@@ -1,0 +1,1526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shadow of Time: Echo Runner</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+canvas { display: block; }
+#ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+#ui > * { pointer-events: auto; }
+#hud { position: absolute; top: 10px; left: 10px; color: #0ff; font-size: 14px; text-shadow: 0 0 10px #0ff; }
+#levelSelect { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+#levelSelect h1 { color: #0ff; font-size: 36px; text-shadow: 0 0 20px #0ff, 0 0 40px #08f; margin-bottom: 10px; }
+#levelSelect h2 { color: #888; font-size: 14px; margin-bottom: 30px; font-weight: normal; }
+#levelGrid { display: grid; grid-template-columns: repeat(20, 1fr); gap: 4px; max-width: 900px; padding: 20px; }
+.levelBtn { width: 36px; height: 36px; background: #111; border: 1px solid #333; color: #666; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.levelBtn:hover { background: #0ff; color: #000; border-color: #0ff; box-shadow: 0 0 10px #0ff; }
+.levelBtn.completed { background: #042; border-color: #0a4; color: #0f0; }
+.levelBtn.current { background: #024; border-color: #08f; color: #0ff; }
+#startBtn { margin-top: 20px; padding: 12px 40px; background: transparent; border: 2px solid #0ff; color: #0ff; font-size: 18px; cursor: pointer; font-family: 'Courier New', monospace; text-shadow: 0 0 10px #0ff; transition: all 0.3s; }
+#startBtn:hover { background: #0ff; color: #000; box-shadow: 0 0 30px #0ff; }
+#message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #0ff; font-size: 28px; text-shadow: 0 0 20px #0ff; opacity: 0; transition: opacity 0.5s; text-align: center; }
+#controls { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); color: #444; font-size: 11px; text-align: center; }
+#deathScreen, #winScreen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; flex-direction: column; z-index: 50; }
+#deathScreen h2 { color: #f44; font-size: 42px; text-shadow: 0 0 30px #f44; margin-bottom: 20px; }
+#winScreen h2 { color: #0f0; font-size: 42px; text-shadow: 0 0 30px #0f0; margin-bottom: 20px; }
+.retryBtn { padding: 10px 30px; background: transparent; border: 2px solid #0ff; color: #0ff; font-size: 16px; cursor: pointer; font-family: 'Courier New', monospace; margin: 5px; transition: all 0.3s; }
+.retryBtn:hover { background: #0ff; color: #000; }
+#titleScreen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(ellipse at center, #0a0a2e 0%, #000 70%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; }
+#titleScreen h1 { color: #0ff; font-size: 48px; text-shadow: 0 0 30px #0ff, 0 0 60px #08f; margin-bottom: 5px; letter-spacing: 4px; }
+#titleScreen h3 { color: #88f; font-size: 20px; font-weight: normal; margin-bottom: 40px; text-shadow: 0 0 15px #88f; }
+#titleScreen p { color: #555; font-size: 12px; margin-bottom: 30px; }
+.titleBtn { padding: 14px 50px; background: transparent; border: 2px solid #0ff; color: #0ff; font-size: 20px; cursor: pointer; font-family: 'Courier New', monospace; margin: 8px; transition: all 0.3s; letter-spacing: 2px; }
+.titleBtn:hover { background: #0ff; color: #000; box-shadow: 0 0 40px #0ff; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui">
+<div id="hud">
+<div id="hudLevel">Level 1</div>
+<div id="hudDeaths">Deaths: 0</div>
+<div id="hudClones">Clones: 0</div>
+<div id="hudTimer">Time: 0s</div>
+</div>
+<div id="message"></div>
+<div id="controls">A/D or ←/→ Move | W/↑/Space Jump | S/↓ Crouch | R Record Timeline | T Replay Clone | P Pause | M Sound Toggle</div>
+<div id="deathScreen">
+<h2>TIMELINE FRACTURED</h2>
+<p style="color:#888;margin-bottom:20px;">The echoes fade...</p>
+<button class="retryBtn" onclick="retryLevel()">RETRY</button>
+<button class="retryBtn" onclick="showLevelSelect()">LEVELS</button>
+</div>
+<div id="winScreen">
+<h2>TIME RESTORED</h2>
+<p style="color:#888;margin-bottom:20px;" id="winText">Level complete!</p>
+<button class="retryBtn" onclick="nextLevel()">NEXT LEVEL</button>
+<button class="retryBtn" onclick="showLevelSelect()">LEVELS</button>
+</div>
+</div>
+<div id="titleScreen">
+<h1>SHADOW OF TIME</h1>
+<h3>Echo Runner</h3>
+<p>A journey through broken timelines</p>
+<button class="titleBtn" onclick="startGame()">BEGIN JOURNEY</button>
+<button class="titleBtn" onclick="showLevelSelect()">SELECT LEVEL</button>
+</div>
+<div id="levelSelect" style="display:none;">
+<h1>SELECT TIMELINE</h1>
+<h2>200 Echoes to restore</h2>
+<div id="levelGrid"></div>
+<button id="startBtn" onclick="startFromGrid()">ENTER</button>
+<button class="retryBtn" onclick="showTitle()" style="margin-top:10px;">BACK</button>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Audio System
+let audioCtx = null;
+let soundEnabled = true;
+function initAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+function playSound(type, vol = 0.3) {
+    if (!soundEnabled || !audioCtx) return;
+    const now = audioCtx.currentTime;
+    const g = audioCtx.createGain();
+    g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(vol, now);
+    if (type === 'jump') {
+        const o = audioCtx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(300, now);
+        o.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        o.connect(g);
+        o.start(now);
+        o.stop(now + 0.15);
+    } else if (type === 'land') {
+        const o = audioCtx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(150, now);
+        o.frequency.exponentialRampToValueAtTime(80, now + 0.1);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        o.connect(g);
+        o.start(now);
+        o.stop(now + 0.12);
+    } else if (type === 'step') {
+        const o = audioCtx.createOscillator();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(80, now);
+        g.gain.setValueAtTime(vol * 0.3, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        o.connect(g);
+        o.start(now);
+        o.stop(now + 0.05);
+    } else if (type === 'record') {
+        const o = audioCtx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(800, now);
+        o.frequency.exponentialRampToValueAtTime(1200, now + 0.2);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+        o.connect(g);
+        o.start(now);
+        o.stop(now + 0.25);
+    } else if (type === 'replay') {
+        const o = audioCtx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(600, now);
+        o.frequency.exponentialRampToValueAtTime(400, now + 0.3);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        o.connect(g);
+        o.start(now);
+        o.stop(now + 0.35);
+    } else if (type === 'death') {
+        const o = audioCtx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(400, now);
+        o.frequency.exponentialRampToValueAtTime(50, now + 0.5);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+        o.connect(g);
+        o.start(now);
+        o.stop(now + 0.6);
+        const o2 = audioCtx.createOscillator();
+        const g2 = audioCtx.createGain();
+        g2.connect(audioCtx.destination);
+        o2.type = 'sine';
+        o2.frequency.setValueAtTime(200, now);
+        o2.frequency.exponentialRampToValueAtTime(30, now + 0.8);
+        g2.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+        o2.connect(g2);
+        o2.start(now);
+        o2.stop(now + 0.8);
+    } else if (type === 'win') {
+        [523, 659, 784, 1047].forEach((f, i) => {
+            const o = audioCtx.createOscillator();
+            const gn = audioCtx.createGain();
+            gn.connect(audioCtx.destination);
+            o.type = 'sine';
+            o.frequency.setValueAtTime(f, now + i * 0.15);
+            gn.gain.setValueAtTime(vol, now + i * 0.15);
+            gn.gain.exponentialRampToValueAtTime(0.001, now + i * 0.15 + 0.4);
+            o.connect(gn);
+            o.start(now + i * 0.15);
+            o.stop(now + i * 0.15 + 0.4);
+        });
+    } else if (type === 'portal') {
+        const o = audioCtx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(400, now);
+        o.frequency.exponentialRampToValueAtTime(1600, now + 0.4);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+        o.connect(g);
+        o.start(now);
+        o.stop(now + 0.5);
+    } else if (type === 'enemyDie') {
+        const o = audioCtx.createOscillator();
+        o.type = 'square';
+        o.frequency.setValueAtTime(200, now);
+        o.frequency.exponentialRampToValueAtTime(50, now + 0.3);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        o.connect(g);
+        o.start(now);
+        o.stop(now + 0.35);
+    } else if (type === 'switch') {
+        const o = audioCtx.createOscillator();
+        o.type = 'square';
+        o.frequency.setValueAtTime(440, now);
+        g.gain.setValueAtTime(vol * 0.5, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        o.connect(g);
+        o.start(now);
+        o.stop(now + 0.1);
+    } else if (type === 'ambient') {
+        const o = audioCtx.createOscillator();
+        const gn = audioCtx.createGain();
+        gn.connect(audioCtx.destination);
+        o.type = 'sine';
+        o.frequency.setValueAtTime(60, now);
+        gn.gain.setValueAtTime(vol * 0.05, now);
+        gn.gain.exponentialRampToValueAtTime(0.001, now + 2);
+        o.connect(gn);
+        o.start(now);
+        o.stop(now + 2);
+    }
+}
+
+// Background music
+let musicInterval = null;
+function startMusic() {
+    if (musicInterval) return;
+    const notes = [130.81, 146.83, 164.81, 174.61, 196, 220, 246.94];
+    let idx = 0;
+    musicInterval = setInterval(() => {
+        if (!soundEnabled || !audioCtx) return;
+        const now = audioCtx.currentTime;
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        g.connect(audioCtx.destination);
+        o.type = 'sine';
+        o.frequency.setValueAtTime(notes[idx % notes.length], now);
+        g.gain.setValueAtTime(0.03, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+        o.connect(g);
+        o.start(now);
+        o.stop(now + 1.5);
+        idx++;
+    }, 2000);
+}
+function stopMusic() {
+    if (musicInterval) { clearInterval(musicInterval); musicInterval = null; }
+}
+
+// Game State
+let gameState = 'title'; // title, playing, paused, dead, win
+let currentLevel = 1;
+let deaths = 0;
+let levelTimer = 0;
+let completedLevels = new Set();
+let unlockedLevel = 1;
+
+// Input
+const keys = {};
+window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (e.code === 'KeyM') {
+        soundEnabled = !soundEnabled;
+        if (!soundEnabled) stopMusic();
+        else startMusic();
+    }
+    if (e.code === 'KeyP' && gameState === 'playing') {
+        gameState = 'paused';
+    } else if (e.code === 'KeyP' && gameState === 'paused') {
+        gameState = 'playing';
+    }
+    if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// Player
+let player = {
+    x: 100, y: 300, vx: 0, vy: 0,
+    w: 20, h: 32,
+    onGround: false,
+    jumping: false,
+    crouching: false,
+    facing: 1,
+    animFrame: 0,
+    animTimer: 0,
+    trail: [],
+    alive: true,
+    recording: false,
+    recordTimer: 0,
+    recordedMoves: [],
+    replaying: false,
+    replayIndex: 0,
+    replayData: [],
+    dashCooldown: 0,
+    wallSliding: false,
+    doubleJump: false,
+    hasDoubleJump: false,
+    invincible: 0,
+    glowIntensity: 0
+};
+
+// Shadows
+let shadows = [];
+
+// Level data
+let platforms = [];
+let enemies = [];
+let hazards = [];
+let collectibles = [];
+let portals = [];
+let switches = [];
+let movingPlatforms = [];
+let buttons = [];
+let doors = [];
+let particles = [];
+let fogParticles = [];
+let bgStars = [];
+let levelWidth = 2000;
+let levelHeight = 800;
+let camera = { x: 0, y: 0 };
+let exitPortal = null;
+let levelData = null;
+
+// Generate background stars
+function generateStars() {
+    bgStars = [];
+    for (let i = 0; i < 100; i++) {
+        bgStars.push({
+            x: Math.random() * levelWidth,
+            y: Math.random() * levelHeight,
+            size: Math.random() * 2 + 0.5,
+            alpha: Math.random() * 0.5 + 0.1,
+            twinkleSpeed: Math.random() * 0.02 + 0.005
+        });
+    }
+}
+
+// Generate fog
+function generateFog() {
+    fogParticles = [];
+    for (let i = 0; i < 30; i++) {
+        fogParticles.push({
+            x: Math.random() * levelWidth,
+            y: Math.random() * levelHeight,
+            size: Math.random() * 100 + 50,
+            alpha: Math.random() * 0.05 + 0.02,
+            speed: Math.random() * 0.3 + 0.1,
+            drift: Math.random() * Math.PI * 2
+        });
+    }
+}
+
+// Level Generation
+function generateLevel(lvl) {
+    platforms = [];
+    enemies = [];
+    hazards = [];
+    collectibles = [];
+    portals = [];
+    switches = [];
+    movingPlatforms = [];
+    buttons = [];
+    doors = [];
+    shadows = [];
+    particles = [];
+    levelWidth = 1500 + lvl * 50;
+    levelHeight = 800;
+
+    // Ground
+    platforms.push({ x: 0, y: levelHeight - 40, w: levelWidth, h: 40, type: 'ground' });
+
+    // Walls
+    platforms.push({ x: -20, y: 0, w: 20, h: levelHeight, type: 'wall' });
+    platforms.push({ x: levelWidth, y: 0, w: 20, h: levelHeight, type: 'wall' });
+
+    const difficulty = Math.min(lvl / 200, 1);
+
+    if (lvl <= 5) {
+        // Tutorial levels - simple platforms
+        generateSimpleLevel(lvl);
+    } else if (lvl <= 30) {
+        generateBasicLevel(lvl);
+    } else if (lvl <= 80) {
+        generateMediumLevel(lvl);
+    } else if (lvl <= 150) {
+        generateHardLevel(lvl);
+    } else {
+        generateExpertLevel(lvl);
+    }
+
+    // Exit portal
+    const exitX = levelWidth - 100;
+    const exitY = 100;
+    exitPortal = { x: exitX, y: exitY, w: 40, h: 60, active: true, pulse: 0 };
+    platforms.push({ x: exitX - 20, y: exitY + 60, w: 80, h: 20, type: 'ground' });
+
+    // Player start
+    player.x = 80;
+    player.y = levelHeight - 100;
+    player.vx = 0;
+    player.vy = 0;
+    player.onGround = false;
+    player.alive = true;
+    player.recording = false;
+    player.replaying = false;
+    player.recordedMoves = [];
+    player.replayData = [];
+    player.replayIndex = 0;
+    player.invincible = 0;
+    player.hasDoubleJump = lvl >= 10;
+    player.doubleJump = false;
+
+    generateStars();
+    generateFog();
+
+    levelTimer = 0;
+}
+
+function generateSimpleLevel(lvl) {
+    const count = 3 + lvl;
+    for (let i = 0; i < count; i++) {
+        const px = 200 + i * (levelWidth - 400) / count;
+        const py = levelHeight - 100 - Math.random() * 200;
+        const pw = 80 + Math.random() * 60;
+        platforms.push({ x: px, y: py, w: pw, h: 16, type: 'platform' });
+    }
+    // Add some spikes for difficulty
+    if (lvl > 2) {
+        for (let i = 0; i < lvl - 1; i++) {
+            hazards.push({
+                x: 300 + i * (levelWidth - 600) / (lvl - 1),
+                y: levelHeight - 56,
+                w: 30, h: 16, type: 'spike'
+            });
+        }
+    }
+}
+
+function generateBasicLevel(lvl) {
+    const count = 5 + Math.floor(lvl / 3);
+    for (let i = 0; i < count; i++) {
+        const px = 150 + i * (levelWidth - 300) / count;
+        const py = 150 + Math.random() * (levelHeight - 300);
+        const pw = 60 + Math.random() * 80;
+        platforms.push({ x: px, y: py, w: pw, h: 16, type: 'platform' });
+    }
+    // Enemies
+    const enemyCount = Math.min(Math.floor(lvl / 5), 4);
+    for (let i = 0; i < enemyCount; i++) {
+        const ep = platforms[Math.floor(Math.random() * platforms.length)];
+        if (ep && ep.type === 'platform') {
+            enemies.push({
+                x: ep.x + ep.w / 2,
+                y: ep.y - 24,
+                w: 24, h: 24,
+                vx: 1,
+                hp: 1,
+                type: 'walker',
+                platform: ep,
+                alive: true,
+                animTimer: 0
+            });
+        }
+    }
+    // Spikes
+    if (lvl > 8) {
+        const spikeCount = Math.floor(lvl / 8);
+        for (let i = 0; i < spikeCount; i++) {
+            hazards.push({
+                x: 200 + Math.random() * (levelWidth - 400),
+                y: levelHeight - 56,
+                w: 24 + Math.random() * 24, h: 16, type: 'spike'
+            });
+        }
+    }
+    // Collectibles
+    const colCount = Math.min(Math.floor(lvl / 4), 5);
+    for (let i = 0; i < colCount; i++) {
+        collectibles.push({
+            x: 200 + Math.random() * (levelWidth - 400),
+            y: 100 + Math.random() * (levelHeight - 250),
+            w: 12, h: 12,
+            collected: false,
+            pulse: Math.random() * Math.PI * 2
+        });
+    }
+}
+
+function generateMediumLevel(lvl) {
+    const count = 8 + Math.floor(lvl / 4);
+    for (let i = 0; i < count; i++) {
+        const px = 100 + i * (levelWidth - 200) / count;
+        const py = 100 + Math.random() * (levelHeight - 250);
+        const pw = 50 + Math.random() * 70;
+        const type = Math.random() < 0.2 ? 'moving' : 'platform';
+        if (type === 'moving') {
+            movingPlatforms.push({
+                x: px, y: py, w: pw, h: 16,
+                startX: px, startY: py,
+                moveX: Math.random() < 0.5 ? 100 : 0,
+                moveY: Math.random() < 0.5 ? 80 : 0,
+                speed: 0.5 + Math.random() * 1,
+                phase: Math.random() * Math.PI * 2,
+                type: 'moving'
+            });
+            platforms.push({ x: px, y: py, w: pw, h: 16, type: 'moving' });
+        } else {
+            platforms.push({ x: px, y: py, w: pw, h: 16, type: 'platform' });
+        }
+    }
+    // Enemies
+    const enemyCount = Math.min(Math.floor(lvl / 4), 6);
+    for (let i = 0; i < enemyCount; i++) {
+        const ep = platforms[Math.floor(Math.random() * platforms.length)];
+        if (ep && ep.type === 'platform') {
+            enemies.push({
+                x: ep.x + ep.w / 2, y: ep.y - 24,
+                w: 24, h: 24, vx: (Math.random() < 0.5 ? 1 : -1) * (1 + lvl * 0.01),
+                hp: 1, type: 'walker', platform: ep, alive: true, animTimer: 0
+            });
+        }
+    }
+    // Spikes
+    const spikeCount = Math.floor(lvl / 5);
+    for (let i = 0; i < spikeCount; i++) {
+        hazards.push({
+            x: 150 + Math.random() * (levelWidth - 300),
+            y: levelHeight - 56,
+            w: 20 + Math.random() * 30, h: 16, type: 'spike'
+        });
+    }
+    // Collectibles
+    const colCount = Math.min(Math.floor(lvl / 3), 6);
+    for (let i = 0; i < colCount; i++) {
+        collectibles.push({
+            x: 150 + Math.random() * (levelWidth - 300),
+            y: 80 + Math.random() * (levelHeight - 230),
+            w: 12, h: 12, collected: false,
+            pulse: Math.random() * Math.PI * 2
+        });
+    }
+    // Switches
+    if (lvl > 20) {
+        switches.push({
+            x: 300 + Math.random() * (levelWidth - 600),
+            y: levelHeight - 60,
+            w: 20, h: 20, pressed: false,
+            targetDoor: null
+        });
+        doors.push({
+            x: switches[0].x + 200,
+            y: levelHeight - 100,
+            w: 20, h: 40, open: false
+        });
+        platforms.push({ x: switches[0].x + 200, y: levelHeight - 100, w: 20, h: 40, type: 'door' });
+    }
+}
+
+function generateHardLevel(lvl) {
+    const count = 10 + Math.floor(lvl / 3);
+    for (let i = 0; i < count; i++) {
+        const px = 80 + i * (levelWidth - 160) / count;
+        const py = 80 + Math.random() * (levelHeight - 220);
+        const pw = 40 + Math.random() * 60;
+        const type = Math.random() < 0.3 ? 'moving' : (Math.random() < 0.15 ? 'crumble' : 'platform');
+        const plat = { x: px, y: py, w: pw, h: 16, type: type };
+        if (type === 'crumble') {
+            plat.crumbleTimer = 0;
+            plat.crumbling = false;
+            plat.visible = true;
+        }
+        if (type === 'moving') {
+            plat.startX = px;
+            plat.startY = py;
+            plat.moveX = Math.random() < 0.5 ? 80 + Math.random() * 80 : 0;
+            plat.moveY = Math.random() < 0.5 ? 60 + Math.random() * 60 : 0;
+            plat.speed = 0.8 + Math.random() * 1.2;
+            plat.phase = Math.random() * Math.PI * 2;
+        }
+        platforms.push(plat);
+    }
+    // Enemies - more aggressive
+    const enemyCount = Math.min(Math.floor(lvl / 3), 8);
+    for (let i = 0; i < enemyCount; i++) {
+        const ep = platforms[Math.floor(Math.random() * platforms.length)];
+        if (ep && ep.type !== 'wall') {
+            const etype = Math.random() < 0.3 ? 'flyer' : 'walker';
+            if (etype === 'flyer') {
+                enemies.push({
+                    x: ep.x + ep.w / 2, y: ep.y - 60,
+                    w: 24, h: 24, vx: 1.5,
+                    hp: 1, type: 'flyer',
+                    baseY: ep.y - 60,
+                    alive: true, animTimer: 0, phase: Math.random() * Math.PI * 2
+                });
+            } else {
+                enemies.push({
+                    x: ep.x + ep.w / 2, y: ep.y - 24,
+                    w: 24, h: 24, vx: (Math.random() < 0.5 ? 1 : -1) * (1.5 + lvl * 0.01),
+                    hp: 1, type: 'walker', platform: ep, alive: true, animTimer: 0
+                });
+            }
+        }
+    }
+    // Hazards
+    const spikeCount = Math.floor(lvl / 4);
+    for (let i = 0; i < spikeCount; i++) {
+        hazards.push({
+            x: 100 + Math.random() * (levelWidth - 200),
+            y: levelHeight - 56,
+            w: 16 + Math.random() * 40, h: 16, type: 'spike'
+        });
+    }
+    // Lava pits
+    if (lvl > 40) {
+        const lavaCount = Math.floor(lvl / 20);
+        for (let i = 0; i < lavaCount; i++) {
+            const lx = 200 + i * (levelWidth - 400) / lavaCount;
+            hazards.push({
+                x: lx, y: levelHeight - 30,
+                w: 60 + Math.random() * 40, h: 30, type: 'lava'
+            });
+            platforms.push({ x: lx + 60 + Math.random() * 40, y: levelHeight - 30, w: 60, h: 30, type: 'ground' });
+        }
+    }
+    // Collectibles
+    const colCount = Math.min(Math.floor(lvl / 3), 8);
+    for (let i = 0; i < colCount; i++) {
+        collectibles.push({
+            x: 100 + Math.random() * (levelWidth - 200),
+            y: 60 + Math.random() * (levelHeight - 200),
+            w: 12, h: 12, collected: false,
+            pulse: Math.random() * Math.PI * 2
+        });
+    }
+    // Switches and doors
+    if (lvl > 30) {
+        const switchCount = Math.min(Math.floor(lvl / 20), 3);
+        for (let i = 0; i < switchCount; i++) {
+            switches.push({
+                x: 200 + i * 300 + Math.random() * 100,
+                y: levelHeight - 60,
+                w: 20, h: 20, pressed: false,
+                targetDoor: doors.length
+            });
+            doors.push({ x: switches[i].x + 150 + Math.random() * 100, y: levelHeight - 100, w: 20, h: 40, open: false });
+            platforms.push({ x: switches[i].x + 150 + Math.random() * 100, y: levelHeight - 100, w: 20, h: 40, type: 'door' });
+        }
+    }
+}
+
+function generateExpertLevel(lvl) {
+    const count = 12 + Math.floor(lvl / 2);
+    for (let i = 0; i < count; i++) {
+        const px = 60 + i * (levelWidth - 120) / count;
+        const py = 60 + Math.random() * (levelHeight - 200);
+        const pw = 30 + Math.random() * 50;
+        const r = Math.random();
+        let type = 'platform';
+        if (r < 0.3) type = 'moving';
+        else if (r < 0.5) type = 'crumble';
+        const plat = { x: px, y: py, w: pw, h: 16, type: type };
+        if (type === 'crumble') {
+            plat.crumbleTimer = 0; plat.crumbling = false; plat.visible = true;
+        }
+        if (type === 'moving') {
+            plat.startX = px; plat.startY = py;
+            plat.moveX = 60 + Math.random() * 100;
+            plat.moveY = 40 + Math.random() * 80;
+            plat.speed = 1 + Math.random() * 1.5;
+            plat.phase = Math.random() * Math.PI * 2;
+        }
+        platforms.push(plat);
+    }
+    // Many enemies
+    const enemyCount = Math.min(Math.floor(lvl / 2), 10);
+    for (let i = 0; i < enemyCount; i++) {
+        const ep = platforms[Math.floor(Math.random() * platforms.length)];
+        if (ep && ep.type !== 'wall') {
+            const etype = Math.random() < 0.5 ? 'flyer' : 'walker';
+            if (etype === 'flyer') {
+                enemies.push({
+                    x: ep.x + ep.w / 2, y: ep.y - 50,
+                    w: 24, h: 24, vx: 2,
+                    hp: 1, type: 'flyer',
+                    baseY: ep.y - 50, alive: true, animTimer: 0, phase: Math.random() * Math.PI * 2
+                });
+            } else {
+                enemies.push({
+                    x: ep.x + ep.w / 2, y: ep.y - 24,
+                    w: 24, h: 24, vx: (Math.random() < 0.5 ? 1 : -1) * (2 + lvl * 0.01),
+                    hp: 1, type: 'walker', platform: ep, alive: true, animTimer: 0
+                });
+            }
+        }
+    }
+    // Many hazards
+    const spikeCount = Math.floor(lvl / 3);
+    for (let i = 0; i < spikeCount; i++) {
+        hazards.push({
+            x: 80 + Math.random() * (levelWidth - 160),
+            y: levelHeight - 56,
+            w: 12 + Math.random() * 48, h: 16, type: 'spike'
+        });
+    }
+    // Lava
+    const lavaCount = Math.floor(lvl / 15);
+    for (let i = 0; i < lavaCount; i++) {
+        const lx = 150 + i * (levelWidth - 300) / lavaCount;
+        hazards.push({ x: lx, y: levelHeight - 30, w: 50 + Math.random() * 50, h: 30, type: 'lava' });
+    }
+    // Collectibles
+    const colCount = Math.min(Math.floor(lvl / 2), 10);
+    for (let i = 0; i < colCount; i++) {
+        collectibles.push({
+            x: 80 + Math.random() * (levelWidth - 160),
+            y: 50 + Math.random() * (levelHeight - 180),
+            w: 12, h: 12, collected: false,
+            pulse: Math.random() * Math.PI * 2
+        });
+    }
+    // Switches
+    const switchCount = Math.min(Math.floor(lvl / 15), 4);
+    for (let i = 0; i < switchCount; i++) {
+        switches.push({
+            x: 150 + i * 250 + Math.random() * 100,
+            y: levelHeight - 60,
+            w: 20, h: 20, pressed: false,
+            targetDoor: doors.length
+        });
+        doors.push({ x: switches[i].x + 120 + Math.random() * 80, y: levelHeight - 100, w: 20, h: 40, open: false });
+        platforms.push({ x: switches[i].x + 120 + Math.random() * 80, y: levelHeight - 100, w: 20, h: 40, type: 'door' });
+    }
+}
+
+// Particle system
+function spawnParticles(x, y, color, count, speed, life) {
+    for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const spd = Math.random() * speed;
+        particles.push({
+            x, y,
+            vx: Math.cos(angle) * spd,
+            vy: Math.sin(angle) * spd,
+            life: life || 30 + Math.random() * 20,
+            maxLife: life || 30 + Math.random() * 20,
+            color: color || '#0ff',
+            size: Math.random() * 3 + 1
+        });
+    }
+}
+
+// Collision detection
+function rectCollide(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function pointInRect(px, py, r) {
+    return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+}
+
+// Update physics
+function updatePlayer(dt) {
+    if (!player.alive) return;
+
+    const gravity = 0.6;
+    const moveSpeed = 4;
+    const jumpForce = -12;
+    const friction = 0.85;
+
+    // Input
+    let moveX = 0;
+    if (keys['ArrowLeft'] || keys['KeyA']) moveX = -1;
+    if (keys['ArrowRight'] || keys['KeyD']) moveX = 1;
+
+    // Crouch
+    player.crouching = (keys['ArrowDown'] || keys['KeyS']) && player.onGround;
+    const currentH = player.crouching ? 16 : 32;
+
+    if (!player.replaying) {
+        player.vx += moveX * 0.8;
+        player.vx *= friction;
+        if (Math.abs(player.vx) > moveSpeed) player.vx = moveSpeed * Math.sign(player.vx);
+        if (Math.abs(player.vx) < 0.1) player.vx = 0;
+
+        if (moveX !== 0) player.facing = moveX;
+
+        // Jump
+        if ((keys['Space'] || keys['ArrowUp'] || keys['KeyW']) && !player.jumping) {
+            if (player.onGround) {
+                player.vy = jumpForce;
+                player.onGround = false;
+                player.jumping = true;
+                player.doubleJump = false;
+                playSound('jump');
+                spawnParticles(player.x + player.w / 2, player.y + player.h, '#0ff', 5, 2, 15);
+            } else if (player.hasDoubleJump && !player.doubleJump) {
+                player.vy = jumpForce * 0.8;
+                player.doubleJump = true;
+                playSound('jump');
+                spawnParticles(player.x + player.w / 2, player.y + player.h, '#88f', 8, 3, 20);
+            }
+        }
+        if (!(keys['Space'] || keys['ArrowUp'] || keys['KeyW'])) {
+            player.jumping = false;
+            if (player.vy < -3) player.vy *= 0.9;
+        }
+
+        // Record movement
+        if (player.recording) {
+            player.recordedMoves.push({
+                x: player.x, y: player.y,
+                vx: player.vx, vy: player.vy,
+                facing: player.facing,
+                crouching: player.crouching,
+                onGround: player.onGround,
+                jumping: player.jumping,
+                doubleJump: player.doubleJump
+            });
+        }
+
+        // Record replay trigger
+        if (keys['KeyT'] && player.recordedMoves.length > 0 && !player.replaying) {
+            player.replaying = true;
+            player.replayData = [...player.recordedMoves];
+            player.replayIndex = 0;
+            playSound('replay');
+            spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#f0f', 15, 4, 25);
+        }
+    }
+
+    // Replay shadow
+    if (player.replaying && player.replayIndex < player.replayData.length) {
+        const move = player.replayData[player.replayIndex];
+        player.x = move.x;
+        player.y = move.y;
+        player.vx = move.vx;
+        player.vy = move.vy;
+        player.facing = move.facing;
+        player.crouching = move.crouching;
+        player.onGround = move.onGround;
+        player.jumping = move.jumping;
+        player.doubleJump = move.doubleJump;
+        player.replayIndex++;
+    }
+
+    // Apply gravity
+    player.vy += gravity;
+    if (player.vy > 15) player.vy = 15;
+
+    // Move X
+    player.x += player.vx;
+
+    // Collision X
+    for (const p of platforms) {
+        if (p.type === 'door' && doors.find(d => d === p) && doors.find(d => d === p).open) continue;
+        if (p.type === 'crumble' && !p.visible) continue;
+        if (rectCollide(player, p)) {
+            if (player.vx > 0) player.x = p.x - player.w;
+            else if (player.vx < 0) player.x = p.x + p.w;
+            player.vx = 0;
+        }
+    }
+
+    // Move Y
+    player.y += player.vy;
+    player.onGround = false;
+
+    // Collision Y
+    for (const p of platforms) {
+        if (p.type === 'door' && doors.find(d => d === p) && doors.find(d => d === p).open) continue;
+        if (p.type === 'crumble' && !p.visible) continue;
+        if (rectCollide(player, p)) {
+            if (player.vy > 0) {
+                player.y = p.y - player.h;
+                player.vy = 0;
+                player.onGround = true;
+                player.doubleJump = false;
+                if (player.vy > 5) {
+                    playSound('land');
+                    spawnParticles(player.x + player.w / 2, player.y + player.h, '#0ff', 3, 2, 10);
+                }
+                // Moving platform carry
+                if (p.type === 'moving' && p.startX !== undefined) {
+                    player.x += Math.cos(p.phase) * p.moveX * p.speed * 0.02;
+                }
+            } else if (player.vy < 0) {
+                player.y = p.y + p.h;
+                player.vy = 0;
+            }
+        }
+    }
+
+    // Moving platforms update
+    for (const mp of platforms.filter(p => p.type === 'moving')) {
+        mp.phase += mp.speed * 0.02;
+        mp.x = mp.startX + Math.sin(mp.phase) * mp.moveX;
+        mp.y = mp.startY + Math.sin(mp.phase * 0.7) * mp.moveY;
+    }
+
+    // Crumble platforms
+    for (const cp of platforms.filter(p => p.type === 'crumble')) {
+        if (cp.crumbling) {
+            cp.crumbleTimer++;
+            if (cp.crumbleTimer > 30) {
+                cp.visible = false;
+                spawnParticles(cp.x + cp.w / 2, cp.y + cp.h / 2, '#884', 8, 3, 20);
+            }
+        }
+        if (player.onGround && player.y + player.h >= cp.y && player.y + player.h <= cp.y + 8 &&
+            player.x + player.w > cp.x && player.x < cp.x + cp.w) {
+            if (!cp.crumbling) cp.crumbling = true;
+        }
+    }
+
+    // Enemies update
+    for (const e of enemies) {
+        if (!e.alive) continue;
+        e.animTimer += 0.1;
+        if (e.type === 'walker' && e.platform) {
+            e.x += e.vx;
+            if (e.x <= e.platform.x || e.x + e.w >= e.platform.x + e.platform.w) {
+                e.vx *= -1;
+            }
+        } else if (e.type === 'flyer') {
+            e.x += e.vx;
+            e.y = e.baseY + Math.sin(e.animTimer + e.phase) * 30;
+            if (e.x < 0 || e.x > levelWidth) e.vx *= -1;
+        }
+
+        // Player collision with enemy
+        if (player.alive && rectCollide(player, e)) {
+            if (player.vy > 0 && player.y + player.h - 8 < e.y + e.h / 2) {
+                // Stomp
+                e.hp--;
+                player.vy = -8;
+                playSound('enemyDie');
+                spawnParticles(e.x + e.w / 2, e.y + e.h / 2, '#f44', 10, 4, 25);
+                if (e.hp <= 0) {
+                    e.alive = false;
+                    spawnParticles(e.x + e.w / 2, e.y + e.h / 2, '#f88', 15, 5, 30);
+                }
+            } else if (player.invincible <= 0) {
+                killPlayer();
+            }
+        }
+    }
+
+    // Hazards
+    for (const h of hazards) {
+        if (rectCollide(player, h)) {
+            if (h.type === 'spike' || h.type === 'lava') {
+                killPlayer();
+            }
+        }
+    }
+
+    // Collectibles
+    for (const c of collectibles) {
+        if (c.collected) continue;
+        c.pulse += 0.05;
+        if (rectCollide(player, { x: c.x - 4, y: c.y - 4, w: c.w + 8, h: c.h + 8 })) {
+            c.collected = true;
+            playSound('portal');
+            spawnParticles(c.x + c.w / 2, c.y + c.h / 2, '#ff0', 10, 3, 20);
+        }
+    }
+
+    // Switches
+    for (const s of switches) {
+        if (rectCollide(player, s)) {
+            s.pressed = true;
+            playSound('switch');
+            spawnParticles(s.x + s.w / 2, s.y + s.h / 2, '#0f0', 10, 3, 20);
+            if (s.targetDoor !== null && doors[s.targetDoor]) {
+                doors[s.targetDoor].open = true;
+            }
+        }
+    }
+
+    // Exit portal
+    if (exitPortal && rectCollide(player, exitPortal)) {
+        winLevel();
+    }
+
+    // Fall death
+    if (player.y > levelHeight + 100) {
+        killPlayer();
+    }
+
+    // Trail
+    player.trail.push({ x: player.x + player.w / 2, y: player.y + player.h / 2, alpha: 1 });
+    if (player.trail.length > 15) player.trail.shift();
+    player.trail.forEach(t => t.alpha -= 0.07);
+
+    // Invincibility
+    if (player.invincible > 0) player.invincible--;
+
+    // Glow
+    player.glowIntensity = Math.max(0, player.glowIntensity - 0.02);
+    if (player.recording) player.glowIntensity = Math.min(1, player.glowIntensity + 0.05);
+
+    // Step sound
+    if (player.onGround && Math.abs(player.vx) > 1) {
+        if (Math.random() < 0.1) playSound('step');
+    }
+
+    // Animation
+    player.animTimer += Math.abs(player.vx) * 0.1;
+    player.animFrame = Math.floor(player.animTimer) % 4;
+}
+
+function killPlayer() {
+    if (player.invincible > 0) return;
+    player.alive = false;
+    deaths++;
+    playSound('death');
+    spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#f44', 20, 5, 30);
+    setTimeout(() => {
+        document.getElementById('deathScreen').style.display = 'flex';
+    }, 500);
+}
+
+function winLevel() {
+    if (gameState !== 'playing') return;
+    gameState = 'win';
+    playSound('win');
+    completedLevels.add(currentLevel);
+    if (currentLevel >= unlockedLevel) unlockedLevel = currentLevel + 1;
+    document.getElementById('winText').textContent = `Level ${currentLevel} complete! Deaths: ${deaths}`;
+    document.getElementById('winScreen').style.display = 'flex';
+}
+
+function nextLevel() {
+    document.getElementById('winScreen').style.display = 'none';
+    currentLevel++;
+    if (currentLevel > 200) currentLevel = 200;
+    loadLevel(currentLevel);
+}
+
+function retryLevel() {
+    document.getElementById('deathScreen').style.display = 'none';
+    loadLevel(currentLevel);
+}
+
+function loadLevel(lvl) {
+    currentLevel = lvl;
+    gameState = 'playing';
+    document.getElementById('deathScreen').style.display = 'none';
+    document.getElementById('winScreen').style.display = 'none';
+    generateLevel(lvl);
+    updateHUD();
+}
+
+function updateHUD() {
+    document.getElementById('hudLevel').textContent = `Level ${currentLevel}`;
+    document.getElementById('hudDeaths').textContent = `Deaths: ${deaths}`;
+    document.getElementById('hudClones').textContent = `Clones: ${shadows.length}`;
+    document.getElementById('hudTimer').textContent = `Time: ${Math.floor(levelTimer)}s`;
+}
+
+// Camera
+function updateCamera() {
+    const targetX = player.x - W / 2 + player.w / 2;
+    const targetY = player.y - H / 2 + player.h / 2;
+    camera.x += (targetX - camera.x) * 0.08;
+    camera.y += (targetY - camera.y) * 0.08;
+    camera.x = Math.max(0, Math.min(camera.x, levelWidth - W));
+    camera.y = Math.max(0, Math.min(camera.y, levelHeight - H));
+}
+
+// Drawing
+function draw() {
+    ctx.fillStyle = '#050510';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.save();
+    ctx.translate(-camera.x, -camera.y);
+
+    // Background gradient
+    const grad = ctx.createLinearGradient(camera.x, camera.y, camera.x, camera.y + H);
+    grad.addColorStop(0, '#0a0a2e');
+    grad.addColorStop(0.5, '#050515');
+    grad.addColorStop(1, '#020208');
+    ctx.fillStyle = grad;
+    ctx.fillRect(camera.x, camera.y, W, H);
+
+    // Stars
+    for (const s of bgStars) {
+        const twinkle = Math.sin(levelTimer * s.twinkleSpeed * 60) * 0.3 + 0.7;
+        ctx.fillStyle = `rgba(200, 220, 255, ${s.alpha * twinkle})`;
+        ctx.fillRect(s.x, s.y, s.size, s.size);
+    }
+
+    // Fog
+    for (const f of fogParticles) {
+        f.drift += 0.003;
+        f.x += f.speed;
+        if (f.x > levelWidth + 100) f.x = -100;
+        const fogGrad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.size);
+        fogGrad.addColorStop(0, `rgba(100, 120, 180, ${f.alpha})`);
+        fogGrad.addColorStop(1, 'rgba(100, 120, 180, 0)');
+        ctx.fillStyle = fogGrad;
+        ctx.fillRect(f.x - f.size, f.y - f.size, f.size * 2, f.size * 2);
+    }
+
+    // Platforms
+    for (const p of platforms) {
+        if (p.type === 'door' && doors.find(d => d === p) && doors.find(d => d === p).open) continue;
+        if (p.type === 'crumble' && !p.visible) continue;
+
+        if (p.x + p.w < camera.x - 50 || p.x > camera.x + W + 50) continue;
+        if (p.y + p.h < camera.y - 50 || p.y > camera.y + H + 50) continue;
+
+        if (p.type === 'ground') {
+            const grd = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
+            grd.addColorStop(0, '#1a1a3a');
+            grd.addColorStop(1, '#0a0a1a');
+            ctx.fillStyle = grd;
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.strokeStyle = '#2a2a5a';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(p.x, p.y, p.w, p.h);
+        } else if (p.type === 'moving') {
+            ctx.shadowColor = '#0ff';
+            ctx.shadowBlur = 10;
+            ctx.fillStyle = '#0a2a3a';
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.strokeStyle = '#0ff';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(p.x, p.y, p.w, p.h);
+            ctx.shadowBlur = 0;
+        } else if (p.type === 'crumble') {
+            const shake = p.crumbling ? Math.sin(p.crumbleTimer * 2) * 2 : 0;
+            ctx.fillStyle = p.crumbling ? `rgba(100, 80, 40, ${1 - p.crumbleTimer / 30})` : '#2a1a0a';
+            ctx.fillRect(p.x + shake, p.y, p.w, p.h);
+            ctx.strokeStyle = '#4a3a1a';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(p.x + shake, p.y, p.w, p.h);
+        } else {
+            ctx.fillStyle = '#151530';
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.strokeStyle = '#252550';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(p.x, p.y, p.w, p.h);
+        }
+    }
+
+    // Hazards
+    for (const h of hazards) {
+        if (h.type === 'spike') {
+            ctx.fillStyle = '#f44';
+            ctx.shadowColor = '#f44';
+            ctx.shadowBlur = 8;
+            const spikeCount = Math.floor(h.w / 10);
+            for (let i = 0; i < spikeCount; i++) {
+                ctx.beginPath();
+                ctx.moveTo(h.x + i * 10, h.y + h.h);
+                ctx.lineTo(h.x + i * 10 + 5, h.y);
+                ctx.lineTo(h.x + i * 10 + 10, h.y + h.h);
+                ctx.fill();
+            }
+            ctx.shadowBlur = 0;
+        } else if (h.type === 'lava') {
+            ctx.fillStyle = '#f80';
+            ctx.shadowColor = '#f80';
+            ctx.shadowBlur = 15;
+            ctx.fillRect(h.x, h.y, h.w, h.h);
+            // Lava bubbles
+            for (let i = 0; i < 3; i++) {
+                const bx = h.x + Math.sin(levelTimer * 2 + i) * h.w * 0.3 + h.w * 0.5;
+                const by = h.y + Math.sin(levelTimer * 3 + i * 2) * 5;
+                ctx.fillStyle = '#ff0';
+                ctx.beginPath();
+                ctx.arc(bx, by, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    // Collectibles
+    for (const c of collectibles) {
+        if (c.collected) continue;
+        const pulse = Math.sin(c.pulse) * 0.3 + 0.7;
+        ctx.shadowColor = '#ff0';
+        ctx.shadowBlur = 15 * pulse;
+        ctx.fillStyle = `rgba(255, 255, 0, ${pulse})`;
+        ctx.beginPath();
+        ctx.arc(c.x + c.w / 2, c.y + c.h / 2, c.w / 2 + Math.sin(c.pulse) * 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    // Switches
+    for (const s of switches) {
+        ctx.fillStyle = s.pressed ? '#0f0' : '#f80';
+        ctx.shadowColor = s.pressed ? '#0f0' : '#f80';
+        ctx.shadowBlur = 10;
+        ctx.fillRect(s.x, s.y, s.w, s.h);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#000';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(s.pressed ? 'ON' : 'OFF', s.x + s.w / 2, s.y + s.h / 2 + 4);
+    }
+
+    // Doors
+    for (const d of doors) {
+        if (d.open) continue;
+        ctx.fillStyle = '#444';
+        ctx.fillRect(d.x, d.y, d.w, d.h);
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(d.x, d.y, d.w, d.h);
+    }
+
+    // Exit portal
+    if (exitPortal) {
+        exitPortal.pulse += 0.05;
+        const pulse = Math.sin(exitPortal.pulse) * 0.3 + 0.7;
+        ctx.shadowColor = '#0ff';
+        ctx.shadowBlur = 20 * pulse;
+        const portalGrad = ctx.createRadialGradient(
+            exitPortal.x + exitPortal.w / 2, exitPortal.y + exitPortal.h / 2, 0,
+            exitPortal.x + exitPortal.w / 2, exitPortal.y + exitPortal.h / 2, 30
+        );
+        portalGrad.addColorStop(0, `rgba(0, 255, 255, ${pulse})`);
+        portalGrad.addColorStop(0.5, `rgba(0, 150, 255, ${pulse * 0.5})`);
+        portalGrad.addColorStop(1, 'rgba(0, 100, 255, 0)');
+        ctx.fillStyle = portalGrad;
+        ctx.fillRect(exitPortal.x - 10, exitPortal.y - 10, exitPortal.w + 20, exitPortal.h + 20);
+        ctx.shadowBlur = 0;
+    }
+
+    // Shadows (clones)
+    for (const s of shadows) {
+        if (!s.alive) continue;
+        const alpha = s.life / s.maxLife;
+        ctx.globalAlpha = alpha * 0.6;
+        ctx.fillStyle = '#f0f';
+        ctx.shadowColor = '#f0f';
+        ctx.shadowBlur = 10;
+        drawCharacter(s.x, s.y, s.w, s.h, s.facing, s.animFrame, '#f0f');
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+    }
+
+    // Player trail
+    for (let i = 0; i < player.trail.length; i++) {
+        const t = player.trail[i];
+        if (t.alpha <= 0) continue;
+        ctx.globalAlpha = t.alpha * 0.3;
+        ctx.fillStyle = player.recording ? '#f0f' : '#0ff';
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // Enemies
+    for (const e of enemies) {
+        if (!e.alive) continue;
+        ctx.fillStyle = '#f44';
+        ctx.shadowColor = '#f44';
+        ctx.shadowBlur = 8;
+        drawCharacter(e.x, e.y, e.w, e.h, e.vx > 0 ? 1 : -1, Math.floor(e.animTimer) % 4, '#f44');
+        ctx.shadowBlur = 0;
+    }
+
+    // Player
+    if (player.alive) {
+        const blink = player.invincible > 0 && Math.floor(player.invincible / 3) % 2;
+        if (!blink) {
+            const glow = player.recording ? '#f0f' : '#0ff';
+            ctx.shadowColor = glow;
+            ctx.shadowBlur = 15 + player.glowIntensity * 10;
+            drawCharacter(player.x, player.y, player.w, player.h, player.facing, player.animFrame, glow);
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    // Particles
+    for (const p of particles) {
+        const alpha = p.life / p.maxLife;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.restore();
+
+    // Recording indicator
+    if (player.recording) {
+        ctx.fillStyle = 'rgba(255, 0, 255, 0.1)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#f0f';
+        ctx.font = '16px monospace';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = '#f0f';
+        ctx.shadowBlur = 10;
+        ctx.fillText('● RECORDING - Press T to replay', W / 2, 40);
+        ctx.shadowBlur = 0;
+    }
+
+    // Pause screen
+    if (gameState === 'paused') {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#0ff';
+        ctx.font = '36px monospace';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = '#0ff';
+        ctx.shadowBlur = 20;
+        ctx.fillText('PAUSED', W / 2, H / 2);
+        ctx.shadowBlur = 0;
+        ctx.font = '16px monospace';
+        ctx.fillStyle = '#888';
+        ctx.fillText('Press P to resume', W / 2, H / 2 + 40);
+    }
+}
+
+function drawCharacter(x, y, w, h, facing, frame, color) {
+    ctx.fillStyle = color;
+
+    // Body
+    const bodyH = h;
+    ctx.fillRect(x + w / 2 - 4, y + 4, 8, bodyH - 12);
+
+    // Head
+    ctx.fillRect(x + w / 2 - 5, y, 10, 10);
+
+    // Eyes
+    ctx.fillStyle = '#fff';
+    const eyeX = facing > 0 ? x + w / 2 + 1 : x + w / 2 - 5;
+    ctx.fillRect(eyeX, y + 3, 3, 3);
+
+    // Legs animation
+    const legOffset = Math.sin(frame * Math.PI / 2) * 3;
+    ctx.fillStyle = color;
+    ctx.fillRect(x + w / 2 - 4, y + bodyH - 8, 3, 8 + legOffset);
+    ctx.fillRect(x + w / 2 + 1, y + bodyH - 8, 3, 8 - legOffset);
+
+    // Arms
+    const armOffset = Math.sin(frame * Math.PI / 2) * 4;
+    ctx.fillRect(x + w / 2 - 8, y + 8 + armOffset, 4, 8);
+    ctx.fillRect(x + w / 2 + 4, y + 8 - armOffset, 4, 8);
+
+    // Glow effect
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 5;
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillRect(x + w / 2 - 2, y + 2, 4, 4);
+    ctx.shadowBlur = 0;
+}
+
+// Update particles
+function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.05;
+        p.life--;
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+}
+
+// Update shadows
+function updateShadows() {
+    for (let i = shadows.length - 1; i >= 0; i--) {
+        const s = shadows[i];
+        s.life--;
+        if (s.life <= 0) {
+            shadows.splice(i, 1);
+        }
+    }
+}
+
+// Create shadow clone
+function createShadowClone() {
+    if (player.recordedMoves.length < 2) return;
+    shadows.push({
+        x: player.x,
+        y: player.y,
+        w: player.w,
+        h: player.h,
+        vx: player.vx,
+        vy: player.vy,
+        facing: player.facing,
+        animFrame: player.animFrame,
+        life: player.recordedMoves.length,
+        maxLife: player.recordedMoves.length,
+        alive: true,
+        moves: [...player.recordedMoves],
+        moveIndex: 0
+    });
+    player.replaying = true;
+    player.replayData = player.recordedMoves;
+    player.replayIndex = 0;
+    player.recordedMoves = [];
+    playSound('replay');
+    spawnParticles(player.x + player.w / 2, player.y + player.h / 2, '#f0f', 20, 5, 30);
+}
+
+// Game loop
+let lastTime = 0;
+let frameCount = 0;
+
+function gameLoop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+    frameCount++;
+
+    if (gameState === 'playing') {
+        levelTimer += dt;
+
+        // Record trigger
+        if (keys['KeyR'] && !player.recording && !player.replaying) {
+            player.recording = true;
+            player.recordedMoves = [];
+            playSound('record');
+        }
+        if (keys['KeyR'] && player.recording) {
+            player.recording = false;
+            if (player.recordedMoves.length > 0) {
+                createShadowClone();
+            }
+        }
+
+        updatePlayer(dt);
+        updateCamera();
+        updateParticles();
+        updateShadows();
+
+        // Update shadow clones
+        for (const s of shadows) {
+            if (s.moveIndex < s.moves.length) {
+                const m = s.moves[s.moveIndex];
+                s.x = m.x;
+                s.y = m.y;
+                s.vx = m.vx;
+                s.vy = m.vy;
+                s.facing = m.facing;
+                s.animFrame = Math.floor(s.moveIndex / 3) % 4;
+                s.moveIndex++;
+            }
+        }
+
+        if (frameCount % 10 === 0) updateHUD();
+    }
+
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+// UI Functions
+function startGame() {
+    initAudio();
+    document.getElementById('titleScreen').style.display = 'none';
+    loadLevel(1);
+    startMusic();
+}
+
+function showLevelSelect() {
+    initAudio();
+    document.getElementById('titleScreen').style.display = 'none';
+    document.getElementById('levelSelect').style.display = 'flex';
+    document.getElementById('deathScreen').style.display = 'none';
+    document.getElementById('winScreen').style.display = 'none';
+    buildLevelGrid();
+}
+
+function showTitle() {
+    document.getElementById('levelSelect').style.display = 'none';
+    document.getElementById('titleScreen').style.display = 'flex';
+}
+
+let selectedLevel = 1;
+function buildLevelGrid() {
+    const grid = document.getElementById('levelGrid');
+    grid.innerHTML = '';
+    for (let i = 1; i <= 200; i++) {
+        const btn = document.createElement('button');
+        btn.className = 'levelBtn';
+        if (completedLevels.has(i)) btn.classList.add('completed');
+        if (i === selectedLevel) btn.classList.add('current');
+        btn.textContent = i;
+        btn.onclick = () => {
+            selectedLevel = i;
+            document.querySelectorAll('.levelBtn').forEach(b => b.classList.remove('current'));
+            btn.classList.add('current');
+        };
+        grid.appendChild(btn);
+    }
+}
+
+function startFromGrid() {
+    loadLevel(selectedLevel);
+    document.getElementById('levelSelect').style.display = 'none';
+    startMusic();
+}
+
+// Save/Load
+function saveProgress() {
+    try {
+        localStorage.setItem('shadowTime', JSON.stringify({
+            completed: [...completedLevels],
+            unlocked: unlockedLevel,
+            deaths: deaths
+        }));
+    } catch (e) {}
+}
+
+function loadProgress() {
+    try {
+        const data = JSON.parse(localStorage.getItem('shadowTime'));
+        if (data) {
+            completedLevels = new Set(data.completed || []);
+            unlockedLevel = data.unlocked || 1;
+            deaths = data.deaths || 0;
+        }
+    } catch (e) {}
+}
+
+loadProgress();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

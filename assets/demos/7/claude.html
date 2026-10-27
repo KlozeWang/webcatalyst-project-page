@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Deep Digger</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; user-select:none; }
+  body { font-family: 'Courier New', monospace; background:#1a1a2e; color:#fff; overflow:hidden; height:100vh; display:flex; align-items:center; justify-content:center; }
+  #game { position:relative; width:100vw; height:100vh; overflow:hidden; }
+  canvas { display:block; background:linear-gradient(#87CEEB 0%,#87CEEB 15%,#8B4513 15%,#3a2418 100%); cursor:crosshair; }
+  #hud { position:absolute; top:10px; left:10px; background:rgba(0,0,0,0.6); padding:10px 15px; border-radius:8px; font-size:14px; line-height:1.6; pointer-events:none; }
+  #hud span { color:#FFD700; font-weight:bold; }
+  .overlay { position:absolute; inset:0; background:rgba(0,0,0,0.8); display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:20px; }
+  .overlay h1 { font-size:48px; color:#FFD700; margin-bottom:10px; text-shadow:3px 3px 0 #8B4513; }
+  .overlay p { margin:8px 0; max-width:400px; }
+  button { margin-top:20px; padding:12px 30px; font-size:18px; background:#FFD700; color:#000; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-family:inherit; }
+  button:hover { background:#fff; }
+  #controls { position:absolute; bottom:10px; right:10px; background:rgba(0,0,0,0.6); padding:8px 12px; border-radius:8px; font-size:12px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="canvas"></canvas>
+  <div id="hud">
+    💰 Coins: <span id="coins">0</span><br>
+    💎 Gems: <span id="gems">0</span><br>
+    ⛏️ Depth: <span id="depth">0</span>m<br>
+    ⚡ Energy: <span id="energy">100</span>
+  </div>
+  <div id="controls">WASD/Arrows: Move &nbsp; Click/Space: Dig</div>
+  <div id="startScreen" class="overlay">
+    <h1>⛏️ DEEP DIGGER</h1>
+    <p>Dig deep into the earth to find coins 💰 and rare gems 💎!</p>
+    <p>Watch out for your energy — collect items to refuel!</p>
+    <p><b>Move:</b> WASD or Arrow Keys<br><b>Dig:</b> Click adjacent block or press Space</p>
+    <button onclick="startGame()">START DIGGING</button>
+  </div>
+  <div id="gameOver" class="overlay hidden">
+    <h1>OUT OF ENERGY!</h1>
+    <p>Final Score: <span id="finalScore">0</span></p>
+    <p>Max Depth: <span id="finalDepth">0</span>m</p>
+    <button onclick="startGame()">DIG AGAIN</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize(){ W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+const TILE = 40;
+const COLS = 24;
+let ROWS = 200;
+
+// Block types: 0 empty/sky, 1 dirt, 2 stone, 3 coin, 4 gem, 5 energy, 6 bedrock
+let grid = [];
+let player = { x:12, y:3, px:0, py:0, dir:1 };
+let coins=0, gems=0, energy=100, maxDepth=0, score=0;
+let running=false;
+let cam = {y:0};
+let particles = [];
+
+function audio(freq, dur=0.1, type='square', vol=0.1){
+  try{
+    const ac = audio.ctx || (audio.ctx = new (window.AudioContext||window.webkitAudioContext)());
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type=type; o.frequency.value=freq;
+    g.gain.value=vol; g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime+dur);
+    o.connect(g); g.connect(ac.destination);
+    o.start(); o.stop(ac.currentTime+dur);
+  }catch(e){}
+}
+
+function genWorld(){
+  grid = [];
+  for(let y=0;y<ROWS;y++){
+    const row=[];
+    for(let x=0;x<COLS;x++){
+      if(y<3) row.push(0);
+      else if(y===ROWS-1) row.push(6);
+      else {
+        const r = Math.random();
+        let block = y<15 ? 1 : (Math.random()<0.4 ? 1 : 2);
+        if(r < 0.04 + y*0.0005) block = 3; // coin
+        else if(r < 0.06 + y*0.0008) block = 4; // gem (deeper=more)
+        else if(r < 0.07) block = 5; // energy
+        row.push(block);
+      }
+    }
+    grid.push(row);
+  }
+  // clear spawn
+  for(let y=0;y<4;y++) for(let x=10;x<14;x++) grid[y][x]=0;
+}
+
+function startGame(){
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('gameOver').classList.add('hidden');
+  coins=0; gems=0; energy=100; maxDepth=0;
+  player.x=12; player.y=3;
+  genWorld();
+  running=true;
+  updateHUD();
+}
+
+function endGame(){
+  running=false;
+  score = coins + gems*10;
+  document.getElementById('finalScore').textContent = score;
+  document.getElementById('finalDepth').textContent = maxDepth;
+  document.getElementById('gameOver').classList.remove('hidden');
+}
+
+function updateHUD(){
+  document.getElementById('coins').textContent=coins;
+  document.getElementById('gems').textContent=gems;
+  document.getElementById('depth').textContent=maxDepth;
+  document.getElementById('energy').textContent=Math.max(0,Math.floor(energy));
+}
+
+function addParticles(x,y,color,n=8){
+  for(let i=0;i<n;i++){
+    particles.push({x,y,vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4-1,life:30,color});
+  }
+}
+
+function tryMove(dx,dy){
+  const nx=player.x+dx, ny=player.y+dy;
+  if(nx<0||nx>=COLS||ny<0||ny>=ROWS) return;
+  if(dx!==0) player.dir=dx;
+  if(grid[ny][nx]===0){
+    player.x=nx; player.y=ny;
+    energy -= 0.3;
+    audio(200,0.05,'sine',0.05);
+  } else if(grid[ny][nx]!==6){
+    dig(nx,ny);
+  }
+  if(player.y>maxDepth) maxDepth=player.y;
+}
+
+function dig(x,y){
+  if(x<0||x>=COLS||y<0||y>=ROWS) return;
+  const b = grid[y][x];
+  if(b===0||b===6) return;
+  // must be adjacent
+  if(Math.abs(x-player.x)+Math.abs(y-player.y)>1) return;
+  grid[y][x]=0;
+  energy -= 1;
+  if(b===1){ audio(150,0.08,'square',0.08); addParticles(x*TILE+TILE/2,y*TILE+TILE/2,'#8B4513'); }
+  else if(b===2){ audio(100,0.1,'square',0.08); addParticles(x*TILE+TILE/2,y*TILE+TILE/2,'#888'); energy -= 0.5; }
+  else if(b===3){ coins++; audio(800,0.15,'sine',0.1); addParticles(x*TILE+TILE/2,y*TILE+TILE/2,'#FFD700',12); }
+  else if(b===4){ gems++; audio(1200,0.25,'sine',0.12); addParticles(x*TILE+TILE/2,y*TILE+TILE/2,'#0ff',16); }
+  else if(b===5){ energy=Math.min(100,energy+30); audio(600,0.2,'triangle',0.1); addParticles(x*TILE+TILE/2,y*TILE+TILE/2,'#0f0',12); }
+  updateHUD();
+}
+
+// gravity
+let fallTimer=0;
+function update(dt){
+  if(!running) return;
+  // gravity
+  fallTimer+=dt;
+  if(fallTimer>150){
+    fallTimer=0;
+    if(player.y+1<ROWS && grid[player.y+1][player.x]===0){
+      player.y++;
+      if(player.y>maxDepth) maxDepth=player.y;
+    }
+  }
+  // camera follow
+  const targetY = player.y*TILE - H/2;
+  cam.y += (targetY - cam.y)*0.1;
+  if(cam.y<0) cam.y=0;
+
+  // particles
+  particles.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.3; p.life--; });
+  particles = particles.filter(p=>p.life>0);
+
+  if(energy<=0){ energy=0; endGame(); }
+  updateHUD();
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // background sky/dirt gradient based on depth
+  const skyH = Math.max(0, 3*TILE - cam.y);
+  ctx.fillStyle = '#87CEEB';
+  ctx.fillRect(0,0,W,skyH);
+  ctx.fillStyle = '#3a2418';
+  ctx.fillRect(0,skyH,W,H-skyH);
+
+  // center offset
+  const offsetX = (W - COLS*TILE)/2;
+
+  const startRow = Math.max(0, Math.floor(cam.y/TILE)-1);
+  const endRow = Math.min(ROWS, Math.ceil((cam.y+H)/TILE)+1);
+
+  for(let y=startRow;y<endRow;y++){
+    for(let x=0;x<COLS;x++){
+      const b = grid[y][x];
+      if(b===0) continue;
+      const px = offsetX + x*TILE;
+      const py = y*TILE - cam.y;
+      if(b===1){ ctx.fillStyle='#8B5A2B'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle='#6B3410'; ctx.fillRect(px+4,py+8,5,5); ctx.fillRect(px+20,py+22,4,4);}
+      else if(b===2){ ctx.fillStyle='#6e6e6e'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle='#555'; ctx.fillRect(px+6,py+10,8,4);}
+      else if(b===3){ ctx.fillStyle='#8B5A2B'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle='#FFD700'; ctx.beginPath(); ctx.arc(px+TILE/2,py+TILE/2,10,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#FFA500'; ctx.beginPath(); ctx.arc(px+TILE/2-3,py+TILE/2-3,3,0,Math.PI*2); ctx.fill();}
+      else if(b===4){ ctx.fillStyle='#6e6e6e'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle='#00FFFF'; ctx.beginPath(); ctx.moveTo(px+TILE/2,py+6); ctx.lineTo(px+TILE-6,py+TILE/2); ctx.lineTo(px+TILE/2,py+TILE-6); ctx.lineTo(px+6,py+TILE/2); ctx.closePath(); ctx.fill(); ctx.fillStyle='#fff'; ctx.fillRect(px+TILE/2-2,py+10,3,6);}
+      else if(b===5){ ctx.fillStyle='#8B5A2B'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle='#0f0'; ctx.beginPath(); ctx.moveTo(px+TILE/2-2,py+8); ctx.lineTo(px+TILE/2+8,py+TILE/2-2); ctx.lineTo(px+TILE/2,py+TILE/2); ctx.lineTo(px+TILE/2+2,py+TILE-8); ctx.lineTo(px+TILE/2-8,py+TILE/2+2); ctx.lineTo(px+TILE/2,py+TILE/2); ctx.closePath(); ctx.fill();}
+      else if(b===6){ ctx.fillStyle='#222'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle='#000'; ctx.fillRect(px+4,py+4,8,8); ctx.fillRect(px+20,py+20,10,10);}
+      // grid lines
+      ctx.strokeStyle='rgba(0,0,0,0.15)'; ctx.strokeRect(px,py,TILE,TILE);
+    }
+  }
+
+  // player
+  const ppx = offsetX + player.x*TILE;
+  const ppy = player.y*TILE - cam.y;
+  ctx.fillStyle='#ffeb3b';
+  ctx.fillRect(ppx+6,ppy+4,28,32);
+  ctx.fillStyle='#000';
+  ctx.fillRect(ppx+12,ppy+12,4,4);
+  ctx.fillRect(ppx+24,ppy+12,4,4);
+  ctx.fillStyle='#d32f2f';
+  ctx.fillRect(ppx+6,ppy+4,28,6); // helmet
+  ctx.fillStyle='#FFD700';
+  ctx.beginPath(); ctx.arc(ppx+20,ppy+7,3,0,Math.PI*2); ctx.fill();
+  // pickaxe
+  ctx.fillStyle='#8B4513';
+  if(player.dir>0){ ctx.fillRect(ppx+28,ppy+18,12,3); ctx.fillStyle='#aaa'; ctx.fillRect(ppx+36,ppy+14,4,10);}
+  else { ctx.fillRect(ppx,ppy+18,12,3); ctx.fillStyle='#aaa'; ctx.fillRect(ppx,ppy+14,4,10);}
+
+  // particles
+  particles.forEach(p=>{
+    ctx.fillStyle=p.color;
+    ctx.globalAlpha = p.life/30;
+    ctx.fillRect(p.x-cam.y*0+offsetX*0 + p.x - p.x, p.y-cam.y, 4,4); // fix below
+  });
+  ctx.globalAlpha=1;
+  particles.forEach(p=>{
+    ctx.fillStyle=p.color;
+    ctx.globalAlpha=Math.max(0,p.life/30);
+    ctx.fillRect(offsetX*0+p.x - 2 + offsetX - offsetX, p.y - cam.y -2, 4,4);
+  });
+  ctx.globalAlpha=1;
+}
+
+// Simpler particle render: redo properly
+function renderParticles(offsetX){
+  particles.forEach(p=>{
+    ctx.globalAlpha=Math.max(0,p.life/30);
+    ctx.fillStyle=p.color;
+    ctx.fillRect(offsetX+p.x-2, p.y-cam.y-2,4,4);
+  });
+  ctx.globalAlpha=1;
+}
+
+// Override draw with cleaner version
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const offsetX = (W - COLS*TILE)/2;
+  // sky
+  const skyBottom = 3*TILE - cam.y;
+  ctx.fillStyle='#87CEEB'; ctx.fillRect(0,0,W,Math.max(0,skyBottom));
+  ctx.fillStyle='#2a1810'; ctx.fillRect(0,Math.max(0,skyBottom),W,H);
+  // sun
+  if(skyBottom>0){ ctx.fillStyle='#FFD700'; ctx.beginPath(); ctx.arc(80,60,25,0,Math.PI*2); ctx.fill();}
+
+  const startRow = Math.max(0, Math.floor(cam.y/TILE)-1);
+  const endRow = Math.min(ROWS, Math.ceil((cam.y+H)/TILE)+1);
+
+  for(let y=startRow;y<endRow;y++){
+    for(let x=0;x<COLS;x++){
+      const b = grid[y][x];
+      const px = offsetX + x*TILE;
+      const py = y*TILE - cam.y;
+      if(b===0){
+        if(y>=3){ ctx.fillStyle='#1a0e08'; ctx.fillRect(px,py,TILE,TILE);}
+        continue;
+      }
+      if(b===1){ ctx.fillStyle='#8B5A2B'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle='#6B3410'; ctx.fillRect(px+4,py+8,5,5); ctx.fillRect(px+22,py+22,4,4);
+        if(y===3){ ctx.fillStyle='#3a8e3a'; ctx.fillRect(px,py,TILE,6);} }
+      else if(b===2){ ctx.fillStyle='#6e6e6e'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle='#555'; ctx.fillRect(px+6,py+10,8,4); ctx.fillRect(px+22,py+24,7,3);}
+      else if(b===3){ ctx.fillStyle='#8B5A2B'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle='#FFD700'; ctx.beginPath(); ctx.arc(px+TILE/2,py+TILE/2,10,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#fff8a0'; ctx.beginPath(); ctx.arc(px+TILE/2-3,py+TILE/2-3,3,0,Math.PI*2); ctx.fill();}
+      else if(b===4){ ctx.fillStyle='#6e6e6e'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle='#00FFFF'; ctx.beginPath(); ctx.moveTo(px+TILE/2,py+6); ctx.lineTo(px+TILE-6,py+TILE/2); ctx.lineTo(px+TILE/2,py+TILE-6); ctx.lineTo(px+6,py+TILE/2); ctx.closePath(); ctx.fill(); ctx.fillStyle='#fff'; ctx.fillRect(px+TILE/2-2,py+10,3,6);}
+      else if(b===5){ ctx.fillStyle='#8B5A2B'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle='#00ff44'; ctx.beginPath(); ctx.arc(px+TILE/2,py+TILE/2,9,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#fff'; ctx.font='bold 14px monospace'; ctx.fillText('⚡',px+TILE/2-6,py+TILE/2+5);}
+      else if(b===6){ ctx.fillStyle='#222'; ctx.fillRect(px,py,TILE,TILE); ctx.fillStyle='#000'; ctx.fillRect(px+4,py+4,8,8); ctx.fillRect(px+22,py+22,10,10);}
+      ctx.strokeStyle='rgba(0,0,0,0.2)'; ctx.strokeRect(px,py,TILE,TILE);
+    }
+  }
+
+  // player
+  const ppx = offsetX + player.x*TILE;
+  const ppy = player.y*TILE - cam.y;
+  ctx.fillStyle='#ffeb3b'; ctx.fillRect(ppx+6,ppy+8,28,28);
+  ctx.fillStyle='#d32f2f'; ctx.fillRect(ppx+4,ppy+4,32,8);
+  ctx.fillStyle='#FFD700'; ctx.beginPath(); ctx.arc(ppx+20,ppy+8,3,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#000'; ctx.fillRect(ppx+12,ppy+16,4,4); ctx.fillRect(ppx+24,ppy+16,4,4);
+  ctx.fillStyle='#8B4513';
+  if(player.dir>0){ ctx.fillRect(ppx+28,ppy+22,14,3); ctx.fillStyle='#bbb'; ctx.fillRect(ppx+38,ppy+18,5,11);}
+  else { ctx.fillRect(ppx-2,ppy+22,14,3); ctx.fillStyle='#bbb'; ctx.fillRect(ppx-3,ppy+18,5,11);}
+
+  renderParticles(offsetX);
+
+  // depth indicator on side
+  ctx.fillStyle='rgba(0,0,0,0.5)';
+  ctx.fillRect(W-50,10,40,H-20);
+  ctx.fillStyle='#FFD700';
+  const progY = Math.min(1, player.y/ROWS)*(H-20);
+  ctx.fillRect(W-48,12+progY-2,36,4);
+}
+
+// Input
+const keys={};
+window.addEventListener('keydown', e=>{
+  if(!running) return;
+  keys[e.key.toLowerCase()]=true;
+  if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase())) e.preventDefault();
+});
+window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
+
+let moveTimer=0;
+function handleInput(dt){
+  moveTimer+=dt;
+  if(moveTimer<120) return;
+  if(!running) return;
+  if(keys['a']||keys['arrowleft']){ tryMove(-1,0); moveTimer=0; }
+  else if(keys['d']||keys['arrowright']){ tryMove(1,0); moveTimer=0; }
+  else if(keys['w']||keys['arrowup']){ tryMove(0,-1); moveTimer=0; }
+  else if(keys['s']||keys['arrowdown']){ tryMove(0,1); moveTimer=0; }
+  else if(keys[' ']){ dig(player.x+player.dir,player.y); dig(player.x,player.y+1); moveTimer=0;}
+}
+
+canvas.addEventListener('click', e=>{
+  if(!running) return;
+  const offsetX = (W - COLS*TILE)/2;
+  const gx = Math.floor((e.clientX-offsetX)/TILE);
+  const gy = Math.floor((e.clientY+cam.y)/TILE);
+  dig(gx,gy);
+});
+
+// touch
+let touchStart=null;
+canvas.addEventListener('touchstart',e=>{ touchStart={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now()}; e.preventDefault(); },{passive:false});
+canvas.addEventListener('touchend',e=>{
+  if(!touchStart||!running) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX-touchStart.x, dy=t.clientY-touchStart.y;
+  if(Math.abs(dx)<20&&Math.abs(dy)<20){
+    const offsetX = (W - COLS*TILE)/2;
+    const gx = Math.floor((t.clientX-offsetX)/TILE);
+    const gy = Math.floor((t.clientY+cam.y)/TILE);
+    dig(gx,gy);
+  } else {
+    if(Math.abs(dx)>Math.abs(dy)) tryMove(dx>0?1:-1,0);
+    else tryMove(0,dy>0?1:-1);
+  }
+  e.preventDefault();
+},{passive:false});
+
+let last=performance.now();
+function loop(now){
+  const dt = now-last; last=now;
+  handleInput(dt);
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

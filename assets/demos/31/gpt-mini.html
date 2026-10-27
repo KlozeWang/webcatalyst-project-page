@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Photo Puzzle Gallery</title>
+  <style>
+    :root{
+      --bg:#0f1220;
+      --panel:#171b2f;
+      --panel2:#1f2540;
+      --text:#f4f7ff;
+      --muted:#aeb8d8;
+      --accent:#7c5cff;
+      --accent2:#27d3a2;
+      --danger:#ff6b6b;
+      --tileGap:4px;
+      --radius:18px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:
+      radial-gradient(1200px 800px at 20% 10%, #24305c 0%, transparent 55%),
+      radial-gradient(1000px 700px at 80% 20%, #1f5f67 0%, transparent 50%),
+      linear-gradient(180deg, #0b0d16 0%, #11162a 100%);
+      color:var(--text);overflow:hidden}
+    .app{height:100%;display:flex;flex-direction:column}
+    header{
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+      padding:14px 16px;background:rgba(10,12,22,.55);backdrop-filter:blur(10px);
+      border-bottom:1px solid rgba(255,255,255,.08)
+    }
+    .title{display:flex;flex-direction:column;gap:2px}
+    .title h1{margin:0;font-size:18px;line-height:1.1}
+    .title small{color:var(--muted)}
+    .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end}
+    .group{display:flex;gap:8px;align-items:center;background:rgba(255,255,255,.06);padding:8px 10px;border-radius:14px}
+    button, select, input[type="file"]::file-selector-button{
+      appearance:none;border:none;border-radius:12px;background:var(--panel2);color:var(--text);
+      padding:10px 12px;font-weight:600;cursor:pointer;box-shadow:0 0 0 1px rgba(255,255,255,.08) inset;
+      transition:.2s transform,.2s background,.2s opacity
+    }
+    button:hover, select:hover, input[type="file"]::file-selector-button:hover{transform:translateY(-1px);background:#293057}
+    button:active, select:active{transform:translateY(0)}
+    button.primary{background:linear-gradient(135deg,var(--accent),#5ea2ff)}
+    button.good{background:linear-gradient(135deg,var(--accent2),#10b981)}
+    button.danger{background:linear-gradient(135deg,#ff6b6b,#ff8e53)}
+    button.ghost{background:transparent;border:1px solid rgba(255,255,255,.12);box-shadow:none}
+    button:disabled{opacity:.5;cursor:not-allowed;transform:none}
+    select{padding-right:34px}
+    input[type="file"]{max-width:220px;color:var(--muted)}
+    main{flex:1;display:grid;grid-template-columns:1fr 320px;gap:14px;padding:14px;min-height:0}
+    .boardWrap,.side{
+      background:rgba(13,16,30,.55);backdrop-filter:blur(10px);
+      border:1px solid rgba(255,255,255,.08);border-radius:var(--radius);min-height:0
+    }
+    .boardWrap{display:flex;flex-direction:column;overflow:hidden}
+    .boardTop{
+      display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 14px;
+      border-bottom:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.03)
+    }
+    .stats{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:14px}
+    .stats b{color:var(--text)}
+    .board{
+      flex:1;display:flex;align-items:center;justify-content:center;padding:14px;min-height:0
+    }
+    #puzzle{
+      position:relative;touch-action:none;user-select:none;
+      background:rgba(255,255,255,.04);border-radius:18px;overflow:hidden;
+      box-shadow:0 20px 70px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.08);
+    }
+    .tile{
+      position:absolute;background-repeat:no-repeat;
+      box-shadow:inset 0 0 0 1px rgba(255,255,255,.13);
+      transition:transform .15s ease, box-shadow .15s ease, filter .15s ease;
+      cursor:pointer;
+    }
+    .tile:hover{filter:brightness(1.06)}
+    .tile.selected{box-shadow:0 0 0 3px rgba(124,92,255,.9), inset 0 0 0 1px rgba(255,255,255,.15); z-index:5}
+    .tile.correct{outline:2px solid rgba(39,211,162,.45)}
+    .side{display:flex;flex-direction:column;overflow:hidden}
+    .preview{
+      padding:12px;border-bottom:1px solid rgba(255,255,255,.07)
+    }
+    .preview .frame{
+      aspect-ratio:1/1;border-radius:16px;overflow:hidden;background:#0d1020;border:1px solid rgba(255,255,255,.08);
+      display:flex;align-items:center;justify-content:center
+    }
+    .preview img{width:100%;height:100%;object-fit:cover;display:block}
+    .panel{
+      padding:12px;border-bottom:1px solid rgba(255,255,255,.07);display:grid;gap:10px
+    }
+    .panel h2{margin:0 0 2px;font-size:15px}
+    .hint{color:var(--muted);font-size:13px;line-height:1.35}
+    .list{display:grid;gap:8px}
+    .row{display:flex;justify-content:space-between;gap:8px;align-items:center}
+    .badge{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.08);color:var(--text);font-size:13px}
+    .footer{
+      margin-top:auto;padding:12px;border-top:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:10px
+    }
+    .progress{
+      height:10px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden
+    }
+    .progress > div{
+      height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));
+      border-radius:inherit;transition:width .2s ease
+    }
+    .msg{
+      min-height:20px;color:#dfe6ff;font-size:14px
+    }
+    .overlay{
+      position:fixed;inset:0;background:rgba(6,8,14,.72);display:none;align-items:center;justify-content:center;padding:16px;z-index:50
+    }
+    .modal{
+      width:min(92vw,560px);background:linear-gradient(180deg,#1a2040,#12162a);border:1px solid rgba(255,255,255,.1);
+      border-radius:22px;padding:22px;box-shadow:0 30px 120px rgba(0,0,0,.5);text-align:center
+    }
+    .modal h2{margin:0 0 8px}
+    .modal p{margin:0 0 18px;color:var(--muted)}
+    .modal .actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+    @media (max-width: 900px){
+      main{grid-template-columns:1fr;grid-template-rows:minmax(320px,1fr) auto}
+      .side{max-height:42vh}
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="title">
+      <h1>Photo Puzzle Gallery</h1>
+      <small>Use a gallery photo or upload your own, then solve the sliding puzzle.</small>
+    </div>
+    <div class="controls">
+      <div class="group">
+        <label for="imageSelect" style="color:var(--muted);font-size:14px">Gallery</label>
+        <select id="imageSelect"></select>
+      </div>
+      <div class="group">
+        <input id="fileInput" type="file" accept="image/*" />
+      </div>
+      <div class="group">
+        <label for="sizeSelect" style="color:var(--muted);font-size:14px">Grid</label>
+        <select id="sizeSelect">
+          <option value="3">3×3</option>
+          <option value="4" selected>4×4</option>
+          <option value="5">5×5</option>
+          <option value="6">6×6</option>
+        </select>
+      </div>
+      <button id="shuffleBtn" class="primary">Shuffle</button>
+      <button id="resetBtn" class="ghost">Reset</button>
+      <button id="hintBtn" class="good">Show Hint</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="boardWrap">
+      <div class="boardTop">
+        <div class="stats">
+          <span>Moves: <b id="moves">0</b></span>
+          <span>Time: <b id="time">00:00</b></span>
+          <span>Correct: <b id="correct">0</b>/<b id="total">16</b></span>
+        </div>
+        <div class="stats">
+          <span class="badge" id="status">Ready</span>
+        </div>
+      </div>
+      <div class="board">
+        <div id="puzzle" aria-label="Puzzle board"></div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="preview">
+        <div class="frame">
+          <img id="previewImg" alt="Selected photo preview" />
+        </div>
+      </div>
+      <div class="panel">
+        <h2>How to play</h2>
+        <div class="hint">
+          Tap or click a tile to select it, then tap another tile to swap. Arrange the pieces to restore the photo.
+        </div>
+        <div class="list">
+          <div class="row"><span>Goal</span><span class="badge">Restore image</span></div>
+          <div class="row"><span>Tip</span><span class="badge">Solve edges first</span></div>
+          <div class="row"><span>Hint</span><span class="badge">Flash solved state</span></div>
+        </div>
+      </div>
+      <div class="footer">
+        <div class="progress"><div id="progressBar"></div></div>
+        <div class="msg" id="message">Select a gallery photo and press Shuffle.</div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<div class="overlay" id="winOverlay">
+  <div class="modal">
+    <h2>Congratulations!</h2>
+    <p>You completed the photo puzzle.</p>
+    <div class="actions">
+      <button id="playAgainBtn" class="primary">Play Again</button>
+      <button id="newShuffleBtn" class="good">Shuffle Again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const galleryImages = [
+    { name: "Mountain Lake", src: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1200&q=80" },
+    { name: "Forest Path", src: "https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=1200&q=80" },
+    { name: "City Lights", src: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?auto=format&fit=crop&w=1200&q=80" },
+    { name: "Ocean Sunset", src: "https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=1200&q=80" }
+  ];
+
+  const els = {
+    imageSelect: document.getElementById('imageSelect'),
+    fileInput: document.getElementById('fileInput'),
+    sizeSelect: document.getElementById('sizeSelect'),
+    shuffleBtn: document.getElementById('shuffleBtn'),
+    resetBtn: document.getElementById('resetBtn'),
+    hintBtn: document.getElementById('hintBtn'),
+    puzzle: document.getElementById('puzzle'),
+    previewImg: document.getElementById('previewImg'),
+    moves: document.getElementById('moves'),
+    time: document.getElementById('time'),
+    correct: document.getElementById('correct'),
+    total: document.getElementById('total'),
+    status: document.getElementById('status'),
+    progressBar: document.getElementById('progressBar'),
+    message: document.getElementById('message'),
+    overlay: document.getElementById('winOverlay'),
+    playAgainBtn: document.getElementById('playAgainBtn'),
+    newShuffleBtn: document.getElementById('newShuffleBtn')
+  };
+
+  let size = +els.sizeSelect.value;
+  let imageSrc = galleryImages[0].src;
+  let imageReady = false;
+  let solvedOrder = [];
+  let currentOrder = [];
+  let selected = null;
+  let moves = 0;
+  let timer = null;
+  let elapsed = 0;
+  let shuffling = false;
+
+  galleryImages.forEach((img, i) => {
+    const o = document.createElement('option');
+    o.value = img.src;
+    o.textContent = img.name;
+    els.imageSelect.appendChild(o);
+  });
+  els.imageSelect.value = imageSrc;
+
+  function fmtTime(s){
+    const m = String(Math.floor(s/60)).padStart(2,'0');
+    const r = String(s%60).padStart(2,'0');
+    return `${m}:${r}`;
+  }
+
+  function updateStats(){
+    const total = size * size;
+    let correct = 0;
+    for(let i=0;i<currentOrder.length;i++) if(currentOrder[i] === solvedOrder[i]) correct++;
+    els.moves.textContent = moves;
+    els.time.textContent = fmtTime(elapsed);
+    els.correct.textContent = correct;
+    els.total.textContent = total;
+    els.progressBar.style.width = `${(correct/total)*100}%`;
+    els.status.textContent = currentOrder.length ? (correct === total ? 'Solved' : 'Playing') : 'Ready';
+  }
+
+  function setMessage(msg){ els.message.textContent = msg; }
+
+  function startTimer(){
+    stopTimer();
+    timer = setInterval(() => { elapsed++; updateStats(); }, 1000);
+  }
+  function stopTimer(){ if(timer){ clearInterval(timer); timer = null; } }
+
+  function buildBoard(){
+    size = +els.sizeSelect.value;
+    els.puzzle.innerHTML = '';
+    els.puzzle.style.width = '';
+    els.puzzle.style.height = '';
+    const total = size * size;
+    solvedOrder = Array.from({length: total}, (_, i) => i);
+    currentOrder = solvedOrder.slice();
+    moves = 0; elapsed = 0; selected = null; shuffling = false;
+    els.overlay.style.display = 'none';
+    updateStats();
+    renderTiles();
+  }
+
+  function fitBoard(){
+    const wrap = els.puzzle.parentElement;
+    const maxW = Math.min(wrap.clientWidth - 6, 760);
+    const maxH = Math.min(wrap.clientHeight - 6, 760);
+    const s = Math.min(maxW, maxH);
+    els.puzzle.style.width = s + 'px';
+    els.puzzle.style.height = s + 'px';
+    const tileSize = s / size;
+    const gap = Math.max(2, Math.floor(s * 0.004));
+    document.documentElement.style.setProperty('--tileGap', gap + 'px');
+    return {s, tileSize};
+  }
+
+  function renderTiles(){
+    const {s, tileSize} = fitBoard();
+    const total = size * size;
+    els.puzzle.innerHTML = '';
+    for(let idx=0; idx<total; idx++){
+      const original = currentOrder[idx];
+      const row = Math.floor(idx / size), col = idx % size;
+      const oRow = Math.floor(original / size), oCol = original % size;
+      const tile = document.createElement('div');
+      tile.className = 'tile';
+      tile.dataset.index = idx;
+      tile.dataset.original = original;
+      tile.style.left = (col * tileSize) + 'px';
+      tile.style.top = (row * tileSize) + 'px';
+      tile.style.width = tileSize + 'px';
+      tile.style.height = tileSize + 'px';
+      tile.style.backgroundImage = `url("${imageSrc}")`;
+      tile.style.backgroundSize = `${s}px ${s}px`;
+      tile.style.backgroundPosition = `${-oCol * tileSize}px ${-oRow * tileSize}px`;
+      tile.addEventListener('click', () => onTileClick(idx, tile));
+      els.puzzle.appendChild(tile);
+    }
+    if(selected !== null) highlightSelected();
+    updateStats();
+  }
+
+  function highlightSelected(){
+    [...els.puzzle.children].forEach((t,i)=>t.classList.toggle('selected', i===selected));
+  }
+
+  function swap(i, j){
+    [currentOrder[i], currentOrder[j]] = [currentOrder[j], currentOrder[i]];
+    moves++;
+    renderTiles();
+    if(!timer) startTimer();
+    checkSolved();
+  }
+
+  function onTileClick(idx, tile){
+    if(shuffling) return;
+    if(selected === null){
+      selected = idx;
+      highlightSelected();
+      setMessage('Select another tile to swap.');
+      return;
+    }
+    if(selected === idx){
+      selected = null;
+      highlightSelected();
+      setMessage('Tile deselected.');
+      return;
+    }
+    swap(selected, idx);
+    selected = null;
+    setMessage('Tiles swapped.');
+  }
+
+  function checkSolved(){
+    const solved = currentOrder.every((v,i)=>v===i);
+    if(solved){
+      stopTimer();
+      els.overlay.style.display = 'flex';
+      setMessage(`Solved in ${moves} moves and ${fmtTime(elapsed)}.`);
+      els.status.textContent = 'Solved';
+    }
+    updateStats();
+  }
+
+  function shuffle(){
+    if(!imageReady) return;
+    buildBoard();
+    const total = size * size;
+    let arr = solvedOrder.slice();
+    do{
+      for(let i=arr.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    } while(arr.every((v,i)=>v===i));
+    currentOrder = arr;
+    shuffling = true;
+    renderTiles();
+    shuffling = false;
+    moves = 0;
+    elapsed = 0;
+    startTimer();
+    setMessage('Puzzle shuffled. Start swapping tiles.');
+    updateStats();
+  }
+
+  function reset(){
+    if(!imageReady) return;
+    buildBoard();
+    setMessage('Puzzle reset to solved state.');
+    updateStats();
+  }
+
+  function showHint(){
+    const prev = els.puzzle.style.filter;
+    els.puzzle.style.filter = 'brightness(1.12) saturate(1.1)';
+    setMessage('Hint shown briefly.');
+    setTimeout(()=>{ els.puzzle.style.filter = prev || ''; }, 900);
+  }
+
+  function loadImage(src){
+    imageReady = false;
+    els.previewImg.src = src;
+    const img = new Image();
+    img.onload = () => {
+      imageReady = true;
+      imageSrc = src;
+      buildBoard();
+      setMessage('Image loaded. Press Shuffle to play.');
+    };
+    img.onerror = () => {
+      setMessage('Unable to load image. Try another gallery photo or upload a file.');
+    };
+    img.src = src;
+  }
+
+  els.imageSelect.addEventListener('change', e => loadImage(e.target.value));
+  els.fileInput.addEventListener('change', e => {
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    const url = URL.createObjectURL(file);
+    loadImage(url);
+  });
+  els.sizeSelect.addEventListener('change', () => {
+    size = +els.sizeSelect.value;
+    buildBoard();
+    setMessage('Grid size changed.');
+  });
+  els.shuffleBtn.addEventListener('click', shuffle);
+  els.resetBtn.addEventListener('click', reset);
+  els.hintBtn.addEventListener('click', showHint);
+  els.playAgainBtn.addEventListener('click', () => { els.overlay.style.display = 'none'; shuffle(); });
+  els.newShuffleBtn.addEventListener('click', () => { els.overlay.style.display = 'none'; shuffle(); });
+
+  window.addEventListener('resize', () => renderTiles());
+
+  loadImage(imageSrc);
+  buildBoard();
+})();
+</script>
+</body>
+</html>

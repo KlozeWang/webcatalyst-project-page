@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Senpai Royal</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #08111f;
+      font-family: Arial, Helvetica, sans-serif;
+      touch-action: none;
+      user-select: none;
+    }
+    canvas {
+      display: block;
+      background: radial-gradient(circle at center, #13243d 0%, #0a1324 55%, #050a12 100%);
+    }
+    .ui {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      color: #fff;
+    }
+    .hud {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-weight: 700;
+      text-shadow: 0 2px 4px rgba(0,0,0,.6);
+      font-size: 14px;
+    }
+    .chip {
+      background: rgba(0,0,0,.35);
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 999px;
+      padding: 8px 12px;
+      backdrop-filter: blur(4px);
+    }
+    .centerMsg {
+      position: absolute;
+      top: 16%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,.5);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 16px;
+      padding: 16px 18px;
+      max-width: min(92vw, 520px);
+      text-align: center;
+      box-shadow: 0 8px 30px rgba(0,0,0,.35);
+      pointer-events: none;
+    }
+    .title {
+      font-size: clamp(28px, 5vw, 54px);
+      font-weight: 900;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+      color: #ffd166;
+      text-shadow: 0 3px 0 rgba(0,0,0,.35);
+    }
+    .subtitle {
+      font-size: 14px;
+      line-height: 1.5;
+      color: #dce8ff;
+      opacity: .95;
+    }
+    .controls {
+      position: absolute;
+      bottom: 14px;
+      left: 14px;
+      right: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 14px;
+      pointer-events: none;
+    }
+    .stickWrap, .fireWrap {
+      pointer-events: auto;
+      touch-action: none;
+    }
+    .stick {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.14);
+      position: relative;
+      box-shadow: inset 0 0 20px rgba(0,0,0,.2);
+    }
+    .knob {
+      position: absolute;
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      left: 33px;
+      top: 33px;
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(255,255,255,.24);
+      box-shadow: 0 4px 10px rgba(0,0,0,.25);
+      transform: translate(0,0);
+    }
+    .fireBtn {
+      width: 112px;
+      height: 112px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #ff8fab 0%, #ff4d6d 35%, #c9184a 100%);
+      border: 2px solid rgba(255,255,255,.2);
+      box-shadow: 0 12px 26px rgba(0,0,0,.28), inset 0 0 18px rgba(255,255,255,.15);
+      display: grid;
+      place-items: center;
+      color: white;
+      font-weight: 900;
+      font-size: 18px;
+      letter-spacing: .5px;
+      text-shadow: 0 2px 2px rgba(0,0,0,.4);
+    }
+    .crosshair {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 20px;
+      height: 20px;
+      transform: translate(-50%,-50%);
+      opacity: .5;
+      display: none;
+    }
+    .crosshair:before, .crosshair:after {
+      content: "";
+      position: absolute;
+      background: rgba(255,255,255,.85);
+      border-radius: 2px;
+    }
+    .crosshair:before {
+      left: 9px; top: 0; width: 2px; height: 20px;
+    }
+    .crosshair:after {
+      top: 9px; left: 0; height: 2px; width: 20px;
+    }
+    .mobileHint {
+      position: absolute;
+      bottom: 132px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,.4);
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: #fff;
+      display: none;
+    }
+    @media (max-width: 800px) {
+      .mobileHint { display: block; }
+      .crosshair { display: block; }
+    }
+  </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div class="ui">
+  <div class="hud">
+    <div class="chip" id="hpChip">HP: 100</div>
+    <div class="chip" id="killsChip">KOs: 0</div>
+    <div class="chip" id="playersChip">Survivors: 24</div>
+    <div class="chip" id="zoneChip">Zone: 100%</div>
+  </div>
+  <div class="centerMsg" id="msgBox">
+    <div class="title">SENPAI ROYAL</div>
+    <div class="subtitle">
+      Survive the shrinking arena. Defeat rival senpais, dodge shots, and be the last one standing.<br>
+      Move with WASD or left stick, aim with mouse or auto-aim, shoot with click or red button.
+    </div>
+  </div>
+  <div class="mobileHint">Drag left joystick to move • Tap red button to shoot</div>
+  <div class="controls">
+    <div class="stickWrap" id="stickWrap">
+      <div class="stick" id="stick">
+        <div class="knob" id="knob"></div>
+      </div>
+    </div>
+    <div class="fireWrap" id="fireWrap">
+      <div class="fireBtn" id="fireBtn">FIRE</div>
+    </div>
+  </div>
+  <div class="crosshair"></div>
+</div>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const hpChip = document.getElementById('hpChip');
+  const killsChip = document.getElementById('killsChip');
+  const playersChip = document.getElementById('playersChip');
+  const zoneChip = document.getElementById('zoneChip');
+  const msgBox = document.getElementById('msgBox');
+  const stick = document.getElementById('stick');
+  const knob = document.getElementById('knob');
+  const fireBtn = document.getElementById('fireBtn');
+
+  let W=0,H=0,DPR=1;
+  function resize(){
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    W = canvas.width = Math.floor(innerWidth * DPR);
+    H = canvas.height = Math.floor(innerHeight * DPR);
+    canvas.style.width = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+  }
+  addEventListener('resize', resize); resize();
+
+  const rand = (a,b)=>a+Math.random()*(b-a);
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  const dist = (a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+  const len = (x,y)=>Math.hypot(x,y);
+
+  const keys = {};
+  addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if ([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(e.key.toLowerCase())) e.preventDefault(); });
+  addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+  let mouse = {x: innerWidth/2, y: innerHeight/2, down:false};
+  addEventListener('mousemove', e => { mouse.x=e.clientX; mouse.y=e.clientY; });
+  addEventListener('mousedown', e => { mouse.down = true; });
+  addEventListener('mouseup', e => { mouse.down = false; });
+
+  let joy = {active:false,id:null,cx:0,cy:0,x:0,y:0};
+  stick.addEventListener('pointerdown', e => {
+    joy.active = true; joy.id = e.pointerId; stick.setPointerCapture(e.pointerId);
+    const r = stick.getBoundingClientRect();
+    joy.cx = r.left + r.width/2; joy.cy = r.top + r.height/2;
+    joyMove(e);
+  });
+  stick.addEventListener('pointermove', joyMove);
+  stick.addEventListener('pointerup', joyEnd);
+  stick.addEventListener('pointercancel', joyEnd);
+  function joyMove(e){
+    if (!joy.active || e.pointerId !== joy.id) return;
+    const dx = e.clientX - joy.cx, dy = e.clientY - joy.cy;
+    const m = Math.min(42, Math.hypot(dx,dy));
+    const ang = Math.atan2(dy,dx);
+    joy.x = Math.cos(ang)*m/42;
+    joy.y = Math.sin(ang)*m/42;
+    knob.style.transform = `translate(${Math.cos(ang)*m}px, ${Math.sin(ang)*m}px)`;
+  }
+  function joyEnd(e){
+    if (e.pointerId !== joy.id) return;
+    joy.active = false; joy.id = null; joy.x = joy.y = 0;
+    knob.style.transform = `translate(0,0)`;
+  }
+
+  let fireHeld = false;
+  fireBtn.addEventListener('pointerdown', e => { fireHeld = true; fireBtn.setPointerCapture(e.pointerId); });
+  fireBtn.addEventListener('pointerup', () => { fireHeld = false; });
+  fireBtn.addEventListener('pointercancel', () => { fireHeld = false; });
+
+  const world = { w: 2600, h: 2600 };
+  let camera = {x:0,y:0};
+  let time = 0;
+  let gameOver = false;
+  let win = false;
+  let kills = 0;
+
+  const player = {
+    x: world.w/2, y: world.h/2, r: 16,
+    hp: 100, speed: 240, cooldown: 0, inv: 0, facing: 0
+  };
+
+  const enemies = [];
+  const bullets = [];
+  const eBullets = [];
+  const loot = [];
+
+  const zone = { x: world.w/2, y: world.h/2, r: 1150, target: 1150, shrink: 0.4 };
+
+  function spawnEnemy(){
+    const side = Math.floor(Math.random()*4);
+    let x,y;
+    if (side===0){ x=rand(0,world.w); y=-50; }
+    if (side===1){ x=world.w+50; y=rand(0,world.h); }
+    if (side===2){ x=rand(0,world.w); y=world.h+50; }
+    if (side===3){ x=-50; y=rand(0,world.h); }
+    enemies.push({
+      x,y,r:15,hp:50,spd: rand(110,170), cd: rand(0,1.2), aim:0, strafe: Math.random()<.5?-1:1
+    });
+  }
+  for (let i=0;i<24;i++) spawnEnemy();
+
+  function shoot(from, angle, speed, friendly){
+    const b = { x:from.x + Math.cos(angle)*(from.r+8), y:from.y + Math.sin(angle)*(from.r+8), vx:Math.cos(angle)*speed, vy:Math.sin(angle)*speed, r: friendly?5:4, life: 2.2, dmg: friendly?22:10, friendly };
+    (friendly ? bullets : eBullets).push(b);
+  }
+
+  function dropLoot(x,y){ if (Math.random()<0.18) loot.push({x,y,r:10, t:0}); }
+
+  function update(dt){
+    time += dt;
+    if (!gameOver) {
+      zone.target = Math.max(380, zone.target - zone.shrink*dt*12);
+      zone.r += (zone.target - zone.r) * Math.min(1, dt*0.5);
+    }
+
+    let mvx = 0, mvy = 0;
+    if (keys['w'] || keys['arrowup']) mvy -= 1;
+    if (keys['s'] || keys['arrowdown']) mvy += 1;
+    if (keys['a'] || keys['arrowleft']) mvx -= 1;
+    if (keys['d'] || keys['arrowright']) mvx += 1;
+    mvx += joy.x; mvy += joy.y;
+    const mlen = len(mvx,mvy) || 1;
+    mvx /= mlen; mvy /= mlen;
+
+    if (!gameOver){
+      player.x += mvx * player.speed * dt;
+      player.y += mvy * player.speed * dt;
+    }
+    player.x = clamp(player.x, player.r, world.w-player.r);
+    player.y = clamp(player.y, player.r, world.h-player.r);
+
+    const aimX = mouse.x * DPR + camera.x;
+    const aimY = mouse.y * DPR + camera.y;
+    player.facing = Math.atan2(aimY - player.y, aimX - player.x);
+
+    player.cooldown = Math.max(0, player.cooldown - dt);
+    player.inv = Math.max(0, player.inv - dt);
+
+    if (!gameOver && (mouse.down || fireHeld || keys[' ']) && player.cooldown <= 0) {
+      shoot(player, player.facing, 700, true);
+      player.cooldown = 0.16;
+    }
+
+    for (const e of enemies){
+      if (gameOver) break;
+      const dx = player.x - e.x, dy = player.y - e.y;
+      const d = Math.hypot(dx,dy) || 1;
+      e.aim = Math.atan2(dy,dx);
+      const inside = d < zone.r - 10;
+      const zonePull = (d > zone.r ? 1.2 : 0.2);
+      const strafe = Math.sin(time*1.4 + e.x*0.01) * 0.6 * e.strafe;
+      e.x += ((dx/d)*e.spd*0.55 + (-dy/d)*e.spd*0.22*strafe) * dt;
+      e.y += ((dy/d)*e.spd*0.55 + (dx/d)*e.spd*0.22*strafe) * dt;
+      if (!inside){ e.x -= (dx/d)*e.spd*zonePull*dt; e.y -= (dy/d)*e.spd*zonePull*dt; }
+      e.x = clamp(e.x, e.r, world.w-e.r);
+      e.y = clamp(e.y, e.r, world.h-e.r);
+      e.cd -= dt;
+      if (e.cd <= 0 && d < 760) {
+        shoot(e, e.aim + rand(-0.12,0.12), 480, false);
+        e.cd = rand(0.8, 1.5);
+      }
+    }
+
+    for (const b of [...bullets, ...eBullets]){
+      b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+    }
+
+    bullets.forEach((b, bi) => {
+      if (b.life <= 0) return;
+      for (const e of enemies){
+        if (e.hp <= 0) continue;
+        if (dist(b,e) < b.r + e.r){
+          e.hp -= b.dmg;
+          b.life = 0;
+          if (e.hp <= 0){
+            kills++;
+            dropLoot(e.x,e.y);
+          }
+          break;
+        }
+      }
+    });
+
+    eBullets.forEach((b, bi) => {
+      if (b.life <= 0 || gameOver) return;
+      if (dist(b, player) < b.r + player.r && player.inv <= 0){
+        player.hp -= b.dmg;
+        player.inv = 0.35;
+        b.life = 0;
+        if (player.hp <= 0){
+          player.hp = 0;
+          gameOver = true;
+          msgBox.innerHTML = `<div class="title">${kills >= 1 ? 'DEFEATED' : 'GAME OVER'}</div><div class="subtitle">Senpai Royal ended. Refresh to battle again.</div>`;
+        }
+      }
+    });
+
+    for (const l of loot){
+      l.t += dt;
+      if (dist(l, player) < l.r + player.r + 6){
+        player.hp = Math.min(100, player.hp + 12);
+        l.dead = true;
+      }
+    }
+
+    enemies.forEach(e => {
+      if (e.hp <= 0) {
+        e.dead = true;
+      } else if (dist(e, player) < e.r + player.r && player.inv <= 0 && !gameOver){
+        player.hp -= 18 * dt;
+        if (player.hp <= 0){
+          player.hp = 0; gameOver = true;
+          msgBox.innerHTML = `<div class="title">DEFEATED</div><div class="subtitle">The royal senpais were too strong. Refresh to try again.</div>`;
+        }
+      }
+      if (!gameOver && dist(e, {x:zone.x,y:zone.y}) > zone.r + 40) {
+        e.hp -= 12 * dt;
+      }
+    });
+
+    bullets.splice(0, bullets.length, ...bullets.filter(b => b.life > 0 && b.x>-50 && b.y>-50 && b.x<world.w+50 && b.y<world.h+50));
+    eBullets.splice(0, eBullets.length, ...eBullets.filter(b => b.life > 0 && b.x>-50 && b.y>-50 && b.x<world.w+50 && b.y<world.h+50));
+    enemies.splice(0, enemies.length, ...enemies.filter(e => !e.dead));
+    loot.splice(0, loot.length, ...loot.filter(l => !l.dead));
+
+    while (enemies.length < 24 && !gameOver) spawnEnemy();
+    if (!gameOver && enemies.length === 0) {
+      win = true; gameOver = true;
+      msgBox.innerHTML = `<div class="title">VICTORY</div><div class="subtitle">You are the last Senpai standing. Royal win!</div>`;
+    }
+
+    camera.x = clamp(player.x * DPR - innerWidth * DPR/2, 0, world.w * DPR - innerWidth * DPR);
+    camera.y = clamp(player.y * DPR - innerHeight * DPR/2, 0, world.h * DPR - innerHeight * DPR);
+
+    hpChip.textContent = `HP: ${Math.ceil(player.hp)}`;
+    killsChip.textContent = `KOs: ${kills}`;
+    playersChip.textContent = `Survivors: ${enemies.length + (gameOver ? 0 : 1)}`;
+    zoneChip.textContent = `Zone: ${Math.max(0, Math.floor(zone.r / 1150 * 100))}%`;
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+
+    ctx.save();
+    ctx.translate(-camera.x, -camera.y);
+
+    const grid = 80 * DPR;
+    ctx.globalAlpha = 0.18;
+    ctx.strokeStyle = '#7fb3ff';
+    ctx.lineWidth = 1 * DPR;
+    for (let x = 0; x <= world.w * DPR; x += grid) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, world.h * DPR);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= world.h * DPR; y += grid) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(world.w * DPR, y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(zone.x * DPR, zone.y * DPR, zone.r * DPR, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(0, 255, 180, 0.05)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(100, 255, 200, 0.25)';
+    ctx.lineWidth = 6 * DPR;
+    ctx.stroke();
+    ctx.restore();
+
+    for (const l of loot){
+      ctx.save();
+      ctx.translate(l.x*DPR, l.y*DPR);
+      ctx.rotate(l.t * 3);
+      ctx.fillStyle = '#ffd166';
+      ctx.beginPath();
+      ctx.moveTo(0, -12*DPR); ctx.lineTo(10*DPR,0); ctx.lineTo(0,12*DPR); ctx.lineTo(-10*DPR,0);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+
+    bullets.forEach(b => {
+      ctx.fillStyle = '#8be9fd';
+      ctx.beginPath();
+      ctx.arc(b.x*DPR, b.y*DPR, b.r*DPR, 0, Math.PI*2);
+      ctx.fill();
+    });
+    eBullets.forEach(b => {
+      ctx.fillStyle = '#ff6b6b';
+      ctx.beginPath();
+      ctx.arc(b.x*DPR, b.y*DPR, b.r*DPR, 0, Math.PI*2);
+      ctx.fill();
+    });
+
+    enemies.forEach(e => {
+      ctx.save();
+      ctx.translate(e.x*DPR, e.y*DPR);
+      ctx.rotate(e.aim);
+      ctx.fillStyle = '#ffb703';
+      ctx.beginPath();
+      ctx.arc(0,0,e.r*DPR,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(4*DPR, -4*DPR, 9*DPR, 8*DPR);
+      ctx.fillStyle = '#111';
+      ctx.fillRect(9*DPR, -2*DPR, 3*DPR, 4*DPR);
+      ctx.restore();
+      ctx.fillStyle = 'rgba(0,0,0,.35)';
+      ctx.fillRect((e.x-16)*DPR, (e.y-24)*DPR, 32*DPR, 4*DPR);
+      ctx.fillStyle = '#4ade80';
+      ctx.fillRect((e.x-16)*DPR, (e.y-24)*DPR, clamp(e.hp,0,50)/50*32*DPR, 4*DPR);
+    });
+
+    ctx.save();
+    ctx.translate(player.x*DPR, player.y*DPR);
+    ctx.rotate(player.facing);
+    ctx.fillStyle = player.inv > 0 ? 'rgba(255,255,255,.7)' : '#ffffff';
+    ctx.beginPath();
+    ctx.arc(0,0,player.r*DPR,0,Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#ff4d6d';
+    ctx.beginPath();
+    ctx.moveTo(10*DPR,-10*DPR); ctx.lineTo(24*DPR,0); ctx.lineTo(10*DPR,10*DPR);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = '#00111f';
+    ctx.beginPath();
+    ctx.arc(zone.x*DPR, zone.y*DPR, Math.max(0, zone.r-2)*DPR, 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(255,255,255,.04)';
+    ctx.lineWidth = 2*DPR;
+    ctx.stroke();
+
+    ctx.restore();
+
+    if (!gameOver) {
+      const overlay = ctx.createLinearGradient(0,0,0,H);
+      overlay.addColorStop(0,'rgba(255,255,255,0.05)');
+      overlay.addColorStop(1,'rgba(0,0,0,0.2)');
+      ctx.fillStyle = overlay;
+      ctx.fillRect(0,0,W,H);
+    }
+  }
+
+  let last = performance.now();
+  function loop(t){
+    const dt = Math.min(0.033, (t-last)/1000);
+    last = t;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  addEventListener('contextmenu', e => e.preventDefault());
+})();
+</script>
+</body>
+</html>

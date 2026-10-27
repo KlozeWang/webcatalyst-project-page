@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ramp Runner</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: linear-gradient(#86d7ff, #dff6ff 60%, #c9f0b8);
+      font-family: Arial, Helvetica, sans-serif;
+      user-select: none;
+      touch-action: none;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: transparent;
+    }
+    .hud {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      color: #14324a;
+      background: rgba(255,255,255,0.7);
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-weight: bold;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    }
+    .hud small {
+      display: block;
+      font-weight: normal;
+      margin-top: 4px;
+      opacity: 0.8;
+    }
+    .centerMsg {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      color: #123;
+      text-align: center;
+      text-shadow: 0 2px 0 rgba(255,255,255,0.8);
+      font-weight: 700;
+    }
+    .card {
+      background: rgba(255,255,255,0.74);
+      padding: 18px 22px;
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+      max-width: 360px;
+      margin: 16px;
+    }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="hud">
+    Score: <span id="score">0</span>
+    <small>Move: A/D or ←/→. Collect coins on the ramp.</small>
+  </div>
+  <div class="centerMsg" id="startMsg">
+    <div class="card">
+      <div style="font-size: 28px; margin-bottom: 6px;">Ramp Runner</div>
+      <div>Guide the guy up and down the ramp to collect points.</div>
+      <div style="margin-top: 10px; font-size: 14px; opacity: 0.85;">Press any arrow key or tap to start</div>
+    </div>
+  </div>
+  <canvas id="game"></canvas>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const startMsg = document.getElementById('startMsg');
+
+    let W = 0, H = 0, dpr = 1;
+    function resize() {
+      dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      W = Math.floor(innerWidth);
+      H = Math.floor(innerHeight);
+      canvas.width = Math.floor(W * dpr);
+      canvas.height = Math.floor(H * dpr);
+      canvas.style.width = W + 'px';
+      canvas.style.height = H + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      buildRamp();
+    }
+    window.addEventListener('resize', resize);
+
+    const keys = { left: false, right: false, started: false };
+    addEventListener('keydown', e => {
+      if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') keys.left = true;
+      if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') keys.right = true;
+      if (!keys.started && (e.key.startsWith('Arrow') || e.key === ' ' || e.key.toLowerCase() === 'a' || e.key.toLowerCase() === 'd')) {
+        keys.started = true;
+        startMsg.classList.add('hidden');
+      }
+    });
+    addEventListener('keyup', e => {
+      if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') keys.left = false;
+      if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') keys.right = false;
+    });
+    addEventListener('pointerdown', () => {
+      if (!keys.started) {
+        keys.started = true;
+        startMsg.classList.add('hidden');
+      }
+    });
+
+    let ramp = [];
+    function buildRamp() {
+      ramp = [];
+      const left = 60;
+      const right = Math.max(220, W - 60);
+      const baseY = H * 0.76;
+      const peakY = H * 0.28;
+      const midX = W * 0.58;
+      ramp.push({ x: left, y: baseY });
+      ramp.push({ x: W * 0.28, y: baseY - H * 0.12 });
+      ramp.push({ x: midX, y: peakY });
+      ramp.push({ x: right, y: baseY - H * 0.06 });
+    }
+
+    function lerp(a,b,t){ return a + (b-a)*t; }
+    function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+    function sampleRamp(t) {
+      t = clamp(t, 0, 1);
+      const n = ramp.length - 1;
+      const p = t * n;
+      const i = Math.min(n - 1, Math.floor(p));
+      const f = p - i;
+      return {
+        x: lerp(ramp[i].x, ramp[i+1].x, f),
+        y: lerp(ramp[i].y, ramp[i+1].y, f)
+      };
+    }
+
+    let player = { t: 0.02, speed: 0.0018, r: 18 };
+    let coins = [];
+    let score = 0;
+    let time = 0;
+
+    function spawnCoin() {
+      const t = 0.08 + Math.random() * 0.86;
+      const pos = sampleRamp(t);
+      coins.push({
+        t,
+        x: pos.x,
+        y: pos.y - 28 - Math.random()*18,
+        r: 10,
+        taken: false,
+        bob: Math.random() * Math.PI * 2
+      });
+    }
+
+    function resetCoins() {
+      coins = [];
+      for (let i = 0; i < 10; i++) spawnCoin();
+    }
+
+    function dist(ax, ay, bx, by) {
+      return Math.hypot(ax - bx, ay - by);
+    }
+
+    function drawBackground() {
+      ctx.clearRect(0,0,W,H);
+
+      for (let i = 0; i < 6; i++) {
+        const y = H * 0.15 + i * 18 + Math.sin(time*0.001 + i) * 2;
+        ctx.fillStyle = `rgba(255,255,255,${0.13 - i*0.012})`;
+        ctx.beginPath();
+        ctx.ellipse(W*0.2 + i*120, y, 44 + i*2, 16, 0, 0, Math.PI*2);
+        ctx.ellipse(W*0.55 + i*110, y + 18, 48 + i*2, 18, 0, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = 'rgba(34, 68, 41, 0.18)';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(0, H*0.84);
+      ctx.lineTo(W, H*0.84);
+      ctx.stroke();
+    }
+
+    function drawRamp() {
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      ctx.beginPath();
+      ctx.moveTo(ramp[0].x, ramp[0].y);
+      for (let i = 1; i < ramp.length; i++) ctx.lineTo(ramp[i].x, ramp[i].y);
+
+      ctx.strokeStyle = '#7a4b21';
+      ctx.lineWidth = 36;
+      ctx.stroke();
+
+      ctx.strokeStyle = '#b6793b';
+      ctx.lineWidth = 28;
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(30,30,30,0.12)';
+      ctx.lineWidth = 44;
+      ctx.beginPath();
+      ctx.moveTo(ramp[0].x, ramp[0].y + 20);
+      for (let i = 1; i < ramp.length; i++) ctx.lineTo(ramp[i].x, ramp[i].y + 20);
+      ctx.stroke();
+    }
+
+    function drawCoin(c) {
+      const bobY = Math.sin(time * 0.006 + c.bob) * 3;
+      ctx.save();
+      ctx.translate(c.x, c.y + bobY);
+      ctx.rotate(Math.sin(time * 0.004 + c.bob) * 0.2);
+
+      const grad = ctx.createRadialGradient(-3, -4, 2, 0, 0, 14);
+      grad.addColorStop(0, '#fff4a3');
+      grad.addColorStop(0.5, '#ffd84d');
+      grad.addColorStop(1, '#d39a00');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(0, 0, c.r, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, c.r - 3, 0, Math.PI*2);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.beginPath();
+      ctx.ellipse(-3, -4, 4, 7, -0.4, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function drawPlayer() {
+      const pos = sampleRamp(player.t);
+      const x = pos.x;
+      const y = pos.y - 18;
+
+      ctx.save();
+      ctx.translate(x, y);
+
+      ctx.fillStyle = '#2f2f2f';
+      ctx.beginPath();
+      ctx.arc(0, -18, 10, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#2f2f2f';
+      ctx.lineWidth = 5;
+      ctx.lineCap = 'round';
+
+      ctx.beginPath();
+      ctx.moveTo(0, -8);
+      ctx.lineTo(0, 16);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-12, 7);
+      ctx.moveTo(0, 0);
+      ctx.lineTo(12, 7);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(0, 16);
+      ctx.lineTo(-10, 30);
+      ctx.moveTo(0, 16);
+      ctx.lineTo(10, 30);
+      ctx.stroke();
+
+      ctx.fillStyle = '#ff6d6d';
+      ctx.beginPath();
+      ctx.arc(0, -18, 11, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffe5c7';
+      ctx.beginPath();
+      ctx.arc(0, -26, 8, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.fillStyle = '#2f2f2f';
+      ctx.beginPath();
+      ctx.arc(-3, -27, 1.4, 0, Math.PI*2);
+      ctx.arc(3, -27, 1.4, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function update() {
+      time += 16.67;
+
+      if (keys.started) {
+        if (keys.left) player.t -= player.speed;
+        if (keys.right) player.t += player.speed;
+      }
+      player.t = clamp(player.t, 0, 1);
+
+      const p = sampleRamp(player.t);
+
+      for (const c of coins) {
+        if (!c.taken && dist(p.x, p.y - 18, c.x, c.y) < 28) {
+          c.taken = true;
+          score += 10;
+          scoreEl.textContent = score;
+        }
+      }
+
+      if (coins.filter(c => !c.taken).length < 6) {
+        if (Math.random() < 0.08) spawnCoin();
+      }
+
+      if (coins.length > 18) coins = coins.filter(c => !c.taken);
+    }
+
+    function render() {
+      drawBackground();
+      drawRamp();
+
+      for (const c of coins) if (!c.taken) drawCoin(c);
+      drawPlayer();
+
+      ctx.fillStyle = 'rgba(20,50,74,0.65)';
+      ctx.font = 'bold 16px Arial';
+      ctx.fillText('Goal: collect as many coins as you can!', 12, H - 16);
+    }
+
+    function loop() {
+      update();
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    resize();
+    resetCoins();
+    loop();
+  </script>
+</body>
+</html>

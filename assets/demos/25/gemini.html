@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Find the Imposter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+        
+        .screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            width: 100%;
+            padding: 1rem;
+        }
+        
+        .screen.active {
+            display: flex;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .word-btn {
+            transition: transform 0.1s, background-color 0.2s;
+        }
+        
+        .word-btn:active {
+            transform: scale(0.95);
+        }
+
+        .shake {
+            animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+
+        .correct-flash {
+            animation: correctFlash 0.3s ease-out;
+        }
+
+        @keyframes correctFlash {
+            0% { background-color: #22c55e; color: white; }
+            100% { background-color: #334155; }
+        }
+        
+        .wrong-flash {
+            animation: wrongFlash 0.3s ease-out;
+        }
+
+        @keyframes wrongFlash {
+            0% { background-color: #ef4444; color: white; }
+            100% { background-color: #334155; }
+        }
+
+        select {
+            background-color: #1e293b;
+            color: white;
+            border: 2px solid #3b82f6;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            width: 100%;
+            max-width: 300px;
+            margin-bottom: 1rem;
+            outline: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Audio Context for Sound Effects -->
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            if (type === 'correct') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'wrong') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.2);
+                gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.2);
+            } else if (type === 'gameover') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 1);
+                gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 1);
+            }
+        }
+    </script>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="screen active">
+        <h1 class="text-5xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 text-center" id="title-text">Find the Imposter</h1>
+        <p class="text-gray-400 mb-8 text-center" id="subtitle-text">Find the word that does not belong to the category!</p>
+        
+        <label for="lang-select" class="sr-only">Language</label>
+        <select id="lang-select" onchange="changeLanguage()">
+            <option value="fr">Français</option>
+            <option value="en">English</option>
+        </select>
+
+        <label for="cat-select" class="sr-only">Category</label>
+        <select id="cat-select">
+            <!-- Populated by JS -->
+        </select>
+
+        <button onclick="startGame()" class="mt-4 px-8 py-3 bg-blue-600 hover:bg-blue-500 rounded-full font-bold text-xl transition-colors shadow-lg shadow-blue-500/30" id="start-btn">
+            Commencer
+        </button>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="game-screen" class="screen w-full max-w-2xl mx-auto">
+        <div class="flex justify-between w-full mb-6 px-4 bg-slate-800 rounded-2xl py-3 shadow-lg">
+            <div class="text-xl font-semibold"><span id="ui-score">Score</span>: <span id="score" class="text-blue-400">0</span></div>
+            <div class="text-xl font-semibold"><span id="ui-time">Temps</span>: <span id="time" class="text-red-400">60</span>s</div>
+        </div>
+
+        <h2 class="text-2xl mb-6 text-center font-light text-gray-300">
+            <span id="ui-category">Catégorie</span>: <span id="current-category-display" class="font-bold text-white text-3xl block mt-1 text-purple-400"></span>
+        </h2>
+
+        <div id="options-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full px-4">
+            <!-- Buttons injected here -->
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over-screen" class="screen">
+        <h1 class="text-6xl font-bold mb-4 text-red-500" id="go-title">Terminé!</h1>
+        <p class="text-2xl mb-8"><span id="go-score-text">Votre Score</span>: <span id="final-score" class="text-4xl font-bold text-blue-400">0</span></p>
+        <button onclick="showStartScreen()" class="px-8 py-3 bg-purple-600 hover:bg-purple-500 rounded-full font-bold text-xl transition-colors shadow-lg shadow-purple-500/30" id="restart-btn">
+            Menu Principal
+        </button>
+    </div>
+
+    <script>
+        const gameData = {
+            fr: {
+                ui: {
+                    title: "Trouve l'Imposteur",
+                    subtitle: "Trouvez le mot qui n'appartient pas à la catégorie !",
+                    start: "Commencer",
+                    score: "Score",
+                    time: "Temps",
+                    category: "Catégorie",
+                    gameover: "Terminé !",
+                    yourscore: "Votre Score",
+                    menu: "Menu Principal",
+                    cat_all: "Toutes les catégories (Aléatoire)"
+                },
+                categories: {
+                    sport: ["Football", "Basketball", "Tennis", "Natation", "Cyclisme", "Rugby", "Volleyball", "Boxe", "Judo", "Athlétisme", "Golf", "Ski"],
+                    joueur: ["Messi", "Ronaldo", "LeBron James", "Nadal", "Mbappé", "Federer", "Djokovic", "Curry", "Hamilton", "Bolt", "Zidane"],
+                    country: ["France", "Japon", "Brésil", "Canada", "Italie", "Espagne", "Australie", "Mexique", "Allemagne", "Maroc", "Sénégal"],
+                    places: ["Tour Eiffel", "Taj Mahal", "Colisée", "Statue de la Liberté", "Machu Picchu", "Pyramides", "Grande Muraille", "Mont Fuji", "Louvre"],
+                    nourriture: ["Pizza", "Sushi", "Hamburger", "Pâtes", "Tacos", "Croissant", "Salade", "Glace", "Couscous", "Paella", "Kebab"],
+                    acteur_ice: ["Tom Cruise", "Brad Pitt", "Meryl Streep", "Leonardo DiCaprio", "Angelina Jolie", "Will Smith", "Scarlett Johansson", "Johnny Depp", "Omar Sy"],
+                    voitures: ["Ferrari", "Porsche", "Toyota", "Ford", "BMW", "Mercedes", "Audi", "Tesla", "Renault", "Peugeot", "Honda"],
+                    animals: ["Chien", "Chat", "Lion", "Éléphant", "Tigre", "Girafe", "Singe", "Dauphin", "Pingouin", "Ours", "Loup", "Renard"],
+                    anime: ["Naruto", "Goku", "Luffy", "Eren", "Ichigo", "Saitama", "Tanjiro", "Midoriya", "Edward Elric", "Gon", "Zoro"]
+                },
+                categoryNames: {
+                    sport: "Sports", joueur: "Athlètes", country: "Pays", places: "Lieux Célèbres", nourriture: "Nourriture", 
+                    acteur_ice: "Acteurs/Actrices", voitures: "Voitures", animals: "Animaux", anime: "Personnages d'Anime"
+                }
+            },
+            en: {
+                ui: {
+                    title: "Find the Imposter",
+                    subtitle: "Find the word that does not belong to the category!",
+                    start: "Start Game",
+                    score: "Score",
+                    time: "Time",
+                    category: "Category",
+                    gameover: "Game Over!",
+                    yourscore: "Your Score",
+                    menu: "Main Menu",
+                    cat_all: "All Categories (Random)"
+                },
+                categories: {
+                    sport: ["Football", "Basketball", "Tennis", "Swimming", "Cycling", "Rugby", "Volleyball", "Boxing", "Judo", "Athletics", "Golf", "Skiing"],
+                    joueur: ["Messi", "Ronaldo", "LeBron James", "Nadal", "Mbappé", "Federer", "Djokovic", "Curry", "Hamilton", "Bolt", "Zidane"],
+                    country: ["France", "Japan", "Brazil", "Canada", "Italy", "Spain", "Australia", "Mexico", "Germany", "Morocco", "Senegal"],
+                    places: ["Eiffel Tower", "Taj Mahal", "Colosseum", "Statue of Liberty", "Machu Picchu", "Pyramids", "Great Wall", "Mount Fuji", "Louvre"],
+                    nourriture: ["Pizza", "Sushi", "Hamburger", "Pasta", "Tacos", "Croissant", "Salad", "Ice Cream", "Couscous", "Paella", "Kebab"],
+                    acteur_ice: ["Tom Cruise", "Brad Pitt", "Meryl Streep", "Leonardo DiCaprio", "Angelina Jolie", "Will Smith", "Scarlett Johansson", "Johnny Depp", "Tom Hanks"],
+                    voitures: ["Ferrari", "Porsche", "Toyota", "Ford", "BMW", "Mercedes", "Audi", "Tesla", "Chevrolet", "Hyundai", "Honda"],
+                    animals: ["Dog", "Cat", "Lion", "Elephant", "Tiger", "Giraffe", "Monkey", "Dolphin", "Penguin", "Bear", "Wolf", "Fox"],
+                    anime: ["Naruto", "Goku", "Luffy", "Eren", "Ichigo", "Saitama", "Tanjiro", "Midoriya", "Edward Elric", "Gon", "Zoro"]
+                },
+                categoryNames: {
+                    sport: "Sports", joueur: "Athletes", country: "Countries", places: "Landmarks", nourriture: "Food", 
+                    acteur_ice: "Actors/Actresses", voitures: "Cars", animals: "Animals", anime: "Anime Characters"
+                }
+            }
+        };
+
+        let currentLang = 'fr';
+        let score = 0;
+        let timeLeft = 60;
+        let timerInterval;
+        let currentImposter = "";
+        let isTransitioning = false;
+
+        function updateUI() {
+            const ui = gameData[currentLang].ui;
+            document.getElementById('title-text').innerText = ui.title;
+            document.getElementById('subtitle-text').innerText = ui.subtitle;
+            document.getElementById('start-btn').innerText = ui.start;
+            document.getElementById('ui-score').innerText = ui.score;
+            document.getElementById('ui-time').innerText = ui.time;
+            document.getElementById('ui-category').innerText = ui.category;
+            document.getElementById('go-title').innerText = ui.gameover;
+            document.getElementById('go-score-text').innerText = ui.yourscore;
+            document.getElementById('restart-btn').innerText = ui.menu;
+
+            populateCategories();
+        }
+
+        function populateCategories() {
+            const select = document.getElementById('cat-select');
+            select.innerHTML = '';
+            
+            const allOpt = document.createElement('option');
+            allOpt.value = 'all';
+            allOpt.innerText = gameData[currentLang].ui.cat_all;
+            select.appendChild(allOpt);
+
+            const catNames = gameData[currentLang].categoryNames;
+            for (const key in catNames) {
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.innerText = catNames[key];
+                select.appendChild(opt);
+            }
+        }
+
+        function changeLanguage() {
+            currentLang = document.getElementById('lang-select').value;
+            updateUI();
+        }
+
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        function showStartScreen() {
+            showScreen('start-screen');
+            clearInterval(timerInterval);
+        }
+
+        function startGame() {
+            score = 0;
+            timeLeft = 60;
+            document.getElementById('score').innerText = score;
+            document.getElementById('time').innerText = timeLeft;
+            showScreen('game-screen');
+            
+            generateRound();
+            
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                document.getElementById('time').innerText = timeLeft;
+                if (timeLeft <= 10) {
+                    document.getElementById('time').classList.replace('text-red-400', 'text-red-600');
+                    document.getElementById('time').classList.add('animate-pulse');
+                }
+                if (timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        function generateRound() {
+            isTransitioning = false;
+            let selectedCatKey = document.getElementById('cat-select').value;
+            let categories = Object.keys(gameData[currentLang].categories);
+            
+            if (selectedCatKey === 'all') {
+                selectedCatKey = categories[Math.floor(Math.random() * categories.length)];
+            }
+
+            // Update UI with category name
+            document.getElementById('current-category-display').innerText = gameData[currentLang].categoryNames[selectedCatKey];
+
+            // Get normal words
+            let normalWordsPool = [...gameData[currentLang].categories[selectedCatKey]];
+            let options = [];
+            for(let i=0; i<3; i++) {
+                const idx = Math.floor(Math.random() * normalWordsPool.length);
+                options.push(normalWordsPool[idx]);
+                normalWordsPool.splice(idx, 1);
+            }
+
+            // Get Imposter
+            let imposterCatKey;
+            do {
+                imposterCatKey = categories[Math.floor(Math.random() * categories.length)];
+            } while (imposterCatKey === selectedCatKey);
+
+            let imposterWordsPool = gameData[currentLang].categories[imposterCatKey];
+            currentImposter = imposterWordsPool[Math.floor(Math.random() * imposterWordsPool.length)];
+            options.push(currentImposter);
+
+            // Shuffle
+            options.sort(() => Math.random() - 0.5);
+
+            // Render buttons
+            const grid = document.getElementById('options-grid');
+            grid.innerHTML = '';
+            options.forEach(word => {
+                const btn = document.createElement('button');
+                btn.className = 'word-btn bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 px-6 rounded-xl text-xl shadow-md border border-slate-600';
+                btn.innerText = word;
+                btn.onclick = () => checkAnswer(word, btn);
+                grid.appendChild(btn);
+            });
+        }
+
+        function checkAnswer(word, btn) {
+            if (isTransitioning) return;
+            isTransitioning = true;
+
+            if (word === currentImposter) {
+                // Correct
+                playSound('correct');
+                score++;
+                document.getElementById('score').innerText = score;
+                btn.classList.add('correct-flash');
+                setTimeout(() => {
+                    generateRound();
+                }, 300);
+            } else {
+                // Wrong
+                playSound('wrong');
+                btn.classList.add('wrong-flash', 'shake');
+                timeLeft = Math.max(0, timeLeft - 3); // Penalty
+                document.getElementById('time').innerText = timeLeft;
+                
+                // Show which one was the imposter
+                const buttons = document.querySelectorAll('.word-btn');
+                buttons.forEach(b => {
+                    if(b.innerText === currentImposter) {
+                        b.classList.remove('bg-slate-700');
+                        b.classList.add('bg-green-600');
+                    }
+                });
+
+                setTimeout(() => {
+                    generateRound();
+                }, 800);
+            }
+        }
+
+        function endGame() {
+            clearInterval(timerInterval);
+            playSound('gameover');
+            document.getElementById('final-score').innerText = score;
+            document.getElementById('time').classList.remove('animate-pulse', 'text-red-600');
+            document.getElementById('time').classList.add('text-red-400');
+            showScreen('game-over-screen');
+        }
+
+        // Init
+        document.getElementById('lang-select').value = 'fr';
+        updateUI();
+
+    </script>
+</body>
+</html>

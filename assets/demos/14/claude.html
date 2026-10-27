@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Habit Tree — Grow Your Life</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; height:100%; font-family: 'Segoe UI', system-ui, sans-serif; background:#000; }
+  #scene { position:fixed; inset:0; }
+  .glass { background: rgba(15, 23, 30, 0.65); backdrop-filter: blur(14px); border:1px solid rgba(255,255,255,0.1); }
+  .habit-item { transition: all .3s; }
+  .habit-done { background: linear-gradient(90deg, rgba(34,197,94,.25), rgba(34,197,94,.05)); border-left:3px solid #22c55e; }
+  .habit-missed { background: linear-gradient(90deg, rgba(239,68,68,.2), rgba(239,68,68,.02)); border-left:3px solid #ef4444; }
+  .habit-pending { border-left:3px solid #eab308; }
+  button.act { transition: transform .15s, background .2s; }
+  button.act:hover { transform: translateY(-2px); }
+  .grow-anim { animation: grow 1.2s ease-out; }
+  @keyframes grow { 0%{transform:scale(.6);opacity:0;} 100%{transform:scale(1);opacity:1;} }
+  .toast { animation: slideIn .4s ease-out; }
+  @keyframes slideIn { from{transform:translateY(-20px);opacity:0;} to{transform:translateY(0);opacity:1;} }
+  ::-webkit-scrollbar { width:6px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius:3px; }
+  #startScreen { background: radial-gradient(circle at 50% 40%, #1a3d2e 0%, #050b08 80%); }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<!-- Start Screen -->
+<div id="startScreen" class="fixed inset-0 z-50 flex items-center justify-center">
+  <div class="text-center px-8 max-w-xl">
+    <h1 class="text-6xl md:text-7xl font-bold text-green-200 mb-4" style="text-shadow: 0 0 30px rgba(34,197,94,.5)">🌳 Habit Tree</h1>
+    <p class="text-green-100/80 text-lg mb-8">Plant your habits. Water them daily. Watch your tree of life grow — or break apart when neglected.</p>
+    <button id="startBtn" class="act px-8 py-4 bg-green-600 hover:bg-green-500 text-white text-xl font-semibold rounded-2xl shadow-2xl">Begin Your Garden</button>
+  </div>
+</div>
+
+<!-- Game Over / Tree Dead -->
+<div id="overScreen" class="fixed inset-0 z-50 hidden items-center justify-center" style="background:rgba(20,5,5,.85)">
+  <div class="text-center px-8">
+    <h1 class="text-6xl font-bold text-red-300 mb-4">💔 Your Tree Died</h1>
+    <p class="text-red-100/80 mb-6">Too many habits forgotten. The tree could not survive.</p>
+    <button id="restartBtn" class="act px-6 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl">Replant</button>
+  </div>
+</div>
+
+<!-- UI -->
+<div id="ui" class="hidden">
+  <!-- Top HUD -->
+  <div class="fixed top-4 left-1/2 -translate-x-1/2 glass rounded-2xl px-6 py-3 z-30 text-white flex gap-6 items-center text-sm md:text-base">
+    <div>🌱 Growth: <span id="growthVal" class="font-bold text-green-300">0</span></div>
+    <div>❤️ Health: <span id="healthVal" class="font-bold text-pink-300">100</span></div>
+    <div>🔥 Streak: <span id="streakVal" class="font-bold text-orange-300">0</span></div>
+    <div class="hidden md:block">📅 Day <span id="dayVal" class="font-bold">1</span></div>
+  </div>
+
+  <!-- Habit Panel -->
+  <div class="fixed top-20 right-4 w-80 max-w-[92vw] glass rounded-2xl p-4 z-30 text-white max-h-[70vh] overflow-y-auto">
+    <h2 class="text-lg font-bold mb-3 text-green-200">Your Habits</h2>
+    <div class="flex gap-2 mb-3">
+      <input id="habitInput" type="text" placeholder="e.g. Read 10 pages" maxlength="40" class="flex-1 px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-sm focus:outline-none focus:border-green-400"/>
+      <button id="addBtn" class="act px-3 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm font-semibold">Add</button>
+    </div>
+    <ul id="habitList" class="space-y-2 text-sm"></ul>
+    <p class="text-xs text-white/50 mt-3">Mark habits done before ending the day. Missed ones break a branch!</p>
+  </div>
+
+  <!-- Bottom Controls -->
+  <div class="fixed bottom-4 left-1/2 -translate-x-1/2 glass rounded-2xl px-4 py-3 z-30 flex gap-3 items-center">
+    <button id="endDayBtn" class="act px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold text-sm">🌙 End Day</button>
+    <button id="rotBtn" class="act px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm">↻ Rotate</button>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed top-32 left-1/2 -translate-x-1/2 z-40 hidden"></div>
+</div>
+
+<script>
+/* ---------- THREE.JS SCENE ---------- */
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x9ec8e3, 30, 90);
+
+// Sky gradient
+const skyGeo = new THREE.SphereGeometry(200, 32, 16);
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  uniforms: { top:{value:new THREE.Color(0x4a89c2)}, bot:{value:new THREE.Color(0xf5d49a)} },
+  vertexShader:`varying vec3 vP; void main(){ vP=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader:`varying vec3 vP; uniform vec3 top; uniform vec3 bot; void main(){ float h=normalize(vP).y*.5+.5; gl_FragColor=vec4(mix(bot,top,smoothstep(0.,.8,h)),1.); }`
+});
+scene.add(new THREE.Mesh(skyGeo, skyMat));
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 300);
+camera.position.set(0, 8, 22);
+
+// Lights
+const sun = new THREE.DirectionalLight(0xfff1c4, 1.6);
+sun.position.set(15, 25, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left=-25; sun.shadow.camera.right=25;
+sun.shadow.camera.top=25; sun.shadow.camera.bottom=-25;
+sun.shadow.camera.far = 80;
+scene.add(sun);
+scene.add(new THREE.HemisphereLight(0x88bbee, 0x4a3520, 0.6));
+scene.add(new THREE.AmbientLight(0xffffff, 0.15));
+
+// Ground
+const groundGeo = new THREE.CircleGeometry(60, 64);
+const groundMat = new THREE.MeshStandardMaterial({ color:0x4a7a3a, roughness:1 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Grass tufts
+for (let i=0;i<200;i++){
+  const r = 4 + Math.random()*40;
+  const a = Math.random()*Math.PI*2;
+  const g = new THREE.Mesh(
+    new THREE.ConeGeometry(0.15, 0.6+Math.random()*0.5, 4),
+    new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(0.28+Math.random()*0.08, 0.6, 0.3+Math.random()*0.15) })
+  );
+  g.position.set(Math.cos(a)*r, 0.3, Math.sin(a)*r);
+  g.castShadow = true;
+  scene.add(g);
+}
+
+// Distant trees silhouette
+for (let i=0;i<30;i++){
+  const a = Math.random()*Math.PI*2;
+  const r = 45 + Math.random()*15;
+  const t = new THREE.Mesh(
+    new THREE.ConeGeometry(2+Math.random(), 6+Math.random()*4, 6),
+    new THREE.MeshStandardMaterial({ color:0x2d4a25 })
+  );
+  t.position.set(Math.cos(a)*r, 3, Math.sin(a)*r);
+  scene.add(t);
+}
+
+/* ---------- TREE GENERATION ---------- */
+const treeGroup = new THREE.Group();
+scene.add(treeGroup);
+
+const barkMat = new THREE.MeshStandardMaterial({ color:0x5a3a22, roughness:0.95 });
+const leafBaseColor = new THREE.Color(0x4caf50);
+
+let branches = []; // {mesh, leaves, broken, depth, end}
+let leafClusters = [];
+
+function clearTree(){
+  while(treeGroup.children.length) treeGroup.remove(treeGroup.children[0]);
+  branches = []; leafClusters = [];
+}
+
+function makeBranch(start, dir, length, radius, depth, maxDepth){
+  const seg = 6;
+  const points = [];
+  let p = start.clone();
+  let d = dir.clone().normalize();
+  for(let i=0;i<=seg;i++){
+    points.push(p.clone());
+    // bend slightly
+    d.x += (Math.random()-0.5)*0.1;
+    d.z += (Math.random()-0.5)*0.1;
+    d.y += (depth===0? 0 : -0.05); // gravity for sub-branches
+    d.normalize();
+    p.addScaledVector(d, length/seg);
+  }
+  const curve = new THREE.CatmullRomCurve3(points);
+  const geo = new THREE.TubeGeometry(curve, 12, radius, 8, false);
+  const mesh = new THREE.Mesh(geo, barkMat);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  treeGroup.add(mesh);
+
+  const branch = { mesh, leaves:[], broken:false, depth, end: points[points.length-1], dir: d.clone() };
+  branches.push(branch);
+
+  if (depth < maxDepth){
+    const childCount = depth===0 ? 3+Math.floor(Math.random()*2) : 2+Math.floor(Math.random()*2);
+    for(let i=0;i<childCount;i++){
+      const t = 0.5 + (i/childCount)*0.5;
+      const idx = Math.floor(points.length * t);
+      const startP = points[Math.min(idx, points.length-1)];
+      const ang = (i/childCount)*Math.PI*2 + Math.random();
+      const spread = 0.7;
+      const childDir = new THREE.Vector3(Math.cos(ang)*spread, 0.6+Math.random()*0.4, Math.sin(ang)*spread).normalize();
+      makeBranch(startP, childDir, length*0.65, radius*0.6, depth+1, maxDepth);
+    }
+  } else {
+    // add leaves at tip
+    addLeaves(branch, points[points.length-1]);
+  }
+}
+
+function addLeaves(branch, pos){
+  const cluster = new THREE.Group();
+  for(let i=0;i<5;i++){
+    const leafGeo = new THREE.SphereGeometry(0.5+Math.random()*0.3, 8, 6);
+    const c = leafBaseColor.clone().offsetHSL((Math.random()-0.5)*0.05, 0, (Math.random()-0.5)*0.1);
+    const leafMat = new THREE.MeshStandardMaterial({ color:c, roughness:0.8 });
+    const leaf = new THREE.Mesh(leafGeo, leafMat);
+    leaf.position.set((Math.random()-0.5)*1.2, (Math.random()-0.5)*1.2, (Math.random()-0.5)*1.2);
+    leaf.scale.y = 0.7;
+    leaf.castShadow = true;
+    cluster.add(leaf);
+  }
+  cluster.position.copy(pos);
+  treeGroup.add(cluster);
+  branch.leaves.push(cluster);
+  leafClusters.push(cluster);
+}
+
+/* tree grows by adjusting scale based on growth */
+let growth = 0;
+function buildTree(){
+  clearTree();
+  const maxDepth = 2 + Math.min(2, Math.floor(growth/8));
+  // trunk
+  makeBranch(new THREE.Vector3(0,0,0), new THREE.Vector3(0,1,0), 4, 0.5, 0, maxDepth);
+  // scale based on growth
+  const s = 0.35 + Math.min(1.3, growth*0.08);
+  treeGroup.scale.set(s,s,s);
+}
+
+/* break a random branch */
+function breakBranch(){
+  const candidates = branches.filter(b=>!b.broken && b.depth>0);
+  if(!candidates.length) return;
+  const b = candidates[Math.floor(Math.random()*candidates.length)];
+  b.broken = true;
+  // tilt and darken
+  b.mesh.material = b.mesh.material.clone();
+  b.mesh.material.color.setHex(0x3a2515);
+  // rotate to look broken
+  b.mesh.rotation.z += (Math.random()-0.5)*0.8;
+  b.mesh.rotation.x += (Math.random()-0.5)*0.5;
+  // remove leaves of this branch
+  b.leaves.forEach(l=>{ treeGroup.remove(l); });
+
+  // falling debris
+  spawnDebris(b.end.clone().multiplyScalar(treeGroup.scale.x));
+  playCrack();
+}
+
+const debris = [];
+function spawnDebris(pos){
+  for(let i=0;i<8;i++){
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(0.15,0.15,0.4),
+      new THREE.MeshStandardMaterial({ color:0x5a3a22 })
+    );
+    m.position.copy(pos);
+    m.castShadow = true;
+    m.userData.vel = new THREE.Vector3((Math.random()-0.5)*3,2+Math.random()*2,(Math.random()-0.5)*3);
+    m.userData.life = 3;
+    scene.add(m);
+    debris.push(m);
+  }
+}
+
+/* falling leaves on miss */
+function spawnFallingLeaves(){
+  leafClusters.forEach(c=>{
+    if(Math.random()<0.2){
+      c.userData.falling = true;
+      c.userData.vel = new THREE.Vector3((Math.random()-0.5)*0.5,-1-Math.random(),(Math.random()-0.5)*0.5);
+    }
+  });
+}
+
+/* ---------- AUDIO ---------- */
+let actx;
+function audio(){ if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)(); return actx; }
+function tone(freq, dur, type='sine', vol=0.2){
+  const a = audio();
+  const o = a.createOscillator(); const g = a.createGain();
+  o.type=type; o.frequency.value=freq;
+  g.gain.setValueAtTime(vol, a.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, a.currentTime+dur);
+  o.connect(g); g.connect(a.destination);
+  o.start(); o.stop(a.currentTime+dur);
+}
+function playGrow(){ tone(440,.15,'sine',.15); setTimeout(()=>tone(660,.2,'sine',.15),100); setTimeout(()=>tone(880,.25,'sine',.1),200); }
+function playCrack(){ tone(120,.3,'sawtooth',.25); setTimeout(()=>tone(80,.4,'sawtooth',.2),50); }
+function playDie(){ tone(200,.8,'sawtooth',.3); setTimeout(()=>tone(100,1,'sawtooth',.25),200); }
+
+/* ---------- GAME STATE ---------- */
+const state = {
+  habits: [], // {name, doneToday}
+  growth: 0,
+  health: 100,
+  streak: 0,
+  day: 1,
+  running: false
+};
+
+function save(){ localStorage.setItem('habitTree', JSON.stringify(state)); }
+function load(){
+  try{ const d = JSON.parse(localStorage.getItem('habitTree')); if(d) Object.assign(state,d); }catch(e){}
+}
+
+function updateHUD(){
+  growthVal.textContent = state.growth.toFixed(1);
+  healthVal.textContent = state.health;
+  streakVal.textContent = state.streak;
+  dayVal.textContent = state.day;
+}
+
+function renderHabits(){
+  const list = document.getElementById('habitList');
+  list.innerHTML = '';
+  if(!state.habits.length){
+    list.innerHTML = '<li class="text-white/50 text-xs italic py-2">No habits yet. Add one above 🌱</li>';
+    return;
+  }
+  state.habits.forEach((h,i)=>{
+    const li = document.createElement('li');
+    li.className = `habit-item flex items-center justify-between gap-2 px-3 py-2 rounded-lg ${h.doneToday?'habit-done':'habit-pending'}`;
+    li.innerHTML = `
+      <span class="flex-1 truncate ${h.doneToday?'line-through opacity-70':''}">${h.name}</span>
+      <button data-i="${i}" class="checkBtn act text-xs px-2 py-1 rounded ${h.doneToday?'bg-green-600':'bg-white/10 hover:bg-green-600'}">${h.doneToday?'✓':'Done'}</button>
+      <button data-i="${i}" class="delBtn text-white/40 hover:text-red-400 text-sm">✕</button>
+    `;
+    list.appendChild(li);
+  });
+  list.querySelectorAll('.checkBtn').forEach(b=>b.onclick=()=>checkHabit(+b.dataset.i));
+  list.querySelectorAll('.delBtn').forEach(b=>b.onclick=()=>{ state.habits.splice(+b.dataset.i,1); save(); renderHabits(); });
+}
+
+function showToast(msg, color='green'){
+  const t = document.getElementById('toast');
+  t.className = `fixed top-32 left-1/2 -translate-x-1/2 z-40 glass rounded-xl px-5 py-3 text-white font-semibold toast border-${color}-400`;
+  t.style.borderTop = `3px solid ${color==='green'?'#22c55e':color==='red'?'#ef4444':'#eab308'}`;
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  clearTimeout(t._to);
+  t._to = setTimeout(()=>t.classList.add('hidden'), 2500);
+}
+
+function addHabit(){
+  const v = habitInput.value.trim();
+  if(!v) return;
+  if(state.habits.length>=8){ showToast('Max 8 habits!','yellow'); return; }
+  state.habits.push({ name:v, doneToday:false });
+  habitInput.value='';
+  save(); renderHabits();
+  showToast('Habit planted 🌱','green');
+}
+
+function checkHabit(i){
+  if(state.habits[i].doneToday) return;
+  state.habits[i].doneToday = true;
+  state.growth += 0.5;
+  state.health = Math.min(100, state.health + 2);
+  playGrow();
+  showToast('+0.5 growth! 🌿','green');
+  save(); updateHUD(); renderHabits();
+  buildTree();
+}
+
+function endDay(){
+  if(!state.habits.length){ showToast('Add habits first!','yellow'); return; }
+  let done=0, missed=0;
+  state.habits.forEach(h=>{ if(h.doneToday) done++; else missed++; });
+  
+  if(missed===0){
+    state.streak++;
+    state.growth += 1 + state.streak*0.2;
+    state.health = Math.min(100, state.health+5);
+    showToast(`Perfect day! Streak ${state.streak} 🔥`,'green');
+    playGrow();
+  } else {
+    state.streak = 0;
+    for(let i=0;i<missed;i++){
+      breakBranch();
+      state.health -= 15;
+      state.growth = Math.max(0, state.growth - 0.5);
+    }
+    spawnFallingLeaves();
+    showToast(`${missed} habit(s) missed! Branches broken 💔`,'red');
+  }
+  
+  state.habits.forEach(h=>h.doneToday=false);
+  state.day++;
+  
+  if(state.health<=0){
+    playDie();
+    document.getElementById('overScreen').style.display='flex';
+    state.running=false;
+  }
+  
+  save(); updateHUD(); renderHabits();
+  buildTree();
+}
+
+/* ---------- INTERACTIONS ---------- */
+let rotating = true;
+let manualAngle = 0;
+let isDragging = false, lastX=0;
+canvas.addEventListener('pointerdown', e=>{ isDragging=true; lastX=e.clientX; rotating=false; });
+canvas.addEventListener('pointermove', e=>{ if(isDragging){ manualAngle += (e.clientX-lastX)*0.005; lastX=e.clientX; }});
+canvas.addEventListener('pointerup', ()=>isDragging=false);
+canvas.addEventListener('pointerleave', ()=>isDragging=false);
+
+document.getElementById('rotBtn').onclick = ()=> rotating = !rotating;
+document.getElementById('addBtn').onclick = addHabit;
+habitInput.addEventListener('keydown', e=>{ if(e.key==='Enter') addHabit(); });
+document.getElementById('endDayBtn').onclick = endDay;
+document.getElementById('startBtn').onclick = ()=>{
+  document.getElementById('startScreen').style.display='none';
+  document.getElementById('ui').classList.remove('hidden');
+  state.running=true;
+  load();
+  updateHUD(); renderHabits(); buildTree();
+};
+document.getElementById('restartBtn').onclick = ()=>{
+  localStorage.removeItem('habitTree');
+  Object.assign(state,{habits:[],growth:0,health:100,streak:0,day:1,running:true});
+  document.getElementById('overScreen').style.display='none';
+  updateHUD(); renderHabits(); buildTree();
+};
+
+/* ---------- ANIMATION LOOP ---------- */
+let t0 = performance.now();
+function loop(){
+  const t = performance.now();
+  const dt = Math.min(0.05,(t-t0)/1000); t0=t;
+  
+  if(rotating) manualAngle += dt*0.2;
+  const radius = 22;
+  camera.position.x = Math.sin(manualAngle)*radius;
+  camera.position.z = Math.cos(manualAngle)*radius;
+  camera.position.y = 8;
+  camera.lookAt(0,5,0);
+  
+  // sway tree
+  treeGroup.children.forEach((c,i)=>{
+    if(c.userData.falling){
+      c.position.addScaledVector(c.userData.vel, dt);
+      c.userData.vel.y -= dt*2;
+      c.rotation.x += dt*2; c.rotation.z += dt;
+      if(c.position.y<0){ treeGroup.remove(c); }
+    }
+  });
+  treeGroup.rotation.z = Math.sin(t*0.0008)*0.015;
+  
+  // debris physics
+  for(let i=debris.length-1;i>=0;i--){
+    const d = debris[i];
+    d.position.addScaledVector(d.userData.vel, dt);
+    d.userData.vel.y -= dt*9;
+    d.rotation.x += dt*5; d.rotation.z += dt*3;
+    d.userData.life -= dt;
+    if(d.position.y<0 || d.userData.life<0){ scene.remove(d); debris.splice(i,1); }
+  }
+  
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+loop();
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// initial preview tree
+buildTree();
+</script>
+</body>
+</html>

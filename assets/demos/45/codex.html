@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Gesture Blocks TV</title>
+  <style>
+    :root{
+      --bg:#05070d;
+      --panel:#0d1324cc;
+      --accent:#4de2ff;
+      --accent2:#6bff9f;
+      --danger:#ff5f7a;
+      --text:#eaf3ff;
+    }
+    *{box-sizing:border-box}
+    html,body{
+      margin:0;
+      width:100%;
+      height:100%;
+      background: radial-gradient(1200px 700px at 50% 20%, #0c1a33 0%, var(--bg) 55%);
+      color:var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      overflow:hidden;
+    }
+    #gameWrap{
+      position:relative;
+      width:100vw;
+      height:100vh;
+    }
+    canvas{
+      width:100%;
+      height:100%;
+      display:block;
+    }
+    #hud{
+      position:absolute;
+      left:16px;
+      top:16px;
+      background:var(--panel);
+      border:1px solid #2e4e86;
+      border-radius:12px;
+      padding:10px 14px;
+      font-size:22px;
+      line-height:1.35;
+      text-shadow:0 0 8px #000;
+      z-index:3;
+      min-width:260px;
+    }
+    #hud .small{
+      font-size:15px;
+      opacity:.9;
+    }
+    #status{
+      color:var(--accent2);
+      font-weight:bold;
+    }
+    #cameraBox{
+      position:absolute;
+      right:16px;
+      top:16px;
+      width:210px;
+      border-radius:12px;
+      overflow:hidden;
+      border:1px solid #2e4e86;
+      background:#000;
+      z-index:3;
+      box-shadow:0 8px 22px #0008;
+    }
+    #preview{
+      width:100%;
+      display:block;
+      transform:scaleX(-1);
+      opacity:.95;
+      background:#000;
+    }
+    #camLabel{
+      font-size:12px;
+      padding:6px 8px;
+      background:#111a2e;
+      color:#bcd6ff;
+      border-top:1px solid #2e4e86;
+    }
+    #overlay{
+      position:absolute;
+      inset:0;
+      background:linear-gradient(#071224e6,#05080fe6);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      z-index:5;
+    }
+    .card{
+      width:min(860px,92vw);
+      background:#0d1730ee;
+      border:1px solid #3f66ac;
+      border-radius:18px;
+      padding:28px;
+      box-shadow:0 20px 60px #000a;
+      text-align:center;
+    }
+    .title{
+      font-size:54px;
+      font-weight:900;
+      letter-spacing:.5px;
+      margin:0 0 10px;
+      color:var(--accent);
+      text-shadow:0 0 18px #2bc4f055;
+    }
+    .subtitle{
+      font-size:24px;
+      margin:0 0 18px;
+      color:#dbe9ff;
+    }
+    .tips{
+      margin:0 auto 24px;
+      font-size:20px;
+      max-width:780px;
+      line-height:1.45;
+      color:#d5e4ff;
+    }
+    .tips b{color:var(--accent2)}
+    .btnRow{
+      display:flex;
+      gap:14px;
+      justify-content:center;
+      flex-wrap:wrap;
+    }
+    button{
+      border:none;
+      border-radius:12px;
+      padding:14px 24px;
+      font-size:22px;
+      font-weight:700;
+      cursor:pointer;
+      transition:.2s transform,.2s filter;
+    }
+    button:hover{transform:translateY(-2px)}
+    #startBtn{
+      background:linear-gradient(135deg,#30d8ff,#00b3ff);
+      color:#001423;
+    }
+    #playKeyboardBtn{
+      background:linear-gradient(135deg,#bbc8de,#96a8c6);
+      color:#111;
+    }
+    #message{
+      margin-top:16px;
+      min-height:26px;
+      font-size:18px;
+      color:#ffd8df;
+    }
+  </style>
+</head>
+<body>
+  <div id="gameWrap">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="hud">
+      <div>Score: <span id="score">0</span></div>
+      <div>Lives: <span id="lives">3</span></div>
+      <div>Level: <span id="level">1</span></div>
+      <div class="small">Control: <span id="status">Keyboard</span></div>
+      <div class="small">Press <b>Space</b> to pause/resume</div>
+    </div>
+
+    <div id="cameraBox">
+      <video id="preview" autoplay playsinline muted></video>
+      <div id="camLabel">Webcam Gesture View</div>
+    </div>
+
+    <div id="overlay">
+      <div class="card">
+        <h1 class="title">Gesture Blocks TV</h1>
+        <p class="subtitle">Break all blocks using your hand + webcam</p>
+        <p class="tips">
+          Move your <b>hand left / right</b> to control the paddle.<br>
+          Keep your hand visible for gesture control. If webcam is unavailable, keyboard still works (<b>← →</b>).
+        </p>
+        <div class="btnRow">
+          <button id="startBtn">Start with Webcam</button>
+          <button id="playKeyboardBtn">Play with Keyboard</button>
+        </div>
+        <div id="message"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const levelEl = document.getElementById('level');
+    const statusEl = document.getElementById('status');
+    const overlay = document.getElementById('overlay');
+    const messageEl = document.getElementById('message');
+    const startBtn = document.getElementById('startBtn');
+    const playKeyboardBtn = document.getElementById('playKeyboardBtn');
+    const video = document.getElementById('preview');
+
+    let W = 1280, H = 720;
+
+    function resize() {
+      W = window.innerWidth;
+      H = window.innerHeight;
+      canvas.width = W;
+      canvas.height = H;
+      if (paddle) paddle.y = H - 45;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Game state
+    let score = 0;
+    let lives = 3;
+    let level = 1;
+    let running = true;
+    let paused = false;
+    let gameOver = false;
+
+    const paddle = {
+      w: 180,
+      h: 20,
+      x: W / 2 - 90,
+      y: H - 45,
+      speed: 12
+    };
+
+    const ball = {
+      x: W / 2,
+      y: H - 75,
+      r: 11,
+      vx: 6.2,
+      vy: -6.2
+    };
+
+    const bricks = [];
+    let rows = 5, cols = 10;
+    const brickGap = 8;
+    const brickTop = 95;
+    let brickW = 100, brickH = 30;
+
+    function createBricks() {
+      bricks.length = 0;
+      cols = Math.max(8, Math.min(14, Math.floor(W / 130)));
+      rows = 5 + Math.floor((level - 1) / 2);
+      rows = Math.min(rows, 8);
+
+      brickW = Math.floor((W * 0.88 - brickGap * (cols - 1)) / cols);
+      brickH = Math.max(24, Math.floor(H * 0.04));
+      const totalW = cols * brickW + (cols - 1) * brickGap;
+      const startX = (W - totalW) / 2;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          bricks.push({
+            x: startX + c * (brickW + brickGap),
+            y: brickTop + r * (brickH + brickGap),
+            w: brickW,
+            h: brickH,
+            alive: true,
+            hp: 1
+          });
+        }
+      }
+    }
+
+    function resetBall() {
+      ball.x = paddle.x + paddle.w / 2;
+      ball.y = paddle.y - ball.r - 2;
+      const speed = 6.2 + (level - 1) * 0.5;
+      ball.vx = (Math.random() > 0.5 ? 1 : -1) * speed;
+      ball.vy = -speed;
+    }
+
+    function resetGame() {
+      score = 0;
+      lives = 3;
+      level = 1;
+      paused = false;
+      gameOver = false;
+      paddle.x = W / 2 - paddle.w / 2;
+      createBricks();
+      resetBall();
+      updateHUD();
+    }
+
+    function nextLevel() {
+      level++;
+      createBricks();
+      resetBall();
+      updateHUD();
+    }
+
+    function updateHUD() {
+      scoreEl.textContent = score;
+      livesEl.textContent = lives;
+      levelEl.textContent = level;
+    }
+
+    // Input
+    const keys = { left: false, right: false };
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') keys.left = true;
+      if (e.key === 'ArrowRight') keys.right = true;
+      if (e.code === 'Space') {
+        paused = !paused;
+        if (gameOver) {
+          resetGame();
+        }
+      }
+      if (gameOver && (e.key === 'Enter' || e.code === 'Space')) {
+        resetGame();
+      }
+    });
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowLeft') keys.left = false;
+      if (e.key === 'ArrowRight') keys.right = false;
+    });
+
+    // Gesture state
+    let gestureEnabled = false;
+    let handXNorm = 0.5;
+    let handVisible = false;
+    let lastHandSeen = 0;
+    let handsModel = null;
+    let detectBusy = false;
+    let streamRef = null;
+
+    function setControlLabel() {
+      if (gestureEnabled && Date.now() - lastHandSeen < 900) {
+        statusEl.textContent = "Gesture";
+        statusEl.style.color = "#6bff9f";
+      } else if (gestureEnabled) {
+        statusEl.textContent = "Gesture (hand not found)";
+        statusEl.style.color = "#ffd982";
+      } else {
+        statusEl.textContent = "Keyboard";
+        statusEl.style.color = "#c3d7ff";
+      }
+    }
+
+    async function setupHands() {
+      if (!window.Hands) throw new Error("MediaPipe Hands failed to load.");
+
+      handsModel = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      });
+
+      handsModel.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.55
+      });
+
+      handsModel.onResults((results) => {
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length) {
+          const lm = results.multiHandLandmarks[0];
+          const indexTip = lm[8];
+          handVisible = true;
+          lastHandSeen = Date.now();
+          // mirrored control for selfie-style movement
+          handXNorm = 1 - Math.min(1, Math.max(0, indexTip.x));
+        } else {
+          handVisible = false;
+        }
+      });
+    }
+
+    async function detectLoop() {
+      if (!gestureEnabled || !handsModel || !video.srcObject) return;
+      if (video.readyState >= 2 && !detectBusy) {
+        detectBusy = true;
+        try {
+          await handsModel.send({ image: video });
+        } catch (e) {}
+        detectBusy = false;
+      }
+      requestAnimationFrame(detectLoop);
+    }
+
+    async function startWebcamGesture() {
+      messageEl.textContent = "Starting webcam...";
+      try {
+        streamRef = await navigator.mediaDevices.getUserMedia({
+          video: { width: 640, height: 480, facingMode: "user" },
+          audio: false
+        });
+        video.srcObject = streamRef;
+        await video.play();
+        await setupHands();
+        gestureEnabled = true;
+        setControlLabel();
+        messageEl.textContent = "Webcam connected. Show your hand!";
+        detectLoop();
+        return true;
+      } catch (err) {
+        gestureEnabled = false;
+        setControlLabel();
+        messageEl.textContent = "Webcam unavailable. Keyboard mode enabled.";
+        return false;
+      }
+    }
+
+    function stopWebcam() {
+      if (streamRef) {
+        streamRef.getTracks().forEach(t => t.stop());
+        streamRef = null;
+      }
+      video.srcObject = null;
+      gestureEnabled = false;
+      setControlLabel();
+    }
+
+    function update() {
+      if (!running || paused || gameOver) return;
+
+      // Paddle control
+      const handActive = gestureEnabled && (Date.now() - lastHandSeen < 900);
+      if (handActive) {
+        const targetCenter = handXNorm * W;
+        const currentCenter = paddle.x + paddle.w / 2;
+        const dx = (targetCenter - currentCenter) * 0.35;
+        paddle.x += dx;
+      } else {
+        if (keys.left) paddle.x -= paddle.speed;
+        if (keys.right) paddle.x += paddle.speed;
+      }
+
+      if (paddle.x < 0) paddle.x = 0;
+      if (paddle.x + paddle.w > W) paddle.x = W - paddle.w;
+
+      // Ball movement
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      // Wall collisions
+      if (ball.x - ball.r < 0) {
+        ball.x = ball.r;
+        ball.vx *= -1;
+      } else if (ball.x + ball.r > W) {
+        ball.x = W - ball.r;
+        ball.vx *= -1;
+      }
+      if (ball.y - ball.r < 0) {
+        ball.y = ball.r;
+        ball.vy *= -1;
+      }
+
+      // Paddle collision
+      if (
+        ball.y + ball.r >= paddle.y &&
+        ball.y - ball.r <= paddle.y + paddle.h &&
+        ball.x >= paddle.x &&
+        ball.x <= paddle.x + paddle.w &&
+        ball.vy > 0
+      ) {
+        const hit = (ball.x - (paddle.x + paddle.w / 2)) / (paddle.w / 2);
+        ball.vx = hit * (7 + level * 0.4);
+        ball.vy = -Math.abs(ball.vy);
+        ball.y = paddle.y - ball.r - 1;
+      }
+
+      // Brick collisions
+      let aliveCount = 0;
+      for (let i = 0; i < bricks.length; i++) {
+        const b = bricks[i];
+        if (!b.alive) continue;
+        aliveCount++;
+
+        if (
+          ball.x + ball.r > b.x &&
+          ball.x - ball.r < b.x + b.w &&
+          ball.y + ball.r > b.y &&
+          ball.y - ball.r < b.y + b.h
+        ) {
+          b.alive = false;
+          score += 10;
+
+          const prevX = ball.x - ball.vx;
+          const prevY = ball.y - ball.vy;
+
+          const fromLeft = prevX + ball.r <= b.x;
+          const fromRight = prevX - ball.r >= b.x + b.w;
+          const fromTop = prevY + ball.r <= b.y;
+          const fromBottom = prevY - ball.r >= b.y + b.h;
+
+          if (fromLeft || fromRight) ball.vx *= -1;
+          else if (fromTop || fromBottom) ball.vy *= -1;
+          else ball.vy *= -1;
+
+          updateHUD();
+          break;
+        }
+      }
+
+      if (aliveCount === 0) {
+        nextLevel();
+      }
+
+      // Ball lost
+      if (ball.y - ball.r > H) {
+        lives--;
+        updateHUD();
+        if (lives <= 0) {
+          gameOver = true;
+        } else {
+          resetBall();
+        }
+      }
+
+      setControlLabel();
+    }
+
+    function drawBackgroundGrid() {
+      const gap = 46;
+      ctx.save();
+      ctx.strokeStyle = "rgba(73,115,175,0.15)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= W; x += gap) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, H);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= H; y += gap) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      drawBackgroundGrid();
+
+      // Bricks
+      for (const b of bricks) {
+        if (!b.alive) continue;
+        const hue = 190 + ((b.y - brickTop) / (rows * (brickH + brickGap))) * 90;
+        ctx.fillStyle = `hsl(${hue}, 90%, 58%)`;
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        ctx.strokeStyle = "rgba(255,255,255,0.35)";
+        ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+      }
+
+      // Paddle
+      ctx.fillStyle = "#83ffd2";
+      ctx.fillRect(paddle.x, paddle.y, paddle.w, paddle.h);
+
+      // Ball
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowColor = "#8bd7ff";
+      ctx.shadowBlur = 12;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      if (paused && !gameOver) {
+        drawCenterText("PAUSED", "Press Space to Resume");
+      }
+
+      if (gameOver) {
+        drawCenterText("GAME OVER", "Press Enter or Space to Restart");
+      }
+    }
+
+    function drawCenterText(title, subtitle) {
+      ctx.save();
+      ctx.fillStyle = "rgba(4,8,18,0.74)";
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#4de2ff";
+      ctx.font = `900 ${Math.floor(Math.max(46, W * 0.05))}px Arial`;
+      ctx.fillText(title, W / 2, H / 2 - 20);
+
+      ctx.fillStyle = "#e3eeff";
+      ctx.font = `600 ${Math.floor(Math.max(20, W * 0.019))}px Arial`;
+      ctx.fillText(subtitle, W / 2, H / 2 + 34);
+      ctx.restore();
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    startBtn.addEventListener('click', async () => {
+      await startWebcamGesture();
+      overlay.style.display = "none";
+      canvas.focus?.();
+    });
+
+    playKeyboardBtn.addEventListener('click', () => {
+      stopWebcam();
+      overlay.style.display = "none";
+      canvas.focus?.();
+    });
+
+    // Init
+    resetGame();
+    loop();
+  </script>
+</body>
+</html>

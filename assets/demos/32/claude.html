@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Dance Rhythm — Pyari Si Jagah 💃🕺</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+  body {
+    background: linear-gradient(180deg, #ff9a9e 0%, #fad0c4 40%, #fbc2eb 70%, #a18cd1 100%);
+    color: #fff;
+    user-select: none;
+  }
+  #scene {
+    position: absolute; inset: 0;
+    overflow: hidden;
+  }
+  /* Pretty place - hills, sun, lake */
+  .sun {
+    position: absolute; top: 8%; left: 50%;
+    width: 120px; height: 120px;
+    background: radial-gradient(circle, #fff7c2, #ffd86b 60%, rgba(255,200,100,0));
+    border-radius: 50%;
+    transform: translateX(-50%);
+    filter: blur(1px);
+    animation: glow 3s ease-in-out infinite alternate;
+  }
+  @keyframes glow { from { transform: translateX(-50%) scale(1);} to { transform: translateX(-50%) scale(1.1);} }
+  .hill {
+    position: absolute; bottom: 35%;
+    width: 70%; height: 30%;
+    background: radial-gradient(ellipse at top, #76c893, #52b788);
+    border-radius: 50% 50% 0 0;
+  }
+  .hill.left { left: -10%; }
+  .hill.right { right: -10%; background: radial-gradient(ellipse at top, #95d5b2, #74c69d); }
+  .lake {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 35%;
+    background: linear-gradient(180deg, #90e0ef 0%, #48cae4 50%, #00b4d8 100%);
+  }
+  .lake::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+    background: rgba(255,255,255,0.6);
+    animation: ripple 2s linear infinite;
+  }
+  @keyframes ripple { 0%,100%{opacity:0.4} 50%{opacity:0.9} }
+  .cloud {
+    position: absolute; background: #fff; border-radius: 50px;
+    opacity: 0.85;
+    box-shadow: 25px -10px 0 -5px #fff, -25px -5px 0 -8px #fff;
+  }
+  .heart {
+    position: absolute;
+    font-size: 24px;
+    animation: float 3s linear forwards;
+    pointer-events: none;
+  }
+  @keyframes float {
+    0% { transform: translateY(0) scale(0.5); opacity: 1; }
+    100% { transform: translateY(-200px) scale(1.5); opacity: 0; }
+  }
+
+  /* Dancers */
+  .dancers {
+    position: absolute; bottom: 22%; left: 50%;
+    transform: translateX(-50%);
+    display: flex; gap: 20px;
+    z-index: 5;
+  }
+  .dancer { font-size: 90px; transition: transform 0.15s; }
+  .dancer.bump { transform: translateY(-25px) rotate(-10deg); }
+  .dancer.bump2 { transform: translateY(-25px) rotate(10deg); }
+
+  /* HUD */
+  #hud {
+    position: absolute; top: 15px; left: 15px; right: 15px;
+    display: flex; justify-content: space-between;
+    font-size: 18px; font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.4);
+    z-index: 10;
+  }
+  #combo { color: #ffe066; }
+
+  /* Notes lane */
+  #lane {
+    position: absolute; bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    width: min(420px, 95%); height: 100%;
+    z-index: 6;
+    pointer-events: none;
+  }
+  .target-row {
+    position: absolute; bottom: 12%;
+    left: 0; right: 0;
+    display: flex; justify-content: space-around;
+  }
+  .target {
+    width: 70px; height: 70px;
+    border: 4px solid rgba(255,255,255,0.7);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; font-weight: bold;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(4px);
+    transition: all 0.1s;
+  }
+  .target.active { background: rgba(255,255,255,0.6); transform: scale(1.15); }
+  .note {
+    position: absolute;
+    width: 60px; height: 60px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: bold;
+    color: #fff;
+    box-shadow: 0 0 20px rgba(255,255,255,0.6);
+  }
+  .note.L { background: linear-gradient(135deg, #ff6b9d, #c94277); }
+  .note.D { background: linear-gradient(135deg, #ffd86b, #ff9a3c); }
+  .note.U { background: linear-gradient(135deg, #6bcfff, #3c8aff); }
+  .note.R { background: linear-gradient(135deg, #95ff6b, #3cff9a); }
+
+  /* Hit popup */
+  .popup {
+    position: absolute;
+    font-size: 30px; font-weight: bold;
+    pointer-events: none;
+    animation: pop 0.8s ease-out forwards;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+  }
+  @keyframes pop {
+    0% { transform: translateY(0) scale(0.5); opacity: 1; }
+    100% { transform: translateY(-80px) scale(1.4); opacity: 0; }
+  }
+
+  /* Screens */
+  .screen {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 100;
+    text-align: center;
+    padding: 20px;
+  }
+  .screen h1 { font-size: 38px; margin-bottom: 10px; color: #ffd86b; text-shadow: 3px 3px 6px rgba(0,0,0,0.5);}
+  .screen p { font-size: 18px; margin: 8px 0; max-width: 400px;}
+  .btn {
+    margin-top: 20px;
+    padding: 14px 32px;
+    font-size: 20px; font-weight: bold;
+    background: linear-gradient(135deg, #ff6b9d, #c94277);
+    border: none; border-radius: 40px;
+    color: white; cursor: pointer;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.4);
+    transition: transform 0.15s;
+  }
+  .btn:hover { transform: scale(1.08); }
+  .hidden { display: none !important; }
+
+  /* Mobile controls */
+  #mobileCtrl {
+    position: absolute; bottom: 10px; left: 0; right: 0;
+    display: none;
+    justify-content: space-around;
+    padding: 0 10px;
+    z-index: 50;
+  }
+  #mobileCtrl button {
+    width: 65px; height: 65px;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.8);
+    background: rgba(255,255,255,0.25);
+    color: white;
+    font-size: 22px; font-weight: bold;
+    backdrop-filter: blur(5px);
+  }
+  @media (max-width: 768px) {
+    #mobileCtrl { display: flex; }
+    .dancer { font-size: 70px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="scene">
+  <div class="sun"></div>
+  <div class="cloud" style="top: 12%; left: 10%; width: 80px; height: 30px;"></div>
+  <div class="cloud" style="top: 20%; right: 12%; width: 100px; height: 35px;"></div>
+  <div class="cloud" style="top: 8%; right: 30%; width: 60px; height: 22px;"></div>
+  <div class="hill left"></div>
+  <div class="hill right"></div>
+  <div class="lake"></div>
+
+  <div class="dancers">
+    <span class="dancer" id="d1">🕺</span>
+    <span class="dancer" id="d2">💃</span>
+  </div>
+
+  <div id="lane">
+    <div class="target-row">
+      <div class="target" data-k="L">←</div>
+      <div class="target" data-k="D">↓</div>
+      <div class="target" data-k="U">↑</div>
+      <div class="target" data-k="R">→</div>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div>Score: <span id="score">0</span></div>
+    <div id="combo">Combo: 0</div>
+    <div>❤️ <span id="lives">3</span></div>
+  </div>
+
+  <div id="mobileCtrl">
+    <button data-k="L">←</button>
+    <button data-k="D">↓</button>
+    <button data-k="U">↑</button>
+    <button data-k="R">→</button>
+  </div>
+
+  <div class="screen" id="startScreen">
+    <h1>💃 Dance with Me 🕺</h1>
+    <p>Pyari si jagah pe IGNOU jawan apni ladki ke saath dance kar raha hai!</p>
+    <p>Press <b>← ↓ ↑ →</b> (or A S W D) when notes hit the circles.</p>
+    <p>Build combos, score points, don't miss the beat! 💖</p>
+    <button class="btn" id="startBtn">Start Dancing!</button>
+  </div>
+
+  <div class="screen hidden" id="gameOverScreen">
+    <h1 id="goTitle">Wah! Kya dance tha! 💖</h1>
+    <p>Final Score: <span id="finalScore">0</span></p>
+    <p>Max Combo: <span id="maxCombo">0</span></p>
+    <button class="btn" id="restartBtn">Dance Again</button>
+  </div>
+</div>
+
+<script>
+const keyMap = { ArrowLeft:'L', ArrowDown:'D', ArrowUp:'U', ArrowRight:'R',
+                 a:'L', s:'D', w:'U', d:'R', A:'L', S:'D', W:'U', D:'R' };
+const lanes = ['L','D','U','R'];
+const laneX = { L: 12.5, D: 37.5, U: 62.5, R: 87.5 }; // percentage within lane
+const arrowChar = { L:'←', D:'↓', U:'↑', R:'→' };
+
+let notes = [];
+let score = 0, combo = 0, maxCombo = 0, lives = 3;
+let running = false, spawnTimer = 0, lastTime = 0, beatInterval = 650;
+let audioCtx;
+
+const lane = document.getElementById('lane');
+const scoreEl = document.getElementById('score');
+const comboEl = document.getElementById('combo');
+const livesEl = document.getElementById('lives');
+const d1 = document.getElementById('d1');
+const d2 = document.getElementById('d2');
+
+function beep(freq, dur=0.1, type='sine', vol=0.2) {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.value = vol;
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start();
+  g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+  o.stop(audioCtx.currentTime + dur);
+}
+
+function spawnNote() {
+  const k = lanes[Math.floor(Math.random()*4)];
+  const el = document.createElement('div');
+  el.className = 'note ' + k;
+  el.textContent = arrowChar[k];
+  el.style.left = `calc(${laneX[k]}% - 30px)`;
+  el.style.top = '-60px';
+  lane.appendChild(el);
+  notes.push({ el, k, y: -60, speed: 0.35 + Math.random()*0.1 });
+}
+
+function getTargetY() {
+  // target row is at bottom 12% of lane (which is full height)
+  return window.innerHeight * 0.88 - 35;
+}
+
+function update(dt) {
+  spawnTimer += dt;
+  if (spawnTimer > beatInterval) {
+    spawnTimer = 0;
+    spawnNote();
+    // gradually speed up
+    if (beatInterval > 380) beatInterval -= 4;
+  }
+  const targetY = getTargetY();
+  for (let i = notes.length-1; i >= 0; i--) {
+    const n = notes[i];
+    n.y += n.speed * dt;
+    n.el.style.top = n.y + 'px';
+    if (n.y > targetY + 60) {
+      // miss
+      n.el.remove();
+      notes.splice(i, 1);
+      missHit();
+    }
+  }
+}
+
+function showPopup(text, color, x, y) {
+  const p = document.createElement('div');
+  p.className = 'popup';
+  p.textContent = text;
+  p.style.color = color;
+  p.style.left = x + 'px';
+  p.style.top = y + 'px';
+  document.getElementById('scene').appendChild(p);
+  setTimeout(()=>p.remove(), 800);
+}
+
+function spawnHeart() {
+  const h = document.createElement('div');
+  h.className = 'heart';
+  h.textContent = ['💖','💕','💗','✨','🌸'][Math.floor(Math.random()*5)];
+  h.style.left = (40 + Math.random()*20) + '%';
+  h.style.top = '55%';
+  document.getElementById('scene').appendChild(h);
+  setTimeout(()=>h.remove(), 3000);
+}
+
+function hitKey(k) {
+  if (!running) return;
+  const t = document.querySelector(`.target[data-k="${k}"]`);
+  t.classList.add('active');
+  setTimeout(()=>t.classList.remove('active'), 120);
+
+  const targetY = getTargetY();
+  let best = -1, bestDist = Infinity;
+  for (let i=0; i<notes.length; i++) {
+    if (notes[i].k !== k) continue;
+    const d = Math.abs(notes[i].y - targetY);
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+  if (best >= 0 && bestDist < 60) {
+    const n = notes[best];
+    const rect = n.el.getBoundingClientRect();
+    n.el.remove();
+    notes.splice(best, 1);
+    let pts, txt, col;
+    if (bestDist < 20) { pts = 100; txt = 'PERFECT!'; col = '#ffd86b'; beep(880, 0.1, 'sine', 0.2); }
+    else if (bestDist < 40) { pts = 50; txt = 'GREAT!'; col = '#95ff6b'; beep(660, 0.1, 'sine', 0.2); }
+    else { pts = 20; txt = 'GOOD'; col = '#6bcfff'; beep(440, 0.1, 'sine', 0.2); }
+    score += pts * (1 + Math.floor(combo/10));
+    combo++;
+    if (combo > maxCombo) maxCombo = combo;
+    showPopup(txt, col, rect.left, rect.top);
+    scoreEl.textContent = score;
+    comboEl.textContent = 'Combo: ' + combo;
+    // dance bump
+    d1.classList.add('bump'); d2.classList.add('bump2');
+    setTimeout(()=>{ d1.classList.remove('bump'); d2.classList.remove('bump2'); }, 150);
+    if (combo % 5 === 0) spawnHeart();
+  } else {
+    // wrong/empty press - mild penalty
+    combo = 0;
+    comboEl.textContent = 'Combo: 0';
+    beep(150, 0.08, 'square', 0.1);
+  }
+}
+
+function missHit() {
+  combo = 0;
+  comboEl.textContent = 'Combo: 0';
+  lives--;
+  livesEl.textContent = lives;
+  beep(120, 0.2, 'sawtooth', 0.15);
+  if (lives <= 0) endGame();
+}
+
+function loop(t) {
+  if (!running) return;
+  if (!lastTime) lastTime = t;
+  const dt = t - lastTime;
+  lastTime = t;
+  update(dt);
+  requestAnimationFrame(loop);
+}
+
+function startGame() {
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('gameOverScreen').classList.add('hidden');
+  notes.forEach(n=>n.el.remove());
+  notes = [];
+  score = 0; combo = 0; maxCombo = 0; lives = 3;
+  beatInterval = 650; spawnTimer = 0; lastTime = 0;
+  scoreEl.textContent = 0;
+  comboEl.textContent = 'Combo: 0';
+  livesEl.textContent = 3;
+  running = true;
+  requestAnimationFrame(loop);
+}
+
+function endGame() {
+  running = false;
+  document.getElementById('finalScore').textContent = score;
+  document.getElementById('maxCombo').textContent = maxCombo;
+  document.getElementById('goTitle').textContent = 
+    score > 2000 ? 'Superstar Dancer! 🌟' : score > 800 ? 'Wah! Kya dance tha! 💖' : 'Practice karo aur try karo! 💪';
+  document.getElementById('gameOverScreen').classList.remove('hidden');
+}
+
+document.addEventListener('keydown', e => {
+  const k = keyMap[e.key];
+  if (k) { e.preventDefault(); hitKey(k); }
+});
+document.querySelectorAll('#mobileCtrl button').forEach(b=>{
+  b.addEventListener('touchstart', e=>{ e.preventDefault(); hitKey(b.dataset.k); });
+  b.addEventListener('click', ()=>hitKey(b.dataset.k));
+});
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+</script>
+</body>
+</html>

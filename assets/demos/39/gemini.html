@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Abyssal Deck</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+
+        :root {
+            --bg-color: #0a0a0c;
+            --panel-bg: #1a1a24;
+            --accent-red: #8b0000;
+            --accent-purple: #4b0082;
+            --text-main: #d3d3d3;
+            --text-muted: #808080;
+        }
+
+        body {
+            font-family: 'Crimson Text', serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            overflow: hidden;
+            user-select: none;
+        }
+
+        h1, h2, h3, .title-font {
+            font-family: 'Cinzel', serif;
+        }
+
+        /* Screen Management */
+        .screen { display: none; width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; flex-direction: column; }
+        .screen.active { display: flex; }
+
+        /* Card Styling */
+        .card {
+            width: 140px; height: 200px;
+            background: #2a2a35;
+            border: 2px solid #444;
+            border-radius: 8px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+            position: relative;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+            margin: 0 -10px; /* Overlap */
+        }
+        .card:hover {
+            transform: translateY(-20px);
+            z-index: 10;
+            box-shadow: 0 10px 15px rgba(0,0,0,0.8);
+            border-color: #888;
+        }
+        .card.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+            border-color: #222 !important;
+        }
+        .card-cost {
+            position: absolute; top: -10px; left: -10px;
+            background: #111; border: 2px solid #555; border-radius: 50%;
+            width: 30px; height: 30px;
+            display: flex; justify-content: center; align-items: center;
+            font-weight: bold; color: #00ffff;
+            font-family: 'Cinzel', serif;
+        }
+        .card-type { font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); text-align: center; margin-bottom: 5px; border-bottom: 1px solid #444; padding-bottom: 2px;}
+        .card-name { font-weight: bold; text-align: center; margin-bottom: 5px; font-size: 1.1rem; line-height: 1.1;}
+        .card-desc { font-size: 0.9rem; text-align: center; flex-grow: 1; display: flex; align-items: center; justify-content: center;}
+        
+        .card.attack { border-top-color: var(--accent-red); background: linear-gradient(180deg, #3a1a1a 0%, #2a2a35 30%);}
+        .card.skill { border-top-color: #2e8b57; background: linear-gradient(180deg, #1a3a2a 0%, #2a2a35 30%);}
+
+        /* Health & Energy Bars */
+        .bar-container { background: #222; border: 1px solid #555; border-radius: 4px; overflow: hidden; height: 20px; position: relative;}
+        .bar-fill { height: 100%; transition: width 0.3s ease-in-out; }
+        .hp-fill { background: var(--accent-red); }
+        .block-fill { background: #4682b4; position: absolute; top:0; right:0; opacity: 0.8;}
+        .bar-text { position: absolute; width: 100%; text-align: center; top: 0; font-size: 0.8rem; line-height: 20px; font-weight: bold; text-shadow: 1px 1px 0 #000;}
+
+        /* Entity Areas */
+        .entity { display: flex; flex-direction: column; align-items: center; width: 250px; }
+        .sprite { width: 150px; height: 150px; background-size: contain; background-position: center; background-repeat: no-repeat; filter: drop-shadow(0 0 10px rgba(0,0,0,0.8)); margin-bottom: 10px; transition: transform 0.1s;}
+        .sprite.hurt { transform: translateX(5px) rotate(2deg); filter: brightness(200%) hue-rotate(-50deg); }
+        
+        #player-sprite { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="%23aaa" d="M40,90 L60,90 L55,40 L65,30 L50,10 L35,30 L45,40 Z"/><circle cx="50" cy="20" r="8" fill="%23ccc"/></svg>'); }
+        
+        .intent-icon { width: 30px; height: 30px; border-radius: 50%; background: #111; border: 1px solid #555; display: flex; justify-content: center; align-items: center; position: absolute; top: -15px; right: -15px; font-size: 1.2rem; z-index: 5;}
+        
+        /* Map */
+        .map-node { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #555; display: flex; justify-content: center; align-items: center; margin: 20px auto; cursor: pointer; background: #111; position: relative;}
+        .map-node.active { border-color: var(--accent-red); box-shadow: 0 0 10px var(--accent-red); }
+        .map-node.completed { border-color: #444; background: #222; cursor: default; }
+        .map-line { width: 2px; height: 40px; background: #555; margin: 0 auto; }
+
+        /* Effects */
+        .shake { animation: shake 0.5s; }
+        @keyframes shake { 0% { transform: translate(1px, 1px) rotate(0deg); } 10% { transform: translate(-1px, -2px) rotate(-1deg); } 20% { transform: translate(-3px, 0px) rotate(1deg); } 30% { transform: translate(3px, 2px) rotate(0deg); } 40% { transform: translate(1px, -1px) rotate(1deg); } 50% { transform: translate(-1px, 2px) rotate(-1deg); } 60% { transform: translate(-3px, 1px) rotate(0deg); } 70% { transform: translate(3px, 1px) rotate(-1deg); } 80% { transform: translate(-1px, -1px) rotate(1deg); } 90% { transform: translate(1px, 2px) rotate(0deg); } 100% { transform: translate(1px, -2px) rotate(-1deg); } }
+        
+        /* CRT overlay */
+        .crt::before { content: " "; display: block; position: absolute; top: 0; left: 0; bottom: 0; right: 0; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06)); z-index: 100; background-size: 100% 2px, 3px 100%; pointer-events: none; }
+        
+        .floating-text { position: absolute; color: white; font-weight: bold; font-size: 1.5rem; pointer-events: none; animation: floatUp 1s ease-out forwards; text-shadow: 2px 2px 0 #000; z-index: 50;}
+        @keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-50px); } }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #111; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+    </style>
+</head>
+<body class="crt">
+
+    <!-- START SCREEN -->
+    <div id="start-screen" class="screen active justify-center items-center bg-[url('https://images.unsplash.com/photo-1605806616949-1e87b487cb2a?q=80&w=1920&auto=format&fit=crop')] bg-cover bg-center">
+        <div class="absolute inset-0 bg-black bg-opacity-70"></div>
+        <div class="z-10 text-center">
+            <h1 class="text-6xl text-red-700 mb-2 drop-shadow-[0_0_10px_rgba(255,0,0,0.5)]">ABYSSAL DECK</h1>
+            <p class="text-xl mb-12 text-gray-400 italic">Descend into the darkness...</p>
+            <button onclick="startGame()" class="px-8 py-3 bg-red-900 hover:bg-red-700 text-white font-bold rounded title-font text-xl transition-colors border border-red-500 shadow-[0_0_15px_rgba(139,0,0,0.5)]">Begin Run</button>
+        </div>
+    </div>
+
+    <!-- MAP SCREEN -->
+    <div id="map-screen" class="screen justify-between items-center py-10 bg-gray-900">
+        <div class="title-font text-2xl text-gray-300">The Descent</div>
+        <div id="map-container" class="flex flex-col-reverse items-center flex-grow overflow-y-auto w-full py-10">
+            <!-- Nodes injected here -->
+        </div>
+        <div class="p-4 border-t border-gray-700 w-full flex justify-between items-center bg-gray-800">
+            <div>HP: <span id="map-hp">50/50</span></div>
+            <div>Deck Size: <span id="map-deck">10</span></div>
+        </div>
+    </div>
+
+    <!-- COMBAT SCREEN -->
+    <div id="combat-screen" class="screen bg-gray-900 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-800 to-black">
+        
+        <!-- Top Bar -->
+        <div class="flex justify-between items-center p-4 bg-black bg-opacity-50 border-b border-gray-800">
+            <div class="flex items-center space-x-4">
+                <div class="title-font text-red-500 text-xl">Floor <span id="floor-display">1</span></div>
+            </div>
+            <button onclick="endTurn()" id="end-turn-btn" class="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded transition-colors border border-gray-500">End Turn</button>
+        </div>
+
+        <!-- Stage Area -->
+        <div class="flex-grow flex justify-around items-center px-10" id="stage-area">
+            
+            <!-- Player -->
+            <div class="entity relative" id="player-entity">
+                <div class="title-font mb-2">You</div>
+                <div class="sprite" id="player-sprite"></div>
+                <div class="w-full">
+                    <div class="bar-container mb-1">
+                        <div class="bar-fill hp-fill" id="player-hp-bar" style="width: 100%"></div>
+                        <div class="bar-text"><span id="player-hp-text">50/50</span></div>
+                    </div>
+                    <div class="text-blue-400 font-bold text-center text-sm" id="player-block-text">Block: 0</div>
+                </div>
+                <div class="mt-4 flex items-center justify-center space-x-2 bg-gray-800 px-4 py-2 rounded-full border border-gray-600">
+                    <span class="text-cyan-400 title-font font-bold text-xl">⚡</span>
+                    <span id="energy-display" class="font-bold text-lg">3/3</span>
+                </div>
+            </div>
+
+            <!-- Enemy -->
+            <div class="entity relative" id="enemy-entity">
+                <div class="title-font mb-2 text-red-400" id="enemy-name">Skeleton</div>
+                <div class="relative">
+                    <div class="sprite" id="enemy-sprite" style="background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="%23ddd" d="M30,30 Q50,10 70,30 Q80,50 60,70 L40,70 Q20,50 30,30 Z"/><circle cx="40" cy="40" r="5" fill="%23000"/><circle cx="60" cy="40" r="5" fill="%23000"/><path stroke="%23000" stroke-width="2" d="M45,60 L55,60"/></svg>');"></div>
+                    <div class="intent-icon" id="enemy-intent-icon" title="Intent">⚔️</div>
+                    <div class="absolute -top-6 w-full text-center font-bold text-sm text-yellow-300" id="enemy-intent-value">5</div>
+                </div>
+                <div class="w-full mt-2">
+                    <div class="bar-container mb-1">
+                        <div class="bar-fill hp-fill" id="enemy-hp-bar" style="width: 100%"></div>
+                        <div class="bar-text"><span id="enemy-hp-text">20/20</span></div>
+                    </div>
+                    <div class="text-blue-400 font-bold text-center text-sm" id="enemy-block-text">Block: 0</div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Hand Area -->
+        <div class="h-64 flex flex-col items-center bg-black bg-opacity-80 p-4 border-t border-gray-800">
+            <div class="flex w-full justify-between px-8 mb-2 text-sm text-gray-400">
+                <div>Draw Pile: <span id="draw-pile-count">0</span></div>
+                <div>Discard: <span id="discard-pile-count">0</span></div>
+            </div>
+            <div class="flex justify-center items-end flex-grow w-full" id="hand-container">
+                <!-- Cards injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- REWARD SCREEN -->
+    <div id="reward-screen" class="screen justify-center items-center bg-gray-900 bg-opacity-95">
+        <h2 class="text-4xl text-yellow-500 mb-8 drop-shadow-[0_0_5px_rgba(255,255,0,0.5)]">Victory</h2>
+        <p class="mb-6 text-xl">Choose a card to add to your deck:</p>
+        <div class="flex space-x-8 mb-10" id="reward-cards-container">
+            <!-- Reward cards injected here -->
+        </div>
+        <button onclick="skipReward()" class="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors">Skip</button>
+    </div>
+
+    <!-- GAME OVER / VICTORY SCREEN -->
+    <div id="end-screen" class="screen justify-center items-center bg-black">
+        <h1 class="text-6xl mb-4" id="end-title">YOU DIED</h1>
+        <p class="text-xl text-gray-400 mb-8" id="end-stats">Reached Floor: 1</p>
+        <button onclick="initGame()" class="px-8 py-3 bg-red-900 hover:bg-red-700 text-white font-bold rounded title-font text-xl transition-colors">Play Again</button>
+    </div>
+
+    <!-- AUDIO (Synthesized for self-containment) -->
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            const now = audioCtx.currentTime;
+            
+            if (type === 'hit') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'block') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.exponentialRampToValueAtTime(600, now + 0.2);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.2);
+                osc.start(now); osc.stop(now + 0.2);
+            } else if (type === 'card') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(300, now + 0.05);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.05);
+                osc.start(now); osc.stop(now + 0.05);
+            }
+        }
+    </script>
+
+    <!-- GAME LOGIC -->
+    <script>
+        // --- DATA ---
+        const CARDS = {
+            strike: { id: 'strike', name: 'Strike', cost: 1, type: 'attack', desc: 'Deal 6 damage.', play: (p, e) => dealDamage(e, 6) },
+            defend: { id: 'defend', name: 'Defend', cost: 1, type: 'skill', desc: 'Gain 5 block.', play: (p, e) => gainBlock(p, 5) },
+            heavy_strike: { id: 'heavy_strike', name: 'Heavy Strike', cost: 2, type: 'attack', desc: 'Deal 14 damage.', play: (p, e) => dealDamage(e, 14) },
+            blood_letting: { id: 'blood_letting', name: 'Blood Rite', cost: 0, type: 'skill', desc: 'Lose 2 HP. Gain 2 Energy.', play: (p, e) => { takeDirectDamage(p, 2); p.energy += 2; } },
+            vampirism: { id: 'vampirism', name: 'Drain', cost: 1, type: 'attack', desc: 'Deal 4 damage. Heal 4 HP.', play: (p, e) => { dealDamage(e, 4); heal(p, 4); } },
+            shield_bash: { id: 'shield_bash', name: 'Shield Bash', cost: 1, type: 'attack', desc: 'Deal damage equal to your Block.', play: (p, e) => dealDamage(e, p.block) }
+        };
+
+        const ENEMIES = [
+            { id: 'ghoul', name: 'Feral Ghoul', maxHp: 25, svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="#556b2f" d="M20,80 Q40,40 50,20 Q60,40 80,80 L60,90 L40,90 Z"/><circle cx="45" cy="35" r="3" fill="#f00"/><circle cx="55" cy="35" r="3" fill="#f00"/></svg>', getIntent: (e) => ({ type: 'attack', val: 6, icon: '⚔️' }) },
+            { id: 'cultist', name: 'Dark Cultist', maxHp: 35, svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="#4b0082" d="M30,90 L50,10 L70,90 Z"/><circle cx="50" cy="40" r="8" fill="#000"/><path stroke="#fff" stroke-width="2" d="M45,40 L55,40 M50,35 L50,45"/></svg>', getIntent: (e) => { e.turn = (e.turn||0)+1; return e.turn % 2 === 0 ? { type: 'defend', val: 8, icon: '🛡️' } : { type: 'attack', val: 9, icon: '⚔️' }; } },
+            { id: 'gargoyle', name: 'Stone Gargoyle', maxHp: 45, svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="30" y="30" width="40" height="60" fill="#555"/><path fill="#555" d="M10,50 Q30,20 50,30 Q70,20 90,50 L70,60 L30,60 Z"/></svg>', getIntent: (e) => ({ type: 'attack', val: Math.floor(Math.random() * 5) + 5, icon: '⚔️' }) },
+            { id: 'boss', name: 'The Abyss Lord', maxHp: 100, isBoss: true, svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="#8b0000" d="M10,90 L50,0 L90,90 Z"/><circle cx="50" cy="30" r="10" fill="#000"/><path stroke="#f00" stroke-width="3" d="M45,30 L55,30 M50,25 L50,35"/></svg>', getIntent: (e) => { e.turn = (e.turn||0)+1; if(e.turn%3===0) return {type: 'defend', val: 15, icon: '🛡️'}; return { type: 'attack', val: 12, icon: '⚔️' }; } }
+        ];
+
+        // --- STATE ---
+        let state = {
+            screen: 'start',
+            floor: 0,
+            maxFloors: 5,
+            player: { hp: 50, maxHp: 50, energy: 3, maxEnergy: 3, block: 0, deck: [], hand: [], drawPile: [], discardPile: [] },
+            enemy: null,
+            map: [],
+            isPlayerTurn: true
+        };
+
+        // --- UTILS ---
+        const $ = id => document.getElementById(id);
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+        function createFloatingText(targetId, text, color) {
+            const target = $(targetId);
+            const rect = target.getBoundingClientRect();
+            const el = document.createElement('div');
+            el.className = 'floating-text';
+            el.style.left = (rect.left + rect.width/2 - 10) + 'px';
+            el.style.top = (rect.top + rect.height/2) + 'px';
+            el.style.color = color;
+            el.innerText = text;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+        }
+
+        // --- CORE LOGIC ---
+        function initGame() {
+            state.player = { hp: 50, maxHp: 50, energy: 3, maxEnergy: 3, block: 0, 
+                             deck: ['strike', 'strike', 'strike', 'strike', 'defend', 'defend', 'defend', 'defend'], 
+                             hand: [], drawPile: [], discardPile: [] };
+            state.floor = 0;
+            generateMap();
+            showScreen('map-screen');
+            updateMapUI();
+        }
+
+        function generateMap() {
+            state.map = [];
+            for(let i=0; i<state.maxFloors - 1; i++) state.map.push({ type: 'combat', enemyIndex: Math.floor(Math.random() * (ENEMIES.length-1)) });
+            state.map.push({ type: 'boss', enemyIndex: ENEMIES.length - 1 });
+        }
+
+        function updateMapUI() {
+            $('map-hp').innerText = `${state.player.hp}/${state.player.maxHp}`;
+            $('map-deck').innerText = state.player.deck.length;
+            const container = $('map-container');
+            container.innerHTML = '';
+            
+            for(let i = state.map.length - 1; i >= 0; i--) {
+                const node = document.createElement('div');
+                node.className = `map-node ${i < state.floor ? 'completed' : (i === state.floor ? 'active' : '')}`;
+                node.innerHTML = state.map[i].type === 'boss' ? '😈' : '⚔️';
+                if(i === state.floor) node.onclick = startCombat;
+                container.appendChild(node);
+                
+                if(i > 0) {
+                    const line = document.createElement('div');
+                    line.className = 'map-line';
+                    container.appendChild(line);
+                }
+            }
+        }
+
+        function startCombat() {
+            const node = state.map[state.floor];
+            const baseEnemy = ENEMIES[node.enemyIndex];
+            state.enemy = { ...baseEnemy, hp: baseEnemy.maxHp, block: 0, turn: 0 };
+            
+            $('enemy-name').innerText = state.enemy.name;
+            $('enemy-name').className = `title-font mb-2 ${state.enemy.isBoss ? 'text-red-600 text-2xl' : 'text-red-400'}`;
+            $('enemy-sprite').style.backgroundImage = `url('data:image/svg+xml;utf8,${encodeURIComponent(state.enemy.svg)}')`;
+            $('floor-display').innerText = state.floor + 1;
+            
+            state.player.drawPile = shuffle([...state.player.deck]);
+            state.player.discardPile = [];
+            state.player.hand = [];
+            state.player.block = 0;
+            
+            showScreen('combat-screen');
+            startTurn();
+        }
+
+        function startTurn() {
+            state.isPlayerTurn = true;
+            state.player.energy = state.player.maxEnergy;
+            state.player.block = 0;
+            $('end-turn-btn').disabled = false;
+            $('end-turn-btn').classList.remove('opacity-50');
+
+            // Draw 5 cards
+            for(let i=0; i<5; i++) drawCard();
+            
+            // Set Enemy Intent
+            state.enemy.intent = state.enemy.getIntent(state.enemy);
+            
+            updateCombatUI();
+        }
+
+        function drawCard() {
+            if (state.player.drawPile.length === 0) {
+                if (state.player.discardPile.length === 0) return;
+                state.player.drawPile = shuffle([...state.player.discardPile]);
+                state.player.discardPile = [];
+            }
+            state.player.hand.push(state.player.drawPile.pop());
+        }
+
+        function playCard(index) {
+            if(!state.isPlayerTurn) return;
+            const cardId = state.player.hand[index];
+            const cardDef = CARDS[cardId];
+            
+            if (state.player.energy >= cardDef.cost) {
+                state.player.energy -= cardDef.cost;
+                state.player.hand.splice(index, 1);
+                playSound('card');
+                
+                // Execute effect
+                cardDef.play(state.player, state.enemy);
+                state.player.discardPile.push(cardId);
+                
+                updateCombatUI();
+                checkCombatEnd();
+            }
+        }
+
+        function dealDamage(target, amount) {
+            let damage = amount;
+            if (target.block > 0) {
+                if (target.block >= damage) {
+                    target.block -= damage;
+                    damage = 0;
+                    playSound('block');
+                } else {
+                    damage -= target.block;
+                    target.block = 0;
+                }
+            }
+            if (damage > 0) {
+                target.hp -= damage;
+                playSound('hit');
+                const spriteId = target === state.enemy ? 'enemy-sprite' : 'player-sprite';
+                $(spriteId).classList.add('hurt');
+                setTimeout(() => $(spriteId).classList.remove('hurt'), 200);
+            }
+            createFloatingText(target === state.enemy ? 'enemy-entity' : 'player-entity', `-${amount}`, '#ff4444');
+        }
+
+        function takeDirectDamage(target, amount) {
+            target.hp -= amount;
+            createFloatingText(target === state.enemy ? 'enemy-entity' : 'player-entity', `-${amount}`, '#ff4444');
+        }
+
+        function gainBlock(target, amount) {
+            target.block += amount;
+            playSound('block');
+            createFloatingText(target === state.enemy ? 'enemy-entity' : 'player-entity', `+${amount}`, '#44aaff');
+        }
+
+        function heal(target, amount) {
+            target.hp = Math.min(target.maxHp, target.hp + amount);
+            createFloatingText(target === state.enemy ? 'enemy-entity' : 'player-entity', `+${amount}`, '#44ff44');
+        }
+
+        function endTurn() {
+            if(!state.isPlayerTurn) return;
+            state.isPlayerTurn = false;
+            $('end-turn-btn').disabled = true;
+            $('end-turn-btn').classList.add('opacity-50');
+
+            // Discard hand
+            state.player.discardPile.push(...state.player.hand);
+            state.player.hand = [];
+            updateCombatUI();
+
+            // Enemy Turn
+            setTimeout(() => {
+                state.enemy.block = 0;
+                const intent = state.enemy.intent;
+                
+                if (intent.type === 'attack') {
+                    $('enemy-sprite').classList.add('shake');
+                    setTimeout(() => $('enemy-sprite').classList.remove('shake'), 500);
+                    dealDamage(state.player, intent.val);
+                } else if (intent.type === 'defend') {
+                    gainBlock(state.enemy, intent.val);
+                }
+
+                updateCombatUI();
+                if(!checkCombatEnd()) {
+                    setTimeout(startTurn, 800);
+                }
+            }, 500);
+        }
+
+        function checkCombatEnd() {
+            if (state.enemy.hp <= 0) {
+                state.floor++;
+                if(state.floor >= state.maxFloors) {
+                    endGame(true);
+                } else {
+                    setTimeout(showRewardScreen, 500);
+                }
+                return true;
+            }
+            if (state.player.hp <= 0) {
+                setTimeout(() => endGame(false), 500);
+                return true;
+            }
+            return false;
+        }
+
+        // --- UI UPDATES ---
+        function updateCombatUI() {
+            // Player stats
+            $('player-hp-text').innerText = `${state.player.hp}/${state.player.maxHp}`;
+            $('player-hp-bar').style.width = `${Math.max(0, (state.player.hp / state.player.maxHp) * 100)}%`;
+            $('player-block-text').innerText = `Block: ${state.player.block}`;
+            $('player-block-text').style.opacity = state.player.block > 0 ? 1 : 0;
+            $('energy-display').innerText = `${state.player.energy}/${state.player.maxEnergy}`;
+
+            // Enemy stats
+            $('enemy-hp-text').innerText = `${state.enemy.hp}/${state.enemy.maxHp}`;
+            $('enemy-hp-bar').style.width = `${Math.max(0, (state.enemy.hp / state.enemy.maxHp) * 100)}%`;
+            $('enemy-block-text').innerText = `Block: ${state.enemy.block}`;
+            $('enemy-block-text').style.opacity = state.enemy.block > 0 ? 1 : 0;
+            
+            // Intent
+            $('enemy-intent-icon').innerText = state.enemy.intent.icon;
+            $('enemy-intent-value').innerText = state.enemy.intent.val;
+
+            // Deck counts
+            $('draw-pile-count').innerText = state.player.drawPile.length;
+            $('discard-pile-count').innerText = state.player.discardPile.length;
+
+            // Render Hand
+            const handContainer = $('hand-container');
+            handContainer.innerHTML = '';
+            state.player.hand.forEach((cardId, index) => {
+                const c = CARDS[cardId];
+                const canPlay = state.player.energy >= c.cost && state.isPlayerTurn;
+                const cardEl = document.createElement('div');
+                cardEl.className = `card ${c.type} ${canPlay ? '' : 'disabled'}`;
+                // Arc positioning
+                const offset = index - (state.player.hand.length - 1) / 2;
+                cardEl.style.transform = canPlay ? `rotate(${offset * 5}deg) translateY(${Math.abs(offset) * 5}px)` : '';
+                
+                cardEl.innerHTML = `
+                    <div class="card-cost">${c.cost}</div>
+                    <div class="card-type">${c.type}</div>
+                    <div class="card-name">${c.name}</div>
+                    <div class="card-desc">${c.desc}</div>
+                `;
+                if(canPlay) cardEl.onclick = () => playCard(index);
+                handContainer.appendChild(cardEl);
+            });
+        }
+
+        // --- REWARD SCREEN ---
+        function showRewardScreen() {
+            showScreen('reward-screen');
+            const container = $('reward-cards-container');
+            container.innerHTML = '';
+            
+            // Pick 3 random cards (excluding basic strike/defend usually, but keeping simple here)
+            const availableCards = Object.keys(CARDS).filter(k => k !== 'strike' && k !== 'defend');
+            const choices = shuffle([...availableCards]).slice(0, 3);
+            
+            choices.forEach(cardId => {
+                const c = CARDS[cardId];
+                const cardEl = document.createElement('div');
+                cardEl.className = `card ${c.type}`;
+                cardEl.style.margin = '0 10px';
+                cardEl.innerHTML = `
+                    <div class="card-cost">${c.cost}</div>
+                    <div class="card-type">${c.type}</div>
+                    <div class="card-name">${c.name}</div>
+                    <div class="card-desc">${c.desc}</div>
+                `;
+                cardEl.onclick = () => {
+                    state.player.deck.push(cardId);
+                    returnToMap();
+                };
+                container.appendChild(cardEl);
+            });
+        }
+
+        function skipReward() { returnToMap(); }
+        
+        function returnToMap() {
+            updateMapUI();
+            showScreen('map-screen');
+        }
+
+        // --- GAME OVER ---
+        function endGame(victory) {
+            showScreen('end-screen');
+            $('end-title').innerText = victory ? "ABYSS CONQUERED" : "YOU DIED";
+            $('end-title').className = `text-6xl mb-4 ${victory ? 'text-yellow-500' : 'text-red-700'}`;
+            $('end-stats').innerText = `Reached Floor: ${state.floor + 1}`;
+        }
+
+        // --- NAVIGATION ---
+        function showScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            $(id).classList.add('active');
+        }
+
+        function startGame() {
+            // Audio context requires user interaction to start
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            initGame();
+        }
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dancing Couple Animation</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+display: flex;
+justify-content: center;
+align-items: center;
+min-height: 100vh;
+background: #1a0a2e;
+font-family: 'Segoe UI', sans-serif;
+overflow: hidden;
+}
+canvas {
+border-radius: 12px;
+box-shadow: 0 0 40px rgba(255,100,200,0.4);
+}
+#controls {
+position: fixed;
+bottom: 20px;
+display: flex;
+gap: 12px;
+z-index: 10;
+}
+#controls button {
+padding: 10px 24px;
+border: none;
+border-radius: 25px;
+background: linear-gradient(135deg, #ff6b9d, #c44dff);
+color: white;
+font-size: 15px;
+cursor: pointer;
+font-weight: bold;
+box-shadow: 0 4px 15px rgba(196,77,255,0.4);
+transition: transform 0.2s;
+}
+#controls button:hover { transform: scale(1.08); }
+#title {
+position: fixed;
+top: 20px;
+color: white;
+font-size: 22px;
+text-shadow: 0 0 20px rgba(255,100,200,0.8);
+letter-spacing: 2px;
+z-index: 10;
+}
+</style>
+</head>
+<body>
+<div id="title">💃🕺 Dancing Together 💕</div>
+<canvas id="canvas"></canvas>
+<div id="controls">
+<button onclick="toggleMusic()">🎵 Toggle Music</button>
+<button onclick="changeScene()">🌅 Change Scene</button>
+<button onclick="toggleHearts()">💖 Hearts</button>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+canvas.width = 900;
+canvas.height = 600;
+
+let time = 0;
+let heartsEnabled = true;
+let musicEnabled = false;
+let currentScene = 0;
+let sceneNames = ['🌸 Garden', '🌅 Sunset Beach', '🌙 Moonlit Park', '🌺 Flower Field'];
+
+const scenes = [
+{ sky1: '#87CEEB', sky2: '#E0F7FA', ground: '#4CAF50', ground2: '#388E3C', flowers: true, stars: false, sun: true, water: false, fireflies: false, snow: false },
+{ sky1: '#FF6B35', sky2: '#FFD700', ground: '#F4D03F', ground2: '#E8C840', flowers: false, stars: false, sun: true, water: true, fireflies: false, snow: false },
+{ sky1: '#0a0a2e', sky2: '#1a1a4e', ground: '#2d5a27', ground2: '#1e3d1a', flowers: false, stars: true, sun: false, water: false, fireflies: true, snow: false },
+{ sky1: '#FFB6C1', sky2: '#FFC0CB', ground: '#90EE90', ground2: '#76C776', flowers: true, stars: false, sun: true, water: false, fireflies: false, snow: false }
+];
+
+let hearts = [];
+let musicNotes = [];
+let particles = [];
+let firefliesArr = [];
+let petals = [];
+
+for (let i = 0; i < 30; i++) {
+firefliesArr.push({ x: Math.random() * 900, y: Math.random() * 400 + 100, size: Math.random() * 3 + 1, speed: Math.random() * 0.5 + 0.2, angle: Math.random() * Math.PI * 2 });
+}
+
+for (let i = 0; i < 20; i++) {
+petals.push({ x: Math.random() * 900, y: Math.random() * 600, size: Math.random() * 4 + 2, speedX: Math.random() * 1 - 0.5, speedY: Math.random() * 1 + 0.5, rotation: Math.random() * Math.PI * 2, rotSpeed: Math.random() * 0.03 - 0.015 });
+}
+
+function drawBackground() {
+const scene = scenes[currentScene];
+
+// Sky gradient
+let skyGrad = ctx.createLinearGradient(0, 0, 0, 400);
+skyGrad.addColorStop(0, scene.sky1);
+skyGrad.addColorStop(1, scene.sky2);
+ctx.fillStyle = skyGrad;
+ctx.fillRect(0, 0, 900, 400);
+
+// Stars
+if (scene.stars) {
+for (let i = 0; i < 80; i++) {
+let twinkle = Math.sin(time * 3 + i) * 0.5 + 0.5;
+ctx.fillStyle = `rgba(255,255,255,${twinkle})`;
+ctx.beginPath();
+ctx.arc((i * 137.5) % 900, (i * 73.1) % 350, Math.random() * 1.5 + 0.5, 0, Math.PI * 2);
+ctx.fill();
+}
+}
+
+// Moon or Sun
+if (scene.sun) {
+if (currentScene === 2) {
+// Moon
+ctx.fillStyle = '#FFFACD';
+ctx.beginPath();
+ctx.arc(750, 80, 35, 0, Math.PI * 2);
+ctx.fill();
+ctx.fillStyle = '#0a0a2e';
+ctx.beginPath();
+ctx.arc(765, 70, 30, 0, Math.PI * 2);
+ctx.fill();
+} else {
+// Sun
+let sunGrad = ctx.createRadialGradient(100, 80, 10, 100, 80, 60);
+sunGrad.addColorStop(0, '#FFFDE7');
+sunGrad.addColorStop(0.5, '#FFD700');
+sunGrad.addColorStop(1, 'rgba(255,215,0,0)');
+ctx.fillStyle = sunGrad;
+ctx.beginPath();
+ctx.arc(100, 80, 60, 0, Math.PI * 2);
+ctx.fill();
+
+ctx.fillStyle = '#FFF176';
+ctx.beginPath();
+ctx.arc(100, 80, 25, 0, Math.PI * 2);
+ctx.fill();
+}
+}
+
+// Clouds
+for (let i = 0; i < 5; i++) {
+let cx = (i * 200 + time * 15) % 1000 - 50;
+let cy = 50 + i * 30;
+drawCloud(cx, cy, 0.7 + i * 0.1);
+}
+
+// Water
+if (scene.water) {
+let waterGrad = ctx.createLinearGradient(0, 380, 0, 420);
+waterGrad.addColorStop(0, 'rgba(30,144,255,0.6)');
+waterGrad.addColorStop(1, 'rgba(30,144,255,0.3)');
+ctx.fillStyle = waterGrad;
+ctx.fillRect(0, 380, 900, 40);
+for (let i = 0; i < 10; i++) {
+ctx.strokeStyle = `rgba(255,255,255,${0.2 + Math.sin(time * 2 + i) * 0.15})`;
+ctx.lineWidth = 1;
+ctx.beginPath();
+ctx.moveTo(i * 100 + Math.sin(time + i) * 10, 395 + Math.sin(time * 1.5 + i) * 3);
+ctx.lineTo(i * 100 + 80 + Math.sin(time + i + 1) * 10, 395 + Math.sin(time * 1.5 + i + 1) * 3);
+ctx.stroke();
+}
+}
+
+// Ground
+let groundGrad = ctx.createLinearGradient(0, 400, 0, 600);
+groundGrad.addColorStop(0, scene.ground);
+groundGrad.addColorStop(1, scene.ground2);
+ctx.fillStyle = groundGrad;
+ctx.beginPath();
+ctx.moveTo(0, 420);
+for (let x = 0; x <= 900; x += 50) {
+ctx.lineTo(x, 420 + Math.sin(x * 0.02 + time * 0.5) * 5);
+}
+ctx.lineTo(900, 600);
+ctx.lineTo(0, 600);
+ctx.closePath();
+ctx.fill();
+
+// Grass blades
+for (let i = 0; i < 60; i++) {
+let gx = i * 15 + Math.sin(i) * 5;
+let gy = 430 + Math.sin(gx * 0.05) * 3;
+ctx.strokeStyle = scene.ground;
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.moveTo(gx, gy);
+ctx.quadraticCurveTo(gx + Math.sin(time * 2 + i) * 5, gy - 15, gx + Math.sin(time * 2 + i) * 8, gy - 25);
+ctx.stroke();
+}
+
+// Flowers
+if (scene.flowers) {
+for (let i = 0; i < 15; i++) {
+let fx = (i * 65 + 30) % 900;
+let fy = 440 + Math.sin(fx * 0.03) * 5;
+drawFlower(fx, fy, ['#FF69B4', '#FF1493', '#FF6347', '#FFD700', '#FF4500'][i % 5], i);
+}
+}
+
+// Trees
+for (let i = 0; i < 4; i++) {
+let tx = 80 + i * 220;
+let ty = 380;
+drawTree(tx, ty, currentScene);
+}
+
+// Fireflies
+if (scene.fireflies) {
+firefliesArr.forEach(f => {
+f.x += Math.sin(time + f.angle) * f.speed;
+f.y += Math.cos(time * 0.7 + f.angle) * f.speed;
+f.angle += 0.02;
+if (f.x < 0) f.x = 900;
+if (f.x > 900) f.x = 0;
+if (f.y < 200) f.y = 400;
+if (f.y > 450) f.y = 200;
+let glow = Math.sin(time * 4 + f.angle) * 0.5 + 0.5;
+ctx.fillStyle = `rgba(255,255,100,${glow})`;
+ctx.beginPath();
+ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+ctx.fill();
+ctx.fillStyle = `rgba(255,255,100,${glow * 0.3})`;
+ctx.beginPath();
+ctx.arc(f.x, f.y, f.size * 3, 0, Math.PI * 2);
+ctx.fill();
+});
+}
+
+// Falling petals
+if (scene.flowers) {
+petals.forEach(p => {
+p.x += p.speedX + Math.sin(time + p.y * 0.01) * 0.5;
+p.y += p.speedY;
+p.rotation += p.rotSpeed;
+if (p.y > 600) { p.y = -10; p.x = Math.random() * 900; }
+if (p.x > 900) p.x = 0;
+if (p.x < 0) p.x = 900;
+ctx.save();
+ctx.translate(p.x, p.y);
+ctx.rotate(p.rotation);
+ctx.fillStyle = '#FFB7C5';
+ctx.beginPath();
+ctx.ellipse(0, 0, p.size, p.size * 0.6, 0, 0, Math.PI * 2);
+ctx.fill();
+ctx.restore();
+});
+}
+
+// Ground flowers (small)
+for (let i = 0; i < 25; i++) {
+let gx = (i * 37 + 10) % 900;
+let gy = 500 + Math.sin(gx * 0.05) * 10;
+ctx.fillStyle = ['#FF69B4', '#FFD700', '#FF6347', '#FFFFFF', '#DDA0DD'][i % 5];
+ctx.beginPath();
+ctx.arc(gx, gy, 3, 0, Math.PI * 2);
+ctx.fill();
+ctx.fillStyle = '#228B22';
+ctx.fillRect(gx - 0.5, gy, 1, 8);
+}
+}
+
+function drawCloud(x, y, scale) {
+ctx.fillStyle = 'rgba(255,255,255,0.8)';
+ctx.beginPath();
+ctx.arc(x, y, 20 * scale, 0, Math.PI * 2);
+ctx.arc(x + 20 * scale, y - 10 * scale, 25 * scale, 0, Math.PI * 2);
+ctx.arc(x + 45 * scale, y, 20 * scale, 0, Math.PI * 2);
+ctx.arc(x + 20 * scale, y + 5 * scale, 18 * scale, 0, Math.PI * 2);
+ctx.fill();
+}
+
+function drawFlower(x, y, color, idx) {
+ctx.strokeStyle = '#228B22';
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.moveTo(x, y);
+ctx.lineTo(x, y + 20);
+ctx.stroke();
+
+for (let p = 0; p < 5; p++) {
+let angle = (p / 5) * Math.PI * 2 + time * 0.5;
+ctx.fillStyle = color;
+ctx.beginPath();
+ctx.ellipse(x + Math.cos(angle) * 6, y + Math.sin(angle) * 6, 5, 3, angle, 0, Math.PI * 2);
+ctx.fill();
+}
+ctx.fillStyle = '#FFD700';
+ctx.beginPath();
+ctx.arc(x, y, 3, 0, Math.PI * 2);
+ctx.fill();
+}
+
+function drawTree(x, y, sceneIdx) {
+// Trunk
+ctx.fillStyle = '#8B4513';
+ctx.fillRect(x - 10, y - 60, 20, 60);
+
+// Leaves
+let leafColor = sceneIdx === 2 ? '#1a4a1a' : '#2E7D32';
+ctx.fillStyle = leafColor;
+ctx.beginPath();
+ctx.arc(x, y - 80, 35, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.arc(x - 20, y - 60, 25, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.arc(x + 20, y - 60, 25, 0, Math.PI * 2);
+ctx.fill();
+
+if (scenes[currentScene].flowers) {
+for (let i = 0; i < 6; i++) {
+let fx = x + Math.cos(i * 1.05) * 20;
+let fy = y - 75 + Math.sin(i * 1.05) * 15;
+ctx.fillStyle = ['#FF69B4', '#FF1493', '#FFD700'][i % 3];
+ctx.beginPath();
+ctx.arc(fx, fy, 3, 0, Math.PI * 2);
+ctx.fill();
+}
+}
+}
+
+function drawBoy(x, y, t) {
+let dancePhase = Math.sin(t * 3);
+let dancePhase2 = Math.cos(t * 3);
+let bounce = Math.abs(Math.sin(t * 3)) * 8;
+
+ctx.save();
+ctx.translate(x, y - bounce);
+
+// Shadow
+ctx.fillStyle = 'rgba(0,0,0,0.2)';
+ctx.beginPath();
+ctx.ellipse(0, 0, 25, 8, 0, 0, Math.PI * 2);
+ctx.fill();
+
+// Legs
+ctx.strokeStyle = '#1a237e';
+ctx.lineWidth = 6;
+ctx.lineCap = 'round';
+
+// Left leg
+ctx.beginPath();
+ctx.moveTo(-8, -30);
+ctx.lineTo(-8 + dancePhase * 15, -10);
+ctx.lineTo(-8 + dancePhase * 15 - dancePhase2 * 5, 0);
+ctx.stroke();
+
+// Right leg
+ctx.beginPath();
+ctx.moveTo(8, -30);
+ctx.lineTo(8 - dancePhase * 15, -10);
+ctx.lineTo(8 - dancePhase * 15 + dancePhase2 * 5, 0);
+ctx.stroke();
+
+// Shoes
+ctx.fillStyle = '#333';
+ctx.beginPath();
+ctx.ellipse(-8 + dancePhase * 15 - dancePhase2 * 5, 2, 7, 4, 0, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.ellipse(8 - dancePhase * 15 + dancePhase2 * 5, 2, 7, 4, 0, 0, Math.PI * 2);
+ctx.fill();
+
+// Body (shirt)
+ctx.fillStyle = '#FF6B35';
+ctx.beginPath();
+ctx.moveTo(-15, -30);
+ctx.lineTo(15, -30);
+ctx.lineTo(12, -65);
+ctx.lineTo(-12, -65);
+ctx.closePath();
+ctx.fill();
+
+// Shirt detail
+ctx.strokeStyle = '#E65100';
+ctx.lineWidth = 1;
+ctx.beginPath();
+ctx.moveTo(0, -30);
+ctx.lineTo(0, -65);
+ctx.stroke();
+
+// Arms
+ctx.strokeStyle = '#D2691E';
+ctx.lineWidth = 5;
+
+// Left arm (reaching toward girl)
+ctx.beginPath();
+ctx.moveTo(-12, -58);
+ctx.lineTo(-25 + dancePhase2 * 10, -50 + dancePhase * 5);
+ctx.stroke();
+
+// Right arm
+ctx.beginPath();
+ctx.moveTo(12, -58);
+ctx.lineTo(25 - dancePhase2 * 10, -50 - dancePhase * 5);
+ctx.stroke();
+
+// Hands
+ctx.fillStyle = '#D2691E';
+ctx.beginPath();
+ctx.arc(-25 + dancePhase2 * 10, -50 + dancePhase * 5, 4, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.arc(25 - dancePhase2 * 10, -50 - dancePhase * 5, 4, 0, Math.PI * 2);
+ctx.fill();
+
+// Head
+ctx.fillStyle = '#D2691E';
+ctx.beginPath();
+ctx.arc(0, -78, 14, 0, Math.PI * 2);
+ctx.fill();
+
+// Hair
+ctx.fillStyle = '#1a1a1a';
+ctx.beginPath();
+ctx.arc(0, -82, 14, Math.PI, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.ellipse(0, -88, 12, 6, 0, 0, Math.PI * 2);
+ctx.fill();
+
+// Eyes
+ctx.fillStyle = 'white';
+ctx.beginPath();
+ctx.ellipse(-5, -78, 4, 3, 0, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.ellipse(5, -78, 4, 3, 0, 0, Math.PI * 2);
+ctx.fill();
+
+ctx.fillStyle = '#1a1a1a';
+ctx.beginPath();
+ctx.arc(-4, -78, 2, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.arc(6, -78, 2, 0, Math.PI * 2);
+ctx.fill();
+
+// Smile
+ctx.strokeStyle = '#8B4513';
+ctx.lineWidth = 1.5;
+ctx.beginPath();
+ctx.arc(0, -74, 6, 0.1, Math.PI - 0.1);
+ctx.stroke();
+
+// Eyebrows
+ctx.strokeStyle = '#1a1a1a';
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.moveTo(-9, -83);
+ctx.lineTo(-2, -84);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(2, -84);
+ctx.lineTo(9, -83);
+ctx.stroke();
+
+ctx.restore();
+}
+
+function drawGirl(x, y, t) {
+let dancePhase = Math.sin(t * 3);
+let dancePhase2 = Math.cos(t * 3);
+let bounce = Math.abs(Math.sin(t * 3)) * 8;
+
+ctx.save();
+ctx.translate(x, y - bounce);
+
+// Shadow
+ctx.fillStyle = 'rgba(0,0,0,0.2)';
+ctx.beginPath();
+ctx.ellipse(0, 0, 25, 8, 0, 0, Math.PI * 2);
+ctx.fill();
+
+// Legs
+ctx.strokeStyle = '#F5DEB3';
+ctx.lineWidth = 5;
+ctx.lineCap = 'round';
+
+// Left leg
+ctx.beginPath();
+ctx.moveTo(-6, -30);
+ctx.lineTo(-6 + dancePhase * 12, -10);
+ctx.lineTo(-6 + dancePhase * 12 - dancePhase2 * 4, 0);
+ctx.stroke();
+
+// Right leg
+ctx.beginPath();
+ctx.moveTo(6, -30);
+ctx.lineTo(6 - dancePhase * 12, -10);
+ctx.lineTo(6 - dancePhase * 12 + dancePhase2 * 4, 0);
+ctx.stroke();
+
+// Shoes (heels)
+ctx.fillStyle = '#FF1493';
+ctx.beginPath();
+ctx.ellipse(-6 + dancePhase * 12 - dancePhase2 * 4, 2, 5, 3, 0, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.ellipse(6 - dancePhase * 12 + dancePhase2 * 4, 2, 5, 3, 0, 0, Math.PI * 2);
+ctx.fill();
+
+// Skirt / Dress bottom
+ctx.fillStyle = '#FF69B4';
+ctx.beginPath();
+ctx.moveTo(-18, -30);
+ctx.lineTo(18, -30);
+ctx.lineTo(22, -10);
+ctx.lineTo(-22, -10);
+ctx.closePath();
+ctx.fill();
+
+// Dress
+let dressGrad = ctx.createLinearGradient(0, -65, 0, -30);
+dressGrad.addColorStop(0, '#FF1493');
+dressGrad.addColorStop(0.5, '#FF69B4');
+dressGrad.addColorStop(1, '#FFB6C1');
+ctx.fillStyle = dressGrad;
+ctx.beginPath();
+ctx.moveTo(-12, -30);
+ctx.lineTo(12, -30);
+ctx.lineTo(10, -68);
+ctx.lineTo(-10, -68);
+ctx.closePath();
+ctx.fill();
+
+// Dress pattern
+ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+ctx.lineWidth = 1;
+for (let i = 0; i < 3; i++) {
+ctx.beginPath();
+ctx.moveTo(-10 + i * 8, -68);
+ctx.lineTo(-10 + i * 8, -30);
+ctx.stroke();
+}
+
+// Arms
+ctx.strokeStyle = '#F5DEB3';
+ctx.lineWidth = 4;
+
+// Left arm (reaching toward boy)
+ctx.beginPath();
+ctx.moveTo(-10, -60);
+ctx.lineTo(-22 - dancePhase2 * 8, -52 + dancePhase * 5);
+ctx.stroke();
+
+// Right arm (raised)
+ctx.beginPath();
+ctx.moveTo(10, -60);
+ctx.lineTo(22 + dancePhase2 * 8, -75 - dancePhase * 8);
+ctx.stroke();
+
+// Hands
+ctx.fillStyle = '#F5DEB3';
+ctx.beginPath();
+ctx.arc(-22 - dancePhase2 * 8, -52 + dancePhase * 5, 3.5, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.arc(22 + dancePhase2 * 8, -75 - dancePhase * 8, 3.5, 0, Math.PI * 2);
+ctx.fill();
+
+// Head
+ctx.fillStyle = '#F5DEB3';
+ctx.beginPath();
+ctx.arc(0, -80, 13, 0, Math.PI * 2);
+ctx.fill();
+
+// Hair (long flowing)
+ctx.fillStyle = '#1a1a1a';
+ctx.beginPath();
+ctx.arc(0, -85, 14, Math.PI, Math.PI * 2);
+ctx.fill();
+
+// Long hair flowing
+ctx.beginPath();
+ctx.moveTo(-14, -85);
+ctx.quadraticCurveTo(-18, -60 + Math.sin(t * 2) * 5, -15, -45);
+ctx.quadraticCurveTo(-12, -40, -10, -45);
+ctx.quadraticCurveTo(-10, -60, -10, -85);
+ctx.fill();
+
+ctx.beginPath();
+ctx.moveTo(14, -85);
+ctx.quadraticCurveTo(18, -60 + Math.cos(t * 2) * 5, 15, -45);
+ctx.quadraticCurveTo(12, -40, 10, -45);
+ctx.quadraticCurveTo(10, -60, 10, -85);
+ctx.fill();
+
+// Hair accessory
+ctx.fillStyle = '#FF1493';
+ctx.beginPath();
+ctx.arc(10, -88, 4, 0, Math.PI * 2);
+ctx.fill();
+ctx.fillStyle = '#FF69B4';
+ctx.beginPath();
+ctx.arc(10, -88, 2, 0, Math.PI * 2);
+ctx.fill();
+
+// Eyes
+ctx.fillStyle = 'white';
+ctx.beginPath();
+ctx.ellipse(-4, -80, 4, 3.5, 0, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.ellipse(5, -80, 4, 3.5, 0, 0, Math.PI * 2);
+ctx.fill();
+
+ctx.fillStyle = '#1a1a1a';
+ctx.beginPath();
+ctx.arc(-3, -80, 2, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.arc(6, -80, 2, 0, Math.PI * 2);
+ctx.fill();
+
+// Eyelashes
+ctx.strokeStyle = '#1a1a1a';
+ctx.lineWidth = 1;
+for (let i = -1; i <= 1; i++) {
+ctx.beginPath();
+ctx.moveTo(-7, -82 + i * 2);
+ctx.lineTo(-9, -84 + i * 2);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(8, -82 + i * 2);
+ctx.lineTo(10, -84 + i * 2);
+ctx.stroke();
+}
+
+// Blush
+ctx.fillStyle = 'rgba(255,100,100,0.3)';
+ctx.beginPath();
+ctx.ellipse(-8, -76, 4, 2.5, 0, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.ellipse(8, -76, 4, 2.5, 0, 0, Math.PI * 2);
+ctx.fill();
+
+// Smile
+ctx.strokeStyle = '#C0392B';
+ctx.lineWidth = 1.5;
+ctx.beginPath();
+ctx.arc(0, -76, 5, 0.2, Math.PI - 0.2);
+ctx.stroke();
+
+ctx.restore();
+}
+
+function drawHearts() {
+if (!heartsEnabled) return;
+
+if (Math.random() < 0.03) {
+hearts.push({
+x: 350 + Math.random() * 200,
+y: 350,
+size: Math.random() * 10 + 5,
+speed: Math.random() * 1.5 + 0.5,
+opacity: 1,
+wobble: Math.random() * Math.PI * 2
+});
+}
+
+hearts.forEach((h, i) => {
+h.y -= h.speed;
+h.x += Math.sin(h.wobble + time * 2) * 0.5;
+h.opacity -= 0.005;
+
+if (h.opacity <= 0) {
+hearts.splice(i, 1);
+return;
+}
+
+ctx.save();
+ctx.translate(h.x, h.y);
+ctx.fillStyle = `rgba(255,${100 + Math.sin(time * 3 + i) * 50},150,${h.opacity})`;
+ctx.beginPath();
+let s = h.size;
+ctx.moveTo(0, s * 0.3);
+ctx.bezierCurveTo(-s * 0.5, -s * 0.3, -s, s * 0.1, 0, s);
+ctx.bezierCurveTo(s, s * 0.1, s * 0.5, -s * 0.3, 0, s * 0.3);
+ctx.fill();
+ctx.restore();
+});
+}
+
+function drawMusicNotes() {
+if (musicEnabled && Math.random() < 0.05) {
+musicNotes.push({
+x: 300 + Math.random() * 300,
+y: 300,
+size: Math.random() * 8 + 6,
+speed: Math.random() * 1 + 0.5,
+opacity: 1,
+type: Math.random() > 0.5 ? '♪' : '♫'
+});
+}
+
+musicNotes.forEach((n, i) => {
+n.y -= n.speed;
+n.opacity -= 0.008;
+
+if (n.opacity <= 0) {
+musicNotes.splice(i, 1);
+return;
+}
+
+ctx.save();
+ctx.translate(n.x, n.y);
+ctx.fillStyle = `rgba(255,215,0,${n.opacity})`;
+ctx.font = `${n.size * 2}px serif`;
+ctx.fillText(n.type, 0, 0);
+ctx.restore();
+});
+}
+
+function drawSpotlight() {
+let grad = ctx.createRadialGradient(450, 300, 20, 450, 300, 250);
+grad.addColorStop(0, 'rgba(255,255,255,0.08)');
+grad.addColorStop(1, 'rgba(255,255,255,0)');
+ctx.fillStyle = grad;
+ctx.beginPath();
+ctx.arc(450, 300, 250, 0, Math.PI * 2);
+ctx.fill();
+}
+
+function drawSparkles() {
+for (let i = 0; i < 15; i++) {
+let sx = 350 + Math.sin(time * 2 + i * 0.7) * 120;
+let sy = 250 + Math.cos(time * 1.5 + i * 0.5) * 100;
+let sparkle = Math.sin(time * 5 + i) * 0.5 + 0.5;
+
+ctx.fillStyle = `rgba(255,255,255,${sparkle * 0.8})`;
+ctx.save();
+ctx.translate(sx, sy);
+ctx.rotate(time * 2 + i);
+
+// 4-point star
+ctx.beginPath();
+for (let p = 0; p < 4; p++) {
+let angle = (p / 4) * Math.PI * 2;
+ctx.lineTo(Math.cos(angle) * 6, Math.sin(angle) * 6);
+let midAngle = angle + Math.PI / 4;
+ctx.lineTo(Math.cos(midAngle) * 2, Math.sin(midAngle) * 2);
+}
+ctx.closePath();
+ctx.fill();
+ctx.restore();
+}
+}
+
+function drawGroundShadow() {
+ctx.fillStyle = 'rgba(0,0,0,0.15)';
+ctx.beginPath();
+ctx.ellipse(450, 440, 100, 15, 0, 0, Math.PI * 2);
+ctx.fill();
+}
+
+function animate() {
+time += 0.016;
+ctx.clearRect(0, 0, 900, 600);
+
+drawBackground();
+drawSpotlight();
+drawSparkles();
+drawGroundShadow();
+
+// Draw couple dancing
+let boyX = 400;
+let girlX = 500;
+let baseY = 435;
+
+drawBoy(boyX, baseY, time);
+drawGirl(girlX, baseY, time);
+
+// Draw them holding hands (visual connection)
+let handY = baseY - 55 + Math.abs(Math.sin(time * 3)) * -8;
+let handX = 450 + Math.sin(time * 3) * 5;
+ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+ctx.lineWidth = 2;
+ctx.setLineDash([3, 3]);
+ctx.beginPath();
+ctx.moveTo(boyX + 25 - Math.cos(time * 3) * 10, handY);
+ctx.lineTo(girlX - 22 - Math.cos(time * 3) * 8, handY);
+ctx.stroke();
+ctx.setLineDash([]);
+
+// Heart between them
+let heartSize = 8 + Math.sin(time * 4) * 3;
+ctx.fillStyle = `rgba(255,${50 + Math.sin(time * 3) * 30},100,${0.6 + Math.sin(time * 3) * 0.3})`;
+ctx.save();
+ctx.translate(handX, handY - 20);
+ctx.beginPath();
+ctx.moveTo(0, heartSize * 0.3);
+ctx.bezierCurveTo(-heartSize * 0.5, -heartSize * 0.3, -heartSize, heartSize * 0.1, 0, heartSize);
+ctx.bezierCurveTo(heartSize, heartSize * 0.1, heartSize * 0.5, -heartSize * 0.3, 0, heartSize * 0.3);
+ctx.fill();
+ctx.restore();
+
+drawHearts();
+drawMusicNotes();
+
+// Scene indicator
+ctx.fillStyle = 'rgba(0,0,0,0.5)';
+ctx.fillRect(350, 560, 200, 30);
+ctx.fillStyle = 'white';
+ctx.font = '14px sans-serif';
+ctx.textAlign = 'center';
+ctx.fillText(sceneNames[currentScene], 450, 580);
+
+requestAnimationFrame(animate);
+}
+
+function toggleMusic() {
+musicEnabled = !musicEnabled;
+}
+
+function changeScene() {
+currentScene = (currentScene + 1) % scenes.length;
+}
+
+function toggleHearts() {
+heartsEnabled = !heartsEnabled;
+}
+
+animate();
+</script>
+</body>
+</html>

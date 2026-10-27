@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How a Hacker Thinks: Mindset, Recon, and Exploitation</title>
+  <style>
+    :root{
+      --bg:#061018;
+      --panel:#0b1a26;
+      --panel2:#0f2434;
+      --text:#d9f7ff;
+      --muted:#7db2c2;
+      --accent:#2ee6a6;
+      --warn:#ffcc4d;
+      --danger:#ff5c7a;
+      --line:#174053;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(circle at 20% 0%, #0b2433 0%, transparent 40%),
+        radial-gradient(circle at 80% 100%, #102031 0%, transparent 35%),
+        var(--bg);
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+    }
+    #game{
+      width:min(980px, 100%);
+      min-height:640px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:linear-gradient(180deg, rgba(10,28,40,0.9), rgba(7,16,24,0.95));
+      box-shadow:0 0 0 1px rgba(46,230,166,0.09), 0 12px 40px rgba(0,0,0,0.5);
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+    }
+    header{
+      padding:16px 20px 12px;
+      border-bottom:1px solid var(--line);
+      background:rgba(5,14,20,0.65);
+    }
+    h1{
+      margin:0;
+      font-size:1.15rem;
+      letter-spacing:.3px;
+      color:#c8fff0;
+      font-weight:700;
+    }
+    .subtitle{
+      margin-top:5px;
+      font-size:.86rem;
+      color:var(--muted);
+    }
+    #hud{
+      display:grid;
+      grid-template-columns:repeat(5,1fr);
+      gap:10px;
+      padding:12px 20px;
+      border-bottom:1px solid var(--line);
+      background:rgba(5,14,20,0.4);
+    }
+    .stat{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:9px;
+      padding:8px 10px;
+      font-size:.82rem;
+    }
+    .stat b{color:#a9fce2}
+    .meter{
+      margin-top:7px;
+      height:8px;
+      border-radius:99px;
+      background:#0d2a3a;
+      overflow:hidden;
+    }
+    .fill{
+      height:100%;
+      width:0%;
+      transition:width .35s ease;
+      background:linear-gradient(90deg, #2ee6a6, #4cffd0);
+    }
+    .fill.warn{background:linear-gradient(90deg, #f6b73c, #ffdb79)}
+    .fill.danger{background:linear-gradient(90deg, #ff5c7a, #ff88a0)}
+    #content{
+      padding:18px 20px;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      flex:1;
+    }
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:14px;
+    }
+    .panel h2{
+      margin:0 0 8px;
+      font-size:1rem;
+      color:#b8fff0;
+    }
+    .panel p{
+      margin:0;
+      color:#bfe1ea;
+      line-height:1.45;
+      font-size:.95rem;
+    }
+    .choices{
+      display:grid;
+      gap:10px;
+      margin-top:12px;
+    }
+    .btn{
+      border:1px solid #23667f;
+      background:linear-gradient(180deg, #123247, #0e2a3d);
+      color:#dcfcff;
+      border-radius:10px;
+      padding:10px 12px;
+      font-size:.92rem;
+      text-align:left;
+      cursor:pointer;
+      transition:.15s ease;
+    }
+    .btn:hover{transform:translateY(-1px); border-color:#2ee6a6}
+    .btn:disabled{opacity:.45; cursor:not-allowed; transform:none}
+    .btn.primary{
+      background:linear-gradient(180deg, #1a5d52, #12423c);
+      border-color:#2ee6a6;
+      color:#e8fff8;
+      font-weight:600;
+    }
+    .row{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .tag{
+      display:inline-block;
+      font-size:.78rem;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid #245767;
+      background:#0f2836;
+      color:#b7eaf7;
+      margin-right:6px;
+      margin-top:6px;
+    }
+    #log{
+      height:170px;
+      overflow:auto;
+      background:#07141d;
+      border:1px solid #153647;
+      border-radius:10px;
+      padding:10px;
+      font-family:Consolas, Monaco, monospace;
+      font-size:.82rem;
+      line-height:1.45;
+      color:#bce9f7;
+    }
+    .log-good{color:#8df6cc}
+    .log-warn{color:#ffd57b}
+    .log-bad{color:#ff94ac}
+    .small{
+      color:var(--muted);
+      font-size:.82rem;
+    }
+    .result{
+      font-size:1.15rem;
+      margin-bottom:6px;
+      color:#d7fff1;
+      font-weight:700;
+    }
+    .footer-actions{
+      margin-top:auto;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    @media (max-width:820px){
+      #hud{grid-template-columns:repeat(2,1fr)}
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <header>
+      <h1>How a Hacker Thinks: Mindset, Recon, and Exploitation</h1>
+      <div class="subtitle">A defensive, ethics-first simulation of security thinking.</div>
+    </header>
+    <div id="hud"></div>
+    <div id="content"></div>
+  </div>
+
+  <script>
+    const game = {
+      phase: "start",
+      score: 0,
+      ethics: 50,
+      intel: 0,
+      detection: 0,
+      turns: 0,
+      mindsetIndex: 0,
+      clues: [],
+      logs: [],
+      ended: false
+    };
+
+    const mindsetQuestions = [
+      {
+        q: "You discover an exposed admin page on a company domain. What's your first move?",
+        options: [
+          { t: "Confirm authorization and scope before any testing.", s: 10, e: 10, f: "Great start. Permission and scope drive responsible testing." },
+          { t: "Try default passwords quietly to see if it works.", s: 2, e: -8, f: "Risky. Even low-noise testing without approval can be unauthorized." },
+          { t: "Post it online for attention.", s: -8, e: -20, f: "Harmful behavior. Responsible disclosure protects users and systems." }
+        ]
+      },
+      {
+        q: "A target has weak controls. How does a mature attacker mindset approach this?",
+        options: [
+          { t: "Focus on repeatable process: hypothesis, test, evidence, report.", s: 10, e: 8, f: "Correct. Method beats chaos." },
+          { t: "Attack randomly until something breaks.", s: -2, e: -8, f: "Randomness creates noise and misses root risk." },
+          { t: "Skip notes to move faster.", s: -3, e: -4, f: "Poor documentation reduces impact and credibility." }
+        ]
+      },
+      {
+        q: "Why does recon matter before exploitation?",
+        options: [
+          { t: "It reduces guesswork, noise, and collateral risk.", s: 10, e: 6, f: "Exactly. Good recon improves precision and safety." },
+          { t: "It's optional if you have a favorite exploit.", s: -4, e: -4, f: "Tool-first thinking often fails in real environments." },
+          { t: "Because screenshots look cool in reports.", s: -1, e: -2, f: "Evidence matters, but mission is risk reduction." }
+        ]
+      }
+    ];
+
+    const reconActions = [
+      { name: "Passive DNS & subdomain mapping", intel:[2,4], detect:[1,5], ethics:2, type:"good" },
+      { name: "Public breach and credential hygiene check", intel:[1,4], detect:[2,6], ethics:1, type:"good" },
+      { name: "Tech stack fingerprinting (headers/certs)", intel:[2,5], detect:[3,8], ethics:0, type:"neutral" },
+      { name: "Aggressive full-scope scan", intel:[4,8], detect:[18,32], ethics:-3, type:"warn" },
+      { name: "Social engineering blast", intel:[3,6], detect:[22,35], ethics:-8, type:"bad" }
+    ];
+
+    const clueDeck = [
+      "Staging subdomain mirrors production auth flow.",
+      "Legacy authentication module appears unpatched.",
+      "MFA is enforced on production but relaxed in staging.",
+      "WAF alerts spike on high-rate scanning."
+    ];
+
+    function rand(min, max){ return Math.floor(Math.random()*(max-min+1))+min; }
+
+    function hud(){
+      const p = game.phase;
+      const phaseLabel = p === "start" ? "Briefing" :
+                        p === "mindset" ? "Phase 1 / Mindset" :
+                        p === "recon" ? "Phase 2 / Recon" :
+                        p === "exploit" ? "Phase 3 / Exploitation" :
+                        "Debrief";
+
+      const intelPct = Math.min(100, (game.intel/22)*100);
+      const detectPct = Math.min(100, game.detection);
+      const ethicsPct = Math.max(0, Math.min(100, game.ethics));
+
+      document.getElementById("hud").innerHTML = `
+        <div class="stat"><b>${phaseLabel}</b><div class="small">Current stage</div></div>
+        <div class="stat"><b>Score: ${game.score}</b><div class="small">Learning points</div></div>
+        <div class="stat"><b>Ethics: ${game.ethics}</b>
+          <div class="meter"><div class="fill ${ethicsPct<35?'danger':ethicsPct<60?'warn':''}" style="width:${ethicsPct}%"></div></div>
+        </div>
+        <div class="stat"><b>Intel: ${game.intel}</b>
+          <div class="meter"><div class="fill" style="width:${intelPct}%"></div></div>
+        </div>
+        <div class="stat"><b>Detection: ${game.detection}%</b>
+          <div class="meter"><div class="fill ${detectPct>70?'danger':detectPct>45?'warn':''}" style="width:${detectPct}%"></div></div>
+        </div>
+      `;
+    }
+
+    function pushLog(text, cls=""){
+      game.logs.unshift({text, cls});
+      game.logs = game.logs.slice(0, 20);
+    }
+
+    function renderStart(){
+      game.phase = "start";
+      hud();
+      document.getElementById("content").innerHTML = `
+        <div class="panel">
+          <h2>Mission Brief</h2>
+          <p>
+            You are an authorized security analyst. Your objective is to think like an attacker
+            while acting like a professional defender: stay in scope, gather intelligence, validate risk, and report responsibly.
+          </p>
+          <p style="margin-top:10px;">
+            Win condition: complete all phases with useful intel, low detection, and strong ethics.
+          </p>
+        </div>
+        <div class="panel">
+          <h2>What you'll practice</h2>
+          <div class="row">
+            <span class="tag">Mindset</span>
+            <span class="tag">Recon tradeoffs</span>
+            <span class="tag">Risk-based exploitation</span>
+            <span class="tag">Responsible disclosure</span>
+          </div>
+          <div class="footer-actions">
+            <button class="btn primary" id="startBtn">Start Simulation</button>
+          </div>
+        </div>
+      `;
+      document.getElementById("startBtn").onclick = startGame;
+    }
+
+    function startGame(){
+      game.phase = "mindset";
+      game.score = 0;
+      game.ethics = 50;
+      game.intel = 0;
+      game.detection = 0;
+      game.turns = 8;
+      game.mindsetIndex = 0;
+      game.clues = [];
+      game.logs = [];
+      game.ended = false;
+      renderMindset();
+    }
+
+    function renderMindset(){
+      hud();
+      const q = mindsetQuestions[game.mindsetIndex];
+      document.getElementById("content").innerHTML = `
+        <div class="panel">
+          <h2>Phase 1: Mindset Calibration</h2>
+          <p>${q.q}</p>
+          <div class="choices">
+            ${q.options.map((o,i)=>`<button class="btn" data-i="${i}">${o.t}</button>`).join("")}
+          </div>
+          <p class="small" style="margin-top:10px;">Question ${game.mindsetIndex+1} of ${mindsetQuestions.length}</p>
+        </div>
+      `;
+      document.querySelectorAll("[data-i]").forEach(btn=>{
+        btn.onclick = () => answerMindset(+btn.dataset.i);
+      });
+    }
+
+    function answerMindset(i){
+      const q = mindsetQuestions[game.mindsetIndex];
+      const o = q.options[i];
+      game.score += o.s;
+      game.ethics += o.e;
+      game.ethics = Math.max(0, Math.min(100, game.ethics));
+      pushLog(`Mindset: ${o.f}`, o.e < 0 ? "log-warn" : "log-good");
+      game.mindsetIndex++;
+      if(game.mindsetIndex >= mindsetQuestions.length){
+        game.phase = "recon";
+        renderRecon();
+      } else {
+        renderMindset();
+      }
+    }
+
+    function maybeAddClue(){
+      if (game.clues.length >= clueDeck.length) return;
+      const thresholds = [5,10,14,18];
+      if (game.intel >= thresholds[game.clues.length]) {
+        const clue = clueDeck[game.clues.length];
+        game.clues.push(clue);
+        pushLog(`Clue unlocked: ${clue}`, "log-good");
+      }
+    }
+
+    function renderRecon(){
+      hud();
+      document.getElementById("content").innerHTML = `
+        <div class="panel">
+          <h2>Phase 2: Recon Operations</h2>
+          <p>
+            Choose recon actions. Build enough intel for a precise validation path while keeping detection low.
+            High-noise tactics can burn access and damage your mission.
+          </p>
+          <p class="small" style="margin-top:8px;">Turns remaining: <b>${game.turns}</b> &nbsp;•&nbsp; Intel goal: <b>18+</b> &nbsp;•&nbsp; Keep detection below <b>100%</b></p>
+        </div>
+
+        <div class="panel">
+          <h2>Available Actions</h2>
+          <div class="choices">
+            ${reconActions.map((a,idx)=>`<button class="btn" data-act="${idx}" ${game.turns<=0||game.ended?'disabled':''}>${a.name}</button>`).join("")}
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Field Log</h2>
+          <div id="log">${game.logs.map(l=>`<div class="${l.cls}">> ${l.text}</div>`).join("") || `<div class="small">No events yet.</div>`}</div>
+          <div class="footer-actions">
+            <button class="btn primary" id="reconNext" ${game.turns>0 && game.detection<100 ? "disabled" : ""}>Continue to Exploitation Phase</button>
+          </div>
+        </div>
+      `;
+      document.querySelectorAll("[data-act]").forEach(btn=>{
+        btn.onclick = () => doReconAction(+btn.dataset.act);
+      });
+      const next = document.getElementById("reconNext");
+      if(next) next.onclick = () => {
+        game.phase = "exploit";
+        renderExploit();
+      };
+    }
+
+    function doReconAction(i){
+      if (game.turns <= 0 || game.ended) return;
+      const a = reconActions[i];
+      const intelGain = rand(a.intel[0], a.intel[1]);
+      const detectGain = rand(a.detect[0], a.detect[1]);
+      game.intel += intelGain;
+      game.detection = Math.min(100, game.detection + detectGain);
+      game.ethics = Math.max(0, Math.min(100, game.ethics + a.ethics));
+      game.turns--;
+
+      const cls = a.type === "bad" ? "log-bad" : a.type === "warn" ? "log-warn" : "log-good";
+      pushLog(`${a.name}: +${intelGain} intel, +${detectGain}% detection`, cls);
+
+      maybeAddClue();
+
+      if(game.detection >= 100){
+        pushLog("Blue team detected and contained your activity.", "log-bad");
+        game.turns = 0;
+        game.score -= 8;
+      } else {
+        game.score += Math.max(1, Math.floor(intelGain - detectGain/10));
+      }
+
+      if (a.ethics < 0) game.score += a.ethics;
+      renderRecon();
+    }
+
+    function renderExploit(){
+      hud();
+      const hasCoreClues = game.clues.length >= 3;
+      const weakEthics = game.ethics < 35;
+
+      document.getElementById("content").innerHTML = `
+        <div class="panel">
+          <h2>Phase 3: Exploitation Decision</h2>
+          <p>
+            You now choose a validation path. The goal is to demonstrate risk with minimum harm and maximum evidence quality.
+          </p>
+          <div style="margin-top:8px;">
+            ${game.clues.length ? game.clues.map(c=>`<span class="tag">${c}</span>`).join("") : `<span class="tag">No strong clues gathered</span>`}
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Choose your approach</h2>
+          <div class="choices">
+            <button class="btn primary" data-choice="A">Request scope confirmation, then test the suspected auth flaw on staging only, document PoC, and report remediation.</button>
+            <button class="btn" data-choice="B">Run immediate exploitation attempts against production for faster proof.</button>
+            <button class="btn" data-choice="C">Use stolen credentials from underground sources to shortcut access.</button>
+            <button class="btn" data-choice="D">Skip validation entirely and submit assumptions as findings.</button>
+          </div>
+          <p class="small" style="margin-top:10px;">Hint: precision, authorization, and evidence quality beat raw impact.</p>
+        </div>
+      `;
+
+      document.querySelectorAll("[data-choice]").forEach(btn=>{
+        btn.onclick = () => resolveExploit(btn.dataset.choice, hasCoreClues, weakEthics);
+      });
+    }
+
+    function resolveExploit(choice, hasCoreClues, weakEthics){
+      let title = "";
+      let msg = "";
+      let bonus = 0;
+
+      if(choice === "A"){
+        bonus += 20;
+        if(hasCoreClues) bonus += 10;
+        if(game.detection < 70) bonus += 6;
+        if(!weakEthics) bonus += 6;
+        title = "Professional Adversary Mindset Achieved";
+        msg = "You validated risk safely, preserved trust, and produced actionable evidence.";
+      } else if(choice === "B"){
+        bonus -= 12;
+        title = "Noisy Outcome";
+        msg = "You pursued impact over control. Detection risk and potential disruption undermined the assessment.";
+      } else if(choice === "C"){
+        bonus -= 25;
+        game.ethics = Math.max(0, game.ethics - 20);
+        title = "Ethics Failure";
+        msg = "Using illicit sources violates legal and professional boundaries.";
+      } else {
+        bonus -= 8;
+        title = "Incomplete Assessment";
+        msg = "Without validation, findings may be weak, disputed, or unhelpful.";
+      }
+
+      game.score += bonus;
+      game.phase = "end";
+      renderEnd(title, msg);
+    }
+
+    function rank(){
+      if(game.score >= 48 && game.ethics >= 60) return "Elite Defensive Thinker";
+      if(game.score >= 30 && game.ethics >= 45) return "Capable Security Analyst";
+      if(game.ethics < 30) return "High Risk Operator";
+      return "Developing Practitioner";
+    }
+
+    function renderEnd(title, msg){
+      hud();
+      document.getElementById("content").innerHTML = `
+        <div class="panel">
+          <div class="result">${title}</div>
+          <p>${msg}</p>
+        </div>
+
+        <div class="panel">
+          <h2>Debrief</h2>
+          <p><b>Final Rank:</b> ${rank()}</p>
+          <p style="margin-top:6px;"><b>Score:</b> ${game.score} &nbsp;•&nbsp; <b>Ethics:</b> ${game.ethics} &nbsp;•&nbsp; <b>Intel:</b> ${game.intel} &nbsp;•&nbsp; <b>Detection:</b> ${game.detection}%</p>
+          <p style="margin-top:8px;" class="small">
+            Core lesson: great security work is not "breaking things"—it's disciplined, authorized, evidence-driven risk validation.
+          </p>
+          <div class="footer-actions">
+            <button class="btn primary" id="restart">Run Again</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Operation Log Snapshot</h2>
+          <div id="log">${game.logs.map(l=>`<div class="${l.cls}">> ${l.text}</div>`).join("") || `<div class="small">No log data.</div>`}</div>
+        </div>
+      `;
+      document.getElementById("restart").onclick = renderStart;
+    }
+
+    renderStart();
+  </script>
+</body>
+</html>

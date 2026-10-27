@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Shadow Duel</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #0b0d12;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    touch-action: none;
+    user-select: none;
+  }
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    background: linear-gradient(#1a2030, #0b0d12 65%, #07080c);
+  }
+  .ui {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    color: #fff;
+  }
+  .topbar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 14px 16px;
+    font-weight: 700;
+    text-shadow: 0 2px 4px rgba(0,0,0,.6);
+    letter-spacing: .5px;
+  }
+  .barWrap {
+    width: 38vw;
+    max-width: 420px;
+  }
+  .label {
+    font-size: 12px;
+    opacity: .85;
+    margin-bottom: 5px;
+  }
+  .bar {
+    height: 14px;
+    border: 2px solid rgba(255,255,255,.4);
+    border-radius: 999px;
+    background: rgba(255,255,255,.08);
+    overflow: hidden;
+    box-shadow: 0 0 12px rgba(0,0,0,.25) inset;
+  }
+  .fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #34d399, #22c55e);
+  }
+  .fill.enemy {
+    background: linear-gradient(90deg, #fb7185, #ef4444);
+  }
+  .centerMsg {
+    position: absolute;
+    left: 50%;
+    top: 18%;
+    transform: translateX(-50%);
+    text-align: center;
+    font-size: clamp(18px, 4vw, 34px);
+    font-weight: 800;
+    text-shadow: 0 2px 8px rgba(0,0,0,.75);
+    opacity: 0;
+    transition: opacity .2s ease;
+  }
+  .subMsg {
+    font-size: clamp(12px, 2.5vw, 16px);
+    margin-top: 8px;
+    opacity: .9;
+    font-weight: 600;
+  }
+  .controls {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 34vh;
+    min-height: 220px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 16px;
+    box-sizing: border-box;
+  }
+  .dpad, .buttons {
+    pointer-events: auto;
+    display: grid;
+    gap: 10px;
+  }
+  .dpad {
+    grid-template-columns: 60px 60px 60px;
+    grid-template-rows: 60px 60px 60px;
+    opacity: .92;
+  }
+  .buttons {
+    grid-template-columns: 74px 74px;
+    grid-template-rows: 74px 74px;
+    align-content: end;
+  }
+  .btn {
+    border: none;
+    border-radius: 18px;
+    color: white;
+    font-weight: 800;
+    background: rgba(255,255,255,.12);
+    box-shadow: 0 6px 20px rgba(0,0,0,.25), inset 0 0 0 1px rgba(255,255,255,.12);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    touch-action: none;
+    user-select: none;
+  }
+  .btn:active, .btn.active {
+    background: rgba(255,255,255,.24);
+    transform: translateY(1px) scale(.99);
+  }
+  .btn.small { font-size: 13px; }
+  .btn.big {
+    border-radius: 22px;
+    font-size: 18px;
+  }
+  .up    { grid-column: 2; grid-row: 1; }
+  .left  { grid-column: 1; grid-row: 2; }
+  .down  { grid-column: 2; grid-row: 3; }
+  .right { grid-column: 3; grid-row: 2; }
+  .center { grid-column: 2; grid-row: 2; opacity: .35; }
+  .attack { background: rgba(239,68,68,.18); }
+  .kick   { background: rgba(245,158,11,.18); }
+  .jump   { background: rgba(59,130,246,.18); }
+  .block  { background: rgba(148,163,184,.18); }
+  .hint {
+    position: absolute;
+    left: 50%;
+    bottom: 36vh;
+    transform: translateX(-50%);
+    color: rgba(255,255,255,.85);
+    font-size: 12px;
+    opacity: .75;
+    text-shadow: 0 2px 4px rgba(0,0,0,.6);
+    pointer-events: none;
+  }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(circle at center, rgba(0,0,0,.18), rgba(0,0,0,.68));
+    pointer-events: auto;
+  }
+  .panel {
+    width: min(92vw, 560px);
+    background: rgba(8,10,16,.78);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 24px;
+    padding: 22px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+    color: #fff;
+  }
+  .title {
+    font-size: clamp(28px, 5vw, 44px);
+    font-weight: 900;
+    margin-bottom: 10px;
+  }
+  .desc {
+    opacity: .88;
+    line-height: 1.5;
+    font-size: 15px;
+    margin-bottom: 18px;
+  }
+  .startBtn {
+    pointer-events: auto;
+    padding: 14px 24px;
+    border: none;
+    border-radius: 16px;
+    background: linear-gradient(180deg, #34d399, #16a34a);
+    color: white;
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: .5px;
+    box-shadow: 0 10px 24px rgba(22,163,74,.35);
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="ui">
+  <div class="topbar">
+    <div class="barWrap">
+      <div class="label">PLAYER</div>
+      <div class="bar"><div id="playerHp" class="fill"></div></div>
+    </div>
+    <div class="barWrap" style="text-align:right;">
+      <div class="label">ENEMY</div>
+      <div class="bar"><div id="enemyHp" class="fill enemy"></div></div>
+    </div>
+  </div>
+
+  <div id="msg" class="centerMsg"></div>
+
+  <div class="hint">Move: D-pad | Attack: red | Kick: orange | Jump: blue | Block: gray</div>
+
+  <div class="controls">
+    <div class="dpad">
+      <button class="btn small up" data-key="up">▲</button>
+      <button class="btn small left" data-key="left">◀</button>
+      <button class="btn small center" disabled></button>
+      <button class="btn small right" data-key="right">▶</button>
+      <button class="btn small down" data-key="down">▼</button>
+    </div>
+    <div class="buttons">
+      <button class="btn big jump" data-key="jump">JUMP</button>
+      <button class="btn big block" data-key="block">BLOCK</button>
+      <button class="btn big kick" data-key="kick">KICK</button>
+      <button class="btn big attack" data-key="attack">ATTACK</button>
+    </div>
+  </div>
+
+  <div id="overlay" class="overlay">
+    <div class="panel">
+      <div class="title">Shadow Duel</div>
+      <div class="desc">
+        A simple 2D shadow-fighting inspired demo.
+        Move, jump, block, kick, and strike your opponent.
+        Defeat the enemy to win.
+      </div>
+      <button id="startBtn" class="startBtn">START FIGHT</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const playerHpEl = document.getElementById('playerHp');
+  const enemyHpEl = document.getElementById('enemyHp');
+  const msgEl = document.getElementById('msg');
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+
+  const DPR = Math.min(2, window.devicePixelRatio || 1);
+  let W = 0, H = 0, groundY = 0;
+  function resize() {
+    W = Math.floor(innerWidth);
+    H = Math.floor(innerHeight);
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    groundY = H * 0.78;
+  }
+  addEventListener('resize', resize, { passive: true });
+  resize();
+
+  const keys = { left:false, right:false, up:false, down:false, attack:false, kick:false, jump:false, block:false };
+  document.querySelectorAll('[data-key]').forEach(btn => {
+    const k = btn.dataset.key;
+    const on = e => { e.preventDefault(); keys[k] = true; btn.classList.add('active'); };
+    const off = e => { e.preventDefault(); keys[k] = false; btn.classList.remove('active'); };
+    btn.addEventListener('pointerdown', on);
+    btn.addEventListener('pointerup', off);
+    btn.addEventListener('pointercancel', off);
+    btn.addEventListener('pointerleave', off);
+  });
+  addEventListener('keydown', e => {
+    if (e.repeat) return;
+    if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
+    if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
+    if (e.key === 'ArrowUp' || e.key === 'w') keys.up = true;
+    if (e.key === 'ArrowDown' || e.key === 's') keys.down = true;
+    if (e.key === 'j') keys.attack = true;
+    if (e.key === 'k') keys.kick = true;
+    if (e.key === ' ') keys.jump = true;
+    if (e.key === 'l') keys.block = true;
+  });
+  addEventListener('keyup', e => {
+    if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
+    if (e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
+    if (e.key === 'ArrowUp' || e.key === 'w') keys.up = false;
+    if (e.key === 'ArrowDown' || e.key === 's') keys.down = false;
+    if (e.key === 'j') keys.attack = false;
+    if (e.key === 'k') keys.kick = false;
+    if (e.key === ' ') keys.jump = false;
+    if (e.key === 'l') keys.block = false;
+  });
+
+  const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+  const dist = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+
+  class Fighter {
+    constructor(x, color) {
+      this.x = x; this.y = groundY;
+      this.vx = 0; this.vy = 0;
+      this.w = 42; this.h = 120;
+      this.facing = 1;
+      this.color = color;
+      this.hp = 100;
+      this.blocking = false;
+      this.airborne = false;
+      this.attackCd = 0;
+      this.hitTimer = 0;
+      this.stun = 0;
+      this.combo = 0;
+      this.anim = 'idle';
+      this.onGround = true;
+      this.dead = false;
+    }
+    rect() {
+      return { x: this.x - this.w/2, y: this.y - this.h, w: this.w, h: this.h };
+    }
+    takeHit(dmg, knockX, knockY, stun=18) {
+      if (this.dead) return;
+      if (this.blocking) dmg *= 0.25;
+      this.hp = Math.max(0, this.hp - dmg);
+      this.vx += knockX;
+      this.vy += knockY;
+      this.stun = Math.max(this.stun, stun);
+      this.hitTimer = 10;
+      if (this.hp <= 0) this.dead = true;
+    }
+    update() {
+      this.vy += 0.7;
+      this.x += this.vx;
+      this.y += this.vy;
+      this.vx *= 0.88;
+      if (this.y >= groundY) {
+        this.y = groundY;
+        this.vy = 0;
+        this.onGround = true;
+      } else {
+        this.onGround = false;
+      }
+      this.x = clamp(this.x, 50, W - 50);
+      if (this.attackCd > 0) this.attackCd--;
+      if (this.stun > 0) this.stun--;
+      if (this.hitTimer > 0) this.hitTimer--;
+    }
+    draw() {
+      const p = this.rect();
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.scale(this.facing, 1);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      const flash = this.hitTimer > 0;
+      const body = flash ? '#f8fafc' : this.color;
+
+      ctx.strokeStyle = body;
+      ctx.fillStyle = body;
+      ctx.lineWidth = 8;
+
+      ctx.beginPath();
+      ctx.arc(0, -92, 14, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(0, -78);
+      ctx.lineTo(0, -32);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(0, -64);
+      ctx.lineTo(-24, -46);
+      ctx.moveTo(0, -60);
+      ctx.lineTo(24, -48);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(0, -32);
+      ctx.lineTo(-20, 8);
+      ctx.moveTo(0, -32);
+      ctx.lineTo(18, 10);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(-2, -4);
+      ctx.lineTo(-18, 38);
+      ctx.moveTo(2, -4);
+      ctx.lineTo(20, 36);
+      ctx.stroke();
+
+      if (this.blocking) {
+        ctx.strokeStyle = 'rgba(255,255,255,.45)';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(-6, -52, 34, -0.7, 0.7);
+        ctx.stroke();
+      }
+
+      if (this.anim === 'attack') {
+        ctx.strokeStyle = 'rgba(255,255,255,.95)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(14, -46);
+        ctx.lineTo(56, -34);
+        ctx.stroke();
+      }
+      if (this.anim === 'kick') {
+        ctx.strokeStyle = 'rgba(255,255,255,.95)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(18, 10);
+        ctx.lineTo(62, 24);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+    attack(target, type='punch') {
+      if (this.dead || this.stun > 0 || this.attackCd > 0) return false;
+      this.attackCd = type === 'kick' ? 28 : 20;
+      this.anim = type;
+      const range = type === 'kick' ? 78 : 56;
+      const dmg = type === 'kick' ? 14 : 10;
+      const knock = type === 'kick' ? 7 : 5;
+      const a = this.facing === 1 ? this.x + 24 : this.x - 24 - range;
+      const hitBox = { x: a, y: this.y - 78, w: range, h: 54 };
+      const r = target.rect();
+      const hit = !(hitBox.x + hitBox.w < r.x || hitBox.x > r.x + r.w || hitBox.y + hitBox.h < r.y || hitBox.y > r.y + r.h);
+      if (hit) {
+        target.takeHit(dmg, this.facing * knock, -3, type === 'kick' ? 24 : 18);
+        return true;
+      }
+      return false;
+    }
+    jump() {
+      if (this.onGround && this.stun === 0) {
+        this.vy = -15;
+        this.onGround = false;
+      }
+    }
+  }
+
+  const player = new Fighter(W * 0.3, '#dbe2ea');
+  const enemy = new Fighter(W * 0.7, '#9ca3af');
+  enemy.facing = -1;
+
+  let running = false;
+  let roundOver = false;
+  let lastMsgTime = 0;
+
+  function showMsg(text, sub='') {
+    msgEl.innerHTML = text + (sub ? `<div class="subMsg">${sub}</div>` : '');
+    msgEl.style.opacity = 1;
+    clearTimeout(showMsg._t);
+    showMsg._t = setTimeout(() => msgEl.style.opacity = 0, 1100);
+  }
+
+  function resetGame() {
+    player.x = W * 0.3; player.y = groundY; player.vx = player.vy = 0; player.hp = 100; player.dead = false;
+    enemy.x = W * 0.7; enemy.y = groundY; enemy.vx = enemy.vy = 0; enemy.hp = 100; enemy.dead = false;
+    player.attackCd = enemy.attackCd = player.stun = enemy.stun = 0;
+    roundOver = false;
+  }
+
+  function ai() {
+    if (enemy.dead || roundOver) return;
+    const d = player.x - enemy.x;
+    enemy.facing = d >= 0 ? 1 : -1;
+    enemy.blocking = Math.abs(d) < 150 && Math.random() < 0.08 && player.attackCd > 0 && player.stun === 0;
+    if (enemy.stun > 0) return;
+
+    if (Math.abs(d) > 110) {
+      enemy.vx += clamp(d * 0.02, -1.2, 1.2);
+      enemy.anim = 'idle';
+    } else {
+      enemy.vx += clamp(d * 0.01, -0.5, 0.5);
+      if (enemy.attackCd === 0 && Math.random() < 0.12) {
+        if (Math.random() < 0.55) enemy.attack(player, 'punch');
+        else enemy.attack(player, 'kick');
+      }
+      if (Math.random() < 0.01) enemy.jump();
+    }
+  }
+
+  function updatePlayer() {
+    if (player.dead || roundOver) return;
+    if (player.stun === 0) {
+      player.blocking = keys.block;
+      if (keys.left) { player.vx -= 0.8; player.facing = -1; player.anim = 'walk'; }
+      if (keys.right) { player.vx += 0.8; player.facing = 1; player.anim = 'walk'; }
+      if (!keys.left && !keys.right) player.anim = 'idle';
+      if (keys.jump) { player.jump(); keys.jump = false; }
+      if (keys.attack) { if (player.attack(enemy, 'punch')) showMsg('HIT!'); keys.attack = false; }
+      if (keys.kick) { if (player.attack(enemy, 'kick')) showMsg('KICK!'); keys.kick = false; }
+    } else {
+      player.blocking = false;
+    }
+  }
+
+  function collideBounce(a, b) {
+    const dx = a.x - b.x;
+    const push = clamp(dx * 0.02, -1.6, 1.6);
+    a.vx += push;
+    b.vx -= push;
+  }
+
+  function drawStage() {
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, '#1a2030');
+    sky.addColorStop(0.7, '#0d1119');
+    sky.addColorStop(1, '#06070b');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    const moonX = W * 0.78, moonY = H * 0.18;
+    ctx.fillStyle = 'rgba(255,255,255,.06)';
+    ctx.beginPath(); ctx.arc(moonX, moonY, 70, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.12)';
+    ctx.beginPath(); ctx.arc(moonX + 10, moonY - 8, 48, 0, Math.PI*2); ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,255,255,.04)';
+    for (let i = 0; i < 6; i++) {
+      ctx.beginPath();
+      ctx.moveTo(0, groundY + i * 18);
+      ctx.lineTo(W, groundY + i * 18);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = '#0a0c10';
+    ctx.fillRect(0, groundY, W, H - groundY);
+
+    ctx.fillStyle = 'rgba(255,255,255,.05)';
+    for (let i = 0; i < 24; i++) {
+      const x = (i * 97 + (performance.now() * 0.01)) % (W + 100) - 50;
+      const h = 40 + (i % 5) * 15;
+      ctx.fillRect(x, groundY - h, 2, h);
+    }
+
+    ctx.fillStyle = 'rgba(0,0,0,.4)';
+    ctx.beginPath();
+    ctx.ellipse(player.x, groundY + 8, 46, 10, 0, 0, Math.PI*2);
+    ctx.ellipse(enemy.x, groundY + 8, 46, 10, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  function tick() {
+    if (!running) return;
+    ai();
+    updatePlayer();
+
+    player.update();
+    enemy.update();
+
+    if (player.x < enemy.x) { player.facing = 1; enemy.facing = -1; }
+    else { player.facing = -1; enemy.facing = 1; }
+
+    if (Math.abs(player.x - enemy.x) < 46) collideBounce(player, enemy);
+
+    if (player.hp <= 0 || enemy.hp <= 0) {
+      roundOver = true;
+      showMsg(player.hp <= 0 ? 'YOU LOSE' : 'YOU WIN', 'Tap START to play again');
+      overlay.style.display = 'grid';
+      startBtn.textContent = 'RESTART';
+      running = false;
+    }
+
+    playerHpEl.style.width = player.hp + '%';
+    enemyHpEl.style.width = enemy.hp + '%';
+
+    drawStage();
+    player.draw();
+    enemy.draw();
+
+    requestAnimationFrame(tick);
+  }
+
+  startBtn.addEventListener('click', () => {
+    overlay.style.display = 'none';
+    resetGame();
+    running = true;
+    showMsg('FIGHT!');
+    requestAnimationFrame(tick);
+  });
+
+  resetGame();
+  drawStage();
+  player.draw();
+  enemy.draw();
+})();
+</script>
+</body>
+</html>

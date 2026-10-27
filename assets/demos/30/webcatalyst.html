@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🍷 Wein Dart Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #1a0a0a 0%, #2d1515 30%, #1a0a0a 60%, #0d0505 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: 'Georgia', serif;
+            color: #f5e6d3;
+            overflow-x: hidden;
+        }
+
+        h1 {
+            margin-top: 20px;
+            font-size: 3em;
+            text-shadow: 0 0 20px rgba(139, 0, 0, 0.8), 0 0 40px rgba(139, 0, 0, 0.4);
+            color: #e8c4a0;
+            letter-spacing: 3px;
+        }
+
+        h1 span {
+            color: #8b0000;
+        }
+
+        .game-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 30px;
+            margin-top: 20px;
+            padding: 20px;
+        }
+
+        .dartboard-container {
+            position: relative;
+            width: 500px;
+            height: 500px;
+        }
+
+        #dartboard {
+            width: 500px;
+            height: 500px;
+            cursor: crosshair;
+            border-radius: 50%;
+            box-shadow: 0 0 30px rgba(139, 0, 0, 0.5), inset 0 0 50px rgba(0, 0, 0, 0.3);
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-width: 250px;
+        }
+
+        .score-panel {
+            background: linear-gradient(145deg, #2d1515, #1a0a0a);
+            border: 2px solid #8b0000;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 0 20px rgba(139, 0, 0, 0.3);
+        }
+
+        .score-panel h2 {
+            color: #e8c4a0;
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            text-align: center;
+            border-bottom: 1px solid #8b0000;
+            padding-bottom: 10px;
+        }
+
+        .score-display {
+            font-size: 3em;
+            text-align: center;
+            color: #ff6b6b;
+            text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+            font-weight: bold;
+        }
+
+        .round-display {
+            text-align: center;
+            font-size: 1.2em;
+            color: #c9a96e;
+            margin-top: 10px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            background: rgba(139, 0, 0, 0.2);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-item label {
+            display: block;
+            font-size: 0.8em;
+            color: #c9a96e;
+            margin-bottom: 5px;
+        }
+
+        .stat-item value {
+            font-size: 1.3em;
+            color: #e8c4a0;
+            font-weight: bold;
+        }
+
+        .buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: 2px solid #8b0000;
+            background: linear-gradient(145deg, #4a1a1a, #2d1515);
+            color: #e8c4a0;
+            font-family: 'Georgia', serif;
+            font-size: 1.1em;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .btn:hover {
+            background: linear-gradient(145deg, #8b0000, #4a1a1a);
+            box-shadow: 0 0 15px rgba(139, 0, 0, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn.primary {
+            background: linear-gradient(145deg, #8b0000, #5a0000);
+            font-size: 1.3em;
+            padding: 15px 30px;
+        }
+
+        .message {
+            text-align: center;
+            font-size: 1.2em;
+            color: #c9a96e;
+            min-height: 30px;
+            margin-top: 10px;
+        }
+
+        .wine-glass {
+            position: fixed;
+            font-size: 2em;
+            opacity: 0.1;
+            animation: float 10s infinite ease-in-out;
+            pointer-events: none;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(10deg); }
+        }
+
+        .dart-animation {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .hit-effect {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 215, 0, 0.8), transparent);
+            animation: hitPulse 0.5s ease-out forwards;
+            pointer-events: none;
+        }
+
+        @keyframes hitPulse {
+            0% { transform: scale(0); opacity: 1; }
+            100% { transform: scale(3); opacity: 0; }
+        }
+
+        .score-popup {
+            position: absolute;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
+            animation: scoreFloat 1.5s ease-out forwards;
+            pointer-events: none;
+            z-index: 101;
+        }
+
+        @keyframes scoreFloat {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-60px); opacity: 0; }
+        }
+
+        .history {
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 10px;
+        }
+
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 10px;
+            border-bottom: 1px solid rgba(139, 0, 0, 0.3);
+            font-size: 0.9em;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-round {
+            color: #c9a96e;
+        }
+
+        .history-score {
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+
+        .history-total {
+            color: #e8c4a0;
+        }
+
+        .leaderboard {
+            background: linear-gradient(145deg, #2d1515, #1a0a0a);
+            border: 2px solid #8b0000;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 0 20px rgba(139, 0, 0, 0.3);
+        }
+
+        .leaderboard h2 {
+            color: #e8c4a0;
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            text-align: center;
+            border-bottom: 1px solid #8b0000;
+            padding-bottom: 10px;
+        }
+
+        .leaderboard-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 10px;
+            margin: 5px 0;
+            background: rgba(139, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+
+        .leaderboard-item:first-child {
+            background: rgba(255, 215, 0, 0.2);
+            border: 1px solid #ffd700;
+        }
+
+        .lb-name {
+            color: #e8c4a0;
+        }
+
+        .lb-score {
+            color: #ffd700;
+            font-weight: bold;
+        }
+
+        .instructions {
+            background: linear-gradient(145deg, #2d1515, #1a0a0a);
+            border: 2px solid #8b0000;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 0 20px rgba(139, 0, 0, 0.3);
+        }
+
+        .instructions h2 {
+            color: #e8c4a0;
+            font-size: 1.3em;
+            margin-bottom: 10px;
+        }
+
+        .instructions p {
+            color: #c9a96e;
+            margin: 5px 0;
+            font-size: 0.95em;
+            line-height: 1.5;
+        }
+
+        .instructions ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .instructions li {
+            padding: 5px 0;
+            color: #c9a96e;
+        }
+
+        .instructions li::before {
+            content: "🍇 ";
+        }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 2em; }
+            .dartboard-container { width: 350px; height: 350px; }
+            #dartboard { width: 350px; height: 350px; }
+            .game-container { flex-direction: column; align-items: center; }
+            .sidebar { min-width: auto; width: 100%; max-width: 350px; }
+        }
+    </style>
+</head>
+<body>
+    <h1>🍷 Wein <span>Dart</span> Game 🍷</h1>
+
+    <div class="game-container">
+        <div class="dartboard-container">
+            <canvas id="dartboard" width="500" height="500"></canvas>
+        </div>
+
+        <div class="sidebar">
+            <div class="score-panel">
+                <h2>🏆 Score</h2>
+                <div class="score-display" id="totalScore">0</div>
+                <div class="round-display">Runde: <span id="currentRound">1</span> / 10</div>
+                <div class="stats">
+                    <div class="stat-item">
+                        <label>Darts geworfen</label>
+                        <value id="dartsThrown">0</value>
+                    </div>
+                    <div class="stat-item">
+                        <label>Durchschnitt</label>
+                        <value id="average">0</value>
+                    </div>
+                    <div class="stat-item">
+                        <label>Höchster Score</label>
+                        <value id="highestScore">0</value>
+                    </div>
+                    <div class="stat-item">
+                        <label>Bullseye</label>
+                        <value id="bullseyeCount">0</value>
+                    </div>
+                </div>
+            </div>
+
+            <div class="buttons">
+                <button class="btn primary" id="throwBtn" onclick="throwDart()">🎯 Dart werfen</button>
+                <button class="btn" onclick="resetGame()">🔄 Neues Spiel</button>
+                <button class="btn" onclick="clearDarts()">🗑️ Darts entfernen</button>
+            </div>
+
+            <div class="message" id="message">Klicke auf das Dartboard oder drücke den Button!</div>
+
+            <div class="score-panel">
+                <h2>📜 Verlauf</h2>
+                <div class="history" id="history">
+                    <div class="history-item" style="color: #666; justify-content: center;">Noch keine Würfe</div>
+                </div>
+            </div>
+
+            <div class="leaderboard">
+                <h2>🏅 Bestwerte</h2>
+                <div id="leaderboard">
+                    <div class="leaderboard-item">
+                        <span class="lb-name">Platz 1</span>
+                        <span class="lb-score">-</span>
+                    </div>
+                    <div class="leaderboard-item">
+                        <span class="lb-name">Platz 2</span>
+                        <span class="lb-score">-</span>
+                    </div>
+                    <div class="leaderboard-item">
+                        <span class="lb-name">Platz 3</span>
+                        <span class="lb-score">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="instructions">
+                <h2>📋 Spielregeln</h2>
+                <ul>
+                    <li>Klicke auf das Dartboard oder verwende den Button</li>
+                    <li>Jede Runde hast du 3 Darts</li>
+                    <li>10 Runden = ein volles Spiel</li>
+                    <li>Triple Ring = 3x Punkte</li>
+                    <li>Double Ring = 2x Punkte</li>
+                    <li>Bullseye = 50 Punkte</li>
+                    <li>Kleines Bullseye = 25 Punkte</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('dartboard');
+        const ctx = canvas.getContext('2d');
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = 230;
+
+        // Dartboard segment definitions (standard dartboard order)
+        const segmentOrder = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+        const segmentAngle = (2 * Math.PI) / 20;
+
+        // Ring radii
+        const outerDoubleRadius = radius;
+        const innerDoubleRadius = radius * 0.95;
+        const outerSingleRadius = radius * 0.95;
+        const innerSingleRadius = radius * 0.35;
+        const outerTripleRadius = radius * 0.55;
+        const innerTripleRadius = radius * 0.49;
+        const outerBullRadius = 16;
+        const innerBullRadius = 6;
+
+        let darts = [];
+        let totalScore = 0;
+        let currentRound = 1;
+        let dartsInRound = 0;
+        let maxDartsPerRound = 3;
+        let maxRounds = 10;
+        let highestScore = 0;
+        let bullseyeCount = 0;
+        let leaderboard = [];
+        let gameActive = true;
+
+        function drawDartboard() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw background circle
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius + 10, 0, 2 * Math.PI);
+            ctx.fillStyle = '#1a0a0a';
+            ctx.fill();
+
+            // Draw segments
+            for (let i = 0; i < 20; i++) {
+                const startAngle = i * segmentAngle - Math.PI / 2 - segmentAngle / 2;
+                const endAngle = startAngle + segmentAngle;
+                const value = segmentOrder[i];
+
+                // Double ring (outer)
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, outerDoubleRadius, startAngle, endAngle);
+                ctx.arc(centerX, centerY, innerDoubleRadius, endAngle, startAngle, true);
+                ctx.closePath();
+                ctx.fillStyle = i % 2 === 0 ? '#8b0000' : '#f5e6d3';
+                ctx.fill();
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Single ring (outer)
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, outerSingleRadius, startAngle, endAngle);
+                ctx.arc(centerX, centerY, outerTripleRadius, endAngle, startAngle, true);
+                ctx.closePath();
+                ctx.fillStyle = i % 2 === 0 ? '#8b0000' : '#f5e6d3';
+                ctx.fill();
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Triple ring
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, outerTripleRadius, startAngle, endAngle);
+                ctx.arc(centerX, centerY, innerTripleRadius, endAngle, startAngle, true);
+                ctx.closePath();
+                ctx.fillStyle = i % 2 === 0 ? '#8b0000' : '#f5e6d3';
+                ctx.fill();
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Single ring (inner)
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, innerTripleRadius, startAngle, endAngle);
+                ctx.arc(centerX, centerY, innerSingleRadius, endAngle, startAngle, true);
+                ctx.closePath();
+                ctx.fillStyle = i % 2 === 0 ? '#8b0000' : '#f5e6d3';
+                ctx.fill();
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Draw segment numbers
+                const numberRadius = radius * 1.08;
+                const midAngle = startAngle + segmentAngle / 2;
+                const numX = centerX + Math.cos(midAngle) * numberRadius;
+                const numY = centerY + Math.sin(midAngle) * numberRadius;
+
+                ctx.beginPath();
+                ctx.arc(numX, numY, 15, 0, 2 * Math.PI);
+                ctx.fillStyle = '#1a0a0a';
+                ctx.fill();
+
+                ctx.fillStyle = '#e8c4a0';
+                ctx.font = 'bold 16px Georgia';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(value, numX, numY);
+            }
+
+            // Draw bullseye
+            // Outer bull (25)
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, outerBullRadius, 0, 2 * Math.PI);
+            ctx.fillStyle = '#228b22';
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Inner bull (50)
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, innerBullRadius, 0, 2 * Math.PI);
+            ctx.fillStyle = '#8b0000';
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Draw wire lines
+            ctx.strokeStyle = '#888';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i < 20; i++) {
+                const angle = i * segmentAngle - Math.PI / 2 - segmentAngle / 2;
+                ctx.beginPath();
+                ctx.moveTo(centerX + Math.cos(angle) * innerSingleRadius, centerY + Math.sin(angle) * innerSingleRadius);
+                ctx.lineTo(centerX + Math.cos(angle) * outerDoubleRadius, centerY + Math.sin(angle) * outerDoubleRadius);
+                ctx.stroke();
+            }
+
+            // Draw circles
+            [outerDoubleRadius, innerDoubleRadius, outerTripleRadius, innerTripleRadius, innerSingleRadius, outerBullRadius].forEach(r => {
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, r, 0, 2 * Math.PI);
+                ctx.strokeStyle = '#888';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            });
+
+            // Draw existing darts
+            darts.forEach(dart => {
+                drawDart(dart.x, dart.y, dart.score, dart.multiplier, dart.segment);
+            });
+        }
+
+        function drawDart(x, y, score, multiplier, segment) {
+            // Dart shadow
+            ctx.beginPath();
+            ctx.arc(x + 2, y + 2, 8, 0, 2 * Math.PI);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fill();
+
+            // Dart outer ring
+            ctx.beginPath();
+            ctx.arc(x, y, 8, 0, 2 * Math.PI);
+            ctx.fillStyle = '#ffd700';
+            ctx.fill();
+            ctx.strokeStyle = '#b8860b';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Dart inner
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, 2 * Math.PI);
+            ctx.fillStyle = '#8b0000';
+            ctx.fill();
+
+            // Dart point
+            ctx.beginPath();
+            ctx.moveTo(x, y - 8);
+            ctx.lineTo(x - 3, y - 15);
+            ctx.lineTo(x + 3, y - 15);
+            ctx.closePath();
+            ctx.fillStyle = '#c0c0c0';
+            ctx.fill();
+
+            // Score label
+            if (score > 0) {
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 10px Georgia';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const label = multiplier > 1 ? `${score}${multiplier}x` : score;
+                ctx.fillText(label, x, y);
+            }
+        }
+
+        function getSegmentInfo(x, y) {
+            const dx = x - centerX;
+            const dy = y - centerY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance > radius) {
+                return { score: 0, multiplier: 0, segment: -1, ring: 'miss' };
+            }
+
+            // Calculate angle
+            let angle = Math.atan2(dy, dx) + Math.PI / 2;
+            if (angle < 0) angle += 2 * Math.PI;
+            angle = angle % (2 * Math.PI);
+
+            const segmentIndex = Math.floor(angle / segmentAngle);
+            const segment = segmentOrder[segmentIndex % 20];
+
+            // Determine ring
+            let multiplier = 1;
+            let ring = 'single';
+
+            if (distance <= innerBullRadius) {
+                return { score: 50, multiplier: 1, segment: segment, ring: 'bullseye' };
+            } else if (distance <= outerBullRadius) {
+                return { score: 25, multiplier: 1, segment: segment, ring: 'outer_bull' };
+            } else if (distance <= innerDoubleRadius) {
+                multiplier = 1;
+                ring = 'single';
+            } else if (distance <= innerTripleRadius) {
+                multiplier = 3;
+                ring = 'triple';
+            } else if (distance <= outerTripleRadius) {
+                multiplier = 1;
+                ring = 'single';
+            } else if (distance <= innerSingleRadius) {
+                multiplier = 1;
+                ring = 'single';
+            } else if (distance <= outerDoubleRadius) {
+                multiplier = 2;
+                ring = 'double';
+            }
+
+            return { score: segment, multiplier: multiplier, segment: segment, ring: ring };
+        }
+
+        function throwDart() {
+            if (!gameActive) return;
+            if (dartsInRound >= maxDartsPerRound) {
+                showMessage("Runde beendet! Nächste Runde startet...");
+                setTimeout(() => {
+                    currentRound++;
+                    dartsInRound = 0;
+                    if (currentRound > maxRounds) {
+                        endGame();
+                        return;
+                    }
+                    document.getElementById('currentRound').textContent = currentRound;
+                    showMessage(`Runde ${currentRound} - Wirf deine 3 Darts!`);
+                }, 1500);
+                return;
+            }
+
+            // Add some randomness to make it more realistic
+            const randomOffsetX = (Math.random() - 0.5) * 20;
+            const randomOffsetY = (Math.random() - 0.5) * 20;
+
+            // Random target position (biased towards center for realism)
+            const angle = Math.random() * 2 * Math.PI;
+            const dist = Math.random() * radius * 0.9;
+            const targetX = centerX + Math.cos(angle) * dist + randomOffsetX;
+            const targetY = centerY + Math.sin(angle) * dist + randomOffsetY;
+
+            // Clamp to canvas
+            const x = Math.max(10, Math.min(canvas.width - 10, targetX));
+            const y = Math.max(10, Math.min(canvas.height - 10, targetY));
+
+            const info = getSegmentInfo(x, y);
+            const score = info.score * info.multiplier;
+
+            darts.push({ x, y, score, multiplier: info.multiplier, segment: info.segment, ring: info.ring });
+            dartsInRound++;
+
+            totalScore += score;
+            if (score > highestScore) highestScore = score;
+            if (info.ring === 'bullseye') bullseyeCount++;
+
+            // Update UI
+            document.getElementById('totalScore').textContent = totalScore;
+            document.getElementById('dartsThrown').textContent = darts.length;
+            document.getElementById('highestScore').textContent = highestScore;
+            document.getElementById('bullseyeCount').textContent = bullseyeCount;
+            document.getElementById('average').textContent = darts.length > 0 ? Math.round(totalScore / darts.length) : 0;
+
+            // Add to history
+            addHistory(currentRound, score);
+
+            // Show message
+            let ringName = '';
+            switch (info.ring) {
+                case 'bullseye': ringName = '🎯 BULLSEYE!'; break;
+                case 'outer_bull': ringName = '🔵 Outer Bull'; break;
+                case 'triple': ringName = '🔥 TRIPLE!'; break;
+                case 'double': ringName = '⭐ DOUBLE!'; break;
+                case 'miss': ringName = '❌ Verpasst!'; break;
+                default: ringName = '';
+            }
+
+            if (score > 0) {
+                showMessage(`${ringName} +${score} Punkte!`);
+                showScorePopup(x, y, `+${score}`);
+            } else {
+                showMessage('❌ Verpasst das Dartboard!');
+            }
+
+            // Redraw
+            drawDartboard();
+
+            // Check if round is complete
+            if (dartsInRound >= maxDartsPerRound) {
+                setTimeout(() => {
+                    currentRound++;
+                    dartsInRound = 0;
+                    if (currentRound > maxRounds) {
+                        endGame();
+                        return;
+                    }
+                    document.getElementById('currentRound').textContent = currentRound;
+                    showMessage(`Runde ${currentRound} - Wirf deine 3 Darts!`);
+                }, 1500);
+            }
+        }
+
+        function showScorePopup(x, y, text) {
+            const popup = document.createElement('div');
+            popup.className = 'score-popup';
+            popup.textContent = text;
+            popup.style.left = x + 'px';
+            popup.style.top = y + 'px';
+            document.querySelector('.dartboard-container').appendChild(popup);
+            setTimeout(() => popup.remove(), 1500);
+        }
+
+        function addHistory(round, score) {
+            const history = document.getElementById('history');
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            item.innerHTML = `
+                <span class="history-round">Runde ${round}</span>
+                <span class="history-score">+${score}</span>
+                <span class="history-total">Gesamt: ${totalScore}</span>
+            `;
+            history.insertBefore(item, history.firstChild);
+        }
+
+        function showMessage(text) {
+            document.getElementById('message').textContent = text;
+        }
+
+        function resetGame() {
+            darts = [];
+            totalScore = 0;
+            currentRound = 1;
+            dartsInRound = 0;
+            highestScore = 0;
+            bullseyeCount = 0;
+            gameActive = true;
+
+            document.getElementById('totalScore').textContent = '0';
+            document.getElementById('currentRound').textContent = '1';
+            document.getElementById('dartsThrown').textContent = '0';
+            document.getElementById('average').textContent = '0';
+            document.getElementById('highestScore').textContent = '0';
+            document.getElementById('bullseyeCount').textContent = '0';
+            document.getElementById('history').innerHTML = '<div class="history-item" style="color: #666; justify-content: center;">Noch keine Würfe</div>';
+            showMessage('Neues Spiel! Wirf deine Darts!');
+
+            drawDartboard();
+        }
+
+        function clearDarts() {
+            darts = [];
+            drawDartboard();
+            showMessage('Darts entfernt!');
+        }
+
+        function endGame() {
+            gameActive = false;
+            showMessage(`🏆 Spiel beendet! Endscore: ${totalScore} Punkte!`);
+
+            // Add to leaderboard
+            leaderboard.push(totalScore);
+            leaderboard.sort((a, b) => b - a);
+            leaderboard = leaderboard.slice(0, 3);
+
+            updateLeaderboard();
+        }
+
+        function updateLeaderboard() {
+            const lb = document.getElementById('leaderboard');
+            lb.innerHTML = '';
+            for (let i = 0; i < 3; i++) {
+                const item = document.createElement('div');
+                item.className = 'leaderboard-item';
+                item.innerHTML = `
+                    <span class="lb-name">Platz ${i + 1}</span>
+                    <span class="lb-score">${leaderboard[i] !== undefined ? leaderboard[i] : '-'}</span>
+                `;
+                lb.appendChild(item);
+            }
+        }
+
+        // Canvas click handler
+        canvas.addEventListener('click', function (e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+
+            // Check if click is within dartboard
+            const dx = x - centerX;
+            const dy = y - centerY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance <= radius) {
+                throwDart();
+            } else {
+                showMessage('❌ Du hast außerhalb des Dartboards geklickt!');
+            }
+        });
+
+        // Keyboard handler
+        document.addEventListener('keydown', function (e) {
+            if (e.code === 'Space' || e.code === 'Enter') {
+                e.preventDefault();
+                throwDart();
+            }
+        });
+
+        // Initialize
+        drawDartboard();
+        showMessage('Willkommen beim Wein Dart Game! 🍷');
+    </script>
+</body>
+</html>

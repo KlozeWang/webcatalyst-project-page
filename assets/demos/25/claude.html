@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Imposteur - Jeu de Mots</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+body {
+  background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+  min-height: 100vh;
+  color: #fff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 15px;
+}
+.container {
+  background: rgba(255,255,255,0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px;
+  padding: 25px;
+  max-width: 500px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+h1 {
+  text-align: center;
+  font-size: 2em;
+  margin-bottom: 10px;
+  background: linear-gradient(45deg, #e94560, #f39c12);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.subtitle { text-align: center; color: #aaa; margin-bottom: 20px; font-size: 0.9em; }
+.screen { display: none; animation: fadeIn 0.4s; }
+.screen.active { display: block; }
+@keyframes fadeIn { from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
+label { display: block; margin: 15px 0 6px; font-weight: 600; color: #f39c12; }
+select, input, button {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  font-size: 1em;
+  outline: none;
+}
+select, input {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.2);
+}
+select option { background: #16213e; }
+button {
+  background: linear-gradient(45deg, #e94560, #c0392b);
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  margin-top: 15px;
+  transition: transform 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+button:hover { transform: translateY(-2px); }
+button:active { transform: scale(0.97); }
+button.secondary { background: linear-gradient(45deg, #3498db, #2980b9); }
+button.success { background: linear-gradient(45deg, #27ae60, #16a085); }
+.card {
+  background: linear-gradient(135deg, #e94560, #c0392b);
+  border-radius: 15px;
+  padding: 40px 20px;
+  text-align: center;
+  margin: 20px 0;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 10px 30px rgba(233,69,96,0.4);
+}
+.card.revealed { background: linear-gradient(135deg, #2c3e50, #34495e); }
+.card.imposter { background: linear-gradient(135deg, #8e44ad, #6c3483); }
+.card .label { font-size: 0.9em; opacity: 0.8; margin-bottom: 10px; }
+.card .word { font-size: 1.8em; font-weight: bold; word-break: break-word; }
+.card .hint { font-size: 0.85em; margin-top: 15px; opacity: 0.7; }
+.player-info { text-align: center; font-size: 1.3em; margin: 15px 0; color: #f39c12; }
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; }
+.info-box {
+  background: rgba(243,156,18,0.15);
+  border-left: 4px solid #f39c12;
+  padding: 12px;
+  border-radius: 8px;
+  margin: 15px 0;
+  font-size: 0.9em;
+}
+.flag { font-size: 1.5em; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🕵️ IMPOSTEUR</h1>
+  <p class="subtitle" id="subtitle">Trouvez l'imposteur parmi vous!</p>
+
+  <!-- Setup -->
+  <div class="screen active" id="setup">
+    <label data-key="lang">🌍 Langue / Language</label>
+    <select id="lang">
+      <option value="fr">🇫🇷 Français</option>
+      <option value="en">🇬🇧 English</option>
+      <option value="es">🇪🇸 Español</option>
+      <option value="ar">🇸🇦 العربية</option>
+    </select>
+
+    <label data-key="cat">📂 Catégorie</label>
+    <select id="category"></select>
+
+    <label data-key="players">👥 Nombre de joueurs (3-12)</label>
+    <input type="number" id="players" min="3" max="12" value="5">
+
+    <label data-key="imp"># Imposteurs</label>
+    <input type="number" id="imposters" min="1" max="3" value="1">
+
+    <button id="startBtn">▶ Commencer</button>
+  </div>
+
+  <!-- Reveal -->
+  <div class="screen" id="reveal">
+    <div class="player-info" id="playerInfo"></div>
+    <div class="card" id="card">
+      <div class="label" id="tapLabel">Touchez pour voir</div>
+      <div class="word">👆</div>
+    </div>
+    <div class="info-box" id="passInfo">Passez le téléphone au joueur suivant en cachant l'écran.</div>
+    <button id="nextBtn" class="secondary">Suivant ➤</button>
+  </div>
+
+  <!-- Discussion -->
+  <div class="screen" id="discuss">
+    <div class="info-box">
+      <strong id="discussTitle">💬 Discussion!</strong>
+      <p id="discussText">Chaque joueur décrit son mot avec UN seul mot. Trouvez l'imposteur!</p>
+    </div>
+    <button id="revealBtn" class="success">🎭 Révéler l'imposteur</button>
+    <button id="restartBtn">🔄 Nouvelle partie</button>
+  </div>
+
+  <!-- Result -->
+  <div class="screen" id="result">
+    <div class="card imposter">
+      <div class="label" id="resLabel">L'imposteur était...</div>
+      <div class="word" id="resImp"></div>
+      <div class="hint" id="resWord"></div>
+    </div>
+    <button id="playAgainBtn" class="success">🔄 Rejouer</button>
+  </div>
+</div>
+
+<script>
+const T = {
+  fr: {subtitle:"Trouvez l'imposteur parmi vous!", lang:"🌍 Langue", cat:"📂 Catégorie", players:"👥 Nombre de joueurs (3-12)", imp:"# Imposteurs", start:"▶ Commencer", player:"Joueur", tap:"Touchez pour voir", pass:"Passez le téléphone au joueur suivant.", next:"Suivant ➤", impWord:"Vous êtes l'IMPOSTEUR! 🤫", impHint:"Faites semblant de connaître le mot.", discuss:"💬 Discussion!", discussTxt:"Chaque joueur décrit son mot avec UN mot. Trouvez l'imposteur!", reveal:"🎭 Révéler", restart:"🔄 Nouvelle partie", was:"L'imposteur(s) était...", word:"Le mot était:", again:"🔄 Rejouer"},
+  en: {subtitle:"Find the imposter among you!", lang:"🌍 Language", cat:"📂 Category", players:"👥 Number of players (3-12)", imp:"# Imposters", start:"▶ Start", player:"Player", tap:"Tap to reveal", pass:"Pass the phone to next player.", next:"Next ➤", impWord:"You are the IMPOSTER! 🤫", impHint:"Pretend you know the word.", discuss:"💬 Discussion!", discussTxt:"Each player describes their word with ONE word. Find the imposter!", reveal:"🎭 Reveal", restart:"🔄 New game", was:"The imposter(s) was...", word:"The word was:", again:"🔄 Play again"},
+  es: {subtitle:"¡Encuentra al impostor!", lang:"🌍 Idioma", cat:"📂 Categoría", players:"👥 Número de jugadores (3-12)", imp:"# Impostores", start:"▶ Comenzar", player:"Jugador", tap:"Toca para ver", pass:"Pasa el teléfono al siguiente jugador.", next:"Siguiente ➤", impWord:"¡Eres el IMPOSTOR! 🤫", impHint:"Finge que conoces la palabra.", discuss:"💬 ¡Discusión!", discussTxt:"Cada jugador describe su palabra con UNA palabra. ¡Encuentra al impostor!", reveal:"🎭 Revelar", restart:"🔄 Nuevo juego", was:"El impostor era...", word:"La palabra era:", again:"🔄 Jugar de nuevo"},
+  ar: {subtitle:"اعثر على الدخيل بينكم!", lang:"🌍 اللغة", cat:"📂 الفئة", players:"👥 عدد اللاعبين (3-12)", imp:"# الدخلاء", start:"▶ ابدأ", player:"لاعب", tap:"اضغط للكشف", pass:"مرر الهاتف للاعب التالي.", next:"التالي ➤", impWord:"أنت الدخيل! 🤫", impHint:"تظاهر أنك تعرف الكلمة.", discuss:"💬 نقاش!", discussTxt:"كل لاعب يصف كلمته بكلمة واحدة. اعثر على الدخيل!", reveal:"🎭 كشف", restart:"🔄 لعبة جديدة", was:"الدخيل كان...", word:"الكلمة كانت:", again:"🔄 العب مرة أخرى"}
+};
+
+const CATS = {
+  fr: {
+    "⚽ Sport":["Football","Basket-ball","Tennis","Natation","Boxe","Rugby","Golf","Volleyball","Ski","Cyclisme","Karaté","Handball","Escrime","Surf","Athlétisme"],
+    "🌟 Joueurs":["Messi","Ronaldo","Mbappé","Neymar","Zidane","Benzema","Pogba","Griezmann","Henry","Maradona","Pelé","Ronaldinho","Iniesta","Ramos","Modric"],
+    "🌍 Pays":["France","Espagne","Italie","Maroc","Japon","Brésil","Canada","Allemagne","Mexique","Inde","Égypte","Australie","Russie","Chine","Argentine"],
+    "🏛️ Lieux":["Tour Eiffel","Pyramides","Colisée","Statue de la Liberté","Taj Mahal","Mont Fuji","Sahara","Amazonie","Times Square","Big Ben","Louvre","Versailles","Niagara","Everest","Venise"],
+    "🍕 Nourriture":["Pizza","Sushi","Couscous","Tacos","Croissant","Burger","Pâtes","Salade","Crêpe","Paella","Ramen","Kebab","Tajine","Quiche","Fondue"],
+    "🎬 Acteurs":["Leonardo DiCaprio","Brad Pitt","Tom Cruise","Marion Cotillard","Omar Sy","Jean Dujardin","Will Smith","Scarlett Johansson","Robert Downey Jr","Audrey Tautou","Vincent Cassel","Sophie Marceau","Tom Hanks","Angelina Jolie","Johnny Depp"],
+    "🚗 Voitures":["Ferrari","Lamborghini","Tesla","BMW","Mercedes","Audi","Porsche","Peugeot","Renault","Toyota","Bugatti","Ford","Volkswagen","Jaguar","Mustang"],
+    "🐾 Animaux":["Lion","Tigre","Éléphant","Girafe","Pingouin","Dauphin","Aigle","Loup","Renard","Panda","Kangourou","Crocodile","Zèbre","Singe","Ours"],
+    "🎌 Anime":["Naruto","One Piece","Dragon Ball","Attack on Titan","Death Note","Bleach","My Hero Academia","Demon Slayer","Jujutsu Kaisen","Pokémon","Tokyo Ghoul","Fullmetal Alchemist","Sailor Moon","One Punch Man","Hunter x Hunter"]
+  },
+  en: {
+    "⚽ Sport":["Football","Basketball","Tennis","Swimming","Boxing","Rugby","Golf","Volleyball","Skiing","Cycling","Karate","Handball","Fencing","Surfing","Athletics"],
+    "🌟 Players":["Messi","Ronaldo","Mbappé","Neymar","Zidane","LeBron James","Michael Jordan","Federer","Nadal","Serena Williams","Tiger Woods","Maradona","Pelé","Kobe Bryant","Tom Brady"],
+    "🌍 Countries":["France","Spain","Italy","Morocco","Japan","Brazil","Canada","Germany","Mexico","India","Egypt","Australia","Russia","China","USA"],
+    "🏛️ Places":["Eiffel Tower","Pyramids","Colosseum","Statue of Liberty","Taj Mahal","Mount Fuji","Sahara","Amazon","Times Square","Big Ben","Louvre","Versailles","Niagara","Everest","Venice"],
+    "🍕 Food":["Pizza","Sushi","Couscous","Tacos","Croissant","Burger","Pasta","Salad","Pancake","Paella","Ramen","Kebab","Tajine","Quiche","Fondue"],
+    "🎬 Actors":["Leonardo DiCaprio","Brad Pitt","Tom Cruise","Will Smith","Scarlett Johansson","Robert Downey Jr","Tom Hanks","Angelina Jolie","Johnny Depp","Morgan Freeman","Meryl Streep","Denzel Washington","Emma Stone","Ryan Gosling","Jennifer Lawrence"],
+    "🚗 Cars":["Ferrari","Lamborghini","Tesla","BMW","Mercedes","Audi","Porsche","Peugeot","Renault","Toyota","Bugatti","Ford","Volkswagen","Jaguar","Mustang"],
+    "🐾 Animals":["Lion","Tiger","Elephant","Giraffe","Penguin","Dolphin","Eagle","Wolf","Fox","Panda","Kangaroo","Crocodile","Zebra","Monkey","Bear"],
+    "🎌 Anime":["Naruto","One Piece","Dragon Ball","Attack on Titan","Death Note","Bleach","My Hero Academia","Demon Slayer","Jujutsu Kaisen","Pokémon","Tokyo Ghoul","Fullmetal Alchemist","Sailor Moon","One Punch Man","Hunter x Hunter"]
+  },
+  es: {
+    "⚽ Deporte":["Fútbol","Baloncesto","Tenis","Natación","Boxeo","Rugby","Golf","Voleibol","Esquí","Ciclismo","Kárate","Balonmano","Esgrima","Surf","Atletismo"],
+    "🌟 Jugadores":["Messi","Ronaldo","Mbappé","Neymar","Zidane","Iniesta","Xavi","Sergio Ramos","Pique","Casillas","Maradona","Pelé","Ronaldinho","Modric","Benzema"],
+    "🌍 Países":["Francia","España","Italia","Marruecos","Japón","Brasil","Canadá","Alemania","México","India","Egipto","Australia","Rusia","China","Argentina"],
+    "🏛️ Lugares":["Torre Eiffel","Pirámides","Coliseo","Estatua de la Libertad","Taj Mahal","Monte Fuji","Sahara","Amazonas","Times Square","Big Ben","Louvre","Versalles","Niágara","Everest","Venecia"],
+    "🍕 Comida":["Pizza","Sushi","Cuscús","Tacos","Croissant","Hamburguesa","Pasta","Ensalada","Crepe","Paella","Ramen","Kebab","Tajine","Quiche","Fondue"],
+    "🎬 Actores":["Leonardo DiCaprio","Brad Pitt","Tom Cruise","Penélope Cruz","Antonio Banderas","Javier Bardem","Will Smith","Scarlett Johansson","Robert Downey Jr","Salma Hayek","Tom Hanks","Angelina Jolie","Johnny Depp","Bardem","Eugenio Derbez"],
+    "🚗 Coches":["Ferrari","Lamborghini","Tesla","BMW","Mercedes","Audi","Porsche","Peugeot","Renault","Toyota","Bugatti","Ford","Volkswagen","Jaguar","Mustang"],
+    "🐾 Animales":["León","Tigre","Elefante","Jirafa","Pingüino","Delfín","Águila","Lobo","Zorro","Panda","Canguro","Cocodrilo","Cebra","Mono","Oso"],
+    "🎌 Anime":["Naruto","One Piece","Dragon Ball","Attack on Titan","Death Note","Bleach","My Hero Academia","Demon Slayer","Jujutsu Kaisen","Pokémon","Tokyo Ghoul","Fullmetal Alchemist","Sailor Moon","One Punch Man","Hunter x Hunter"]
+  },
+  ar: {
+    "⚽ رياضة":["كرة القدم","كرة السلة","التنس","السباحة","الملاكمة","الرغبي","الجولف","الكرة الطائرة","التزلج","ركوب الدراجات","الكاراتيه","كرة اليد","المبارزة","ركوب الأمواج","ألعاب القوى"],
+    "🌟 لاعبين":["ميسي","رونالدو","مبابي","نيمار","زيدان","صلاح","حكيمي","بنزيما","بوغبا","رياض محرز","مارادونا","بيليه","رونالدينيو","إنييستا","مودريتش"],
+    "🌍 دول":["فرنسا","إسبانيا","إيطاليا","المغرب","اليابان","البرازيل","كندا","ألمانيا","المكسيك","الهند","مصر","أستراليا","روسيا","الصين","السعودية"],
+    "🏛️ أماكن":["برج إيفل","الأهرامات","الكولوسيوم","تمثال الحرية","تاج محل","جبل فوجي","الصحراء","الأمازون","تايمز سكوير","بيغ بن","اللوفر","فرساي","نياغرا","إيفرست","البندقية"],
+    "🍕 طعام":["بيتزا","سوشي","كسكس","تاكو","كرواسون","برغر","معكرونة","سلطة","كريب","بايلا","رامن","كباب","طاجين","كيش","فوندو"],
+    "🎬 ممثلين":["ليوناردو دي كابريو","براد بيت","توم كروز","ويل سميث","سكارليت جوهانسون","روبرت داوني","توم هانكس","أنجلينا جولي","جوني ديب","عادل إمام","أحمد حلمي","منى زكي","يسرا","نادين نسيب نجيم","تيم حسن"],
+    "🚗 سيارات":["فيراري","لامبورغيني","تيسلا","بي إم دبليو","مرسيدس","أودي","بورش","بيجو","رينو","تويوتا","بوغاتي","فورد","فولكس فاغن","جاكوار","موستانغ"],
+    "🐾 حيوانات":["أسد","نمر","فيل","زرافة","بطريق","دلفين","نسر","ذئب","ثعلب","باندا","كنغر","تمساح","حمار وحشي","قرد","دب"],
+    "🎌 أنمي":["ناروتو","ون بيس","دراغون بول","هجوم العمالقة","مذكرة الموت","بليتش","بطلي الأكاديمي","قاتل الشياطين","جوجوتسو كايسن","بوكيمون","طوكيو غول","الخيميائي","سيلور مون","ون بانش مان","هانتر إكس هانتر"]
+  }
+};
+
+let state = { lang:'fr', words:[], imposterIndices:[], word:'', current:0, total:5, imp:1 };
+
+const $ = id => document.getElementById(id);
+
+function applyLang() {
+  const t = T[state.lang];
+  document.documentElement.dir = state.lang === 'ar' ? 'rtl' : 'ltr';
+  $('subtitle').textContent = t.subtitle;
+  document.querySelectorAll('[data-key]').forEach(el => el.textContent = t[el.dataset.key]);
+  $('startBtn').textContent = t.start;
+  $('nextBtn').textContent = t.next;
+  $('revealBtn').textContent = t.reveal;
+  $('restartBtn').textContent = t.restart;
+  $('playAgainBtn').textContent = t.again;
+  $('discussTitle').textContent = t.discuss;
+  $('discussText').textContent = t.discussTxt;
+  $('passInfo').textContent = t.pass;
+  $('tapLabel').textContent = t.tap;
+  $('resLabel').textContent = t.was;
+  // categories
+  const cat = $('category');
+  cat.innerHTML = '';
+  Object.keys(CATS[state.lang]).forEach(c => {
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    cat.appendChild(o);
+  });
+}
+
+function beep(freq=440, dur=0.1) {
+  try {
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.frequency.value = freq; o.connect(g); g.connect(ctx.destination);
+    g.gain.setValueAtTime(0.2, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime+dur);
+    o.start(); o.stop(ctx.currentTime+dur);
+  } catch(e){}
+}
+
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $(id).classList.add('active');
+}
+
+$('lang').addEventListener('change', e => { state.lang = e.target.value; applyLang(); });
+
+$('startBtn').addEventListener('click', () => {
+  state.total = Math.max(3, Math.min(12, +$('players').value));
+  state.imp = Math.max(1, Math.min(state.total-2, +$('imposters').value));
+  const cat = $('category').value;
+  const words = CATS[state.lang][cat];
+  state.word = words[Math.floor(Math.random()*words.length)];
+  // pick imposter indices
+  const idx = Array.from({length:state.total}, (_,i)=>i);
+  state.imposterIndices = [];
+  for (let i=0;i<state.imp;i++){
+    const r = Math.floor(Math.random()*idx.length);
+    state.imposterIndices.push(idx.splice(r,1)[0]);
+  }
+  state.current = 0;
+  showPlayer();
+  show('reveal');
+});
+
+function showPlayer() {
+  const t = T[state.lang];
+  $('playerInfo').textContent = `${t.player} ${state.current+1} / ${state.total}`;
+  const card = $('card');
+  card.className = 'card';
+  card.querySelector('.label').textContent = t.tap;
+  card.querySelector('.word').textContent = '👆';
+  let revealed = false;
+  card.onclick = () => {
+    if (revealed) return;
+    revealed = true;
+    beep(660);
+    const isImp = state.imposterIndices.includes(state.current);
+    if (isImp) {
+      card.classList.add('imposter');
+      card.querySelector('.label').textContent = '🤫';
+      card.querySelector('.word').textContent = t.impWord;
+    } else {
+      card.classList.add('revealed');
+      card.querySelector('.label').textContent = '🎯';
+      card.querySelector('.word').textContent = state.word;
+    }
+  };
+}
+
+$('nextBtn').addEventListener('click', () => {
+  beep(440);
+  state.current++;
+  if (state.current >= state.total) {
+    show('discuss');
+  } else {
+    showPlayer();
+  }
+});
+
+$('revealBtn').addEventListener('click', () => {
+  beep(880, 0.3);
+  const t = T[state.lang];
+  const names = state.imposterIndices.map(i=>`${t.player} ${i+1}`).join(', ');
+  $('resImp').textContent = names;
+  $('resWord').textContent = `${t.word} ${state.word}`;
+  show('result');
+});
+
+$('restartBtn').addEventListener('click', () => show('setup'));
+$('playAgainBtn').addEventListener('click', () => show('setup'));
+
+applyLang();
+</script>
+</body>
+</html>

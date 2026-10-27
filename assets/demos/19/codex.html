@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>Brainrot Heist Racers</title>
+<style>
+  :root{
+    --bg:#0f1220;
+    --panel:#1b2138cc;
+    --accent:#61dafb;
+    --good:#7dff9b;
+    --warn:#ffd166;
+    --bad:#ff6b6b;
+    --text:#eaf0ff;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);font-family:Inter,Segoe UI,Arial,sans-serif;color:var(--text);}
+  #game{display:block;background:#111827;}
+  .ui{
+    position:fixed;top:10px;left:10px;z-index:10;display:flex;gap:10px;pointer-events:none;
+  }
+  .panel{
+    background:var(--panel);backdrop-filter:blur(4px);border:1px solid #ffffff22;border-radius:10px;
+    padding:10px;min-width:260px;pointer-events:auto;
+  }
+  .panel h3{margin:0 0 8px;font-size:14px;color:var(--accent);letter-spacing:.4px;}
+  .row{display:flex;gap:6px;align-items:center;margin:4px 0;}
+  .row label{font-size:12px;opacity:.9;min-width:85px;}
+  button,select,input[type="color"]{
+    background:#2a3357;border:1px solid #ffffff22;color:var(--text);padding:6px 8px;border-radius:7px;font-size:12px;
+  }
+  button:hover{filter:brightness(1.1);cursor:pointer;}
+  button:active{transform:translateY(1px);}
+  #stats{font-size:12px;line-height:1.45;}
+  #feed{
+    position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:20;
+    background:#0000008f;border:1px solid #ffffff33;border-radius:8px;padding:8px 12px;font-size:12px;min-width:300px;text-align:center;
+  }
+  #help{
+    position:fixed;top:10px;right:10px;z-index:10;background:var(--panel);border:1px solid #ffffff22;border-radius:10px;padding:10px;
+    width:280px;font-size:12px;line-height:1.4;
+  }
+  .tiny{font-size:11px;opacity:.8}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="ui">
+  <div class="panel" style="width:290px">
+    <h3>Player / Economy</h3>
+    <div id="stats"></div>
+    <div class="row"><button id="auraBtn">Click Aura (+Multiplier)</button></div>
+    <div class="row"><button id="defBtn">Upgrade Base Defense</button></div>
+    <div class="row"><button id="hatchBtn">Hatch Pet Egg</button></div>
+    <div class="tiny" id="petInfo">Pet: None</div>
+  </div>
+
+  <div class="panel" style="width:300px">
+    <h3>Vehicle Empire</h3>
+    <div class="row">
+      <label>Model</label>
+      <select id="carSelect"></select>
+    </div>
+    <div class="row">
+      <button id="buyBtn">Buy</button>
+      <button id="equipBtn">Equip</button>
+      <button id="engBtn">Engine Upgrade</button>
+    </div>
+    <div class="row">
+      <label>Paint</label>
+      <input id="colorPick" type="color" value="#58a6ff"/>
+      <button id="paintBtn">Apply Paint</button>
+    </div>
+    <div class="tiny" id="carInfo"></div>
+  </div>
+</div>
+
+<div id="help">
+  <b>Controls</b><br>
+  WASD / Arrows: Move<br>
+  E: Interact (pick up / deposit / enter-exit car)<br>
+  R: Start race at Race Gate<br><br>
+  <b>Loop</b>: Grab Brainrot in center → carry it home (vulnerable) → passive cash from stored Brainrot → buy/upgrade cars → win races → improve defenses, aura, pets.
+</div>
+
+<div id="feed">Welcome to Brainrot Heist Racers!</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+
+  const WORLD = { w: 3200, h: 2200 };
+  const CENTER_ZONE = { x: WORLD.w/2, y: WORLD.h/2, r: 170 };
+  const PLAYER_BASE = { x: 350, y: 350, r: 120 };
+  const GARAGE = { x: 420, y: 430, r: 55 };
+  const RACE_GATE = { x: 2550, y: 1080, r: 75 };
+  const BANDIT_OUTPOST = { x: 2950, y: 250, r: 80 };
+
+  const checkpoints = [
+    {x: 2550, y: 1080},
+    {x: 2850, y: 450},
+    {x: 2950, y: 1700},
+    {x: 2100, y: 1850},
+    {x: 1750, y: 900}
+  ];
+
+  const state = {
+    cash: 1200,
+    aura: 0,
+    auraMult: 1,
+    baseBrainrot: 0,
+    carrying: null,
+    defenseLevel: 1,
+    passiveTick: 0,
+    spawnTick: 0,
+    raidTick: 0,
+    messageTime: 0,
+    worldTime: 0
+  };
+
+  const player = {
+    x: 500, y: 500, vx: 0, vy: 0, r: 14,
+    inVehicle: false,
+    equippedCar: 'Starter',
+    facing: 0
+  };
+
+  const carCatalog = {
+    Starter: { cost: 0, speed: 210, accel: 8, color:'#58a6ff' },
+    Coupe:   { cost: 3000, speed: 260, accel: 9, color:'#f4a261' },
+    Super:   { cost: 9000, speed: 330, accel: 10, color:'#e76f51' },
+    Hyper:   { cost: 22000, speed: 410, accel: 11, color:'#9d4edd' }
+  };
+  const ownedCars = { Starter: { engine:0, color:carCatalog.Starter.color } };
+
+  const pets = [
+    {name:'Cheetah', race:1.22, steal:1.00, income:1.00, color:'#ffd166', rarity:'Rare'},
+    {name:'Raccoon', race:1.04, steal:1.35, income:1.00, color:'#bde0fe', rarity:'Rare'},
+    {name:'Owl',     race:1.00, steal:1.05, income:1.32, color:'#caffbf', rarity:'Rare'},
+    {name:'Dragon',  race:1.24, steal:1.30, income:1.26, color:'#ff99c8', rarity:'Epic'},
+    {name:'Sloth',   race:0.96, steal:1.18, income:1.44, color:'#a0c4ff', rarity:'Uncommon'}
+  ];
+  let activePet = null;
+
+  const race = {
+    active:false, playerCp:0, playerLapDone:false,
+    ai:[], finishedAI:0, finishPlace:0, startTime:0
+  };
+
+  const brainrotItems = [];
+  const bandits = [];
+
+  for(let i=0;i<7;i++){
+    bandits.push({
+      x: BANDIT_OUTPOST.x + (Math.random()-0.5)*120,
+      y: BANDIT_OUTPOST.y + (Math.random()-0.5)*120,
+      r: 12, speed: 110 + Math.random()*20,
+      mode: 'roam', hp: 100, targetX: Math.random()*WORLD.w, targetY: Math.random()*WORLD.h,
+      raidIntent:false
+    });
+  }
+
+  function msg(t){
+    document.getElementById('feed').textContent = t;
+    state.messageTime = 3.2;
+  }
+
+  function resize(){
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  const keys = {};
+  const just = {};
+  addEventListener('keydown', e => {
+    if (!keys[e.key]) just[e.key] = true;
+    keys[e.key] = true;
+  });
+  addEventListener('keyup', e => keys[e.key] = false);
+
+  function dist(a,b,c,d){ return Math.hypot(a-c,b-d); }
+  function clamp(v,min,max){ return v<min?min:v>max?max:v; }
+
+  function getPetBuffs(){
+    return activePet ? {race:activePet.race, steal:activePet.steal, income:activePet.income} : {race:1,steal:1,income:1};
+  }
+
+  function currentCarStats(){
+    const model = player.equippedCar;
+    const base = carCatalog[model];
+    const own = ownedCars[model];
+    const eng = own ? own.engine : 0;
+    return {
+      maxSpeed: (base.speed + eng*22) * getPetBuffs().race,
+      accel: base.accel,
+      color: own?.color || base.color
+    };
+  }
+
+  function spawnBrainrot(){
+    const a = Math.random()*Math.PI*2;
+    const rr = Math.random()*(CENTER_ZONE.r-18);
+    brainrotItems.push({
+      x: CENTER_ZONE.x + Math.cos(a)*rr,
+      y: CENTER_ZONE.y + Math.sin(a)*rr,
+      r: 8
+    });
+  }
+
+  function tryInteract(){
+    if (dist(player.x, player.y, GARAGE.x, GARAGE.y) < GARAGE.r + 24){
+      player.inVehicle = !player.inVehicle;
+      msg(player.inVehicle ? `Entered ${player.equippedCar}` : 'Exited vehicle');
+      return;
+    }
+    if (dist(player.x, player.y, PLAYER_BASE.x, PLAYER_BASE.y) < PLAYER_BASE.r){
+      if (state.carrying){
+        state.baseBrainrot++;
+        state.carrying = null;
+        msg('Brainrot delivered to base vault.');
+        return;
+      }
+    }
+    if (!state.carrying){
+      let idx = -1, best = 99999;
+      for(let i=0;i<brainrotItems.length;i++){
+        const d = dist(player.x, player.y, brainrotItems[i].x, brainrotItems[i].y);
+        if (d < 28 && d < best){ best = d; idx = i; }
+      }
+      if (idx !== -1){
+        state.carrying = brainrotItems.splice(idx,1)[0];
+        msg('Picked up Brainrot! You are vulnerable while carrying.');
+      }
+    }
+  }
+
+  function startRace(){
+    race.active = true;
+    race.playerCp = 0;
+    race.playerLapDone = false;
+    race.ai = [];
+    race.finishedAI = 0;
+    race.finishPlace = 0;
+    race.startTime = state.worldTime;
+    for(let i=0;i<3;i++){
+      race.ai.push({
+        x:RACE_GATE.x - 30 - i*24, y:RACE_GATE.y + 40 + i*18, cp:0, finished:false,
+        speed:(210 + Math.random()*100) * (0.95 + Math.random()*0.15)
+      });
+    }
+    msg('Race started! Hit all checkpoints.');
+  }
+
+  function finishPlayerRace(){
+    if (!race.active || race.finishPlace) return;
+    const place = race.finishedAI + 1;
+    race.finishPlace = place;
+    const rewards = [1800,1200,800,500];
+    const cashGain = Math.floor((rewards[place-1] || 350) * getPetBuffs().race * state.auraMult);
+    state.cash += cashGain;
+    msg(`Race finished: #${place} | +$${cashGain}`);
+    setTimeout(()=>{ race.active = false; }, 1400);
+  }
+
+  function updateBandits(dt){
+    const defenseRange = 120 + state.defenseLevel*35;
+    const defenseDps = 18 + state.defenseLevel*14;
+
+    for(const b of bandits){
+      if (b.hp <= 0){
+        b.x = BANDIT_OUTPOST.x + (Math.random()-0.5)*80;
+        b.y = BANDIT_OUTPOST.y + (Math.random()-0.5)*80;
+        b.hp = 100;
+        b.mode = 'roam';
+      }
+
+      const dToPlayer = dist(b.x,b.y,player.x,player.y);
+      const dToBase = dist(b.x,b.y,PLAYER_BASE.x,PLAYER_BASE.y);
+
+      if (state.carrying && dToPlayer < 380){
+        b.mode = 'chase';
+      } else if (state.raidTick > 8 && state.baseBrainrot > 0 && Math.random() < 0.0025){
+        b.mode = 'raid';
+      } else if (Math.random() < 0.004){
+        b.mode = 'roam';
+        b.targetX = Math.random()*WORLD.w; b.targetY = Math.random()*WORLD.h;
+      }
+
+      if (b.mode === 'chase'){
+        b.targetX = player.x; b.targetY = player.y;
+      } else if (b.mode === 'raid'){
+        b.targetX = PLAYER_BASE.x; b.targetY = PLAYER_BASE.y;
+      }
+
+      const dx = b.targetX - b.x, dy = b.targetY - b.y;
+      const len = Math.hypot(dx,dy) || 1;
+      b.x += dx/len * b.speed * dt;
+      b.y += dy/len * b.speed * dt;
+
+      if (state.carrying && dToPlayer < b.r + player.r + 2){
+        const resist = clamp(0.12 + (getPetBuffs().steal-1)*0.45, 0.1, 0.78);
+        if (Math.random() > resist){
+          state.carrying = null;
+          msg('A bandit stole your carried Brainrot!');
+        } else {
+          msg('Pet buff resisted a steal attempt!');
+        }
+      }
+
+      if (b.mode === 'raid' && dToBase < PLAYER_BASE.r - 12 && state.baseBrainrot > 0){
+        state.baseBrainrot--;
+        b.mode = 'roam';
+        b.targetX = BANDIT_OUTPOST.x; b.targetY = BANDIT_OUTPOST.y;
+        msg('Raid! A bandit stole 1 Brainrot from your base.');
+      }
+
+      if (dToBase < defenseRange){
+        b.hp -= defenseDps * dt;
+      }
+
+      b.x = clamp(b.x, 20, WORLD.w-20);
+      b.y = clamp(b.y, 20, WORLD.h-20);
+    }
+  }
+
+  function updateRace(dt){
+    if (!race.active) return;
+
+    const cp = checkpoints[race.playerCp % checkpoints.length];
+    if (dist(player.x,player.y,cp.x,cp.y) < 55){
+      race.playerCp++;
+      if (race.playerCp >= checkpoints.length){
+        finishPlayerRace();
+      }
+    }
+
+    for(const ai of race.ai){
+      if (ai.finished) continue;
+      const target = checkpoints[ai.cp % checkpoints.length];
+      const dx = target.x - ai.x, dy = target.y - ai.y;
+      const len = Math.hypot(dx,dy) || 1;
+      ai.x += dx/len * ai.speed * dt;
+      ai.y += dy/len * ai.speed * dt;
+
+      if (dist(ai.x,ai.y,target.x,target.y) < 45){
+        ai.cp++;
+        if (ai.cp >= checkpoints.length){
+          ai.finished = true;
+          race.finishedAI++;
+        }
+      }
+    }
+  }
+
+  function updatePlayer(dt){
+    let ix = (keys['a']||keys['ArrowLeft']?-1:0) + (keys['d']||keys['ArrowRight']?1:0);
+    let iy = (keys['w']||keys['ArrowUp']?-1:0) + (keys['s']||keys['ArrowDown']?1:0);
+    const il = Math.hypot(ix,iy) || 1;
+    ix/=il; iy/=il;
+
+    const pet = getPetBuffs();
+    let speed = 155;
+    if (player.inVehicle){
+      speed = currentCarStats().maxSpeed;
+    } else if (state.carrying){
+      speed *= clamp(0.76 + (pet.steal-1)*0.26, 0.6, 1);
+    }
+
+    player.vx = ix*speed;
+    player.vy = iy*speed;
+    if (ix || iy) player.facing = Math.atan2(iy,ix);
+
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
+    player.x = clamp(player.x, 12, WORLD.w-12);
+    player.y = clamp(player.y, 12, WORLD.h-12);
+
+    if (state.carrying){
+      state.carrying.x = player.x + Math.cos(state.worldTime*8)*9;
+      state.carrying.y = player.y - 20 + Math.sin(state.worldTime*9)*3;
+    }
+
+    if (just['e'] || just['E']) tryInteract();
+    if ((just['r'] || just['R']) && player.inVehicle && dist(player.x,player.y,RACE_GATE.x,RACE_GATE.y)<RACE_GATE.r+30 && !race.active){
+      startRace();
+    }
+
+    just['e']=just['E']=just['r']=just['R']=false;
+  }
+
+  function updateEconomy(dt){
+    state.passiveTick += dt;
+    state.spawnTick += dt;
+    state.raidTick += dt;
+    state.worldTime += dt;
+    state.messageTime -= dt;
+
+    if (state.spawnTick > 1.35){
+      state.spawnTick = 0;
+      if (brainrotItems.length < 24) spawnBrainrot();
+    }
+
+    if (state.passiveTick > 1){
+      state.passiveTick = 0;
+      const gain = Math.floor(state.baseBrainrot * 2 * state.auraMult * getPetBuffs().income);
+      state.cash += gain;
+    }
+
+    if (state.messageTime < 0){
+      document.getElementById('feed').textContent = race.active
+        ? `Race CP: ${Math.min(race.playerCp,checkpoints.length)}/${checkpoints.length}`
+        : 'Collect Brainrot, defend base, race for cash.';
+    }
+  }
+
+  function drawWorld(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    const camX = clamp(player.x - canvas.width/2, 0, WORLD.w - canvas.width);
+    const camY = clamp(player.y - canvas.height/2, 0, WORLD.h - canvas.height);
+
+    ctx.save();
+    ctx.translate(-camX,-camY);
+
+    ctx.fillStyle = '#0d1327';
+    ctx.fillRect(0,0,WORLD.w,WORLD.h);
+
+    ctx.strokeStyle = '#ffffff10';
+    for(let x=0;x<WORLD.w;x+=100){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,WORLD.h); ctx.stroke(); }
+    for(let y=0;y<WORLD.h;y+=100){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(WORLD.w,y); ctx.stroke(); }
+
+    // Zones
+    drawZone(CENTER_ZONE,'#57cc99','#57cc9922','Brainrot Core');
+    drawZone(PLAYER_BASE,'#8ecae6','#8ecae622','Your Base');
+    drawZone(GARAGE,'#f4a261','#f4a26126','Garage');
+    drawZone(RACE_GATE,'#c77dff','#c77dff24','Race Gate');
+    drawZone(BANDIT_OUTPOST,'#ef476f','#ef476f24','Bandit Outpost');
+
+    // Defense range
+    ctx.strokeStyle = '#7dff9b30';
+    ctx.beginPath();
+    ctx.arc(PLAYER_BASE.x,PLAYER_BASE.y,120 + state.defenseLevel*35,0,Math.PI*2);
+    ctx.stroke();
+
+    // checkpoints
+    if (race.active){
+      checkpoints.forEach((cp,i)=>{
+        ctx.fillStyle = i === race.playerCp % checkpoints.length ? '#ffd166' : '#ffffff66';
+        ctx.beginPath(); ctx.arc(cp.x,cp.y,14,0,Math.PI*2); ctx.fill();
+      });
+    }
+
+    // Brainrot items
+    for(const it of brainrotItems){
+      ctx.fillStyle = '#39ff88';
+      ctx.beginPath(); ctx.arc(it.x,it.y,it.r,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(it.x-2,it.y-2,4,4);
+    }
+
+    // Bandits
+    for(const b of bandits){
+      ctx.fillStyle = '#ff6b6b';
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#00000066';
+      ctx.fillRect(b.x-14,b.y-18,28,4);
+      ctx.fillStyle = '#7dff9b';
+      ctx.fillRect(b.x-14,b.y-18,28*(b.hp/100),4);
+    }
+
+    // AI race cars
+    if (race.active){
+      for(const ai of race.ai){
+        ctx.save();
+        ctx.translate(ai.x,ai.y);
+        ctx.fillStyle = ai.finished ? '#95d5b2' : '#adb5bd';
+        ctx.fillRect(-13,-7,26,14);
+        ctx.restore();
+      }
+    }
+
+    // Player
+    if (player.inVehicle){
+      const car = currentCarStats();
+      ctx.save();
+      ctx.translate(player.x,player.y);
+      ctx.rotate(player.facing);
+      ctx.fillStyle = car.color;
+      ctx.fillRect(-16,-9,32,18);
+      ctx.fillStyle = '#111';
+      ctx.fillRect(-12,-10,8,3); ctx.fillRect(4,-10,8,3);
+      ctx.fillRect(-12,7,8,3); ctx.fillRect(4,7,8,3);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = '#4cc9f0';
+      ctx.beginPath(); ctx.arc(player.x,player.y,player.r,0,Math.PI*2); ctx.fill();
+    }
+
+    // carried item
+    if (state.carrying){
+      ctx.fillStyle = '#00ff88';
+      ctx.beginPath(); ctx.arc(state.carrying.x,state.carrying.y,8,0,Math.PI*2); ctx.fill();
+    }
+
+    // active pet follower
+    if (activePet){
+      const px = player.x + Math.cos(state.worldTime*3)*24;
+      const py = player.y + Math.sin(state.worldTime*3)*24;
+      ctx.fillStyle = activePet.color;
+      ctx.beginPath(); ctx.arc(px,py,7,0,Math.PI*2); ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  function drawZone(z, stroke, fill, label){
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(z.x,z.y,z.r,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#eaf0ff';
+    ctx.font = '12px sans-serif';
+    ctx.fillText(label, z.x - 30, z.y - z.r - 8);
+  }
+
+  function updateUI(){
+    const pet = getPetBuffs();
+    const cstats = currentCarStats();
+    const stats = document.getElementById('stats');
+    stats.innerHTML = `
+      Cash: <b>$${Math.floor(state.cash)}</b><br>
+      Aura: <b>${state.aura}</b> (x${state.auraMult.toFixed(2)})<br>
+      Stored Brainrot: <b>${state.baseBrainrot}</b> (passive)<br>
+      Carrying: <b>${state.carrying ? 'YES' : 'No'}</b><br>
+      Defense Level: <b>${state.defenseLevel}</b><br>
+      Mode: <b>${player.inVehicle ? 'Vehicle' : 'On Foot'}</b><br>
+      Race Buff x${pet.race.toFixed(2)} | Steal Buff x${pet.steal.toFixed(2)} | Income Buff x${pet.income.toFixed(2)}
+    `;
+
+    const sel = document.getElementById('carSelect');
+    if (!sel.dataset.init){
+      for(const m in carCatalog){
+        const o = document.createElement('option');
+        o.value = m; o.textContent = `${m} ($${carCatalog[m].cost})`;
+        sel.appendChild(o);
+      }
+      sel.value = player.equippedCar;
+      sel.dataset.init = '1';
+    }
+
+    const m = sel.value;
+    const own = ownedCars[m];
+    const base = carCatalog[m];
+    document.getElementById('carInfo').textContent =
+      `${m}: ${own?'Owned':'Not Owned'} | Top Speed ${Math.floor((base.speed + (own?.engine||0)*22)*pet.race)} | Engine Lv ${own?.engine||0}`;
+
+    document.getElementById('petInfo').textContent = activePet
+      ? `Pet: ${activePet.name} [${activePet.rarity}] | Race x${activePet.race} Steal x${activePet.steal} Income x${activePet.income}`
+      : 'Pet: None';
+  }
+
+  // UI actions
+  document.getElementById('auraBtn').onclick = () => {
+    state.aura++;
+    state.auraMult = 1 + state.aura*0.01;
+  };
+
+  document.getElementById('defBtn').onclick = () => {
+    const cost = 800 * state.defenseLevel;
+    if (state.cash >= cost){
+      state.cash -= cost;
+      state.defenseLevel++;
+      msg(`Defense upgraded to Lv ${state.defenseLevel}`);
+    } else msg('Not enough cash for defense upgrade.');
+  };
+
+  document.getElementById('hatchBtn').onclick = () => {
+    const cost = 900;
+    if (state.cash < cost){ msg('Need more cash to hatch.'); return; }
+    state.cash -= cost;
+    let roll = Math.random();
+    let pet;
+    if (roll < 0.1) pet = pets.find(p=>p.name==='Dragon');
+    else pet = pets[Math.floor(Math.random()*pets.length)];
+    activePet = {...pet};
+    msg(`Hatched ${pet.rarity} pet: ${pet.name}!`);
+  };
+
+  document.getElementById('buyBtn').onclick = () => {
+    const m = document.getElementById('carSelect').value;
+    if (ownedCars[m]) return msg(`${m} already owned.`);
+    const cost = carCatalog[m].cost;
+    if (state.cash >= cost){
+      state.cash -= cost;
+      ownedCars[m] = {engine:0,color:carCatalog[m].color};
+      msg(`Purchased ${m}`);
+    } else msg('Not enough cash.');
+  };
+
+  document.getElementById('equipBtn').onclick = () => {
+    const m = document.getElementById('carSelect').value;
+    if (!ownedCars[m]) return msg('Buy this car first.');
+    player.equippedCar = m;
+    msg(`Equipped ${m}`);
+  };
+
+  document.getElementById('engBtn').onclick = () => {
+    const m = player.equippedCar;
+    const own = ownedCars[m];
+    const cost = 1200 * (own.engine + 1);
+    if (state.cash >= cost){
+      state.cash -= cost;
+      own.engine++;
+      msg(`${m} engine upgraded to Lv ${own.engine}`);
+    } else msg('Not enough cash for engine upgrade.');
+  };
+
+  document.getElementById('paintBtn').onclick = () => {
+    const m = player.equippedCar;
+    ownedCars[m].color = document.getElementById('colorPick').value;
+    msg(`${m} repaint applied.`);
+  };
+
+  let last = performance.now();
+  function loop(t){
+    const dt = Math.min(0.033, (t-last)/1000);
+    last = t;
+
+    updatePlayer(dt);
+    updateBandits(dt);
+    updateRace(dt);
+    updateEconomy(dt);
+    drawWorld();
+    updateUI();
+
+    requestAnimationFrame(loop);
+  }
+
+  for(let i=0;i<12;i++) spawnBrainrot();
+  msg('Steal Brainrot from the core and race to build your empire!');
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

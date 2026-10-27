@@ -1,0 +1,1557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eldoria: The Sacred Crystals</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Cinzel+Decorative:wght@700&family=MedievalSharp&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0a0a0f;
+  color: #e0d5c0;
+  font-family: 'MedievalSharp', cursive;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+#game-container {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Particle system */
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: floatUp linear infinite;
+}
+
+@keyframes floatUp {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(-100vh) rotate(720deg); opacity: 0; }
+}
+
+/* Title Screen */
+#title-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, #1a1025 0%, #0a0a0f 70%);
+  z-index: 100;
+  transition: opacity 1s;
+}
+
+#title-screen.hidden { opacity: 0; pointer-events: none; }
+
+.title-glow {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: clamp(2rem, 6vw, 4.5rem);
+  color: #f0c040;
+  text-shadow: 0 0 20px #f0c04088, 0 0 40px #f0c04044, 0 0 80px #f0c04022;
+  letter-spacing: 4px;
+  animation: titlePulse 3s ease-in-out infinite;
+  text-align: center;
+  padding: 0 20px;
+}
+
+@keyframes titlePulse {
+  0%, 100% { text-shadow: 0 0 20px #f0c04088, 0 0 40px #f0c04044; }
+  50% { text-shadow: 0 0 30px #f0c040bb, 0 0 60px #f0c04066, 0 0 100px #f0c04033; }
+}
+
+.subtitle {
+  font-family: 'Cinzel', serif;
+  font-size: clamp(0.8rem, 2vw, 1.3rem);
+  color: #8877aa;
+  margin-top: 10px;
+  letter-spacing: 8px;
+  text-transform: uppercase;
+}
+
+.lore-box {
+  max-width: 600px;
+  margin: 30px auto;
+  padding: 25px 30px;
+  background: rgba(20, 15, 30, 0.8);
+  border: 1px solid #3a2a5a;
+  border-radius: 8px;
+  font-size: clamp(0.8rem, 1.5vw, 1rem);
+  line-height: 1.8;
+  color: #b0a090;
+  text-align: center;
+}
+
+.lore-box .highlight { color: #f0c040; font-weight: bold; }
+
+.btn {
+  font-family: 'Cinzel', serif;
+  font-size: 1.1rem;
+  padding: 14px 40px;
+  background: linear-gradient(135deg, #2a1a4a, #1a0a3a);
+  color: #f0c040;
+  border: 2px solid #f0c04066;
+  border-radius: 6px;
+  cursor: pointer;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  transition: all 0.3s;
+  margin-top: 20px;
+}
+
+.btn:hover {
+  background: linear-gradient(135deg, #3a2a6a, #2a1a5a);
+  border-color: #f0c040;
+  box-shadow: 0 0 20px #f0c04044;
+  transform: scale(1.05);
+}
+
+/* Game Screen */
+#game-screen {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+}
+
+#game-screen.active { display: flex; }
+
+/* Top HUD */
+#hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: linear-gradient(180deg, rgba(10,10,20,0.95), rgba(10,10,20,0.7));
+  border-bottom: 1px solid #2a1a4a;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.hud-left, .hud-right { display: flex; align-items: center; gap: 15px; }
+
+.crystal-slot {
+  width: 40px;
+  height: 40px;
+  border: 2px solid #3a2a5a;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  background: rgba(10,10,20,0.8);
+  transition: all 0.5s;
+  position: relative;
+}
+
+.crystal-slot.found {
+  border-color: #f0c040;
+  box-shadow: 0 0 15px #f0c04066;
+  animation: crystalGlow 2s ease-in-out infinite;
+}
+
+@keyframes crystalGlow {
+  0%, 100% { box-shadow: 0 0 10px #f0c04044; }
+  50% { box-shadow: 0 0 25px #f0c04088; }
+}
+
+.crystal-slot .crystal-label {
+  position: absolute;
+  bottom: -18px;
+  font-size: 0.55rem;
+  color: #665588;
+  white-space: nowrap;
+  font-family: 'Cinzel', serif;
+  letter-spacing: 1px;
+}
+
+.crystal-slot.found .crystal-label { color: #f0c040; }
+
+.hud-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Cinzel', serif;
+  font-size: 0.85rem;
+}
+
+.stat-icon { font-size: 1.1rem; }
+
+.stat-bar-container {
+  width: 100px;
+  height: 10px;
+  background: #1a1a2a;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid #3a2a5a;
+}
+
+.stat-bar {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.5s;
+}
+
+.health-bar { background: linear-gradient(90deg, #aa2222, #ff4444); }
+.mana-bar { background: linear-gradient(90deg, #2244aa, #4488ff); }
+
+/* Main Content Area */
+#main-area {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Map View */
+#map-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+#map-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #0d0d18;
+}
+
+#world-map {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.map-region {
+  position: absolute;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.4s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid transparent;
+  overflow: hidden;
+}
+
+.map-region::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  opacity: 0.3;
+  transition: opacity 0.4s;
+}
+
+.map-region:hover::before { opacity: 0.5; }
+.map-region:hover { transform: scale(1.05); z-index: 5; }
+
+.map-region.locked {
+  opacity: 0.3;
+  cursor: not-allowed;
+  filter: grayscale(0.8);
+}
+.map-region.locked:hover { transform: none; }
+
+.map-region.current {
+  border-color: #f0c040;
+  box-shadow: 0 0 20px #f0c04044;
+}
+
+.map-region.cleared {
+  border-color: #44aa44;
+}
+
+.region-icon { font-size: 2rem; z-index: 2; }
+.region-name {
+  font-family: 'Cinzel', serif;
+  font-size: 0.7rem;
+  z-index: 2;
+  margin-top: 4px;
+  text-shadow: 0 0 10px rgba(0,0,0,0.8);
+  letter-spacing: 1px;
+}
+
+.region-crystal-indicator {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  font-size: 0.9rem;
+  z-index: 2;
+}
+
+/* Region Backgrounds */
+.region-forest { background: linear-gradient(135deg, #0a1a0a, #1a2a1a); left: 5%; top: 15%; width: 28%; height: 35%; }
+.region-forest::before { background: linear-gradient(135deg, #0a2a0a, #0a3a0a); }
+
+.region-mountains { background: linear-gradient(135deg, #1a0a0a, #2a1a0a); left: 40%; top: 8%; width: 25%; height: 30%; }
+.region-mountains::before { background: linear-gradient(135deg, #2a1a0a, #3a2a0a); }
+
+.region-temple { background: linear-gradient(135deg, #0a0a2a, #0a1a3a); left: 70%; top: 20%; width: 25%; height: 35%; }
+.region-temple::before { background: linear-gradient(135deg, #0a1a4a, #0a2a5a); }
+
+.region-caves { background: linear-gradient(135deg, #1a1a0a, #2a2a1a); left: 10%; top: 55%; width: 30%; height: 35%; }
+.region-caves::before { background: linear-gradient(135deg, #2a2a0a, #3a3a1a); }
+
+.region-storm { background: linear-gradient(135deg, #1a0a2a, #2a1a3a); left: 48%; top: 50%; width: 42%; height: 40%; }
+.region-storm::before { background: linear-gradient(135deg, #2a1a4a, #3a2a5a); }
+
+/* Story Panel */
+#story-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(0deg, rgba(10,10,20,0.98), rgba(10,10,20,0.85));
+  border-top: 1px solid #2a1a4a;
+  padding: 15px 20px;
+  max-height: 40%;
+  overflow-y: auto;
+  z-index: 10;
+  transition: max-height 0.5s;
+}
+
+#story-text {
+  font-size: clamp(0.85rem, 1.5vw, 1rem);
+  line-height: 1.7;
+  color: #c0b0a0;
+}
+
+#story-text .speaker {
+  font-family: 'Cinzel', serif;
+  color: #f0c040;
+  font-weight: bold;
+}
+
+#story-text .narration { color: #a09080; font-style: italic; }
+
+#story-text .action-text { color: #88aaff; }
+
+.story-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.choice-btn {
+  font-family: 'MedievalSharp', cursive;
+  font-size: 0.9rem;
+  padding: 8px 18px;
+  background: rgba(30,20,50,0.8);
+  color: #c0b0a0;
+  border: 1px solid #3a2a5a;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.choice-btn:hover {
+  background: rgba(50,30,80,0.8);
+  border-color: #f0c040;
+  color: #f0c040;
+}
+
+/* Scene View (for encounters/puzzles) */
+#scene-view {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  background: rgba(5,5,15,0.95);
+}
+
+#scene-view.active { display: flex; }
+
+.scene-title {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: clamp(1.2rem, 3vw, 2rem);
+  color: #f0c040;
+  text-shadow: 0 0 20px #f0c04044;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.scene-content {
+  max-width: 600px;
+  width: 90%;
+  text-align: center;
+}
+
+.scene-description {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: #b0a090;
+  margin-bottom: 20px;
+}
+
+/* Puzzle: Memory */
+.memory-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.memory-card {
+  aspect-ratio: 1;
+  background: linear-gradient(135deg, #2a1a4a, #1a0a3a);
+  border: 2px solid #3a2a5a;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  user-select: none;
+}
+
+.memory-card:hover { border-color: #f0c040; }
+.memory-card.flipped { background: linear-gradient(135deg, #3a2a6a, #2a1a5a); border-color: #f0c040; }
+.memory-card.matched { background: linear-gradient(135deg, #1a3a1a, #0a2a0a); border-color: #44aa44; }
+
+/* Puzzle: Runes */
+.rune-puzzle {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+
+.rune-stone {
+  width: 70px;
+  height: 90px;
+  background: linear-gradient(180deg, #2a2a3a, #1a1a2a);
+  border: 2px solid #4a3a6a;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  user-select: none;
+}
+
+.rune-stone:hover { border-color: #f0c040; transform: translateY(-5px); }
+.rune-stone.selected { border-color: #f0c040; box-shadow: 0 0 15px #f0c04044; }
+.rune-stone.correct { border-color: #44aa44; background: linear-gradient(180deg, #1a3a1a, #0a2a0a); }
+.rune-stone.wrong { border-color: #aa2222; animation: shake 0.5s; }
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  75% { transform: translateX(8px); }
+}
+
+/* Combat */
+.combat-arena {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  width: 100%;
+  max-width: 500px;
+  margin: 20px 0;
+}
+
+.combatant {
+  text-align: center;
+}
+
+.combatant-sprite {
+  font-size: 3.5rem;
+  margin-bottom: 10px;
+  transition: transform 0.3s;
+}
+
+.combatant-sprite.attacking {
+  animation: attackAnim 0.5s;
+}
+
+@keyframes attackAnim {
+  0% { transform: translateX(0); }
+  30% { transform: translateX(30px); }
+  60% { transform: translateX(-10px); }
+  100% { transform: translateX(0); }
+}
+
+.combatant-sprite.hit {
+  animation: hitAnim 0.5s;
+}
+
+@keyframes hitAnim {
+  0%, 100% { filter: none; }
+  25% { filter: brightness(3) hue-rotate(180deg); transform: translateX(-5px); }
+  50% { filter: brightness(3) hue-rotate(180deg); transform: translateX(5px); }
+}
+
+.combat-hp-bar {
+  width: 120px;
+  height: 8px;
+  background: #1a1a2a;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 5px auto;
+}
+
+.combat-hp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #aa2222, #ff4444);
+  border-radius: 4px;
+  transition: width 0.5s;
+}
+
+.combat-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 15px;
+}
+
+.combat-btn {
+  font-family: 'Cinzel', serif;
+  font-size: 0.85rem;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #2a1a4a, #1a0a3a);
+  color: #f0c040;
+  border: 1px solid #3a2a5a;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.combat-btn:hover {
+  border-color: #f0c040;
+  box-shadow: 0 0 10px #f0c04044;
+}
+
+.combat-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Crystal Collection Animation */
+.crystal-collect {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 200;
+  text-align: center;
+  display: none;
+}
+
+.crystal-collect.active { display: block; }
+
+.crystal-collect-icon {
+  font-size: 5rem;
+  animation: crystalSpin 1s ease-out;
+}
+
+@keyframes crystalSpin {
+  0% { transform: scale(0) rotate(0deg); opacity: 0; }
+  50% { transform: scale(1.5) rotate(180deg); opacity: 1; }
+  100% { transform: scale(1) rotate(360deg); opacity: 1; }
+}
+
+.crystal-collect-text {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 1.5rem;
+  color: #f0c040;
+  text-shadow: 0 0 20px #f0c04088;
+  margin-top: 15px;
+  animation: fadeInUp 0.5s ease-out 0.5s both;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Victory Screen */
+#victory-screen {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, #1a1a0a 0%, #0a0a0f 70%);
+  z-index: 300;
+  text-align: center;
+  padding: 20px;
+}
+
+#victory-screen.active { display: flex; }
+
+.victory-title {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: clamp(1.5rem, 4vw, 3rem);
+  color: #f0c040;
+  text-shadow: 0 0 30px #f0c04088, 0 0 60px #f0c04044;
+  margin-bottom: 20px;
+}
+
+.victory-text {
+  max-width: 500px;
+  font-size: 1rem;
+  line-height: 1.8;
+  color: #c0b0a0;
+  margin-bottom: 30px;
+}
+
+.victory-crystals {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+.victory-crystal {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  animation: victoryPulse 2s ease-in-out infinite;
+  border: 2px solid #f0c040;
+  box-shadow: 0 0 20px #f0c04044;
+}
+
+@keyframes victoryPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+/* Back button */
+.back-btn {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 15;
+  font-family: 'Cinzel', serif;
+  font-size: 0.8rem;
+  padding: 6px 14px;
+  background: rgba(20,15,30,0.8);
+  color: #8877aa;
+  border: 1px solid #3a2a5a;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.back-btn:hover { color: #f0c040; border-color: #f0c040; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0a0a0f; }
+::-webkit-scrollbar-thumb { background: #3a2a5a; border-radius: 3px; }
+
+/* Notification */
+.notification {
+  position: fixed;
+  top: 60px;
+  right: 20px;
+  padding: 12px 20px;
+  background: rgba(20,15,30,0.95);
+  border: 1px solid #3a2a5a;
+  border-radius: 8px;
+  font-family: 'Cinzel', serif;
+  font-size: 0.85rem;
+  color: #f0c040;
+  z-index: 100;
+  animation: notifSlide 0.3s ease-out, notifFade 0.5s ease-in 2s forwards;
+}
+
+@keyframes notifSlide {
+  from { transform: translateX(100px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes notifFade {
+  to { opacity: 0; transform: translateX(50px); }
+}
+
+/* Lightning effect */
+.lightning {
+  position: absolute;
+  inset: 0;
+  background: rgba(200, 200, 255, 0.1);
+  pointer-events: none;
+  z-index: 50;
+  animation: lightningFlash 0.15s ease-out;
+}
+
+@keyframes lightningFlash {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Darkness overlay */
+#darkness-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  transition: background 2s;
+  background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.7) 100%);
+}
+
+#darkness-overlay.light {
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.2) 100%);
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .map-region { font-size: 0.6rem; }
+  .region-icon { font-size: 1.5rem; }
+  .region-name { font-size: 0.55rem; }
+  .crystal-slot { width: 32px; height: 32px; font-size: 1rem; }
+  .stat-bar-container { width: 60px; }
+  .memory-grid { grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .memory-card { font-size: 1.1rem; }
+  .rune-stone { width: 55px; height: 70px; font-size: 1.5rem; }
+}
+</style>
+</head>
+<body>
+<div id="game-container">
+  <!-- Particles -->
+  <div id="particles"></div>
+
+  <!-- Title Screen -->
+  <div id="title-screen">
+    <div class="title-glow">Eldoria</div>
+    <div class="subtitle">The Sacred Crystals</div>
+    <div class="lore-box">
+      Long ago, there was a peaceful kingdom called <span class="highlight">Eldoria</span>. The people lived in harmony, and the land was full of life. One dark night, an evil sorcerer known as <span class="highlight">Dark Lord Vexar</span> attacked the kingdom using forbidden magic. The king was killed, the land was destroyed, and darkness spread everywhere.<br><br>
+      Before the kingdom fell, the ancient guardians hid <span class="highlight">five Sacred Crystals</span> across the world. These crystals are the only hope to restore Eldoria.<br><br>
+      <em>You are the last guardian. The quest begins now.</em>
+    </div>
+    <button class="btn" onclick="startGame()">Begin the Quest</button>
+  </div>
+
+  <!-- Game Screen -->
+  <div id="game-screen">
+    <!-- HUD -->
+    <div id="hud">
+      <div class="hud-left">
+        <div class="hud-stat">
+          <span class="stat-icon">❤️</span>
+          <div class="stat-bar-container">
+            <div class="stat-bar health-bar" id="health-bar" style="width:100%"></div>
+          </div>
+          <span id="health-text">100</span>
+        </div>
+        <div class="hud-stat">
+          <span class="stat-icon">💎</span>
+          <div class="stat-bar-container">
+            <div class="stat-bar mana-bar" id="mana-bar" style="width:100%"></div>
+          </div>
+          <span id="mana-text">100</span>
+        </div>
+      </div>
+      <div class="hud-right" id="crystal-slots"></div>
+    </div>
+
+    <!-- Main Area -->
+    <div id="main-area">
+      <!-- Map View -->
+      <div id="map-view">
+        <div id="map-container">
+          <div id="world-map">
+            <div class="map-region region-forest" data-region="forest" onclick="enterRegion('forest')">
+              <div class="region-crystal-indicator" id="forest-crystal">🔒</div>
+              <div class="region-icon">🌲</div>
+              <div class="region-name">Darkwood Forest</div>
+            </div>
+            <div class="map-region region-mountains" data-region="mountains" onclick="enterRegion('mountains')">
+              <div class="region-crystal-indicator" id="mountains-crystal">🔒</div>
+              <div class="region-icon">🌋</div>
+              <div class="region-name">Burning Mountains</div>
+            </div>
+            <div class="map-region region-temple" data-region="temple" onclick="enterRegion('temple')">
+              <div class="region-crystal-indicator" id="temple-crystal">🔒</div>
+              <div class="region-icon">🏛️</div>
+              <div class="region-name">Sunken Temple</div>
+            </div>
+            <div class="map-region region-caves" data-region="caves" onclick="enterRegion('caves')">
+              <div class="region-crystal-indicator" id="caves-crystal">🔒</div>
+              <div class="region-icon">⛏️</div>
+              <div class="region-name">Crystal Caves</div>
+            </div>
+            <div class="map-region region-storm" data-region="storm" onclick="enterRegion('storm')">
+              <div class="region-crystal-indicator" id="storm-crystal">🔒</div>
+              <div class="region-icon">⛈️</div>
+              <div class="region-name">Storm Peaks</div>
+            </div>
+          </div>
+          <div id="darkness-overlay"></div>
+        </div>
+
+        <!-- Story Panel -->
+        <div id="story-panel">
+          <div id="story-text">
+            <span class="narration">You stand at the edge of the ruined kingdom. The sky is choked with dark clouds, and the land stretches before you, scarred by Vexar's magic. The five Sacred Crystals must be found before the darkness consumes all of Eldoria.</span>
+          </div>
+          <div class="story-choices" id="story-choices"></div>
+        </div>
+      </div>
+
+      <!-- Scene View -->
+      <div id="scene-view">
+        <button class="back-btn" onclick="exitScene()">← Return to Map</button>
+        <div class="scene-content" id="scene-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Crystal Collection Animation -->
+  <div class="crystal-collect" id="crystal-collect">
+    <div class="crystal-collect-icon" id="collect-icon">💎</div>
+    <div class="crystal-collect-text" id="collect-text">Crystal Found!</div>
+  </div>
+
+  <!-- Victory Screen -->
+  <div id="victory-screen">
+    <div class="victory-title">✦ Eldoria is Restored ✦</div>
+    <div class="victory-crystals">
+      <div class="victory-crystal">🌲</div>
+      <div class="victory-crystal">🌋</div>
+      <div class="victory-crystal">🏛️</div>
+      <div class="victory-crystal">⛏️</div>
+      <div class="victory-crystal">⛈️</div>
+    </div>
+    <div class="victory-text">
+      With all five Sacred Crystals united, a brilliant light erupted across Eldoria. The dark clouds parted, sunlight flooded the land, and the ruins began to heal. Vexar's sorcery shattered like glass, and the ancient kingdom was reborn.<br><br>
+      The people emerged from hiding, weeping with joy as the flowers bloomed and rivers ran clear once more. You, the last guardian, had saved them all.<br><br>
+      <em>Eldoria lives again, thanks to your courage.</em>
+    </div>
+    <button class="btn" onclick="location.reload()">Play Again</button>
+  </div>
+</div>
+
+<script>
+// Game State
+const state = {
+  health: 100,
+  maxHealth: 100,
+  mana: 100,
+  maxMana: 100,
+  crystals: { forest: false, mountains: false, temple: false, caves: false, storm: false },
+  currentRegion: null,
+  visitedRegions: [],
+  storyStep: 0,
+  gameStarted: false
+};
+
+const crystalNames = {
+  forest: 'Crystal of Light',
+  mountains: 'Crystal of Fire',
+  temple: 'Crystal of Water',
+  caves: 'Crystal of Earth',
+  storm: 'Crystal of Wind'
+};
+
+const crystalIcons = {
+  forest: '💚',
+  mountains: '🔴',
+  temple: '🔵',
+  caves: '🟡',
+  storm: '⚪'
+};
+
+// Story data
+const stories = {
+  forest: {
+    intro: `<span class="narration">You enter the Darkwood Forest. Ancient trees twist like skeletal fingers against the bruised sky. The air is thick with a malevolent energy — Vexar's dark magic seeps from the soil itself. Somewhere in this forest, the <span class="highlight">Crystal of Light</span> waits.</span>`,
+    choices: [
+      { text: '🔦 Venture deeper into the forest', action: () => forestPuzzle() },
+      { text: '🧘 Meditate to sense the crystal', action: () => forestMeditate() }
+    ],
+    meditate: `<span class="narration">You close your eyes and reach out with your mind. A faint green glow pulses from the eastern grove — the Crystal of Light is nearby, but it is guarded by an ancient enchantment. To pass, you must prove your wisdom by matching the sacred symbols.</span>`,
+    puzzle: `<span class="narration">Before you stands a stone altar covered in glowing runes. The Crystal of Light hovers above it, protected by a memory seal. You must find all matching pairs of runes to break the enchantment.</span>`,
+    victory: `<span class="narration">The green light of the Crystal of Light bursts forth, illuminating the darkened forest. Vines wither and fall away as the crystal's pure energy purifies the corrupted trees. You feel the forest's gratitude — a gentle warmth spreads through you, restoring your strength.</span>`
+  },
+  mountains: {
+    intro: `<span class="narration">The Burning Mountains rise before you, their peaks wreathed in ash and ember. The ground trembles beneath your feet as lava flows through cracks in the earth. The <span class="highlight">Crystal of Fire</span> lies within the volcano's heart, guarded by Vexar's most fearsome creation.</span>`,
+    choices: [
+      { text: '⚔️ Face the Shadow Dragon', action: () => startCombat('dragon') },
+      { text: '🏃 Sneak past the dragon', action: () => sneakMountain() }
+    ],
+    sneak: `<span class="narration">You creep through the rocky passageways, avoiding the dragon's blazing gaze. But the ground beneath you crumbles! The dragon awakens and blocks your path. There is no choice now — you must fight!</span>`,
+    puzzle: `<span class="narration">After a fierce battle, the Shadow Dragon falls. Its ashes reveal a hidden chamber where the Crystal of Fire pulses with inner flame. But the chamber's door requires a sequence of ancient fire runes to open.</span>`,
+    victory: `<span class="narration">The Crystal of Fire ignites with brilliant orange light. The volcanic energy surges, and you feel the raw power of creation coursing through you. The mountains shake — not in anger, but in renewal.</span>`
+  },
+  temple: {
+    intro: `<span class="narration">The Sunken Temple rises from a vast, dark lake. Its marble columns are cracked and covered in black moss. The <span class="highlight">Crystal of Water</span> is said to be hidden in the temple's deepest sanctum, protected by Vexar's water elementals.</span>`,
+    choices: [
+      { text: '🚣 Enter through the main gate', action: () => templePuzzle() },
+      { text: '🏊 Swim through the underwater passage', action: () => swimTemple() }
+    ],
+    swim: `<span class="narration">You dive into the dark waters, swimming through the submerged corridors. The pressure builds, and shadowy figures begin to close in around you. You must solve the temple's water puzzle quickly before the elementals overwhelm you.</span>`,
+    puzzle: `<span class="narration">The temple's sanctum is filled with still water. In its center, the Crystal of Water floats, surrounded by a circular pattern of water symbols. You must arrange the symbols in the correct order — the sequence of the tides — to claim the crystal.</span>`,
+    victory: `<span class="narration">The Crystal of Water shimmers with deep blue light. The dark lake clears, and the temple's ancient beauty is restored. You feel a wave of calm wash over you, healing your wounds and sharpening your mind.</span>`
+  },
+  caves: {
+    intro: `<span class="narration">The Crystal Caves stretch deep beneath the earth. Stalactites glint with mineral deposits, and the walls seem to breathe with a faint luminescence. The <span class="highlight">Crystal of Earth</span> rests in the deepest chamber, guarded by stone golems animated by Vexar's dark magic.</span>`,
+    choices: [
+      { text: '🗡️ Fight through the golems', action: () => startCombat('golem') },
+      { text: '🧩 Solve the cave maze', action: () => cavePuzzle() }
+    ],
+    puzzle: `<span class="narration">The cave maze shifts and rearranges itself. Stone walls slide with grinding sounds. To find the Crystal of Earth, you must navigate the labyrinth by remembering the correct path. The walls glow with earth runes that reveal the way.</span>`,
+    victory: `<span class="narration">The Crystal of Earth blazes with golden light. The cavern resonates with a deep, grounding frequency. The stone golems crumble to dust, and the cave stabilizes. You feel unshakeable resolve fill your being.</span>`
+  },
+  storm: {
+    intro: `<span class="narration">The Storm Peaks pierce the heavens, wreathed in perpetual lightning. The wind howls like a thousand lost souls. At the summit, the <span class="highlight">Crystal of Wind</span> awaits — the final piece. But Vexar himself has placed his most powerful servant to guard it: the Storm Elemental.</span>`,
+    choices: [
+      { text: '⚡ Climb to the summit', action: () => stormPuzzle() },
+      { text: '🌪️ Ride the storm currents', action: () => rideStorm() }
+    ],
+    ride: `<span class="narration">You leap into the raging storm, catching a powerful updraft. The wind carries you higher, but the turbulence is immense. Lightning strikes around you as you ascend toward the summit where the Crystal of Wind awaits.</span>`,
+    puzzle: `<span class="narration">At the summit, the Crystal of Wind spins in a vortex of air. Before you can reach it, the Storm Elemental manifests — a towering figure of wind and lightning. To defeat it, you must channel the crystal's energy through a sequence of wind runes.</span>`,
+    victory: `<span class="narration">The Crystal of Wind erupts with brilliant white light. The storm clears, and for the first time in years, sunlight breaks through the clouds. The four crystals you've collected begin to glow in response, calling to their fifth sibling.</span>`
+  }
+};
+
+// Initialize
+function startGame() {
+  document.getElementById('title-screen').classList.add('hidden');
+  setTimeout(() => {
+    document.getElementById('title-screen').style.display = 'none';
+    document.getElementById('game-screen').classList.add('active');
+    state.gameStarted = true;
+    updateHUD();
+    updateCrystalSlots();
+    createParticles();
+    updateDarkness();
+  }, 1000);
+}
+
+function createParticles() {
+  const container = document.getElementById('particles');
+  const colors = ['#f0c040', '#8877aa', '#4488ff', '#ff4444', '#44aa44'];
+  for (let i = 0; i < 30; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    const size = Math.random() * 4 + 1;
+    p.style.width = size + 'px';
+    p.style.height = size + 'px';
+    p.style.left = Math.random() * 100 + '%';
+    p.style.top = (100 + Math.random() * 20) + '%';
+    p.style.background = colors[Math.floor(Math.random() * colors.length)];
+    p.style.animationDuration = (Math.random() * 10 + 8) + 's';
+    p.style.animationDelay = (Math.random() * 10) + 's';
+    container.appendChild(p);
+  }
+}
+
+function updateHUD() {
+  document.getElementById('health-bar').style.width = (state.health / state.maxHealth * 100) + '%';
+  document.getElementById('mana-bar').style.width = (state.mana / state.maxMana * 100) + '%';
+  document.getElementById('health-text').textContent = state.health;
+  document.getElementById('mana-text').textContent = state.mana;
+}
+
+function updateCrystalSlots() {
+  const container = document.getElementById('crystal-slots');
+  container.innerHTML = '';
+  const regions = ['forest', 'mountains', 'temple', 'caves', 'storm'];
+  regions.forEach(r => {
+    const slot = document.createElement('div');
+    slot.className = 'crystal-slot' + (state.crystals[r] ? ' found' : '');
+    slot.innerHTML = state.crystals[r] ? crystalIcons[r] : '🔒';
+    const label = document.createElement('span');
+    label.className = 'crystal-label';
+    label.textContent = crystalNames[r].split(' of ')[1];
+    slot.appendChild(label);
+    container.appendChild(slot);
+  });
+}
+
+function updateDarkness() {
+  const found = Object.values(state.crystals).filter(v => v).length;
+  const overlay = document.getElementById('darkness-overlay');
+  if (found >= 3) {
+    overlay.classList.add('light');
+  }
+  if (found >= 5) {
+    showVictory();
+  }
+}
+
+function enterRegion(region) {
+  if (state.crystals[region]) {
+    showNotification('Crystal already collected!');
+    return;
+  }
+  state.currentRegion = region;
+  const story = stories[region];
+  showStory(story.intro);
+  showChoices(story.choices);
+}
+
+function showStory(text) {
+  document.getElementById('story-text').innerHTML = text;
+  document.getElementById('story-choices').innerHTML = '';
+}
+
+function showChoices(choices) {
+  const container = document.getElementById('story-choices');
+  container.innerHTML = '';
+  choices.forEach(choice => {
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn';
+    btn.textContent = choice.text;
+    btn.onclick = choice.action;
+    container.appendChild(btn);
+  });
+}
+
+function showNotification(text) {
+  const notif = document.createElement('div');
+  notif.className = 'notification';
+  notif.textContent = text;
+  document.body.appendChild(notif);
+  setTimeout(() => notif.remove(), 3000);
+}
+
+function heal(amount) {
+  state.health = Math.min(state.maxHealth, state.health + amount);
+  state.mana = Math.min(state.maxMana, state.mana + Math.floor(amount / 2));
+  updateHUD();
+}
+
+function damage(amount) {
+  state.health = Math.max(0, state.health - amount);
+  updateHUD();
+  if (state.health <= 0) {
+    showStory(`<span class="narration">Darkness consumes you... But the ancient guardians will not let their quest end here. A warm light envelops you, restoring your strength. You rise again, stronger and more determined.</span>`);
+    setTimeout(() => {
+      state.health = 50;
+      state.mana = 50;
+      updateHUD();
+      showNotification('Revived by ancient magic!');
+    }, 2000);
+  }
+}
+
+// Forest Puzzle - Memory Match
+function forestPuzzle() {
+  showScene('memory', 'forest');
+  setTimeout(() => initMemoryGame(), 500);
+}
+
+function forestMeditate() {
+  showStory(stories.forest.meditate);
+  setTimeout(() => forestPuzzle(), 3000);
+}
+
+function showScene(type, region) {
+  document.getElementById('scene-view').classList.add('active');
+  const content = document.getElementById('scene-content');
+  content.innerHTML = '';
+
+  if (type === 'memory') {
+    content.innerHTML = `
+      <div class="scene-title">🌲 The Ancient Altar</div>
+      <div class="scene-description">Match all pairs of runes to break the enchantment protecting the Crystal of Light!</div>
+      <div class="memory-grid" id="memory-grid"></div>
+      <div id="memory-status" style="margin-top:15px; font-family:'Cinzel',serif; color:#8877aa;"></div>
+    `;
+  } else if (type === 'rune') {
+    content.innerHTML = `
+      <div class="scene-title">🔥 The Fire Rune Chamber</div>
+      <div class="scene-description">Click the runes in the correct order to open the chamber door!</div>
+      <div class="rune-puzzle" id="rune-puzzle"></div>
+      <div id="rune-status" style="margin-top:15px; font-family:'Cinzel',serif; color:#8877aa;"></div>
+    `;
+  } else if (type === 'combat') {
+    content.innerHTML = `
+      <div class="scene-title">⚔️ Battle!</div>
+      <div class="combat-arena" id="combat-arena"></div>
+      <div class="combat-actions" id="combat-actions"></div>
+      <div id="combat-log" style="margin-top:15px; font-size:0.85rem; color:#8877aa; text-align:center;"></div>
+    `;
+  }
+}
+
+function exitScene() {
+  document.getElementById('scene-view').classList.remove('active');
+  state.currentRegion = null;
+}
+
+// Memory Game
+function initMemoryGame() {
+  const symbols = ['🌿', '🌿', '🌸', '🌸', '🍃', '🍃', '🌺', '🌺', '🌻', '🌻', '🍂', '🍂', '🌾', '🌾', '🍀', '🍀'];
+  let cards = symbols.sort(() => Math.random() - 0.5);
+  let flipped = [];
+  let matched = 0;
+  const grid = document.getElementById('memory-grid');
+
+  cards.forEach((sym, i) => {
+    const card = document.createElement('div');
+    card.className = 'memory-card';
+    card.dataset.symbol = sym;
+    card.dataset.index = i;
+    card.textContent = '?';
+    card.onclick = () => {
+      if (flipped.length >= 2 || card.classList.contains('flipped') || card.classList.contains('matched')) return;
+      card.classList.add('flipped');
+      card.textContent = sym;
+      flipped.push(card);
+
+      if (flipped.length === 2) {
+        if (flipped[0].dataset.symbol === flipped[1].dataset.symbol) {
+          flipped.forEach(c => c.classList.add('matched'));
+          flipped = [];
+          matched += 2;
+          document.getElementById('memory-status').textContent = `Pairs found: ${matched / 2} / 8`;
+          if (matched === 16) {
+            setTimeout(() => collectCrystal('forest'), 800);
+          }
+        } else {
+          setTimeout(() => {
+            flipped.forEach(c => {
+              c.classList.remove('flipped');
+              c.textContent = '?';
+            });
+            flipped = [];
+          }, 800);
+        }
+      }
+    };
+    grid.appendChild(card);
+  });
+}
+
+// Rune Puzzle
+function runePuzzle(type, region) {
+  showScene('rune', region);
+  const runes = ['🔥', '💧', '🌍', '💨', '☀️', '🌙'];
+  const correctOrder = runes.sort(() => Math.random() - 0.5).slice(0, 4);
+  const displayOrder = [...correctOrder].sort(() => Math.random() - 0.5);
+  let playerOrder = [];
+  let attempts = 0;
+
+  const puzzle = document.getElementById('rune-puzzle');
+  displayOrder.forEach((rune, i) => {
+    const stone = document.createElement('div');
+    stone.className = 'rune-stone';
+    stone.textContent = rune;
+    stone.onclick = () => {
+      if (stone.classList.contains('correct')) return;
+      stone.classList.add('selected');
+      playerOrder.push(rune);
+
+      const idx = playerOrder.length - 1;
+      if (playerOrder[idx] === correctOrder[idx]) {
+        stone.classList.remove('selected');
+        stone.classList.add('correct');
+        if (playerOrder.length === 4) {
+          document.getElementById('rune-status').textContent = 'The door opens!';
+          setTimeout(() => collectCrystal(region), 1000);
+        }
+      } else {
+        stone.classList.remove('selected');
+        stone.classList.add('wrong');
+        attempts++;
+        document.getElementById('rune-status').textContent = `Incorrect! Attempts: ${attempts}`;
+        setTimeout(() => {
+          stone.classList.remove('wrong');
+          playerOrder = [];
+        }, 500);
+      }
+    };
+    puzzle.appendChild(stone);
+  });
+}
+
+// Combat System
+function startCombat(enemy) {
+  showScene('combat', state.currentRegion);
+  let playerHP, playerMaxHP, enemyHP, enemyMaxHP, enemyName, enemySprite, enemyDamage;
+
+  if (enemy === 'dragon') {
+    enemyName = 'Shadow Dragon';
+    enemySprite = '🐉';
+    enemyMaxHP = 60;
+    enemyHP = 60;
+    enemyDamage = 15;
+    playerMaxHP = state.health;
+  } else if (enemy === 'golem') {
+    enemyName = 'Stone Golem';
+    enemySprite = '🗿';
+    enemyMaxHP = 50;
+    enemyHP = 50;
+    enemyDamage = 12;
+    playerMaxHP = state.health;
+  }
+  playerHP = playerMaxHP;
+
+  function renderCombat() {
+    const arena = document.getElementById('combat-arena');
+    arena.innerHTML = `
+      <div class="combatant">
+        <div class="combatant-sprite" id="player-sprite">🧙</div>
+        <div style="font-family:'Cinzel',serif; font-size:0.8rem; color:#f0c040;">You</div>
+        <div class="combat-hp-bar"><div class="combat-hp-fill" style="width:${playerHP/playerMaxHP*100}%"></div></div>
+        <div style="font-size:0.75rem; color:#8877aa;">${playerHP}/${playerMaxHP}</div>
+      </div>
+      <div style="font-size:2rem; color:#444;">⚔️</div>
+      <div class="combatant">
+        <div class="combatant-sprite" id="enemy-sprite">${enemySprite}</div>
+        <div style="font-family:'Cinzel',serif; font-size:0.8rem; color:#ff4444;">${enemyName}</div>
+        <div class="combat-hp-bar"><div class="combat-hp-fill" style="width:${enemyHP/enemyMaxHP*100}%"></div></div>
+        <div style="font-size:0.75rem; color:#8877aa;">${enemyHP}/${enemyMaxHP}</div>
+      </div>
+    `;
+  }
+
+  renderCombat();
+
+  const actions = document.getElementById('combat-actions');
+  actions.innerHTML = `
+    <button class="combat-btn" onclick="combatAttack()">⚔️ Attack</button>
+    <button class="combat-btn" onclick="combatDefend()">🛡️ Defend</button>
+    <button class="combat-btn" onclick="combatMagic()">✨ Magic</button>
+  `;
+
+  window.combatState = { playerHP, playerMaxHP, enemyHP, enemyMaxHP, enemyName, enemySprite, enemyDamage, playerDefending: false };
+}
+
+function combatAttack() {
+  const cs = window.combatState;
+  const dmg = Math.floor(Math.random() * 12) + 8;
+  cs.enemyHP = Math.max(0, cs.enemyHP - dmg);
+  logCombat(`You strike ${cs.enemyName} for ${dmg} damage!`);
+  animateSprite('player-sprite', 'attacking');
+  setTimeout(() => animateSprite('enemy-sprite', 'hit'), 300);
+  renderCombat();
+  checkCombatEnd();
+}
+
+function combatDefend() {
+  const cs = window.combatState;
+  cs.playerDefending = true;
+  logCombat('You raise your guard!');
+  setTimeout(() => enemyTurn(), 600);
+}
+
+function combatMagic() {
+  const cs = window.combatState;
+  if (state.mana < 20) {
+    logCombat('Not enough mana!');
+    return;
+  }
+  state.mana -= 20;
+  updateHUD();
+  const dmg = Math.floor(Math.random() * 15) + 15;
+  cs.enemyHP = Math.max(0, cs.enemyHP - dmg);
+  logCombat(`You unleash magic on ${cs.enemyName} for ${dmg} damage!`);
+  animateSprite('player-sprite', 'attacking');
+  setTimeout(() => animateSprite('enemy-sprite', 'hit'), 300);
+  renderCombat();
+  checkCombatEnd();
+}
+
+function enemyTurn() {
+  const cs = window.combatState;
+  let dmg = Math.floor(Math.random() * cs.enemyDamage) + 5;
+  if (cs.playerDefending) {
+    dmg = Math.floor(dmg / 2);
+    cs.playerDefending = false;
+  }
+  cs.playerHP = Math.max(0, cs.playerHP - dmg);
+  logCombat(`${cs.enemyName} attacks for ${dmg} damage!`);
+  animateSprite('enemy-sprite', 'attacking');
+  setTimeout(() => animateSprite('player-sprite', 'hit'), 300);
+  renderCombat();
+  checkCombatEnd();
+}
+
+function checkCombatEnd() {
+  const cs = window.combatState;
+  if (cs.enemyHP <= 0) {
+    logCombat(`🎉 ${cs.enemyName} has been defeated!`);
+    document.getElementById('combat-actions').innerHTML = '';
+    setTimeout(() => {
+      exitScene();
+      if (state.currentRegion === 'mountains') {
+        runePuzzle('fire', 'mountains');
+      } else if (state.currentRegion === 'caves') {
+        runePuzzle('earth', 'caves');
+      }
+    }, 2000);
+  } else if (cs.playerHP <= 0) {
+    logCombat('💀 You have been defeated...');
+    document.getElementById('combat-actions').innerHTML = '';
+    setTimeout(() => {
+      exitScene();
+      state.health = 30;
+      state.mana = 30;
+      updateHUD();
+      showStory(`<span class="narration">Darkness takes you... But the ancient guardians will not let their quest end here. You awaken at the entrance, battered but alive. The quest continues.</span>`);
+    }, 2000);
+  } else {
+    setTimeout(() => enemyTurn(), 800);
+  }
+}
+
+function animateSprite(id, anim) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.classList.add(anim);
+    setTimeout(() => el.classList.remove(anim), 500);
+  }
+}
+
+function logCombat(text) {
+  document.getElementById('combat-log').textContent = text;
+}
+
+// Mountain sneak
+function sneakMountain() {
+  showStory(stories.mountains.sneak);
+  setTimeout(() => startCombat('dragon'), 3000);
+}
+
+// Temple puzzles
+function templePuzzle() {
+  showScene('rune', 'temple');
+  const symbols = ['🌊', '🐚', '🐠', '🦀', '🐙', '🐡'];
+  const correctOrder = symbols.sort(() => Math.random() - 0.5).slice(0, 4);
+  const displayOrder = [...correctOrder].sort(() => Math.random() - 0.5);
+  let playerOrder = [];
+  let attempts = 0;
+
+  document.querySelector('.scene-title').textContent = '🏛️ The Water Rune Chamber';
+  document.querySelector('.scene-description').textContent = 'Arrange the water symbols in the correct tidal order!';
+
+  const puzzle = document.getElementById('rune-puzzle');
+  displayOrder.forEach((sym, i) => {
+    const stone = document.createElement('div');
+    stone.className = 'rune-stone';
+    stone.textContent = sym;
+    stone.onclick = () => {
+      if (stone.classList.contains('correct')) return;
+      stone.classList.add('selected');
+      playerOrder.push(sym);
+
+      const idx = playerOrder.length - 1;
+      if (playerOrder[idx] === correctOrder[idx]) {
+        stone.classList.remove('selected');
+        stone.classList.add('correct');
+        if (playerOrder.length === 4) {
+          document.getElementById('rune-status').textContent = 'The water parts!';
+          setTimeout(() => collectCrystal('temple'), 1000);
+        }
+      } else {
+        stone.classList.remove('selected');
+        stone.classList.add('wrong');
+        attempts++;
+        document.getElementById('rune-status').textContent = `Incorrect! Attempts: ${attempts}`;
+        setTimeout(() => {
+          stone.classList.remove('wrong');
+          playerOrder = [];
+        }, 500);
+      }
+    };
+    puzzle.appendChild(stone);
+  });
+}
+
+function swimTemple() {
+  showStory(stories.temple.swim);
+  setTimeout(() => templePuzzle(), 3000);
+}
+
+// Cave puzzle
+function cavePuzzle() {
+  showScene('rune', 'caves');
+  const symbols = ['🪨', '💎', '🌋', '🏔️', '⛰️', '🗻'];
+  const correctOrder = symbols.sort(() => Math.random() - 0.5).slice(0, 4);
+  const displayOrder = [...correctOrder].sort(() => Math.random() - 0.5);
+  let playerOrder = [];
+  let attempts = 0;
+
+  document.querySelector('.scene-title').textContent = '⛏️ The Earth Rune Chamber';
+  document.querySelector('.scene-description').textContent = 'Match the earth symbols in the correct sequence!';
+
+  const puzzle = document.getElementById('rune-puzzle');
+  displayOrder.forEach((sym, i) => {
+    const stone = document.createElement('div');
+    stone.className = 'rune-stone';
+    stone.textContent = sym;
+    stone.onclick = () => {
+      if (stone.classList.contains('correct')) return;
+      stone.classList.add('selected');
+      playerOrder.push(sym);
+
+      const idx = playerOrder.length - 1;
+      if (playerOrder[idx] === correctOrder[idx]) {
+        stone.classList.remove('selected');
+        stone.classList.add('correct');
+        if (playerOrder.length === 4) {
+          document.getElementById('rune-status').textContent = 'The path is revealed!';
+          setTimeout(() => collectCrystal('caves'), 1000);
+        }
+      } else {
+        stone.classList.remove('selected');
+        stone.classList.add('wrong');
+        attempts++;
+        document.getElementById('rune-status').textContent = `Incorrect! Attempts: ${attempts}`;
+        setTimeout(() => {
+          stone.classList.remove('wrong');
+          playerOrder = [];
+        }, 500);
+      }
+    };
+    puzzle.appendChild(stone);
+  });
+}
+
+// Storm puzzle
+function stormPuzzle() {
+  showScene('rune', 'storm');
+  const symbols = ['⚡', '🌪️', '☁️', '🌈', '💫', '✨'];
+  const correctOrder = symbols.sort(() => Math.random() - 0.5).slice(0, 4);
+  const displayOrder = [...correctOrder].sort(() => Math.random() - 0.5);
+  let playerOrder = [];
+  let attempts = 0;
+
+  document.querySelector('.scene-title').textContent = '⛈️ The Wind Rune Chamber';
+  document.querySelector('.scene-description').textContent = 'Channel the wind through the correct rune sequence!';
+
+  const puzzle = document.getElementById('rune-puzzle');
+  displayOrder.forEach((sym, i) => {
+    const stone = document.createElement('div');
+    stone.className = 'rune-stone';
+    stone.textContent = sym;
+    stone.onclick = () => {
+      if (stone.classList.contains('correct')) return;
+      stone.classList.add('selected');
+      playerOrder.push(sym);
+
+      const idx = playerOrder.length - 1;
+      if (playerOrder[idx] === correctOrder[idx]) {
+        stone.classList.remove('selected');
+        stone.classList.add('correct');
+        if (playerOrder.length === 4) {
+          document.getElementById('rune-status').textContent = 'The storm obeys!';
+          setTimeout(() => collectCrystal('storm'), 1000);
+        }
+      } else {
+        stone.classList.remove('selected');
+        stone.classList.add('wrong');
+        attempts++;
+        document.getElementById('rune-status').textContent = `Incorrect! Attempts: ${attempts}`;
+        setTimeout(() => {
+          stone.classList.remove('wrong');
+          playerOrder = [];
+        }, 500);
+      }
+    };
+    puzzle.appendChild(stone);
+  });
+}
+
+function rideStorm() {
+  showStory(stories.storm.ride);
+  setTimeout(() => stormPuzzle(), 3000);
+}
+
+// Crystal Collection
+function collectCrystal(region) {
+  state.crystals[region] = true;
+  state.visitedRegions.push(region);
+  heal(30);
+
+  // Show collection animation
+  const collect = document.getElementById('crystal-collect');
+  document.getElementById('collect-icon').textContent = crystalIcons[region];
+  document.getElementById('collect-text').textContent = crystalNames[region] + ' Found!';
+  collect.classList.add('active');
+
+  // Show victory story
+  showStory(stories[region].victory);
+  document.getElementById('story-choices').innerHTML = '';
+
+  // Update UI
+  updateCrystalSlots();
+  updateDarkness();
+
+  // Flash lightning
+  const flash = document.createElement('div');
+  flash.className = 'lightning';
+  document.getElementById('game-container').appendChild(flash);
+  setTimeout(() => flash.remove(), 200);
+
+  setTimeout(() => {
+    collect.classList.remove('active');
+    document.getElementById('scene-view').classList.remove('active');
+    state.currentRegion = null;
+
+    // Update map
+    document.querySelector(`.map-region[data-region="${region}"]`).classList.add('cleared');
+    document.querySelector(`.map-region[data-region="${region}"]`).querySelector('.region-crystal-indicator').textContent = '✅';
+
+    if (Object.values(state.crystals).filter(v => v).length >= 5) {
+      setTimeout(() => showVictory(), 2000);
+    } else {
+      showStory(`<span class="narration">You have collected ${Object.values(state.crystals).filter(v => v).length} of 5 Sacred Crystals. The darkness begins to recede... Continue your quest to find the remaining crystals!</span>`);
+    }
+  }, 3500);
+}
+
+function showVictory() {
+  document.getElementById('victory-screen').classList.add('active');
+  // Create celebration particles
+  for (let i = 0; i < 50; i++) {
+    setTimeout(() => {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      const size = Math.random() * 6 + 2;
+      p.style.width = size + 'px';
+      p.style.height = size + 'px';
+      p.style.left = Math.random() * 100 + '%';
+      p.style.top = '100%';
+      p.style.background = ['#f0c040', '#ff4444', '#44aa44', '#4488ff', '#ff8844'][Math.floor(Math.random() * 5)];
+      p.style.animationDuration = (Math.random() * 3 + 2) + 's';
+      p.style.animationDelay = '0s';
+      document.getElementById('game-container').appendChild(p);
+      setTimeout(() => p.remove(), 5000);
+    }, i * 100);
+  }
+}
+
+// Keyboard support
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('scene-view').classList.contains('active')) {
+      exitScene();
+    }
+  }
+});
+</script>
+</body>
+</html>

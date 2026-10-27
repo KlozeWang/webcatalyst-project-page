@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MOJO - Buy & Sell India</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #ff9a9e 0%, #fad0c4 25%, #fbc2eb 50%, #a18cd1 75%, #84fab0 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+  .gradient-text {
+    background: linear-gradient(90deg, #ff006e, #8338ec, #3a86ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .card {
+    background: rgba(255,255,255,0.95);
+    backdrop-filter: blur(10px);
+    transition: all 0.3s;
+  }
+  .card:hover { transform: translateY(-5px); box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+  .btn-primary {
+    background: linear-gradient(90deg, #ff006e, #8338ec);
+    color: white;
+    transition: all 0.3s;
+  }
+  .btn-primary:hover { transform: scale(1.05); box-shadow: 0 10px 20px rgba(131,56,236,0.4); }
+  .modal-bg {
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(5px);
+  }
+  .locked {
+    filter: blur(6px);
+    user-select: none;
+    pointer-events: none;
+  }
+  .nav-btn {
+    transition: all 0.3s;
+  }
+  .nav-btn.active {
+    background: linear-gradient(90deg, #ff006e, #8338ec);
+    color: white;
+  }
+  .qr-box {
+    background: repeating-conic-gradient(#000 0% 25%, #fff 0% 50%) 50%/8px 8px;
+    width: 200px; height: 200px;
+    border: 8px solid white;
+    margin: auto;
+  }
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 20px rgba(255,0,110,0.5); }
+    50% { box-shadow: 0 0 40px rgba(131,56,236,0.8); }
+  }
+  .glow { animation: pulse-glow 2s infinite; }
+  input, textarea { color: #222; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="bg-white/90 backdrop-blur sticky top-0 z-40 shadow-lg">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+    <h1 class="text-3xl font-black gradient-text">🛍️ MOJO</h1>
+    <nav class="flex gap-2 flex-wrap">
+      <button onclick="showView('home')" id="nav-home" class="nav-btn active px-4 py-2 rounded-full font-semibold text-sm">🏠 Home</button>
+      <button onclick="showView('sell')" id="nav-sell" class="nav-btn px-4 py-2 rounded-full font-semibold text-sm bg-gray-100">➕ Sell</button>
+      <button onclick="showView('my')" id="nav-my" class="nav-btn px-4 py-2 rounded-full font-semibold text-sm bg-gray-100">📦 My Posts</button>
+      <button onclick="showView('admin')" id="nav-admin" class="nav-btn px-4 py-2 rounded-full font-semibold text-sm bg-gray-100">🔐 Admin</button>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto p-4">
+
+  <!-- HOME -->
+  <section id="view-home">
+    <div class="text-center my-6">
+      <h2 class="text-4xl font-black text-white drop-shadow-lg">India's Colorful Marketplace</h2>
+      <p class="text-white/90 mt-2">Pay just ₹1 to unlock seller details!</p>
+    </div>
+    <div id="products-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+  </section>
+
+  <!-- SELL -->
+  <section id="view-sell" class="hidden">
+    <div class="card rounded-3xl p-6 max-w-lg mx-auto shadow-2xl">
+      <h2 class="text-2xl font-black gradient-text mb-4">📤 Post Your Product</h2>
+      <form id="sellForm" class="space-y-3">
+        <input required id="p-name" type="text" placeholder="Product Name" class="w-full p-3 rounded-xl border-2 border-pink-200 focus:border-pink-500 outline-none">
+        <input required id="p-img" type="file" accept="image/*" class="w-full p-3 rounded-xl border-2 border-purple-200">
+        <div class="grid grid-cols-2 gap-3">
+          <input required id="p-price" type="number" min="1" placeholder="Price ₹" class="p-3 rounded-xl border-2 border-blue-200 focus:border-blue-500 outline-none">
+          <input required id="p-stock" type="number" min="1" placeholder="Stock" class="p-3 rounded-xl border-2 border-green-200 focus:border-green-500 outline-none">
+        </div>
+        <input required id="p-phone" type="tel" pattern="[0-9]{10}" placeholder="Phone (10 digits)" class="w-full p-3 rounded-xl border-2 border-yellow-200 focus:border-yellow-500 outline-none">
+        <textarea required id="p-addr" placeholder="Full Address" rows="2" class="w-full p-3 rounded-xl border-2 border-red-200 focus:border-red-500 outline-none"></textarea>
+        <button type="submit" class="btn-primary w-full py-3 rounded-xl font-bold text-lg">🚀 Post Product</button>
+        <p class="text-xs text-gray-600 text-center">⏳ Will be visible after admin approval</p>
+      </form>
+    </div>
+  </section>
+
+  <!-- MY POSTS -->
+  <section id="view-my" class="hidden">
+    <h2 class="text-2xl font-black text-white mb-4">📦 My Products</h2>
+    <div id="my-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+  </section>
+
+  <!-- ADMIN -->
+  <section id="view-admin" class="hidden">
+    <div id="admin-login" class="card rounded-3xl p-6 max-w-sm mx-auto">
+      <h2 class="text-2xl font-black gradient-text mb-4">🔐 Admin Login</h2>
+      <input id="adm-u" placeholder="Username" class="w-full p-3 rounded-xl border-2 border-gray-200 mb-3">
+      <input id="adm-p" type="password" placeholder="Password" class="w-full p-3 rounded-xl border-2 border-gray-200 mb-3">
+      <button onclick="adminLogin()" class="btn-primary w-full py-3 rounded-xl font-bold">Login</button>
+      <p class="text-xs text-gray-500 mt-2 text-center">Hint: admin / mojo123</p>
+    </div>
+    <div id="admin-panel" class="hidden">
+      <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+        <h2 class="text-2xl font-black text-white">👑 Admin Dashboard</h2>
+        <button onclick="adminLogout()" class="bg-white px-4 py-2 rounded-full font-bold text-red-600">Logout</button>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div class="card p-4 rounded-2xl text-center"><div class="text-3xl font-black text-pink-600" id="stat-total">0</div><div class="text-xs">Total</div></div>
+        <div class="card p-4 rounded-2xl text-center"><div class="text-3xl font-black text-yellow-600" id="stat-pending">0</div><div class="text-xs">Pending</div></div>
+        <div class="card p-4 rounded-2xl text-center"><div class="text-3xl font-black text-green-600" id="stat-approved">0</div><div class="text-xs">Approved</div></div>
+        <div class="card p-4 rounded-2xl text-center"><div class="text-3xl font-black text-purple-600" id="stat-pay">0</div><div class="text-xs">₹1 Payments</div></div>
+      </div>
+      <div class="flex gap-2 mb-3 flex-wrap">
+        <button onclick="adminTab('products')" id="atab-products" class="nav-btn active px-4 py-2 rounded-full font-semibold">All Products</button>
+        <button onclick="adminTab('payments')" id="atab-payments" class="nav-btn px-4 py-2 rounded-full font-semibold bg-white">Payments Log</button>
+      </div>
+      <div id="admin-products" class="space-y-3"></div>
+      <div id="admin-payments" class="hidden space-y-2"></div>
+    </div>
+  </section>
+
+</main>
+
+<!-- Modal: View Details / Payment -->
+<div id="modal" class="hidden fixed inset-0 modal-bg z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-3xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-xl font-black gradient-text">Product Details</h3>
+      <button onclick="closeModal()" class="text-2xl">✖</button>
+    </div>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="editModal" class="hidden fixed inset-0 modal-bg z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-3xl max-w-md w-full p-6">
+    <h3 class="text-xl font-black gradient-text mb-4">Edit Product</h3>
+    <input id="e-name" class="w-full p-3 rounded-xl border-2 mb-2" placeholder="Name">
+    <input id="e-price" type="number" class="w-full p-3 rounded-xl border-2 mb-2" placeholder="Price">
+    <input id="e-stock" type="number" class="w-full p-3 rounded-xl border-2 mb-2" placeholder="Stock">
+    <div class="flex gap-2">
+      <button onclick="saveEdit()" class="btn-primary flex-1 py-3 rounded-xl font-bold">Save</button>
+      <button onclick="document.getElementById('editModal').classList.add('hidden')" class="flex-1 py-3 rounded-xl font-bold bg-gray-200">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 bg-black text-white px-6 py-3 rounded-full z-50 font-semibold"></div>
+
+<script>
+// ---- Storage helpers ----
+const DB = {
+  get(k, def) { try { return JSON.parse(localStorage.getItem('mojo_'+k)) ?? def; } catch { return def; } },
+  set(k, v) { localStorage.setItem('mojo_'+k, JSON.stringify(v)); }
+};
+
+// User ID
+let USER_ID = DB.get('uid', null);
+if (!USER_ID) { USER_ID = 'u_' + Math.random().toString(36).slice(2,9); DB.set('uid', USER_ID); }
+
+// Seed sample products
+if (!DB.get('products', null)) {
+  DB.set('products', [
+    {id:'p1', uid:'seed', name:'Handmade Saree', price:1499, stock:5, phone:'9876543210', addr:'Jaipur, Rajasthan', img:'https://picsum.photos/seed/saree/400', status:'approved'},
+    {id:'p2', uid:'seed', name:'Brass Diya Set', price:299, stock:20, phone:'9123456780', addr:'Varanasi, UP', img:'https://picsum.photos/seed/diya/400', status:'approved'},
+    {id:'p3', uid:'seed', name:'Spice Box', price:799, stock:15, phone:'9988776655', addr:'Kochi, Kerala', img:'https://picsum.photos/seed/spice/400', status:'approved'},
+    {id:'p4', uid:'seed', name:'Wooden Toy', price:499, stock:10, phone:'9001122334', addr:'Channapatna, Karnataka', img:'https://picsum.photos/seed/toy/400', status:'approved'},
+  ]);
+}
+
+let isAdmin = false;
+let currentProduct = null;
+let editingId = null;
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  setTimeout(()=>t.classList.add('hidden'), 2200);
+}
+
+function showView(v) {
+  ['home','sell','my','admin'].forEach(x=>{
+    document.getElementById('view-'+x).classList.toggle('hidden', x!==v);
+    document.getElementById('nav-'+x).classList.toggle('active', x===v);
+    document.getElementById('nav-'+x).classList.toggle('bg-gray-100', x!==v);
+  });
+  if (v==='home') renderHome();
+  if (v==='my') renderMy();
+  if (v==='admin' && isAdmin) renderAdmin();
+}
+
+function renderHome() {
+  const products = DB.get('products', []).filter(p=>p.status==='approved');
+  const paid = DB.get('paid', []);
+  const grid = document.getElementById('products-grid');
+  if (!products.length) { grid.innerHTML = '<p class="text-white col-span-full text-center">No products yet</p>'; return; }
+  grid.innerHTML = products.map(p=>`
+    <div class="card rounded-2xl overflow-hidden shadow-xl">
+      <img src="${p.img}" class="w-full h-40 object-cover" loading="lazy">
+      <div class="p-3">
+        <h3 class="font-bold text-sm truncate">${p.name}</h3>
+        <div class="flex justify-between items-center mt-1">
+          <span class="text-pink-600 font-black">₹${p.price}</span>
+          <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Stock: ${p.stock}</span>
+        </div>
+        <button onclick="openProduct('${p.id}')" class="btn-primary w-full mt-2 py-2 rounded-lg text-sm font-bold">${paid.includes(p.id)?'✅ View Details':'🔓 View Full Details'}</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openProduct(id) {
+  const p = DB.get('products', []).find(x=>x.id===id);
+  if (!p) return;
+  currentProduct = p;
+  const paid = DB.get('paid', []).includes(id);
+  const mc = document.getElementById('modal-content');
+  if (paid) {
+    mc.innerHTML = `
+      <img src="${p.img}" class="w-full h-48 object-cover rounded-xl mb-3">
+      <h3 class="text-xl font-black">${p.name}</h3>
+      <p class="text-pink-600 font-black text-2xl">₹${p.price}</p>
+      <p class="text-sm">Stock: ${p.stock}</p>
+      <hr class="my-3">
+      <p class="font-bold text-green-700">✅ Details Unlocked</p>
+      <p class="mt-2">📞 <b>${p.phone}</b></p>
+      <p>📍 ${p.addr}</p>
+      <div class="grid grid-cols-2 gap-2 mt-3">
+        <a href="tel:${p.phone}" class="btn-primary text-center py-2 rounded-xl font-bold">📞 Call</a>
+        <a href="sms:${p.phone}" class="btn-primary text-center py-2 rounded-xl font-bold">💬 Message</a>
+      </div>
+    `;
+  } else {
+    mc.innerHTML = `
+      <img src="${p.img}" class="w-full h-40 object-cover rounded-xl mb-3">
+      <h3 class="text-xl font-black">${p.name}</h3>
+      <p class="text-pink-600 font-black text-2xl">₹${p.price}</p>
+      <div class="bg-gray-100 p-3 rounded-xl mt-3">
+        <p class="locked">📞 98XXXXXXXX</p>
+        <p class="locked">📍 Full address hidden</p>
+      </div>
+      <div class="bg-yellow-50 border-2 border-yellow-400 rounded-2xl p-4 mt-4 text-center">
+        <p class="font-bold mb-2">🔓 Pay ₹1 to Unlock</p>
+        <div class="qr-box glow"></div>
+        <p class="text-xs mt-2 text-gray-600">Scan QR with any UPI app</p>
+        <button onclick="confirmPay()" class="btn-primary w-full mt-3 py-3 rounded-xl font-bold">✅ I've Paid ₹1</button>
+      </div>
+    `;
+  }
+  document.getElementById('modal').classList.remove('hidden');
+}
+
+function confirmPay() {
+  const paid = DB.get('paid', []);
+  if (!paid.includes(currentProduct.id)) paid.push(currentProduct.id);
+  DB.set('paid', paid);
+  const pays = DB.get('payments', []);
+  pays.push({pid:currentProduct.id, pname:currentProduct.name, buyer:USER_ID, seller:currentProduct.uid, amount:1, time:new Date().toLocaleString()});
+  DB.set('payments', pays);
+  toast('✅ Payment Successful!');
+  openProduct(currentProduct.id);
+}
+
+function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+
+// Sell form
+document.getElementById('sellForm').addEventListener('submit', e=>{
+  e.preventDefault();
+  const file = document.getElementById('p-img').files[0];
+  const reader = new FileReader();
+  reader.onload = () => {
+    const products = DB.get('products', []);
+    products.push({
+      id: 'p_'+Date.now(),
+      uid: USER_ID,
+      name: document.getElementById('p-name').value,
+      price: +document.getElementById('p-price').value,
+      stock: +document.getElementById('p-stock').value,
+      phone: document.getElementById('p-phone').value,
+      addr: document.getElementById('p-addr').value,
+      img: reader.result,
+      status: 'pending'
+    });
+    DB.set('products', products);
+    toast('🚀 Submitted! Awaiting approval');
+    document.getElementById('sellForm').reset();
+    showView('my');
+  };
+  reader.readAsDataURL(file);
+});
+
+function renderMy() {
+  const mine = DB.get('products', []).filter(p=>p.uid===USER_ID);
+  const g = document.getElementById('my-grid');
+  if (!mine.length) { g.innerHTML = '<p class="text-white">No products yet. Post one!</p>'; return; }
+  g.innerHTML = mine.map(p=>`
+    <div class="card rounded-2xl p-3 flex gap-3">
+      <img src="${p.img}" class="w-24 h-24 object-cover rounded-xl">
+      <div class="flex-1">
+        <h3 class="font-bold">${p.name}</h3>
+        <p class="text-pink-600 font-black">₹${p.price} • Stock: ${p.stock}</p>
+        <span class="text-xs px-2 py-0.5 rounded-full ${p.status==='approved'?'bg-green-100 text-green-700':p.status==='rejected'?'bg-red-100 text-red-700':'bg-yellow-100 text-yellow-700'}">${p.status}</span>
+        <div class="flex gap-2 mt-2">
+          <button onclick="editProduct('${p.id}')" class="text-xs bg-blue-500 text-white px-3 py-1 rounded-full">Edit</button>
+          <button onclick="delProduct('${p.id}')" class="text-xs bg-red-500 text-white px-3 py-1 rounded-full">Delete</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function editProduct(id) {
+  const p = DB.get('products', []).find(x=>x.id===id);
+  if (!p) return;
+  if (p.uid!==USER_ID && !isAdmin) { toast('Not allowed'); return; }
+  editingId = id;
+  document.getElementById('e-name').value = p.name;
+  document.getElementById('e-price').value = p.price;
+  document.getElementById('e-stock').value = p.stock;
+  document.getElementById('editModal').classList.remove('hidden');
+}
+
+function saveEdit() {
+  const products = DB.get('products', []);
+  const i = products.findIndex(x=>x.id===editingId);
+  if (i>=0) {
+    products[i].name = document.getElementById('e-name').value;
+    products[i].price = +document.getElementById('e-price').value;
+    products[i].stock = +document.getElementById('e-stock').value;
+    DB.set('products', products);
+  }
+  document.getElementById('editModal').classList.add('hidden');
+  toast('✅ Updated');
+  renderMy(); if (isAdmin) renderAdmin(); renderHome();
+}
+
+function delProduct(id) {
+  const p = DB.get('products', []).find(x=>x.id===id);
+  if (!p) return;
+  if (p.uid!==USER_ID && !isAdmin) { toast('Not allowed'); return; }
+  if (!confirm('Delete this product?')) return;
+  DB.set('products', DB.get('products', []).filter(x=>x.id!==id));
+  toast('🗑️ Deleted');
+  renderMy(); if (isAdmin) renderAdmin(); renderHome();
+}
+
+// Admin
+function adminLogin() {
+  const u = document.getElementById('adm-u').value;
+  const p = document.getElementById('adm-p').value;
+  if (u==='admin' && p==='mojo123') {
+    isAdmin = true;
+    document.getElementById('admin-login').classList.add('hidden');
+    document.getElementById('admin-panel').classList.remove('hidden');
+    renderAdmin();
+    toast('👑 Welcome Admin');
+  } else toast('❌ Wrong credentials');
+}
+
+function adminLogout() {
+  isAdmin = false;
+  document.getElementById('admin-login').classList.remove('hidden');
+  document.getElementById('admin-panel').classList.add('hidden');
+}
+
+function adminTab(t) {
+  document.getElementById('atab-products').classList.toggle('active', t==='products');
+  document.getElementById('atab-payments').classList.toggle('active', t==='payments');
+  document.getElementById('atab-products').classList.toggle('bg-white', t!=='products');
+  document.getElementById('atab-payments').classList.toggle('bg-white', t!=='payments');
+  document.getElementById('admin-products').classList.toggle('hidden', t!=='products');
+  document.getElementById('admin-payments').classList.toggle('hidden', t!=='payments');
+}
+
+function renderAdmin() {
+  const products = DB.get('products', []);
+  const payments = DB.get('payments', []);
+  document.getElementById('stat-total').textContent = products.length;
+  document.getElementById('stat-pending').textContent = products.filter(p=>p.status==='pending').length;
+  document.getElementById('stat-approved').textContent = products.filter(p=>p.status==='approved').length;
+  document.getElementById('stat-pay').textContent = payments.length;
+
+  document.getElementById('admin-products').innerHTML = products.map(p=>`
+    <div class="card rounded-2xl p-3 flex gap-3 flex-wrap">
+      <img src="${p.img}" class="w-20 h-20 object-cover rounded-xl">
+      <div class="flex-1 min-w-[150px]">
+        <h3 class="font-bold">${p.name}</h3>
+        <p class="text-sm">₹${p.price} • Stock: ${p.stock}</p>
+        <p class="text-xs text-gray-600">📞 ${p.phone} • ${p.addr}</p>
+        <span class="text-xs px-2 py-0.5 rounded-full ${p.status==='approved'?'bg-green-100 text-green-700':p.status==='rejected'?'bg-red-100 text-red-700':'bg-yellow-100 text-yellow-700'}">${p.status}</span>
+      </div>
+      <div class="flex gap-1 flex-wrap">
+        ${p.status!=='approved'?`<button onclick="setStatus('${p.id}','approved')" class="text-xs bg-green-500 text-white px-3 py-1 rounded-full">Approve</button>`:''}
+        ${p.status!=='rejected'?`<button onclick="setStatus('${p.id}','rejected')" class="text-xs bg-orange-500 text-white px-3 py-1 rounded-full">Reject</button>`:''}
+        <button onclick="editProduct('${p.id}')" class="text-xs bg-blue-500 text-white px-3 py-1 rounded-full">Edit</button>
+        <button onclick="delProduct('${p.id}')" class="text-xs bg-red-500 text-white px-3 py-1 rounded-full">Delete</button>
+      </div>
+    </div>
+  `).join('') || '<p class="text-white">No products</p>';
+
+  document.getElementById('admin-payments').innerHTML = payments.length ? payments.map(p=>`
+    <div class="card rounded-xl p-3 text-sm">
+      <b>${p.pname}</b> — ₹${p.amount}<br>
+      Buyer: <code>${p.buyer}</code> | Seller: <code>${p.seller}</code><br>
+      <span class="text-xs text-gray-500">${p.time}</span>
+    </div>
+  `).join('') : '<p class="text-white">No payments yet</p>';
+}
+
+function setStatus(id, s) {
+  const products = DB.get('products', []);
+  const i = products.findIndex(x=>x.id===id);
+  if (i>=0) { products[i].status = s; DB.set('products', products); }
+  renderAdmin(); renderHome();
+  toast('Updated');
+}
+
+renderHome();
+</script>
+</body>
+</html>

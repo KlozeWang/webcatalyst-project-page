@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Temple Escape 3D - Endless Runner</title>
+  <style>
+    :root{
+      --gold:#ffd76a;
+      --bg:rgba(8,10,14,0.76);
+      --panel:rgba(18,22,30,0.88);
+      --accent:#68e1ff;
+      --danger:#ff6b6b;
+      --ok:#76ff9f;
+    }
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+    html,body{margin:0;padding:0;overflow:hidden;background:#000;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;color:#fff}
+    canvas{display:block}
+    .overlay{
+      position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+      background:linear-gradient(180deg,rgba(0,0,0,.45),rgba(0,0,0,.8));
+      backdrop-filter:blur(4px);z-index:20
+    }
+    .hidden{display:none!important}
+    .panel{
+      width:min(94vw,900px);max-height:92vh;overflow:auto;
+      background:var(--panel);border:1px solid rgba(255,255,255,.12);
+      border-radius:16px;padding:18px 18px 20px;box-shadow:0 20px 50px rgba(0,0,0,.45)
+    }
+    h1,h2,h3,p{margin:8px 0}
+    h1{font-size:36px;letter-spacing:1px}
+    h2{font-size:24px}
+    p{opacity:.92}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .btn{
+      border:none;border-radius:12px;padding:12px 16px;font-size:15px;font-weight:700;
+      cursor:pointer;color:#000;background:var(--gold);min-width:110px;transition:.2s transform,.2s opacity
+    }
+    .btn:hover{transform:translateY(-1px)}
+    .btn:active{transform:translateY(1px)}
+    .btn.secondary{background:#d9e4ff}
+    .btn.danger{background:#ff9d9d}
+    .btn.dark{background:#1f2634;color:#fff;border:1px solid rgba(255,255,255,.15)}
+    .small{font-size:13px;opacity:.9}
+    #hud{
+      position:fixed;z-index:10;inset:0;pointer-events:none
+    }
+    #topBar{
+      display:flex;justify-content:space-between;align-items:flex-start;padding:10px 12px;gap:8px
+    }
+    .statBox{
+      background:var(--bg);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:8px 10px;min-width:110px
+    }
+    .label{font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.7px}
+    .value{font-size:20px;font-weight:800;line-height:1.1}
+    #powerBar{
+      display:flex;gap:8px;padding:0 12px
+    }
+    .power{
+      background:var(--bg);border:1px solid rgba(255,255,255,.14);
+      border-radius:999px;padding:6px 10px;font-size:12px
+    }
+    #pauseBtn{
+      pointer-events:auto;
+      background:var(--bg);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:10px;
+      width:42px;height:42px;font-size:20px;font-weight:800;cursor:pointer
+    }
+    #hint{
+      position:fixed;left:50%;bottom:22%;transform:translateX(-50%);
+      background:rgba(255,106,106,.9);padding:10px 14px;border-radius:12px;font-weight:800;
+      letter-spacing:.6px;z-index:11;display:none
+    }
+    .characters{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+    .charCard{
+      border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px;background:rgba(255,255,255,.04);cursor:pointer
+    }
+    .charCard.active{outline:2px solid var(--accent);background:rgba(104,225,255,.12)}
+    .swatch{width:28px;height:28px;border-radius:50%;border:2px solid #fff;display:inline-block;margin-right:8px;vertical-align:middle}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .list{margin:0;padding-left:18px}
+    .pill{display:inline-block;padding:3px 10px;border-radius:999px;background:rgba(255,255,255,.12);font-size:12px}
+    input[type="range"]{width:180px}
+    select{background:#101621;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:7px 10px}
+    @media (max-width:700px){
+      .grid{grid-template-columns:1fr}
+      h1{font-size:28px}
+      .value{font-size:18px}
+    }
+  </style>
+</head>
+<body>
+  <div id="gameContainer"></div>
+
+  <div id="hud" class="hidden">
+    <div id="topBar">
+      <div class="row">
+        <div class="statBox"><div class="label">Score</div><div id="scoreVal" class="value">0</div></div>
+        <div class="statBox"><div class="label">Distance</div><div id="distVal" class="value">0m</div></div>
+        <div class="statBox"><div class="label">Coins</div><div id="coinVal" class="value">0</div></div>
+      </div>
+      <button id="pauseBtn">Ⅱ</button>
+    </div>
+    <div id="powerBar">
+      <div id="shieldP" class="power hidden">🛡 Shield: <span>0.0</span>s</div>
+      <div id="magnetP" class="power hidden">🧲 Magnet: <span>0.0</span>s</div>
+      <div id="boostP" class="power hidden">⚡ Boost: <span>0.0</span>s</div>
+    </div>
+  </div>
+  <div id="hint">SWIPE LEFT / RIGHT TO TURN!</div>
+
+  <div id="startScreen" class="overlay">
+    <div class="panel">
+      <h1>Temple Escape 3D</h1>
+      <p>Run endlessly through cursed ruins, dodge traps, collect coins, and survive the chase.</p>
+      <div class="pill" id="walletPill">Wallet: 0 bonus coins</div>
+      <h3>Choose Explorer</h3>
+      <div id="charList" class="characters"></div>
+      <div class="grid" style="margin-top:12px">
+        <div>
+          <h3>Daily Challenge</h3>
+          <p id="challengeText">-</p>
+          <p class="small" id="challengeProgress">Progress: 0%</p>
+        </div>
+        <div>
+          <h3>Global Leaderboard</h3>
+          <ol id="leaderboardStart" class="list"></ol>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button id="startBtn" class="btn">Start Run</button>
+        <button id="settingsBtn" class="btn secondary">Settings</button>
+      </div>
+      <p class="small">Controls: Swipe or Arrow keys • Up=Jump • Down=Slide • Left/Right=Lane/Turn • P=Pause</p>
+    </div>
+  </div>
+
+  <div id="pauseMenu" class="overlay hidden">
+    <div class="panel" style="max-width:460px">
+      <h2>Paused</h2>
+      <div class="row" style="margin-top:10px">
+        <button id="resumeBtn" class="btn">Resume</button>
+        <button id="restartBtn" class="btn secondary">Restart</button>
+        <button id="pauseSettingsBtn" class="btn dark">Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="settingsMenu" class="overlay hidden">
+    <div class="panel" style="max-width:520px">
+      <h2>Settings</h2>
+      <div class="row" style="margin-top:8px">
+        <label><input type="checkbox" id="soundToggle"> Sound Effects</label>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="musicToggle"> Background Music</label>
+      </div>
+      <div class="row">
+        <label>Master Volume <input type="range" id="volumeRange" min="0" max="1" step="0.01"></label>
+      </div>
+      <div class="row">
+        <label>Quality
+          <select id="qualitySelect">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="closeSettingsBtn" class="btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="gameOverScreen" class="overlay hidden">
+    <div class="panel" style="max-width:560px">
+      <h2>Game Over</h2>
+      <p id="gameOverReason">You were caught.</p>
+      <div class="row">
+        <div class="statBox"><div class="label">Final Score</div><div id="finalScore" class="value">0</div></div>
+        <div class="statBox"><div class="label">Distance</div><div id="finalDist" class="value">0m</div></div>
+        <div class="statBox"><div class="label">Coins</div><div id="finalCoins" class="value">0</div></div>
+      </div>
+      <h3 style="margin-top:12px">Leaderboard</h3>
+      <ol id="leaderboardGameOver" class="list"></ol>
+      <div class="row" style="margin-top:12px">
+        <button id="playAgainBtn" class="btn">Play Again</button>
+        <button id="toStartBtn" class="btn secondary">Main Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/three@0.159.0/build/three.min.js"></script>
+  <script>
+    // =========================
+    // Persistent data utilities
+    // =========================
+    const Storage = {
+      get(key, fallback) {
+        try {
+          const v = localStorage.getItem(key);
+          return v ? JSON.parse(v) : fallback;
+        } catch (e) { return fallback; }
+      },
+      set(key, value) {
+        localStorage.setItem(key, JSON.stringify(value));
+      }
+    };
+
+    // =========================
+    // Config & game-wide values
+    // =========================
+    const CHARACTERS = [
+      { id: "arya",  name: "Arya",  color: 0x5bc0ff, jump: 1.00, magnet: 1.00 },
+      { id: "kiran", name: "Kiran", color: 0xffa24a, jump: 1.08, magnet: 0.95 },
+      { id: "noah",  name: "Noah",  color: 0x7eff89, jump: 0.95, magnet: 1.15 }
+    ];
+
+    const SETTINGS_DEFAULT = { sound: true, music: true, volume: 0.5, quality: "medium" };
+    const settings = Object.assign({}, SETTINGS_DEFAULT, Storage.get("tr_settings", {}));
+    let walletCoins = Storage.get("tr_wallet", 0);
+
+    // Leaderboard seed entries (simulated global board)
+    const seededGlobal = [
+      {name:"Luna",score:14230},{name:"Kai",score:11890},{name:"Mira",score:10640},
+      {name:"Rex",score:9850},{name:"Nia",score:9420}
+    ];
+
+    // =========================
+    // DOM references
+    // =========================
+    const el = {
+      hud: document.getElementById("hud"),
+      scoreVal: document.getElementById("scoreVal"),
+      distVal: document.getElementById("distVal"),
+      coinVal: document.getElementById("coinVal"),
+      hint: document.getElementById("hint"),
+      shieldP: document.getElementById("shieldP"),
+      magnetP: document.getElementById("magnetP"),
+      boostP: document.getElementById("boostP"),
+      startScreen: document.getElementById("startScreen"),
+      pauseMenu: document.getElementById("pauseMenu"),
+      settingsMenu: document.getElementById("settingsMenu"),
+      gameOverScreen: document.getElementById("gameOverScreen"),
+      startBtn: document.getElementById("startBtn"),
+      settingsBtn: document.getElementById("settingsBtn"),
+      closeSettingsBtn: document.getElementById("closeSettingsBtn"),
+      pauseSettingsBtn: document.getElementById("pauseSettingsBtn"),
+      pauseBtn: document.getElementById("pauseBtn"),
+      resumeBtn: document.getElementById("resumeBtn"),
+      restartBtn: document.getElementById("restartBtn"),
+      playAgainBtn: document.getElementById("playAgainBtn"),
+      toStartBtn: document.getElementById("toStartBtn"),
+      gameOverReason: document.getElementById("gameOverReason"),
+      finalScore: document.getElementById("finalScore"),
+      finalDist: document.getElementById("finalDist"),
+      finalCoins: document.getElementById("finalCoins"),
+      leaderboardStart: document.getElementById("leaderboardStart"),
+      leaderboardGameOver: document.getElementById("leaderboardGameOver"),
+      charList: document.getElementById("charList"),
+      challengeText: document.getElementById("challengeText"),
+      challengeProgress: document.getElementById("challengeProgress"),
+      walletPill: document.getElementById("walletPill"),
+      soundToggle: document.getElementById("soundToggle"),
+      musicToggle: document.getElementById("musicToggle"),
+      volumeRange: document.getElementById("volumeRange"),
+      qualitySelect: document.getElementById("qualitySelect")
+    };
+
+    // =========================
+    // Three.js core objects
+    // =========================
+    let scene, camera, renderer;
+    let worldGroup, groundGroup, decoGroup, objectGroup;
+    let player, chaser;
+    let ambient, sun;
+    const lanes = [-2.2, 0, 2.2];
+
+    // Active object arrays
+    const obstacles = [];
+    const coins = [];
+    const powerups = [];
+    const corners = [];
+    const groundTiles = [];
+
+    // State
+    let state = "start";
+    let selectedChar = Storage.get("tr_selected_char", "arya");
+    let now = performance.now(), dt = 0;
+    let score = 0, distance = 0, runCoins = 0, turns = 0;
+    let laneIndex = 1, targetLane = 1;
+    let verticalVel = 0, playerY = 1.0, grounded = true;
+    let slideTimer = 0;
+    let baseSpeed = 16, speed = 16;
+    let obstacleTimer = 0, coinTimer = 0, powerTimer = 0;
+    let nextCornerAt = 220;
+    let activeCorner = null;
+    let worldTargetYaw = 0;
+    let runTime = 0;
+    let lastThemeShift = 0;
+
+    // Power-up timers
+    let shieldT = 0, magnetT = 0, boostT = 0;
+
+    // Challenge system
+    const todayKey = new Date().toISOString().slice(0,10);
+    const challengeState = Storage.get("tr_daily", {});
+    let dailyChallenge = null;
+
+    // Input tracking for swipe
+    let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+
+    // Audio
+    let audioCtx = null, musicClock = null;
+
+    // =========================
+    // Setup UI values
+    // =========================
+    el.soundToggle.checked = settings.sound;
+    el.musicToggle.checked = settings.music;
+    el.volumeRange.value = settings.volume;
+    el.qualitySelect.value = settings.quality;
+
+    el.soundToggle.onchange = () => { settings.sound = el.soundToggle.checked; persistSettings(); };
+    el.musicToggle.onchange = () => { settings.music = el.musicToggle.checked; persistSettings(); };
+    el.volumeRange.oninput = () => { settings.volume = Number(el.volumeRange.value); persistSettings(); };
+    el.qualitySelect.onchange = () => { settings.quality = el.qualitySelect.value; applyQuality(); persistSettings(); };
+
+    function persistSettings(){
+      Storage.set("tr_settings", settings);
+    }
+
+    // =========================
+    // Initialize 3D scene
+    // =========================
+    init3D();
+    setupCharactersUI();
+    setupDailyChallenge();
+    refreshWallet();
+    refreshLeaderboards();
+    animate();
+
+    function init3D() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x08111a);
+      scene.fog = new THREE.Fog(0x08111a, 25, 180);
+
+      camera = new THREE.PerspectiveCamera(68, window.innerWidth/window.innerHeight, 0.1, 500);
+      camera.position.set(0, 5.3, 9.8);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      document.getElementById("gameContainer").appendChild(renderer.domElement);
+
+      worldGroup = new THREE.Group();
+      groundGroup = new THREE.Group();
+      decoGroup = new THREE.Group();
+      objectGroup = new THREE.Group();
+
+      worldGroup.add(groundGroup, decoGroup, objectGroup);
+      scene.add(worldGroup);
+
+      ambient = new THREE.AmbientLight(0x8ab0c9, 0.72);
+      sun = new THREE.DirectionalLight(0xffffff, 0.92);
+      sun.position.set(8, 16, 8);
+      scene.add(ambient, sun);
+
+      createPlayer();
+      createChaser();
+      createGroundPool();
+      spawnInitialDecor();
+      applyQuality();
+
+      window.addEventListener("resize", onResize);
+    }
+
+    function applyQuality() {
+      const dpr = settings.quality === "high" ? Math.min(devicePixelRatio, 2)
+                 : settings.quality === "medium" ? Math.min(devicePixelRatio, 1.5)
+                 : 1;
+      renderer.setPixelRatio(dpr);
+    }
+
+    function createPlayer() {
+      const char = CHARACTERS.find(c => c.id === selectedChar) || CHARACTERS[0];
+
+      // Simple stylized explorer mesh
+      const grp = new THREE.Group();
+
+      const body = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.45, 1.2, 6, 12),
+        new THREE.MeshStandardMaterial({ color: char.color, roughness: 0.35, metalness: 0.1 })
+      );
+      body.position.y = 1.25;
+
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.33, 16, 16),
+        new THREE.MeshStandardMaterial({ color: 0xffd2b0, roughness: 0.8 })
+      );
+      head.position.y = 2.35;
+
+      const band = new THREE.Mesh(
+        new THREE.TorusGeometry(0.24, 0.05, 8, 18),
+        new THREE.MeshStandardMaterial({ color: 0x2b2b2b })
+      );
+      band.rotation.x = Math.PI / 2;
+      band.position.set(0, 2.37, 0.14);
+
+      grp.add(body, head, band);
+      grp.position.set(0, 0, 0);
+      player = grp;
+      worldGroup.add(player);
+    }
+
+    function recreatePlayer() {
+      if (player) worldGroup.remove(player);
+      createPlayer();
+    }
+
+    function createChaser() {
+      const mat = new THREE.MeshStandardMaterial({ color: 0x1f2630, roughness: 0.9, metalness: 0.0 });
+      chaser = new THREE.Mesh(new THREE.SphereGeometry(0.8, 14, 14), mat);
+      chaser.position.set(0, 1.0, 8.5);
+      worldGroup.add(chaser);
+    }
+
+    function createGroundPool() {
+      const tileGeo = new THREE.BoxGeometry(8, 0.5, 20);
+      for (let i=0; i<18; i++) {
+        const m = new THREE.MeshStandardMaterial({ color: i % 2 ? 0x59452f : 0x4e3d2b, roughness: 0.95 });
+        const tile = new THREE.Mesh(tileGeo, m);
+        tile.position.set(0, -0.25, -i * 20);
+        groundGroup.add(tile);
+        groundTiles.push(tile);
+
+        // Side walls for temple feel
+        const wallL = new THREE.Mesh(new THREE.BoxGeometry(0.6, 2.2, 20), new THREE.MeshStandardMaterial({ color: 0x66503b, roughness: 0.9 }));
+        const wallR = wallL.clone();
+        wallL.position.set(-4.3, 1.0, tile.position.z);
+        wallR.position.set(4.3, 1.0, tile.position.z);
+        groundGroup.add(wallL, wallR);
+      }
+    }
+
+    function spawnInitialDecor() {
+      for (let i=0;i<35;i++) spawnPillar(-i * 12 - 20);
+    }
+
+    function spawnPillar(z) {
+      const x = Math.random() < 0.5 ? -6 - Math.random()*2 : 6 + Math.random()*2;
+      const h = 2.2 + Math.random() * 4.5;
+      const col = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.36,0.42,h,9),
+        new THREE.MeshStandardMaterial({ color: Math.random()<0.5?0x5b6b55:0x4e4a5f, roughness:0.95 })
+      );
+      col.position.set(x, h/2 - 0.1, z);
+      decoGroup.add(col);
+      col.userData.kind = "pillar";
+    }
+
+    // =========================
+    // Daily challenge system
+    // =========================
+    function setupDailyChallenge() {
+      const templates = [
+        { type:"coins", target:120, reward:150, text:"Collect 120 coins in one run." },
+        { type:"distance", target:1600, reward:150, text:"Run 1600m in one run." },
+        { type:"turns", target:10, reward:180, text:"Successfully take 10 turns in one run." }
+      ];
+      const hash = [...todayKey].reduce((a,c)=>a+c.charCodeAt(0),0);
+      dailyChallenge = templates[hash % templates.length];
+
+      const completedOn = challengeState.completedOn || "";
+      const completed = completedOn === todayKey;
+      el.challengeText.textContent = dailyChallenge.text + ` Reward: +${dailyChallenge.reward} bonus coins.`;
+      el.challengeProgress.textContent = completed ? "Completed today ✔" : "Progress: 0%";
+    }
+
+    function updateChallengeProgress() {
+      if ((challengeState.completedOn || "") === todayKey) return;
+      let p = 0;
+      if (dailyChallenge.type === "coins") p = Math.min(1, runCoins / dailyChallenge.target);
+      if (dailyChallenge.type === "distance") p = Math.min(1, distance / dailyChallenge.target);
+      if (dailyChallenge.type === "turns") p = Math.min(1, turns / dailyChallenge.target);
+      el.challengeProgress.textContent = `Progress: ${Math.floor(p*100)}%`;
+
+      if (p >= 1) {
+        walletCoins += dailyChallenge.reward;
+        Storage.set("tr_wallet", walletCoins);
+        challengeState.completedOn = todayKey;
+        Storage.set("tr_daily", challengeState);
+        refreshWallet();
+        showHint("DAILY CHALLENGE COMPLETE! +" + dailyChallenge.reward, "#76ff9f");
+      }
+    }
+
+    function refreshWallet() {
+      el.walletPill.textContent = `Wallet: ${walletCoins} bonus coins`;
+    }
+
+    // =========================
+    // Character selection UI
+    // =========================
+    function setupCharactersUI() {
+      el.charList.innerHTML = "";
+      CHARACTERS.forEach(ch => {
+        const card = document.createElement("div");
+        card.className = "charCard" + (ch.id===selectedChar ? " active":"");
+        card.innerHTML = `
+          <div><span class="swatch" style="background:#${ch.color.toString(16).padStart(6,'0')}"></span><strong>${ch.name}</strong></div>
+          <div class="small">Jump: ${Math.round(ch.jump*100)}% • Magnet: ${Math.round(ch.magnet*100)}%</div>
+        `;
+        card.onclick = () => {
+          selectedChar = ch.id;
+          Storage.set("tr_selected_char", selectedChar);
+          setupCharactersUI();
+          recreatePlayer();
+        };
+        el.charList.appendChild(card);
+      });
+    }
+
+    // =========================
+    // Leaderboard
+    // =========================
+    function getLocalScores() {
+      return Storage.get("tr_scores", []);
+    }
+    function saveScoreEntry(name, scoreValue, dist, coinCount) {
+      const arr = getLocalScores();
+      arr.push({name,score:scoreValue,dist:Math.floor(dist),coins:coinCount,at:Date.now()});
+      arr.sort((a,b)=>b.score-a.score);
+      Storage.set("tr_scores", arr.slice(0,25));
+    }
+    function mergedLeaderboard() {
+      const local = getLocalScores().slice(0,10).map(s=>({name:s.name,score:s.score}));
+      const all = seededGlobal.concat(local);
+      all.sort((a,b)=>b.score-a.score);
+      return all.slice(0,8);
+    }
+    function refreshLeaderboards() {
+      const board = mergedLeaderboard();
+      el.leaderboardStart.innerHTML = "";
+      el.leaderboardGameOver.innerHTML = "";
+      board.forEach(e => {
+        const li1 = document.createElement("li");
+        li1.textContent = `${e.name} — ${e.score}`;
+        el.leaderboardStart.appendChild(li1);
+        const li2 = li1.cloneNode(true);
+        el.leaderboardGameOver.appendChild(li2);
+      });
+    }
+
+    // =========================
+    // Game lifecycle
+    // =========================
+    function startRun() {
+      initAudio();
+      clearRunObjects();
+      resetRunStats();
+      state = "running";
+      el.startScreen.classList.add("hidden");
+      el.gameOverScreen.classList.add("hidden");
+      el.pauseMenu.classList.add("hidden");
+      el.settingsMenu.classList.add("hidden");
+      el.hud.classList.remove("hidden");
+
+      recreatePlayer();
+      player.position.set(0,0,0);
+      laneIndex = 1; targetLane = 1;
+      worldGroup.rotation.y = 0;
+      worldTargetYaw = 0;
+
+      // Reset tiles
+      groundTiles.forEach((t,i)=>{ t.position.z = -i*20; });
+      score = distance = runCoins = turns = 0;
+      runTime = 0;
+      nextCornerAt = 220;
+      obstacleTimer = 0.8;
+      coinTimer = 0.3;
+      powerTimer = 6;
+      shieldT = magnetT = boostT = 0;
+      updateHUD();
+      startMusicLoop();
+      showHint("RUN!", "#68e1ff", 800);
+    }
+
+    function resetRunStats() {
+      baseSpeed = 16;
+      speed = baseSpeed;
+      verticalVel = 0;
+      playerY = 1;
+      grounded = true;
+      slideTimer = 0;
+      activeCorner = null;
+      el.hint.style.display = "none";
+    }
+
+    function clearRunObjects() {
+      [obstacles, coins, powerups, corners].forEach(arr => {
+        arr.forEach(o => objectGroup.remove(o));
+        arr.length = 0;
+      });
+      // Remove old decor moving objects if needed
+      for (let i=decoGroup.children.length-1; i>=0; i--) {
+        const c = decoGroup.children[i];
+        if (c.userData.kind === "pillar") decoGroup.remove(c);
+      }
+      spawnInitialDecor();
+    }
+
+    function pauseRun() {
+      if (state !== "running") return;
+      state = "paused";
+      el.pauseMenu.classList.remove("hidden");
+    }
+
+    function resumeRun() {
+      if (state !== "paused") return;
+      state = "running";
+      el.pauseMenu.classList.add("hidden");
+      now = performance.now();
+    }
+
+    function gameOver(reason = "You were caught by the temple curse.") {
+      state = "gameover";
+      stopMusicLoop();
+      el.hud.classList.add("hidden");
+      el.gameOverScreen.classList.remove("hidden");
+      el.gameOverReason.textContent = reason;
+      el.finalScore.textContent = Math.floor(score);
+      el.finalDist.textContent = Math.floor(distance) + "m";
+      el.finalCoins.textContent = runCoins;
+
+      const charName = (CHARACTERS.find(c=>c.id===selectedChar)||CHARACTERS[0]).name;
+      saveScoreEntry(charName, Math.floor(score), distance, runCoins);
+      refreshLeaderboards();
+    }
+
+    // =========================
+    // Spawning functions
+    // =========================
+    function spawnObstaclePattern(zBase) {
+      // Smart obstacle pattern: always keeps at least one viable lane/action option.
+      const safeLane = Math.floor(Math.random()*3);
+      const pattern = Math.floor(Math.random()*3);
+
+      for (let l=0; l<3; l++) {
+        if (l === safeLane && Math.random() < 0.78) continue;
+        if (pattern === 0) spawnObstacle(["block","bar","spike"][Math.floor(Math.random()*3)], l, zBase);
+        else if (pattern === 1) spawnObstacle(l%2===0 ? "bar":"block", l, zBase);
+        else spawnObstacle(["fire","spike","block"][Math.floor(Math.random()*3)], l, zBase - (l===safeLane?0:Math.random()*2));
+      }
+    }
+
+    function spawnObstacle(type, lane, z) {
+      let mesh;
+      if (type === "block") {
+        mesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.6, 1.2), new THREE.MeshStandardMaterial({color:0x7a5d44, roughness:0.9}));
+        mesh.position.y = 0.8;
+        mesh.userData.need = "jump";
+      } else if (type === "bar") {
+        mesh = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.5, 1.2), new THREE.MeshStandardMaterial({color:0x5f6b77, roughness:0.8}));
+        mesh.position.y = 1.35;
+        mesh.userData.need = "slide";
+      } else if (type === "spike") {
+        mesh = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.1, 8), new THREE.MeshStandardMaterial({color:0xb9c2cf, roughness:0.5}));
+        mesh.position.y = 0.55;
+        mesh.userData.need = "jump";
+      } else { // fire
+        mesh = new THREE.Mesh(new THREE.SphereGeometry(0.55, 10, 10), new THREE.MeshStandardMaterial({color:0xff6d2e, emissive:0x6e250f}));
+        mesh.position.y = 0.6;
+        mesh.userData.need = "jump";
+      }
+
+      mesh.position.x = lanes[lane];
+      mesh.position.z = z;
+      mesh.userData.kind = "obstacle";
+      mesh.userData.passed = false;
+      objectGroup.add(mesh);
+      obstacles.push(mesh);
+    }
+
+    function spawnCoinLine(zBase) {
+      const lane = Math.floor(Math.random()*3);
+      const count = 4 + Math.floor(Math.random()*4);
+      for (let i=0; i<count; i++) {
+        const c = new THREE.Mesh(
+          new THREE.TorusGeometry(0.28, 0.1, 8, 16),
+          new THREE.MeshStandardMaterial({color:0xffd45b, emissive:0x493704, roughness:0.35, metalness:0.65})
+        );
+        c.rotation.x = Math.PI/2;
+        c.position.set(lanes[lane], 1.0 + (Math.random()<0.2?0.6:0), zBase - i*2.3);
+        c.userData.kind = "coin";
+        objectGroup.add(c);
+        coins.push(c);
+      }
+    }
+
+    function spawnPowerup(z) {
+      const types = ["shield","magnet","boost"];
+      const type = types[Math.floor(Math.random()*types.length)];
+      const color = type==="shield"?0x76d7ff:type==="magnet"?0xff86d1:0x9dff74;
+
+      const p = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.45, 0),
+        new THREE.MeshStandardMaterial({color, emissive:color, emissiveIntensity:0.4, roughness:0.25, metalness:0.2})
+      );
+      p.position.set(lanes[Math.floor(Math.random()*3)], 1.2, z);
+      p.userData.kind = "powerup";
+      p.userData.type = type;
+      objectGroup.add(p);
+      powerups.push(p);
+    }
+
+    function spawnCorner(z) {
+      const g = new THREE.Group();
+      const archMat = new THREE.MeshStandardMaterial({color:0x6e7f8b, roughness:0.85});
+      const leftP = new THREE.Mesh(new THREE.BoxGeometry(0.8, 3.0, 0.8), archMat);
+      const rightP = leftP.clone();
+      leftP.position.set(-3.5,1.5,0);
+      rightP.position.set(3.5,1.5,0);
+      const top = new THREE.Mesh(new THREE.BoxGeometry(7.8,0.8,0.8), archMat);
+      top.position.set(0,3.0,0);
+      g.add(leftP,rightP,top);
+
+      const arrGeo = new THREE.ConeGeometry(0.4,0.9,8);
+      const arrL = new THREE.Mesh(arrGeo, new THREE.MeshStandardMaterial({color:0x68e1ff, emissive:0x133e55}));
+      const arrR = arrL.clone();
+      arrL.rotation.z = Math.PI/2; arrL.position.set(-1.2,2.0,0);
+      arrR.rotation.z = -Math.PI/2; arrR.position.set(1.2,2.0,0);
+      g.add(arrL,arrR);
+
+      g.position.set(0,0,z);
+      g.userData.kind = "corner";
+      g.userData.active = false;
+      g.userData.resolved = false;
+      objectGroup.add(g);
+      corners.push(g);
+    }
+
+    // =========================
+    // Input handling
+    // =========================
+    function doAction(action) {
+      if (state === "start" || state === "gameover") return;
+      if (state === "paused" && action !== "pause") return;
+
+      if (action === "pause") {
+        if (state === "running") pauseRun();
+        else if (state === "paused") resumeRun();
+        return;
+      }
+
+      if (state !== "running") return;
+
+      if ((action === "left" || action === "right") && activeCorner) {
+        resolveCorner(action === "left" ? -1 : 1);
+        return;
+      }
+
+      if (action === "left") {
+        targetLane = Math.max(0, targetLane - 1);
+        sfx(340,0.04,"triangle");
+      }
+      else if (action === "right") {
+        targetLane = Math.min(2, targetLane + 1);
+        sfx(380,0.04,"triangle");
+      }
+      else if (action === "jump") {
+        const c = CHARACTERS.find(x=>x.id===selectedChar) || CHARACTERS[0];
+        if (grounded && slideTimer <= 0) {
+          verticalVel = 12.5 * c.jump;
+          grounded = false;
+          sfx(620,0.08,"square");
+        }
+      }
+      else if (action === "slide") {
+        if (grounded && slideTimer <= 0.01) {
+          slideTimer = 0.75;
+          sfx(220,0.07,"sawtooth");
+        }
+      }
+    }
+
+    window.addEventListener("keydown", (e) => {
+      const k = e.key.toLowerCase();
+      if (k === "arrowleft" || k === "a") doAction("left");
+      else if (k === "arrowright" || k === "d") doAction("right");
+      else if (k === "arrowup" || k === "w" || k===" ") doAction("jump");
+      else if (k === "arrowdown" || k === "s") doAction("slide");
+      else if (k === "p" || k === "escape") doAction("pause");
+    });
+
+    window.addEventListener("touchstart", (e)=>{
+      if (!e.touches[0]) return;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      touchStartTime = performance.now();
+    }, {passive:true});
+
+    window.addEventListener("touchend", (e)=>{
+      const t = e.changedTouches[0];
+      if (!t) return;
+      const dx = t.clientX - touchStartX;
+      const dy = t.clientY - touchStartY;
+      const dtm = performance.now() - touchStartTime;
+      if (dtm > 420) return;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 28) doAction("right");
+        else if (dx < -28) doAction("left");
+      } else {
+        if (dy < -24) doAction("jump");
+        else if (dy > 24) doAction("slide");
+      }
+    }, {passive:true});
+
+    // =========================
+    // Collision helpers
+    // =========================
+    function isInPlayerLane(objX) {
+      return Math.abs(objX - player.position.x) < 0.85;
+    }
+
+    function playerFailsObstacle(need) {
+      if (need === "jump") return playerY < 1.75; // must be high enough
+      if (need === "slide") return slideTimer <= 0;
+      return true;
+    }
+
+    function collectCoin(c) {
+      runCoins++;
+      score += 25;
+      sfx(900,0.03,"sine");
+      objectGroup.remove(c);
+      c.userData.collected = true;
+    }
+
+    function activatePower(type) {
+      if (type === "shield") shieldT = 8;
+      if (type === "magnet") {
+        const ch = CHARACTERS.find(x=>x.id===selectedChar) || CHARACTERS[0];
+        magnetT = 8 * ch.magnet;
+      }
+      if (type === "boost") boostT = 5;
+      showHint((type==="shield"?"SHIELD":type==="magnet"?"MAGNET":"SPEED BOOST")+" ACTIVATED!", "#68e1ff", 900);
+      sfx(460,0.1,"triangle");
+    }
+
+    // =========================
+    // Corner turning
+    // =========================
+    function resolveCorner(dir) {
+      if (!activeCorner) return;
+      activeCorner.userData.resolved = true;
+      activeCorner.userData.active = false;
+      activeCorner = null;
+      worldTargetYaw += dir * (Math.PI / 2);
+      turns++;
+      nextCornerAt = Math.max(nextCornerAt, distance + 220 + Math.random()*160);
+      sfx(520,0.1,"square");
+      showHint(dir<0?"TURN LEFT!":"TURN RIGHT!", "#68e1ff", 450);
+      el.hint.style.display = "none";
+    }
+
+    // =========================
+    // Update loop
+    // =========================
+    function animate() {
+      requestAnimationFrame(animate);
+      const t = performance.now();
+      dt = Math.min(0.033, (t - now) / 1000);
+      now = t;
+
+      if (state === "running") updateGame(dt);
+      renderScene();
+    }
+
+    function updateGame(delta) {
+      runTime += delta;
+
+      // Adaptive speed and difficulty scaling
+      baseSpeed = 16 + runTime * 0.24;
+      speed = baseSpeed + (boostT > 0 ? 8 : 0);
+
+      // Advance distance and score
+      distance += speed * delta;
+      score += speed * delta * (1.4 + (boostT>0?0.45:0));
+      updateChallengeProgress();
+
+      // Smooth world turn interpolation
+      worldGroup.rotation.y += (worldTargetYaw - worldGroup.rotation.y) * Math.min(1, delta * 7);
+
+      // Player lane movement interpolation
+      laneIndex = targetLane;
+      player.position.x += (lanes[targetLane] - player.position.x) * Math.min(1, delta * 15);
+
+      // Jump & gravity
+      if (!grounded) {
+        verticalVel -= 33 * delta;
+        playerY += verticalVel * delta;
+        if (playerY <= 1) {
+          playerY = 1;
+          verticalVel = 0;
+          grounded = true;
+        }
+      }
+
+      // Slide timer
+      if (slideTimer > 0) {
+        slideTimer -= delta;
+        player.scale.y = 0.55;
+        player.position.y = -0.45;
+      } else {
+        player.scale.y = 1;
+        player.position.y = 0;
+      }
+
+      // Visual run animation
+      const bob = Math.sin(runTime * 18) * (grounded ? 0.06 : 0.02);
+      player.children.forEach(ch => ch.position.y += 0); // no-op keeps structure explicit
+      player.position.z = 0;
+      player.position.y += bob * 0.3;
+
+      // Chaser follows center lane and bobs
+      chaser.position.x += (player.position.x * 0.5 - chaser.position.x) * Math.min(1, delta*3);
+      chaser.position.y = 0.95 + Math.sin(runTime*6)*0.08;
+      chaser.position.z = 8.5 - Math.min(2.8, runTime*0.03);
+
+      // Update timers
+      if (shieldT > 0) shieldT -= delta;
+      if (magnetT > 0) magnetT -= delta;
+      if (boostT > 0) boostT -= delta;
+
+      // Spawn logic
+      const interval = Math.max(0.42, 1.05 - runTime * 0.004);
+      obstacleTimer -= delta;
+      if (obstacleTimer <= 0) {
+        obstacleTimer = interval * (0.9 + Math.random()*0.25);
+        if (distance > nextCornerAt && !activeCorner) {
+          spawnCorner(-120);
+          nextCornerAt += 260 + Math.random()*180;
+        } else {
+          spawnObstaclePattern(-120);
+        }
+      }
+
+      coinTimer -= delta;
+      if (coinTimer <= 0) {
+        coinTimer = 1.05 + Math.random()*0.55;
+        spawnCoinLine(-95 - Math.random()*40);
+      }
+
+      powerTimer -= delta;
+      if (powerTimer <= 0) {
+        powerTimer = 11 + Math.random()*8;
+        spawnPowerup(-130);
+      }
+
+      // Periodic theme shifts (jungle/cave/ruins tone)
+      if (distance - lastThemeShift > 600) {
+        lastThemeShift = distance;
+        const themes = [0x08111a,0x0f0d16,0x07160f];
+        const pick = themes[Math.floor(Math.random()*themes.length)];
+        scene.fog.color.setHex(pick);
+        scene.background = new THREE.Color(pick);
+      }
+
+      // Move and update ground tiles
+      let minZ = Infinity;
+      for (const tile of groundTiles) {
+        tile.position.z += speed * delta;
+        if (tile.position.z < minZ) minZ = tile.position.z;
+      }
+      for (const tile of groundTiles) {
+        if (tile.position.z > 20) {
+          tile.position.z = minZ - 20;
+          minZ = tile.position.z;
+        }
+      }
+
+      // Recycle and move pillars
+      for (let i=decoGroup.children.length-1; i>=0; i--) {
+        const p = decoGroup.children[i];
+        if (p.userData.kind !== "pillar") continue;
+        p.position.z += speed * delta;
+        if (p.position.z > 25) decoGroup.remove(p);
+      }
+      if (Math.random() < 0.35) spawnPillar(-180 - Math.random()*120);
+
+      // Update obstacles
+      for (let i=obstacles.length-1; i>=0; i--) {
+        const o = obstacles[i];
+        o.position.z += speed * delta;
+        if (o.position.z > 25) {
+          objectGroup.remove(o);
+          obstacles.splice(i,1);
+          continue;
+        }
+        // Collision zone
+        if (!o.userData.passed && Math.abs(o.position.z) < 0.9 && isInPlayerLane(o.position.x)) {
+          o.userData.passed = true;
+          if (shieldT > 0) {
+            shieldT = Math.max(0, shieldT - 1.2);
+            objectGroup.remove(o);
+            obstacles.splice(i,1);
+            showHint("SHIELD BLOCKED!", "#76ff9f", 450);
+            sfx(250,0.07,"square");
+          } else {
+            if (playerFailsObstacle(o.userData.need)) {
+              gameOver("You hit a trap.");
+              return;
+            }
+          }
+        }
+      }
+
+      // Update coins
+      for (let i=coins.length-1; i>=0; i--) {
+        const c = coins[i];
+        c.position.z += speed * delta;
+        c.rotation.y += 6 * delta;
+        c.rotation.x += 3 * delta;
+
+        if (magnetT > 0 && c.position.z > -14 && c.position.z < 5) {
+          c.position.x += (player.position.x - c.position.x) * Math.min(1, delta * 7.5);
+          c.position.y += ((playerY+0.2) - c.position.y) * Math.min(1, delta * 4.5);
+        }
+
+        if (Math.abs(c.position.z) < 0.9 && Math.abs(c.position.x - player.position.x) < 0.9 && Math.abs(c.position.y - (playerY+0.2)) < 1.2) {
+          collectCoin(c);
+          coins.splice(i,1);
+          continue;
+        }
+        if (c.position.z > 25 || c.userData.collected) {
+          objectGroup.remove(c);
+          coins.splice(i,1);
+        }
+      }
+
+      // Update powerups
+      for (let i=powerups.length-1; i>=0; i--) {
+        const p = powerups[i];
+        p.position.z += speed * delta;
+        p.rotation.x += 2 * delta;
+        p.rotation.y += 2.8 * delta;
+        if (Math.abs(p.position.z) < 1.0 && isInPlayerLane(p.position.x) && Math.abs((playerY+0.2)-p.position.y)<1.4) {
+          activatePower(p.userData.type);
+          objectGroup.remove(p);
+          powerups.splice(i,1);
+          continue;
+        }
+        if (p.position.z > 25) {
+          objectGroup.remove(p);
+          powerups.splice(i,1);
+        }
+      }
+
+      // Update corners
+      for (let i=corners.length-1; i>=0; i--) {
+        const c = corners[i];
+        c.position.z += speed * delta;
+        if (c.position.z > 30) {
+          objectGroup.remove(c);
+          corners.splice(i,1);
+          continue;
+        }
+
+        if (!c.userData.active && !c.userData.resolved && c.position.z > -8) {
+          c.userData.active = true;
+          activeCorner = c;
+          el.hint.style.display = "block";
+          el.hint.textContent = "SWIPE LEFT / RIGHT TO TURN!";
+        }
+
+        if (c.userData.active && !c.userData.resolved && c.position.z > 2.2) {
+          // Missed turn -> game over
+          activeCorner = null;
+          el.hint.style.display = "none";
+          gameOver("You missed the turn and fell.");
+          return;
+        }
+      }
+
+      updateHUD();
+    }
+
+    function updateHUD() {
+      el.scoreVal.textContent = Math.floor(score);
+      el.distVal.textContent = Math.floor(distance) + "m";
+      el.coinVal.textContent = runCoins;
+
+      if (shieldT > 0) {
+        el.shieldP.classList.remove("hidden");
+        el.shieldP.querySelector("span").textContent = shieldT.toFixed(1);
+      } else el.shieldP.classList.add("hidden");
+
+      if (magnetT > 0) {
+        el.magnetP.classList.remove("hidden");
+        el.magnetP.querySelector("span").textContent = magnetT.toFixed(1);
+      } else el.magnetP.classList.add("hidden");
+
+      if (boostT > 0) {
+        el.boostP.classList.remove("hidden");
+        el.boostP.querySelector("span").textContent = boostT.toFixed(1);
+      } else el.boostP.classList.add("hidden");
+    }
+
+    function renderScene() {
+      // Camera tracks player lane slightly
+      camera.position.x += ((player ? player.position.x * 0.24 : 0) - camera.position.x) * 0.1;
+      camera.lookAt(new THREE.Vector3(player ? player.position.x * 0.2 : 0, 1.35, -4));
+      renderer.render(scene, camera);
+    }
+
+    // =========================
+    // Utility visuals
+    // =========================
+    function showHint(text, color = "#ff6b6b", ms = 1000) {
+      el.hint.textContent = text;
+      el.hint.style.background = color;
+      el.hint.style.display = "block";
+      clearTimeout(showHint._t);
+      showHint._t = setTimeout(() => {
+        if (activeCorner) return;
+        el.hint.style.display = "none";
+      }, ms);
+    }
+
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // =========================
+    // Audio
+    // =========================
+    function initAudio() {
+      if (audioCtx) return;
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { audioCtx = null; }
+    }
+
+    function sfx(freq=440, duration=0.08, type="sine") {
+      if (!settings.sound || !audioCtx) return;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = type;
+      o.frequency.value = freq;
+      g.gain.value = 0.0001;
+      o.connect(g); g.connect(audioCtx.destination);
+
+      const nowT = audioCtx.currentTime;
+      const vol = 0.07 * settings.volume;
+      g.gain.exponentialRampToValueAtTime(Math.max(0.001,vol), nowT + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, nowT + duration);
+      o.start(nowT); o.stop(nowT + duration + 0.01);
+    }
+
+    function startMusicLoop() {
+      stopMusicLoop();
+      musicClock = setInterval(()=>{
+        if (state !== "running" || !settings.music || !audioCtx) return;
+        const seq = [220,330,277,370,330,415];
+        const n = seq[Math.floor((runTime*2) % seq.length)];
+        sfx(n, 0.12, "triangle");
+      }, 320);
+    }
+
+    function stopMusicLoop() {
+      if (musicClock) clearInterval(musicClock);
+      musicClock = null;
+    }
+
+    // =========================
+    // Buttons and menus
+    // =========================
+    el.startBtn.onclick = startRun;
+    el.pauseBtn.onclick = ()=>doAction("pause");
+    el.resumeBtn.onclick = resumeRun;
+    el.restartBtn.onclick = startRun;
+    el.playAgainBtn.onclick = startRun;
+    el.toStartBtn.onclick = () => {
+      state = "start";
+      el.gameOverScreen.classList.add("hidden");
+      el.startScreen.classList.remove("hidden");
+      refreshLeaderboards();
+      refreshWallet();
+      setupDailyChallenge();
+    };
+
+    el.settingsBtn.onclick = () => el.settingsMenu.classList.remove("hidden");
+    el.pauseSettingsBtn.onclick = () => el.settingsMenu.classList.remove("hidden");
+    el.closeSettingsBtn.onclick = () => el.settingsMenu.classList.add("hidden");
+
+    // Close overlay tap outside panel behavior
+    [el.settingsMenu, el.pauseMenu, el.gameOverScreen, el.startScreen].forEach(overlay => {
+      overlay.addEventListener("click", (ev)=>{
+        if (ev.target === overlay && overlay === el.settingsMenu) overlay.classList.add("hidden");
+      });
+    });
+
+    // Prevent scrolling gestures on mobile
+    document.body.addEventListener("touchmove", e => { if (state === "running") e.preventDefault(); }, {passive:false});
+  </script>
+</body>
+</html>

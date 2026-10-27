@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sword Duel - Master the Fight</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+background: #0a0a0a;
+display: flex;
+justify-content: center;
+align-items: center;
+min-height: 100vh;
+font-family: 'Georgia', serif;
+overflow: hidden;
+}
+#gameContainer {
+position: relative;
+width: 900px;
+height: 600px;
+border: 3px solid #333;
+border-radius: 8px;
+overflow: hidden;
+box-shadow: 0 0 40px rgba(0,0,0,0.8);
+}
+canvas {
+display: block;
+background: #1a1a2e;
+}
+#ui {
+position: absolute;
+top: 0; left: 0;
+width: 100%; height: 100%;
+pointer-events: none;
+}
+.health-bar-container {
+position: absolute;
+top: 20px;
+width: 300px;
+height: 30px;
+background: #222;
+border: 2px solid #555;
+border-radius: 15px;
+overflow: hidden;
+}
+#playerHealthContainer { left: 30px; }
+#enemyHealthContainer { right: 30px; }
+.health-bar {
+height: 100%;
+transition: width 0.3s ease;
+border-radius: 13px;
+}
+#playerHealth {
+background: linear-gradient(90deg, #2ecc71, #27ae60);
+width: 100%;
+}
+#enemyHealth {
+background: linear-gradient(90deg, #e74c3c, #c0392b);
+width: 100%;
+float: right;
+}
+.health-text {
+position: absolute;
+top: 22px;
+width: 300px;
+text-align: center;
+color: white;
+font-size: 14px;
+font-weight: bold;
+text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+z-index: 1;
+}
+#playerHealthText { left: 30px; }
+#enemyHealthText { right: 30px; }
+#controls {
+position: absolute;
+bottom: 20px;
+left: 50%;
+transform: translateX(-50%);
+display: flex;
+gap: 15px;
+pointer-events: auto;
+}
+.control-btn {
+padding: 12px 24px;
+border: 2px solid #555;
+border-radius: 8px;
+background: rgba(0,0,0,0.7);
+color: white;
+font-family: 'Georgia', serif;
+font-size: 14px;
+cursor: pointer;
+transition: all 0.2s;
+text-transform: uppercase;
+letter-spacing: 1px;
+}
+.control-btn:hover {
+background: rgba(255,255,255,0.1);
+border-color: #888;
+}
+.control-btn.block { border-color: #3498db; }
+.control-btn.block:hover { background: rgba(52,152,219,0.3); }
+.control-btn.dodge { border-color: #f39c12; }
+.control-btn.dodge:hover { background: rgba(243,156,18,0.3); }
+.control-btn.counter { border-color: #e74c3c; }
+.control-btn.counter:hover { background: rgba(231,76,60,0.3); }
+.control-btn:active {
+transform: scale(0.95);
+}
+#message {
+position: absolute;
+top: 50%;
+left: 50%;
+transform: translate(-50%, -50%);
+color: white;
+font-size: 48px;
+font-weight: bold;
+text-shadow: 0 0 20px rgba(255,255,255,0.5);
+text-align: center;
+display: none;
+z-index: 10;
+}
+#startScreen {
+position: absolute;
+top: 0; left: 0;
+width: 100%; height: 100%;
+background: rgba(0,0,0,0.85);
+display: flex;
+flex-direction: column;
+justify-content: center;
+align-items: center;
+z-index: 20;
+}
+#startScreen h1 {
+color: #e74c3c;
+font-size: 52px;
+margin-bottom: 10px;
+text-shadow: 0 0 30px rgba(231,76,60,0.5);
+}
+#startScreen h2 {
+color: #aaa;
+font-size: 20px;
+margin-bottom: 30px;
+font-weight: normal;
+}
+#startScreen .instructions {
+color: #888;
+font-size: 16px;
+margin-bottom: 30px;
+text-align: center;
+line-height: 1.8;
+}
+#startScreen .instructions span {
+color: #fff;
+background: rgba(255,255,255,0.1);
+padding: 2px 8px;
+border-radius: 4px;
+margin: 0 2px;
+}
+#startBtn {
+padding: 15px 50px;
+font-size: 24px;
+background: linear-gradient(135deg, #e74c3c, #c0392b);
+color: white;
+border: none;
+border-radius: 8px;
+cursor: pointer;
+font-family: 'Georgia', serif;
+transition: all 0.3s;
+text-transform: uppercase;
+letter-spacing: 2px;
+}
+#startBtn:hover {
+transform: scale(1.05);
+box-shadow: 0 0 30px rgba(231,76,60,0.5);
+}
+#comboDisplay {
+position: absolute;
+top: 60px;
+left: 50%;
+transform: translateX(-50%);
+color: #f39c12;
+font-size: 20px;
+font-weight: bold;
+text-shadow: 0 0 10px rgba(243,156,18,0.5);
+opacity: 0;
+transition: opacity 0.3s;
+}
+#actionFeedback {
+position: absolute;
+top: 40%;
+left: 50%;
+transform: translate(-50%, -50%);
+color: white;
+font-size: 28px;
+font-weight: bold;
+text-shadow: 0 0 15px rgba(255,255,255,0.5);
+opacity: 0;
+transition: opacity 0.5s;
+z-index: 5;
+}
+.stance-indicator {
+position: absolute;
+bottom: 70px;
+left: 50%;
+transform: translateX(-50%);
+color: #666;
+font-size: 12px;
+text-transform: uppercase;
+letter-spacing: 2px;
+}
+</style>
+</head>
+<body>
+<div id="gameContainer">
+<canvas id="gameCanvas" width="900" height="600"></canvas>
+<div id="ui">
+<div class="health-bar-container" id="playerHealthContainer">
+<div class="health-bar" id="playerHealth"></div>
+</div>
+<div class="health-text" id="playerHealthText">YOUR HEALTH</div>
+<div class="health-bar-container" id="enemyHealthContainer">
+<div class="health-bar" id="enemyHealth"></div>
+</div>
+<div class="health-text" id="enemyHealthText">OPPONENT</div>
+<div id="comboDisplay"></div>
+<div id="actionFeedback"></div>
+<div id="message"></div>
+<div id="controls">
+<button class="control-btn block" id="blockBtn"mousedown="startBlock()" mousedown="endBlock()">🛡 BLOCK (B)</button>
+<button class="control-btn dodge" id="dodgeBtn" onclick="dodge()">💨 DODGE (D)</button>
+<button class="control-btn counter" id="counterBtn" onclick="counter()">⚔ COUNTER (F)</button>
+</div>
+<div class="stance-indicator" id="stanceIndicator">STANDING</div>
+</div>
+<div id="startScreen">
+<h1>⚔ SWORD DUEL ⚔</h1>
+<h2>Master the Art of Combat</h2>
+<div class="instructions">
+<span>B</span> or hold <span>LEFT</span> to BLOCK incoming attacks<br>
+<span>D</span> to DODGE left or right (timed dodge avoids attacks)<br>
+<span>F</span> to COUNTER attack (hit enemy during their attack window)<br><br>
+Time your actions wisely. Block reduces damage, Dodge avoids it entirely,<br>
+Counter deals double damage when timed correctly!
+</div>
+<button id="startBtn" onclick="startGame()">BEGIN DUEL</button>
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width;
+const H = canvas.height;
+
+// Game state
+let gameRunning = false;
+let playerHealth = 100;
+let enemyHealth = 100;
+let playerMaxHealth = 100;
+let enemyMaxHealth = 100;
+let combo = 0;
+let comboTimer = 0;
+let screenShake = 0;
+let particles = [];
+let projectiles = [];
+let gameTime = 0;
+
+// Player state
+const player = {
+x: 200,
+y: 350,
+width: 50,
+height: 80,
+speed: 5,
+isBlocking: false,
+isDodging: false,
+dodgeDirection: 0,
+dodgeTimer: 0,
+dodgeCooldown: 0,
+isCountering: false,
+counterTimer: 0,
+attackTimer: 0,
+attackCooldown: 0,
+state: 'idle', // idle, blocking, dodging, attacking, hit, dead
+stamina: 100,
+maxStamina: 100,
+facing: 1,
+animFrame: 0,
+animTimer: 0
+};
+
+// Enemy state
+const enemy = {
+x: 650,
+y: 350,
+width: 50,
+height: 80,
+speed: 3,
+health: 100,
+maxHealth: 100,
+state: 'idle', // idle, attacking, blocking, hit, dead
+attackTimer: 0,
+attackCooldown: 0,
+attackType: 0,
+attackWindow: 0,
+aiTimer: 0,
+aiDecision: 'idle',
+animFrame: 0,
+animTimer: 0,
+facing: -1,
+retreatTimer: 0
+};
+
+// Input handling
+const keys = {};
+let blockHeld = false;
+
+document.addEventListener('keydown', (e) => {
+keys[e.key.toLowerCase()] = true;
+if (e.key.toLowerCase() === 'b') {
+blockHeld = true;
+player.isBlocking = true;
+}
+if (e.key.toLowerCase() === 'd' && !player.isDodging && player.dodgeCooldown <= 0) {
+dodge();
+}
+if (e.key.toLowerCase() === 'f' && !player.isCountering && player.attackCooldown <= 0) {
+counter();
+}
+if (e.key === ' ') {
+e.preventDefault();
+}
+});
+
+document.addEventListener('keyup', (e) => {
+keys[e.key.toLowerCase()] = false;
+if (e.key.toLowerCase() === 'b') {
+blockHeld = false;
+player.isBlocking = false;
+}
+});
+
+// Mouse/Touch controls
+document.getElementById('blockBtn').addEventListener('mousedown', () => {
+blockHeld = true;
+player.isBlocking = true;
+});
+document.getElementById('blockBtn').addEventListener('mouseup', () => {
+blockHeld = false;
+player.isBlocking = false;
+});
+document.getElementById('blockBtn').addEventListener('touchstart', (e) => {
+e.preventDefault();
+blockHeld = true;
+player.isBlocking = true;
+});
+document.getElementById('blockBtn').addEventListener('touchend', () => {
+blockHeld = false;
+player.isBlocking = false;
+});
+
+function dodge() {
+if (player.isDodging || player.dodgeCooldown > 0 || !gameRunning) return;
+player.isDodging = true;
+player.dodgeDirection = Math.random() > 0.5 ? 1 : -1;
+player.dodgeTimer = 20;
+player.dodgeCooldown = 30;
+player.state = 'dodging';
+showActionFeedback('DODGE!', '#f39c12');
+createParticles(player.x, player.y + 40, '#f39c12', 5);
+}
+
+function counter() {
+if (player.isCountering || player.attackCooldown > 0 || !gameRunning) return;
+player.isCountering = true;
+player.counterTimer = 15;
+player.state = 'attacking';
+player.attackTimer = 15;
+showActionFeedback('COUNTER!', '#e74c3c');
+createParticles(player.x + 30, player.y + 40, '#e74c3c', 8);
+}
+
+function startBlock() {
+blockHeld = true;
+player.isBlocking = true;
+}
+
+function endBlock() {
+blockHeld = false;
+player.isBlocking = false;
+}
+
+function showActionFeedback(text, color) {
+const feedback = document.getElementById('actionFeedback');
+feedback.textContent = text;
+feedback.style.color = color;
+feedback.style.opacity = 1;
+setTimeout(() => {
+feedback.style.opacity = 0;
+}, 800);
+}
+
+function createParticles(x, y, color, count) {
+for (let i = 0; i < count; i++) {
+particles.push({
+x: x,
+y: y,
+vx: (Math.random() - 0.5) * 8,
+vy: (Math.random() - 0.5) * 8 - 2,
+life: 30 + Math.random() * 20,
+maxLife: 50,
+color: color,
+size: 2 + Math.random() * 4
+});
+}
+}
+
+function createSlashEffect(x, y, direction) {
+for (let i = 0; i < 10; i++) {
+particles.push({
+x: x,
+y: y,
+vx: direction * (3 + Math.random() * 5),
+vy: (Math.random() - 0.5) * 6,
+life: 15 + Math.random() * 10,
+maxLife: 25,
+color: '#fff',
+size: 1 + Math.random() * 3
+});
+}
+}
+
+function updatePlayer() {
+if (player.state === 'dead') return;
+
+// Animation
+player.animTimer++;
+if (player.animTimer > 10) {
+player.animTimer = 0;
+player.animFrame = (player.animFrame + 1) % 4;
+}
+
+// Dodge cooldown
+if (player.dodgeCooldown > 0) player.dodgeCooldown--;
+
+// Dodge movement
+if (player.isDodging) {
+player.dodgeTimer--;
+player.x += player.dodgeDirection * 8;
+if (player.dodgeTimer <= 0) {
+player.isDodging = false;
+player.state = 'idle';
+}
+}
+
+// Counter/Attack
+if (player.isCountering) {
+player.counterTimer--;
+if (player.counterTimer <= 0) {
+player.isCountering = false;
+player.state = 'idle';
+}
+}
+
+// Attack cooldown
+if (player.attackCooldown > 0) player.attackCooldown--;
+
+// Blocking
+if (player.isBlocking && player.state !== 'dodging' && player.state !== 'attacking') {
+player.state = 'blocking';
+} else if (!player.isBlocking && player.state === 'blocking') {
+player.state = 'idle';
+}
+
+// Clamp position
+player.x = Math.max(50, Math.min(W - 50, player.x));
+
+// Stamina regen
+if (player.stamina < player.maxStamina) {
+player.stamina += 0.2;
+}
+}
+
+function updateEnemy() {
+if (enemy.state === 'dead') return;
+
+enemy.animTimer++;
+if (enemy.animTimer > 12) {
+enemy.animTimer = 0;
+enemy.animFrame = (enemy.animFrame + 1) % 4;
+}
+
+enemy.aiTimer++;
+
+// AI decision making
+if (enemy.aiTimer > 60 + Math.random() * 60) {
+enemy.aiTimer = 0;
+const rand = Math.random();
+if (rand < 0.4) {
+enemy.aiDecision = 'attack';
+} else if (rand < 0.7) {
+enemy.aiDecision = 'block';
+} else {
+enemy.aiDecision = 'move';
+}
+}
+
+// AI state machine
+switch (enemy.aiDecision) {
+case 'attack':
+if (enemy.state === 'idle' || enemy.state === 'blocking') {
+enemy.state = 'attacking';
+enemy.attackTimer = 30;
+enemy.attackType = Math.floor(Math.random() * 3);
+enemy.attackWindow = 15;
+enemy.aiDecision = 'attack_windup';
+}
+break;
+
+case 'attack_windup':
+if (enemy.attackTimer > 0) {
+enemy.attackTimer--;
+if (enemy.attackTimer <= 0) {
+// Execute attack
+executeEnemyAttack();
+enemy.state = 'idle';
+enemy.aiDecision = 'idle';
+}
+}
+break;
+
+case 'block':
+if (enemy.state !== 'blocking') {
+enemy.state = 'blocking';
+setTimeout(() => {
+if (enemy.state === 'blocking') enemy.state = 'idle';
+}, 1000);
+enemy.aiDecision = 'idle';
+}
+break;
+
+case 'move':
+if (Math.random() < 0.02) {
+enemy.retreatTimer = 30;
+}
+if (enemy.retreatTimer > 0) {
+enemy.retreatTimer--;
+enemy.x += (player.x > enemy.x ? -1 : 1) * 2;
+} else {
+// Move toward player
+if (Math.abs(player.x - enemy.x) > 150) {
+enemy.x += (player.x > enemy.x ? 1 : -1) * enemy.speed;
+}
+}
+enemy.aiDecision = 'idle';
+break;
+}
+
+// Clamp enemy position
+enemy.x = Math.max(50, Math.min(W - 50, enemy.x));
+
+// Face player
+enemy.facing = player.x > enemy.x ? 1 : -1;
+}
+
+function executeEnemyAttack() {
+// Check if player is dodging
+if (player.isDodging) {
+showActionFeedback('DODGED!', '#f39c12');
+createParticles(player.x, player.y + 40, '#f39c12', 3);
+return;
+}
+
+// Check if player is countering
+if (player.isCountering) {
+const damage = 15;
+enemyHealth -= damage;
+combo++;
+comboTimer = 120;
+updateHealthBars();
+showActionFeedback('COUNTERED! -' + damage, '#e74c3c');
+createParticles(enemy.x, enemy.y + 40, '#e74c3c', 15);
+screenShake = 10;
+if (combo > 1) {
+document.getElementById('comboDisplay').textContent = combo + 'x COMBO!';
+document.getElementById('comboDisplay').style.opacity = 1;
+}
+if (enemyHealth <= 0) {
+enemyHealth = 0;
+enemy.state = 'dead';
+gameWon();
+}
+return;
+}
+
+// Check if player is blocking
+if (player.isBlocking) {
+const damage = 5;
+playerHealth -= damage;
+updateHealthBars();
+showActionFeedback('BLOCKED -' + damage, '#3498db');
+createParticles(player.x, player.y + 40, '#3498db', 5);
+screenShake = 3;
+if (playerHealth <= 0) {
+playerHealth = 0;
+player.state = 'dead';
+gameLost();
+}
+return;
+}
+
+// Player took full damage
+const damage = 15 + Math.random() * 10;
+playerHealth -= damage;
+updateHealthBars();
+showActionFeedback('HIT! -' + Math.floor(damage), '#e74c3c');
+createParticles(player.x, player.y + 40, '#e74c3c', 10);
+screenShake = 8;
+player.state = 'hit';
+setTimeout(() => {
+if (player.state === 'hit') player.state = 'idle';
+}, 300);
+
+if (playerHealth <= 0) {
+playerHealth = 0;
+player.state = 'dead';
+gameLost();
+}
+}
+
+function updateHealthBars() {
+document.getElementById('playerHealth').style.width = (playerHealth / playerMaxHealth * 100) + '%';
+document.getElementById('enemyHealth').style.width = (enemyHealth / enemyMaxHealth * 100) + '%';
+}
+
+function gameWon() {
+gameRunning = false;
+const msg = document.getElementById('message');
+msg.innerHTML = '⚔ VICTORY ⚔<br><span style="font-size:24px">You have defeated your opponent!</span>';
+msg.style.display = 'block';
+msg.style.color = '#2ecc71';
+setTimeout(() => {
+msg.innerHTML += '<br><br><button onclick="resetGame()" style="padding:10px 30px;font-size:18px;background:#2ecc71;color:white;border:none;border-radius:5px;cursor:pointer;margin-top:20px;">REMATCH</button>';
+}, 1000);
+}
+
+function gameLost() {
+gameRunning = false;
+const msg = document.getElementById('message');
+msg.innerHTML = '💀 DEFEAT 💀<br><span style="font-size:24px">Your opponent was stronger...</span>';
+msg.style.display = 'block';
+msg.style.color = '#e74c3c';
+setTimeout(() => {
+msg.innerHTML += '<br><br><button onclick="resetGame()" style="padding:10px 30px;font-size:18px;background:#e74c3c;color:white;border:none;border-radius:5px;cursor:pointer;margin-top:20px;">REMATCH</button>';
+}, 1000);
+}
+
+function resetGame() {
+playerHealth = 100;
+enemyHealth = 100;
+player.state = 'idle';
+enemy.state = 'idle';
+player.x = 200;
+enemy.x = 650;
+player.isBlocking = false;
+player.isDodging = false;
+player.isCountering = false;
+combo = 0;
+particles = [];
+screenShake = 0;
+updateHealthBars();
+document.getElementById('message').style.display = 'none';
+gameRunning = true;
+}
+
+function startGame() {
+document.getElementById('startScreen').style.display = 'none';
+gameRunning = true;
+playerHealth = 100;
+enemyHealth = 100;
+updateHealthBars();
+}
+
+function drawBackground() {
+// Sky gradient
+const skyGrad = ctx.createLinearGradient(0, 0, 0, H);
+skyGrad.addColorStop(0, '#0f0c29');
+skyGrad.addColorStop(0.5, '#302b63');
+skyGrad.addColorStop(1, '#24243e');
+ctx.fillStyle = skyGrad;
+ctx.fillRect(0, 0, W, H);
+
+// Stars
+ctx.fillStyle = '#fff';
+for (let i = 0; i < 50; i++) {
+const sx = (i * 137.5 + gameTime * 0.01) % W;
+const sy = (i * 73.1) % (H * 0.6);
+const size = (Math.sin(gameTime * 0.05 + i) + 1) * 1;
+ctx.globalAlpha = 0.3 + Math.sin(gameTime * 0.03 + i * 0.5) * 0.3;
+ctx.fillRect(sx, sy, size, size);
+}
+ctx.globalAlpha = 1;
+
+// Moon
+ctx.fillStyle = '#f5f5dc';
+ctx.beginPath();
+ctx.arc(750, 80, 40, 0, Math.PI * 2);
+ctx.fill();
+ctx.fillStyle = '#0f0c29';
+ctx.beginPath();
+ctx.arc(765, 70, 35, 0, Math.PI * 2);
+ctx.fill();
+
+// Mountains
+ctx.fillStyle = '#1a1a3e';
+ctx.beginPath();
+ctx.moveTo(0, 400);
+ctx.lineTo(100, 300);
+ctx.lineTo(200, 350);
+ctx.lineTo(350, 250);
+ctx.lineTo(500, 320);
+ctx.lineTo(600, 280);
+ctx.lineTo(750, 350);
+ctx.lineTo(850, 300);
+ctx.lineTo(900, 350);
+ctx.lineTo(900, 400);
+ctx.closePath();
+ctx.fill();
+
+// Ground
+const groundGrad = ctx.createLinearGradient(0, 400, 0, H);
+groundGrad.addColorStop(0, '#2d2d5e');
+groundGrad.addColorStop(1, '#1a1a3e');
+ctx.fillStyle = groundGrad;
+ctx.fillRect(0, 400, W, H - 400);
+
+// Ground line
+ctx.strokeStyle = '#4a4a8a';
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.moveTo(0, 400);
+ctx.lineTo(W, 400);
+ctx.stroke();
+
+// Ground details
+ctx.strokeStyle = '#3a3a6a';
+ctx.lineWidth = 1;
+for (let i = 0; i < 20; i++) {
+const gx = (i * 50 + gameTime * 0.5) % W;
+ctx.beginPath();
+ctx.moveTo(gx, 410 + Math.sin(i) * 5);
+ctx.lineTo(gx + 20, 410 + Math.sin(i + 1) * 5);
+ctx.stroke();
+}
+}
+
+function drawCharacter(char, isPlayer) {
+ctx.save();
+ctx.translate(char.x, char.y);
+
+const scale = char.facing;
+ctx.scale(scale, 1);
+
+// Shadow
+ctx.fillStyle = 'rgba(0,0,0,0.3)';
+ctx.beginPath();
+ctx.ellipse(0, 45, 25, 8, 0, 0, Math.PI * 2);
+ctx.fill();
+
+// Body color
+const bodyColor = isPlayer ? '#3498db' : '#e74c3c';
+const darkColor = isPlayer ? '#2980b9' : '#c0392b';
+const skinColor = '#deb887';
+const armorColor = isPlayer ? '#2c3e50' : '#4a1a1a';
+
+// State-based animations
+let bodyOffsetY = 0;
+let armAngle = 0;
+let legSpread = 0;
+
+if (char.state === 'idle') {
+bodyOffsetY = Math.sin(gameTime * 0.05) * 2;
+armAngle = Math.sin(gameTime * 0.03) * 0.1;
+} else if (char.state === 'blocking') {
+armAngle = -0.5;
+bodyOffsetY = 3;
+} else if (char.state === 'attacking' || char.isCountering) {
+armAngle = -1.2;
+bodyOffsetY = -5;
+} else if (char.state === 'hit') {
+bodyOffsetY = 5;
+armAngle = 0.3;
+} else if (char.state === 'dodging') {
+bodyOffsetY = 10;
+armAngle = 0.5;
+}
+
+// Legs
+ctx.strokeStyle = armorColor;
+ctx.lineWidth = 6;
+ctx.lineCap = 'round';
+
+// Left leg
+ctx.beginPath();
+ctx.moveTo(-8, 20 + bodyOffsetY);
+ctx.lineTo(-12 - legSpread, 45);
+ctx.stroke();
+
+// Right leg
+ctx.beginPath();
+ctx.moveTo(8, 20 + bodyOffsetY);
+ctx.lineTo(12 + legSpread, 45);
+ctx.stroke();
+
+// Boots
+ctx.fillStyle = '#1a1a1a';
+ctx.fillRect(-16 - legSpread, 42, 8, 6);
+ctx.fillRect(8 + legSpread, 42, 8, 6);
+
+// Body/Torso
+ctx.fillStyle = bodyColor;
+ctx.beginPath();
+ctx.roundRect(-15, -20 + bodyOffsetY, 30, 45, 5);
+ctx.fill();
+
+// Armor detail
+ctx.fillStyle = armorColor;
+ctx.beginPath();
+ctx.roundRect(-12, -15 + bodyOffsetY, 24, 20, 3);
+ctx.fill();
+
+// Belt
+ctx.fillStyle = '#8b4513';
+ctx.fillRect(-14, 10 + bodyOffsetY, 28, 5);
+
+// Head
+ctx.fillStyle = skinColor;
+ctx.beginPath();
+ctx.arc(0, -30 + bodyOffsetY, 12, 0, Math.PI * 2);
+ctx.fill();
+
+// Helmet
+ctx.fillStyle = armorColor;
+ctx.beginPath();
+ctx.arc(0, -33 + bodyOffsetY, 13, Math.PI, 0);
+ctx.fill();
+
+// Helmet crest
+ctx.fillStyle = bodyColor;
+ctx.beginPath();
+ctx.moveTo(-3, -46 + bodyOffsetY);
+ctx.lineTo(0, -52 + bodyOffsetY);
+ctx.lineTo(3, -46 + bodyOffsetY);
+ctx.closePath();
+ctx.fill();
+
+// Eyes
+ctx.fillStyle = '#fff';
+ctx.fillRect(3, -32 + bodyOffsetY, 4, 3);
+ctx.fillStyle = '#000';
+ctx.fillRect(5, -32 + bodyOffsetY, 2, 3);
+
+// Arms
+ctx.strokeStyle = bodyColor;
+ctx.lineWidth = 5;
+ctx.lineCap = 'round';
+
+// Back arm
+ctx.beginPath();
+ctx.moveTo(-10, -10 + bodyOffsetY);
+ctx.lineTo(-20, 5 + bodyOffsetY + Math.sin(gameTime * 0.05) * 3);
+ctx.stroke();
+
+// Front arm (weapon arm)
+ctx.save();
+ctx.translate(10, -10 + bodyOffsetY);
+ctx.rotate(armAngle);
+
+ctx.beginPath();
+ctx.moveTo(0, 0);
+ctx.lineTo(15, 10);
+ctx.stroke();
+
+// Sword
+ctx.strokeStyle = '#c0c0c0';
+ctx.lineWidth = 3;
+ctx.beginPath();
+ctx.moveTo(15, 10);
+ctx.lineTo(45, -5);
+ctx.stroke();
+
+// Sword tip
+ctx.fillStyle = '#e0e0e0';
+ctx.beginPath();
+ctx.moveTo(45, -5);
+ctx.lineTo(50, -8);
+ctx.lineTo(48, -2);
+ctx.closePath();
+ctx.fill();
+
+// Sword guard
+ctx.fillStyle = '#8b4513';
+ctx.fillRect(12, 5, 6, 10);
+
+// Sword handle
+ctx.strokeStyle = '#8b4513';
+ctx.lineWidth = 4;
+ctx.beginPath();
+ctx.moveTo(15, 10);
+ctx.lineTo(10, 18);
+ctx.stroke();
+
+ctx.restore();
+
+// Blocking shield effect
+if (char.state === 'blocking') {
+ctx.strokeStyle = 'rgba(52, 152, 219, 0.6)';
+ctx.lineWidth = 3;
+ctx.beginPath();
+ctx.arc(0, 0, 35, 0, Math.PI * 2);
+ctx.stroke();
+
+ctx.fillStyle = 'rgba(52, 152, 219, 0.1)';
+ctx.beginPath();
+ctx.arc(0, 0, 35, 0, Math.PI * 2);
+ctx.fill();
+}
+
+// Dodge effect
+if (char.state === 'dodging') {
+ctx.globalAlpha = 0.5;
+ctx.fillStyle = '#f39c12';
+ctx.beginPath();
+ctx.arc(0, 0, 30, 0, Math.PI * 2);
+ctx.fill();
+ctx.globalAlpha = 1;
+}
+
+// Hit effect
+if (char.state === 'hit') {
+ctx.strokeStyle = 'rgba(231, 76, 60, 0.8)';
+ctx.lineWidth = 2;
+for (let i = 0; i < 4; i++) {
+const angle = (gameTime * 0.2 + i * Math.PI / 2);
+ctx.beginPath();
+ctx.moveTo(Math.cos(angle) * 20, Math.sin(angle) * 20);
+ctx.lineTo(Math.cos(angle) * 35, Math.sin(angle) * 35);
+ctx.stroke();
+}
+}
+
+ctx.restore();
+}
+
+function drawParticles() {
+for (let i = particles.length - 1; i >= 0; i--) {
+const p = particles[i];
+p.x += p.vx;
+p.y += p.vy;
+p.vy += 0.2;
+p.life--;
+
+if (p.life <= 0) {
+particles.splice(i, 1);
+continue;
+}
+
+ctx.globalAlpha = p.life / p.maxLife;
+ctx.fillStyle = p.color;
+ctx.beginPath();
+ctx.arc(p.x, p.y, p.size * (p.life / p.maxLife), 0, Math.PI * 2);
+ctx.fill();
+}
+ctx.globalAlpha = 1;
+}
+
+function drawUI() {
+// Stamina bar
+ctx.fillStyle = 'rgba(0,0,0,0.5)';
+ctx.fillRect(30, 55, 200, 10);
+ctx.fillStyle = '#f39c12';
+ctx.fillRect(30, 55, (player.stamina / player.maxStamina) * 200, 10);
+ctx.strokeStyle = '#555';
+ctx.lineWidth = 1;
+ctx.strokeRect(30, 55, 200, 10);
+
+ctx.fillStyle = '#fff';
+ctx.font = '10px Georgia';
+ctx.fillText('STAMINA', 35, 63);
+
+// Combo display
+if (comboTimer > 0) {
+comboTimer--;
+if (comboTimer <= 0) {
+combo = 0;
+document.getElementById('comboDisplay').style.opacity = 0;
+}
+}
+
+// Status indicators
+const stance = document.getElementById('stanceIndicator');
+if (player.state === 'blocking') {
+stance.textContent = '🛡 BLOCKING';
+stance.style.color = '#3498db';
+} else if (player.state === 'dodging') {
+stance.textContent = '💨 DODGING';
+stance.style.color = '#f39c12';
+} else if (player.state === 'attacking') {
+stance.textContent = '⚔ ATTACKING';
+stance.style.color = '#e74c3c';
+} else {
+stance.textContent = 'STANDING';
+stance.style.color = '#666';
+}
+}
+
+function gameLoop() {
+gameTime++;
+
+// Screen shake
+ctx.save();
+if (screenShake > 0) {
+ctx.translate(
+(Math.random() - 0.5) * screenShake,
+(Math.random() - 0.5) * screenShake
+);
+screenShake *= 0.9;
+if (screenShake < 0.5) screenShake = 0;
+}
+
+// Clear
+ctx.clearRect(-10, -10, W + 20, H + 20);
+
+// Draw background
+drawBackground();
+
+if (gameRunning) {
+// Update
+updatePlayer();
+updateEnemy();
+
+// Check attack collision
+if (player.isCountering && player.counterTimer > 10 && enemy.state !== 'dead') {
+// Counter attack hits during the window
+if (Math.abs(player.x - enemy.x) < 100) {
+const damage = 20;
+enemyHealth -= damage;
+updateHealthBars();
+createSlashEffect(enemy.x - 20, enemy.y + 20, -1);
+screenShake = 5;
+showActionFeedback('COUNTER HIT! -' + damage, '#e74c3c');
+if (enemyHealth <= 0) {
+enemyHealth = 0;
+enemy.state = 'dead';
+gameWon();
+}
+player.isCountering = false;
+player.counterTimer = 0;
+player.state = 'idle';
+}
+}
+}
+
+// Draw characters
+drawCharacter(player, true);
+drawCharacter(enemy, false);
+
+// Draw particles
+drawParticles();
+
+// Draw UI
+drawUI();
+
+ctx.restore();
+
+requestAnimationFrame(gameLoop);
+}
+
+// Start the game loop
+gameLoop();
+</script>
+</body>
+</html>

@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>501 Darts</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            touch-action: none; /* Prevent scrolling on mobile */
+            overflow: hidden;
+            background-color: #1a1a1a;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        canvas {
+            background: radial-gradient(circle, #333 0%, #111 100%);
+            border-radius: 50%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8), inset 0 0 20px rgba(0,0,0,0.5);
+            border: 10px solid #222;
+            cursor: crosshair;
+        }
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(26, 26, 26, 0.95);
+            z-index: 10;
+            transition: opacity 0.3s;
+        }
+        .hidden {
+            display: none !important;
+        }
+        
+        /* Dart indicators */
+        .dart-slot {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid #555;
+            margin: 0 5px;
+        }
+        .dart-slot.filled {
+            background-color: #ef4444;
+            border-color: #ef4444;
+            box-shadow: 0 0 10px #ef4444;
+        }
+        
+        #hud {
+            width: 100%;
+            max-width: 600px;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 5;
+        }
+
+        .score-pop {
+            position: absolute;
+            color: yellow;
+            font-weight: bold;
+            font-size: 24px;
+            text-shadow: 2px 2px 0 #000;
+            pointer-events: none;
+            animation: floatUp 1s forwards;
+            z-index: 20;
+        }
+
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-50px) scale(1.5); }
+        }
+
+        button {
+            transition: transform 0.1s, background-color 0.2s;
+        }
+        button:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        
+        <!-- HUD -->
+        <div id="hud" class="hidden">
+            <div class="flex flex-col items-center bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-lg">
+                <span class="text-gray-400 text-sm uppercase tracking-widest">Score</span>
+                <span id="current-score" class="text-5xl font-black text-white">501</span>
+            </div>
+            
+            <div class="flex flex-col items-center">
+                <span id="instruction-text" class="text-yellow-400 text-lg font-bold mb-2 h-6">Click to lock X</span>
+                <div class="flex">
+                    <div id="dart1" class="dart-slot"></div>
+                    <div id="dart2" class="dart-slot"></div>
+                    <div id="dart3" class="dart-slot"></div>
+                </div>
+                <div id="turn-score" class="mt-2 text-gray-400 h-6">Turn: 0</div>
+            </div>
+        </div>
+
+        <!-- Game Canvas -->
+        <div class="relative flex-grow flex items-center justify-center w-full max-w-2xl p-4">
+            <canvas id="dartboard"></canvas>
+            <div id="score-popups"></div>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="screen">
+            <h1 class="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-red-500 to-yellow-500 mb-2">501 DARTS</h1>
+            <p class="text-gray-400 mb-8 max-w-md text-center">Stop the moving crosshairs to throw your darts. Reach exactly 0 to win. If you go below 0, you bust!</p>
+            <button id="start-btn" class="px-8 py-4 bg-red-600 hover:bg-red-500 text-white rounded-full font-bold text-xl shadow-[0_0_20px_rgba(220,38,38,0.5)]">PLAY NOW</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="screen hidden">
+            <h2 class="text-5xl font-black text-white mb-4" id="end-title">WINNER!</h2>
+            <p class="text-2xl text-gray-300 mb-8">Darts thrown: <span id="final-darts" class="text-yellow-400 font-bold">0</span></p>
+            <button id="restart-btn" class="px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full font-bold text-xl shadow-[0_0_20px_rgba(5,150,105,0.5)]">PLAY AGAIN</button>
+        </div>
+
+    </div>
+
+    <script>
+        const canvas = document.getElementById('dartboard');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const hud = document.getElementById('hud');
+        const scoreDisplay = document.getElementById('current-score');
+        const turnScoreDisplay = document.getElementById('turn-score');
+        const instructionText = document.getElementById('instruction-text');
+        const dartSlots = [document.getElementById('dart1'), document.getElementById('dart2'), document.getElementById('dart3')];
+        const scorePopups = document.getElementById('score-popups');
+
+        // Audio Context setup
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            if (type === 'hit') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'bull') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.setValueAtTime(600, audioCtx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+            } else if (type === 'bust') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(50, audioCtx.currentTime + 0.5);
+                gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.5);
+            } else if (type === 'win') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                osc.frequency.setValueAtTime(554, audioCtx.currentTime + 0.1);
+                osc.frequency.setValueAtTime(659, audioCtx.currentTime + 0.2);
+                gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.5);
+            }
+        }
+
+        // Board setup
+        const boardNumbers = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+        let cx, cy, radius;
+        let R_DOUBLE_OUTER, R_DOUBLE_INNER, R_TRIPLE_OUTER, R_TRIPLE_INNER, R_OUTER_BULL, R_INNER_BULL;
+
+        // Game State
+        let gameState = 'start'; // start, aimingX, aimingY, processing, over
+        let score = 501;
+        let turnScore = 0;
+        let dartsThrown = 0;
+        let totalDartsThrown = 0;
+        let startTurnScore = 501;
+        let thrownDartsPos = [];
+
+        // Aiming mechanics
+        let aimX = 0;
+        let aimY = 0;
+        let aimTime = 0;
+        const aimSpeed = 0.003;
+
+        function resize() {
+            const container = canvas.parentElement;
+            const size = Math.min(container.clientWidth, container.clientHeight) - 20;
+            canvas.width = size;
+            canvas.height = size;
+            cx = size / 2;
+            cy = size / 2;
+            radius = (size / 2) * 0.9; // Leave margin
+
+            R_DOUBLE_OUTER = radius;
+            R_DOUBLE_INNER = radius * 0.90;
+            R_TRIPLE_OUTER = radius * 0.60;
+            R_TRIPLE_INNER = radius * 0.50;
+            R_OUTER_BULL = radius * 0.12;
+            R_INNER_BULL = radius * 0.05;
+
+            drawBoard();
+        }
+
+        window.addEventListener('resize', resize);
+
+        function drawBoard() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Wireframe base
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#000';
+            ctx.fill();
+
+            const anglePerSector = (Math.PI * 2) / 20;
+            
+            // Draw sectors
+            for (let i = 0; i < 20; i++) {
+                const startAngle = i * anglePerSector - (Math.PI / 2) - (anglePerSector / 2);
+                const endAngle = startAngle + anglePerSector;
+                
+                const isBlack = i % 2 === 0;
+                const baseColor = isBlack ? '#111' : '#ffe4c4';
+                const doubleColor = isBlack ? '#e60000' : '#008000';
+                const tripleColor = isBlack ? '#e60000' : '#008000';
+
+                // Single
+                drawSegment(cx, cy, R_DOUBLE_INNER, startAngle, endAngle, baseColor);
+                // Double
+                drawSegment(cx, cy, R_DOUBLE_OUTER, startAngle, endAngle, doubleColor, R_DOUBLE_INNER);
+                // Triple
+                drawSegment(cx, cy, R_TRIPLE_OUTER, startAngle, endAngle, tripleColor, R_TRIPLE_INNER);
+                
+                // Numbers
+                const numAngle = startAngle + anglePerSector / 2;
+                const numRadius = radius + 15;
+                ctx.fillStyle = '#fff';
+                ctx.font = `bold ${radius * 0.12}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(boardNumbers[i].toString(), cx + Math.cos(numAngle) * numRadius, cy + Math.sin(numAngle) * numRadius);
+            }
+
+            // Outer Bull
+            drawCircle(cx, cy, R_OUTER_BULL, '#008000');
+            // Inner Bull
+            drawCircle(cx, cy, R_INNER_BULL, '#e60000');
+
+            // Draw wire grid
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 1;
+            
+            // Radial lines
+            for (let i = 0; i < 20; i++) {
+                const angle = i * anglePerSector - (Math.PI / 2) - (anglePerSector / 2);
+                ctx.beginPath();
+                ctx.moveTo(cx + Math.cos(angle) * R_OUTER_BULL, cy + Math.sin(angle) * R_OUTER_BULL);
+                ctx.lineTo(cx + Math.cos(angle) * R_DOUBLE_OUTER, cy + Math.sin(angle) * R_DOUBLE_OUTER);
+                ctx.stroke();
+            }
+
+            // Rings
+            [R_DOUBLE_OUTER, R_DOUBLE_INNER, R_TRIPLE_OUTER, R_TRIPLE_INNER, R_OUTER_BULL, R_INNER_BULL].forEach(r => {
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.stroke();
+            });
+
+            // Draw thrown darts
+            thrownDartsPos.forEach(p => drawDartMarker(p.x, p.y));
+
+            // Draw Aiming Crosshairs
+            if (gameState === 'aimingX' || gameState === 'aimingY') {
+                ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
+                ctx.lineWidth = 2;
+                
+                // X Crosshair (moves left/right)
+                const xPos = cx + Math.sin(aimTime) * radius * 1.1;
+                ctx.beginPath();
+                ctx.moveTo(xPos, 0);
+                ctx.lineTo(xPos, canvas.height);
+                ctx.stroke();
+
+                if (gameState === 'aimingY') {
+                    // Lock X, draw locked line
+                    ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+                    ctx.beginPath();
+                    ctx.moveTo(aimX, 0);
+                    ctx.lineTo(aimX, canvas.height);
+                    ctx.stroke();
+
+                    // Y Crosshair (moves up/down)
+                    const yPos = cy + Math.sin(aimTime * 1.2) * radius * 1.1; // slightly different speed
+                    ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
+                    ctx.beginPath();
+                    ctx.moveTo(0, yPos);
+                    ctx.lineTo(canvas.width, yPos);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function drawSegment(x, y, r, sa, ea, color, innerR = 0) {
+            ctx.beginPath();
+            ctx.arc(x, y, r, sa, ea);
+            if (innerR > 0) {
+                ctx.arc(x, y, innerR, ea, sa, true);
+            } else {
+                ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+
+        function drawCircle(x, y, r, color) {
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+
+        function drawDartMarker(x, y) {
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            
+            // Dart flight simple shape
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + 10, y + 15);
+            ctx.lineTo(x + 5, y + 20);
+            ctx.fillStyle = '#555';
+            ctx.fill();
+        }
+
+        function calculateScore(x, y) {
+            const dx = x - cx;
+            const dy = y - cy;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist > R_DOUBLE_OUTER) return { points: 0, label: "MISS" };
+            if (dist <= R_INNER_BULL) return { points: 50, label: "BULL" };
+            if (dist <= R_OUTER_BULL) return { points: 25, label: "25" };
+
+            let angle = Math.atan2(dy, dx) + (Math.PI / 2);
+            if (angle < 0) angle += Math.PI * 2;
+            
+            const sectorAngle = (Math.PI * 2) / 20;
+            const sectorIndex = Math.floor((angle + sectorAngle/2) / sectorAngle) % 20;
+            const basePoints = boardNumbers[sectorIndex];
+
+            if (dist > R_TRIPLE_INNER && dist <= R_TRIPLE_OUTER) {
+                return { points: basePoints * 3, label: `T${basePoints}` };
+            }
+            if (dist > R_DOUBLE_INNER && dist <= R_DOUBLE_OUTER) {
+                return { points: basePoints * 2, label: `D${basePoints}` };
+            }
+
+            return { points: basePoints, label: `${basePoints}` };
+        }
+
+        function showPopup(x, y, text) {
+            const popup = document.createElement('div');
+            popup.className = 'score-pop';
+            popup.innerText = text;
+            // Convert canvas local coords to relative to container
+            const rect = canvas.getBoundingClientRect();
+            const containerRect = canvas.parentElement.getBoundingClientRect();
+            
+            popup.style.left = (x + (rect.left - containerRect.left)) + 'px';
+            popup.style.top = (y + (rect.top - containerRect.top)) + 'px';
+            
+            scorePopups.appendChild(popup);
+            setTimeout(() => popup.remove(), 1000);
+        }
+
+        function handleInput() {
+            if (gameState === 'start' || gameState === 'over' || gameState === 'processing') return;
+
+            if (gameState === 'aimingX') {
+                aimX = cx + Math.sin(aimTime) * radius * 1.1;
+                gameState = 'aimingY';
+                instructionText.innerText = "Click to lock Y";
+                playSound('hit'); // tick sound
+            } else if (gameState === 'aimingY') {
+                aimY = cy + Math.sin(aimTime * 1.2) * radius * 1.1;
+                throwDart(aimX, aimY);
+            }
+        }
+
+        canvas.addEventListener('mousedown', handleInput);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(); }, {passive: false});
+
+        function throwDart(x, y) {
+            gameState = 'processing';
+            thrownDartsPos.push({x, y});
+            dartsThrown++;
+            totalDartsThrown++;
+            
+            const result = calculateScore(x, y);
+            
+            if (result.points === 50) playSound('bull');
+            else playSound('hit');
+
+            showPopup(x, y, result.label);
+            
+            // Update UI
+            dartSlots[dartsThrown - 1].classList.add('filled');
+            
+            turnScore += result.points;
+            let tempScore = score - result.points;
+
+            if (tempScore < 0 || tempScore === 1) {
+                // Bust
+                playSound('bust');
+                showPopup(cx, cy, "BUST!");
+                score = startTurnScore;
+                turnScore = 0;
+                endTurn();
+            } else if (tempScore === 0) {
+                // Win
+                score = 0;
+                updateDisplay();
+                winGame();
+            } else {
+                // Normal hit
+                score = tempScore;
+                updateDisplay();
+                
+                setTimeout(() => {
+                    if (dartsThrown === 3) {
+                        endTurn();
+                    } else {
+                        startDartAim();
+                    }
+                }, 800);
+            }
+        }
+
+        function updateDisplay() {
+            scoreDisplay.innerText = score;
+            turnScoreDisplay.innerText = `Turn: ${turnScore}`;
+        }
+
+        function startDartAim() {
+            gameState = 'aimingX';
+            instructionText.innerText = "Click to lock X";
+            instructionText.classList.remove('text-red-500');
+            instructionText.classList.add('text-yellow-400');
+        }
+
+        function endTurn() {
+            instructionText.innerText = "Turn Over";
+            instructionText.classList.add('text-red-500');
+            instructionText.classList.remove('text-yellow-400');
+            
+            setTimeout(() => {
+                dartsThrown = 0;
+                turnScore = 0;
+                startTurnScore = score;
+                thrownDartsPos = [];
+                dartSlots.forEach(s => s.classList.remove('filled'));
+                updateDisplay();
+                startDartAim();
+            }, 1500);
+        }
+
+        function winGame() {
+            gameState = 'over';
+            playSound('win');
+            setTimeout(() => {
+                document.getElementById('final-darts').innerText = totalDartsThrown;
+                hud.classList.add('hidden');
+                gameOverScreen.classList.remove('hidden');
+            }, 1000);
+        }
+
+        function startGame() {
+            score = 501;
+            turnScore = 0;
+            dartsThrown = 0;
+            totalDartsThrown = 0;
+            startTurnScore = 501;
+            thrownDartsPos = [];
+            
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            hud.classList.remove('hidden');
+            
+            dartSlots.forEach(s => s.classList.remove('filled'));
+            updateDisplay();
+            resize();
+            
+            audioCtx.resume();
+            startDartAim();
+        }
+
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('restart-btn').addEventListener('click', startGame);
+
+        let lastTime = 0;
+        function loop(timestamp) {
+            const dt = timestamp - lastTime;
+            lastTime = timestamp;
+
+            if (gameState === 'aimingX' || gameState === 'aimingY') {
+                aimTime += dt * aimSpeed;
+            }
+            
+            drawBoard();
+            requestAnimationFrame(loop);
+        }
+
+        // Init
+        resize();
+        requestAnimationFrame(loop);
+
+    </script>
+</body>
+</html>

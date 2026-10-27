@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Samurai Duel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a202c; color: white; touch-action: none; font-family: 'Courier New', Courier, monospace; }
+        #game-container { position: relative; width: 100vw; height: 100vh; overflow: hidden; background: linear-gradient(to bottom, #2d3748, #1a202c); }
+        
+        /* Environment */
+        .moon { position: absolute; top: 10%; right: 20%; width: 100px; height: 100px; background: #e2e8f0; border-radius: 50%; box-shadow: 0 0 50px rgba(255,255,255,0.5); }
+        .ground { position: absolute; bottom: 0; width: 100%; height: 30%; background: #2d3748; border-top: 2px solid #4a5568; }
+
+        /* Fighters */
+        .fighter-container { position: absolute; bottom: 30%; width: 80px; height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; transition: transform 0.2s ease-out; }
+        #player { left: 20%; }
+        #enemy { right: 20%; transform: scaleX(-1); }
+        
+        .body { width: 40px; height: 80px; background-color: #cbd5e0; position: relative; border-radius: 5px; transition: all 0.2s; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        .head { width: 30px; height: 30px; background-color: #e2e8f0; border-radius: 50%; position: absolute; top: -35px; left: 5px; }
+        .weapon { width: 60px; height: 4px; background-color: #a0aec0; position: absolute; top: 30px; left: 20px; transform-origin: left center; transition: all 0.15s; }
+        
+        #player .body { background-color: #4299e1; }
+        #enemy .body { background-color: #f56565; }
+
+        /* States / Animations */
+        .idle .weapon { transform: rotate(-45deg); }
+        .windup .weapon { transform: rotate(-120deg) translateX(-10px); background-color: white; }
+        .attacking .body { transform: translateX(40px); }
+        .attacking .weapon { transform: rotate(20deg); width: 80px; background-color: #fff; box-shadow: 0 0 10px white; }
+        .blocking .body { background-color: #a0aec0 !important; transform: scale(0.95); }
+        .blocking .weapon { transform: rotate(-90deg) translate(-20px, -20px); width: 80px; }
+        .dodging .body { transform: translateX(-40px) skewX(-10deg); opacity: 0.7; }
+        .countering .body { filter: drop-shadow(0 0 10px #ecc94b); }
+        .countering .weapon { transform: rotate(-60deg); background-color: #ecc94b; }
+        .hit .body { background-color: white !important; transform: translateX(-10px); }
+        .dead .body { transform: rotate(90deg) translateY(40px); opacity: 0.5; }
+
+        /* Floating Text */
+        .combat-text { position: absolute; font-weight: bold; pointer-events: none; animation: floatUp 1s forwards; text-shadow: 1px 1px 2px black; z-index: 10; }
+        @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-50px) scale(1.5); } }
+
+        /* UI */
+        .bar-container { width: 100%; height: 20px; background: rgba(0,0,0,0.5); border: 2px solid #4a5568; border-radius: 10px; overflow: hidden; margin-bottom: 5px; }
+        .health-bar { height: 100%; background: #f56565; transition: width 0.2s; }
+        .stamina-bar { height: 100%; background: #ecc94b; transition: width 0.1s; }
+        
+        .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); z-index: 50; }
+        .hidden { display: none !important; }
+
+        .control-btn { background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-weight: bold; user-select: none; }
+        .control-btn:active { background: rgba(255,255,255,0.3); transform: scale(0.9); }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div class="moon"></div>
+    <div class="ground"></div>
+
+    <!-- HUD -->
+    <div id="hud" class="absolute top-0 left-0 w-full p-4 flex justify-between z-20 hidden">
+        <div class="w-2/5">
+            <h2 class="text-xl font-bold mb-1 text-blue-400">Player</h2>
+            <div class="bar-container"><div id="p-hp" class="health-bar" style="width: 100%;"></div></div>
+            <div class="bar-container h-3"><div id="p-stm" class="stamina-bar" style="width: 100%;"></div></div>
+        </div>
+        <div class="w-2/5 text-right">
+            <h2 class="text-xl font-bold mb-1 text-red-400">Ronin</h2>
+            <div class="bar-container"><div id="e-hp" class="health-bar" style="width: 100%; float: right;"></div></div>
+            <div class="bar-container h-3"><div id="e-stm" class="stamina-bar" style="width: 100%; float: right;"></div></div>
+        </div>
+    </div>
+
+    <!-- Arena -->
+    <div id="arena" class="hidden">
+        <div id="player" class="fighter-container idle">
+            <div class="body"><div class="head"></div><div class="weapon"></div></div>
+        </div>
+        <div id="enemy" class="fighter-container idle">
+            <div class="body"><div class="head"></div><div class="weapon"></div></div>
+        </div>
+    </div>
+
+    <!-- Controls (Mobile) -->
+    <div id="mobile-controls" class="absolute bottom-4 left-0 w-full px-4 flex justify-between z-20 hidden md:hidden">
+        <div class="flex gap-2">
+            <div class="control-btn" id="btn-dodge">D<br><span class="text-xs text-gray-400">Dodge</span></div>
+            <div class="control-btn" id="btn-block">S<br><span class="text-xs text-gray-400">Block</span></div>
+        </div>
+        <div class="flex gap-2">
+            <div class="control-btn" id="btn-counter">W<br><span class="text-xs text-gray-400">Parry</span></div>
+            <div class="control-btn" id="btn-attack" style="background: rgba(245,101,101,0.2);">J<br><span class="text-xs text-gray-400">Attack</span></div>
+        </div>
+    </div>
+
+    <!-- Desktop Help -->
+    <div id="desktop-controls" class="absolute bottom-4 w-full text-center text-gray-400 text-sm hidden md:block z-20">
+        Controls: [J] Attack (25 STM) | [S] Block (10 STM) | [D] Dodge (15 STM) | [W] Parry (30 STM)
+    </div>
+
+    <!-- Screens -->
+    <div id="start-screen" class="screen">
+        <h1 class="text-5xl font-bold mb-8 text-red-500 tracking-widest uppercase" style="text-shadow: 2px 2px 0 #000;">Bushido</h1>
+        <p class="mb-8 text-center max-w-md text-gray-300">
+            Timing is everything. Read your opponent.<br><br>
+            Attack has a wind-up.<br>
+            Dodge evades damage entirely.<br>
+            Block reduces damage.<br>
+            Parry (Counter) reflects damage if timed perfectly against an attack.
+        </p>
+        <button id="start-btn" class="px-8 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded text-xl border-2 border-red-800 transition">Duel</button>
+    </div>
+
+    <div id="game-over-screen" class="screen hidden">
+        <h1 id="result-title" class="text-5xl font-bold mb-4 text-white uppercase tracking-wider"></h1>
+        <p id="result-desc" class="text-xl mb-8 text-gray-400"></p>
+        <button id="restart-btn" class="px-8 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded text-xl border-2 border-gray-900 transition">Play Again</button>
+    </div>
+</div>
+
+<script>
+    // Audio Context (Simple synth sounds)
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContext();
+
+    function playSound(type) {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        const now = audioCtx.currentTime;
+        
+        if (type === 'hit') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, now);
+            osc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
+            gainNode.gain.setValueAtTime(0.3, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        } else if (type === 'block') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(300, now);
+            gainNode.gain.setValueAtTime(0.1, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        } else if (type === 'swing') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(600, now);
+            osc.frequency.linearRampToValueAtTime(200, now + 0.2);
+            gainNode.gain.setValueAtTime(0.1, now);
+            gainNode.gain.linearRampToValueAtTime(0.01, now + 0.2);
+            osc.start(now);
+            osc.stop(now + 0.2);
+        } else if (type === 'parry') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(800, now);
+            osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+            gainNode.gain.setValueAtTime(0.4, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+            osc.start(now);
+            osc.stop(now + 0.2);
+        }
+    }
+
+    // Game State
+    let gameState = 'START'; // START, PLAY, OVER
+    let gameLoopInt;
+    let aiLoopInt;
+
+    const CONSTANTS = {
+        MAX_HP: 100,
+        MAX_STM: 100,
+        STM_REGEN: 0.5,
+        DMG: 20,
+        COSTS: { attack: 25, block: 10, dodge: 15, parry: 30 },
+        DURATIONS: { windup: 300, attack: 200, block: 500, dodge: 400, parry: 300, cooldown: 300 }
+    };
+
+    class Fighter {
+        constructor(id, isPlayer) {
+            this.id = id;
+            this.el = document.getElementById(id);
+            this.isPlayer = isPlayer;
+            this.reset();
+        }
+
+        reset() {
+            this.hp = CONSTANTS.MAX_HP;
+            this.stm = CONSTANTS.MAX_STM;
+            this.state = 'idle'; // idle, windup, attacking, blocking, dodging, countering, dead
+            this.stateTimer = null;
+            this.el.className = 'fighter-container idle';
+            this.updateUI();
+        }
+
+        setState(newState, duration) {
+            if (this.state === 'dead' || this.hp <= 0) return;
+            
+            clearTimeout(this.stateTimer);
+            this.state = newState;
+            
+            // Clean up old classes, add new
+            this.el.className = 'fighter-container ' + newState;
+
+            if (duration) {
+                this.stateTimer = setTimeout(() => {
+                    if (this.state !== 'dead') this.setState('idle');
+                }, duration);
+            }
+        }
+
+        takeDamage(amount, type = 'normal') {
+            if (this.state === 'dead') return;
+            this.hp = Math.max(0, this.hp - amount);
+            this.updateUI();
+            
+            if (amount > 0) {
+                this.el.classList.add('hit');
+                setTimeout(() => this.el.classList.remove('hit'), 150);
+            }
+
+            if (this.hp <= 0) {
+                this.setState('dead');
+                endGame(this.isPlayer ? 'LOSE' : 'WIN');
+            }
+        }
+
+        useStamina(amount) {
+            if (this.stm < amount) return false;
+            this.stm -= amount;
+            this.updateUI();
+            return true;
+        }
+
+        updateUI() {
+            const prefix = this.isPlayer ? 'p' : 'e';
+            document.getElementById(`${prefix}-hp`).style.width = `${(this.hp / CONSTANTS.MAX_HP) * 100}%`;
+            document.getElementById(`${prefix}-stm`).style.width = `${(this.stm / CONSTANTS.MAX_STM) * 100}%`;
+        }
+    }
+
+    const player = new Fighter('player', true);
+    const enemy = new Fighter('enemy', false);
+
+    // UI Elements
+    const screenStart = document.getElementById('start-screen');
+    const screenOver = document.getElementById('game-over-screen');
+    const hud = document.getElementById('hud');
+    const arena = document.getElementById('arena');
+    const mobileControls = document.getElementById('mobile-controls');
+    const desktopControls = document.getElementById('desktop-controls');
+
+    // Visual Feedback
+    function showCombatText(text, targetEl, color = 'white') {
+        const span = document.createElement('span');
+        span.className = 'combat-text text-xl';
+        span.innerText = text;
+        span.style.color = color;
+        
+        const rect = targetEl.getBoundingClientRect();
+        const containerRect = document.getElementById('game-container').getBoundingClientRect();
+        
+        span.style.left = `${rect.left - containerRect.left + (rect.width/2)}px`;
+        span.style.top = `${rect.top - containerRect.top}px`;
+        
+        document.getElementById('game-container').appendChild(span);
+        setTimeout(() => span.remove(), 1000);
+    }
+
+    // Mechanics Logic
+    function performAction(actor, target, action) {
+        if (actor.state !== 'idle' || gameState !== 'PLAY') return;
+
+        if (!actor.useStamina(CONSTANTS.COSTS[action])) {
+            if(actor.isPlayer) showCombatText("Tired", actor.el, "gray");
+            return;
+        }
+
+        switch (action) {
+            case 'block':
+                actor.setState('blocking', CONSTANTS.DURATIONS.block);
+                break;
+            case 'dodge':
+                actor.setState('dodging', CONSTANTS.DURATIONS.dodge);
+                break;
+            case 'parry':
+                actor.setState('countering', CONSTANTS.DURATIONS.parry);
+                break;
+            case 'attack':
+                actor.setState('windup', CONSTANTS.DURATIONS.windup);
+                playSound('swing');
+                
+                // Attack Resolution schedule
+                actor.stateTimer = setTimeout(() => {
+                    if (actor.state === 'dead' || gameState !== 'PLAY') return;
+                    
+                    actor.setState('attacking', CONSTANTS.DURATIONS.attack);
+                    
+                    // Resolve Hit
+                    let dmg = CONSTANTS.DMG;
+                    const tState = target.state;
+
+                    if (tState === 'dodging') {
+                        showCombatText("Dodged", target.el, "cyan");
+                    } else if (tState === 'countering') {
+                        showCombatText("PARRY!", target.el, "yellow");
+                        playSound('parry');
+                        // Counter damage
+                        actor.takeDamage(dmg * 1.5);
+                        showCombatText(`-${dmg*1.5}`, actor.el, "red");
+                    } else if (tState === 'blocking') {
+                        playSound('block');
+                        showCombatText("Blocked", target.el, "gray");
+                        target.takeDamage(dmg * 0.2); // 80% reduction
+                    } else {
+                        playSound('hit');
+                        target.takeDamage(dmg);
+                        showCombatText(`-${dmg}`, target.el, "red");
+                    }
+
+                    // Cooldown phase
+                    setTimeout(() => {
+                        if(actor.state === 'attacking') actor.setState('idle');
+                    }, CONSTANTS.DURATIONS.attack);
+
+                }, CONSTANTS.DURATIONS.windup);
+                break;
+        }
+    }
+
+    // AI Logic
+    function runAI() {
+        if (enemy.state !== 'idle' || gameState !== 'PLAY') return;
+
+        // Simple behavior based on player state and random chance
+        const pState = player.state;
+        const rand = Math.random();
+
+        if (pState === 'windup') {
+            // Reaction time
+            setTimeout(() => {
+                if(enemy.state !== 'idle') return;
+                const r = Math.random();
+                if (enemy.stm >= CONSTANTS.COSTS.parry && r < 0.3) performAction(enemy, player, 'parry');
+                else if (enemy.stm >= CONSTANTS.COSTS.dodge && r < 0.6) performAction(enemy, player, 'dodge');
+                else if (enemy.stm >= CONSTANTS.COSTS.block && r < 0.9) performAction(enemy, player, 'block');
+            }, 150); // Imperfect reaction time
+        } else {
+            // Offensive / Idle
+            if (rand < 0.05 && enemy.stm >= CONSTANTS.COSTS.attack) {
+                performAction(enemy, player, 'attack');
+            }
+        }
+    }
+
+    // Game Loop
+    function gameLoop() {
+        if (gameState !== 'PLAY') return;
+
+        // Regen Stamina
+        if (player.state === 'idle') {
+            player.stm = Math.min(CONSTANTS.MAX_STM, player.stm + CONSTANTS.STM_REGEN);
+            player.updateUI();
+        }
+        if (enemy.state === 'idle') {
+            enemy.stm = Math.min(CONSTANTS.MAX_STM, enemy.stm + CONSTANTS.STM_REGEN);
+            enemy.updateUI();
+        }
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Controls
+    function handleInput(key) {
+        if (gameState !== 'PLAY') return;
+        switch(key.toLowerCase()) {
+            case 'j': performAction(player, enemy, 'attack'); break;
+            case 's': performAction(player, enemy, 'block'); break;
+            case 'd': performAction(player, enemy, 'dodge'); break;
+            case 'w': performAction(player, enemy, 'parry'); break;
+        }
+    }
+
+    window.addEventListener('keydown', (e) => handleInput(e.key));
+    
+    // Mobile Buttons
+    document.getElementById('btn-attack').addEventListener('touchstart', (e) => { e.preventDefault(); handleInput('j'); });
+    document.getElementById('btn-block').addEventListener('touchstart', (e) => { e.preventDefault(); handleInput('s'); });
+    document.getElementById('btn-dodge').addEventListener('touchstart', (e) => { e.preventDefault(); handleInput('d'); });
+    document.getElementById('btn-counter').addEventListener('touchstart', (e) => { e.preventDefault(); handleInput('w'); });
+
+    // Game Flow
+    function startGame() {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        gameState = 'PLAY';
+        player.reset();
+        enemy.reset();
+        
+        screenStart.classList.add('hidden');
+        screenOver.classList.add('hidden');
+        hud.classList.remove('hidden');
+        arena.classList.remove('hidden');
+        
+        if('ontouchstart' in window) mobileControls.classList.remove('hidden');
+
+        requestAnimationFrame(gameLoop);
+        aiLoopInt = setInterval(runAI, 100);
+    }
+
+    function endGame(result) {
+        gameState = 'OVER';
+        clearInterval(aiLoopInt);
+        
+        setTimeout(() => {
+            screenOver.classList.remove('hidden');
+            hud.classList.add('hidden');
+            mobileControls.classList.add('hidden');
+            
+            const title = document.getElementById('result-title');
+            const desc = document.getElementById('result-desc');
+            
+            if (result === 'WIN') {
+                title.innerText = 'Victory';
+                title.className = 'text-5xl font-bold mb-4 text-blue-400 uppercase tracking-wider';
+                desc.innerText = 'The enemy has fallen.';
+            } else {
+                title.innerText = 'Defeat';
+                title.className = 'text-5xl font-bold mb-4 text-red-500 uppercase tracking-wider';
+                desc.innerText = 'Your journey ends here.';
+            }
+        }, 1500); // Wait for death animation
+    }
+
+    document.getElementById('start-btn').addEventListener('click', startGame);
+    document.getElementById('restart-btn').addEventListener('click', startGame);
+
+</script>
+</body>
+</html>

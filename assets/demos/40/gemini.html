@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D Endless Runner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none;
+        }
+        #game-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        .interactive {
+            pointer-events: auto;
+        }
+        .hidden {
+            display: none !important;
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 5;
+            color: white;
+            font-weight: bold;
+            font-size: 1.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="hud" class="hidden">
+        <div>Score: <span id="score-display">0</span></div>
+        <div class="text-yellow-400">Coins: <span id="coin-display">0</span></div>
+    </div>
+
+    <div id="start-screen" class="ui-layer bg-black bg-opacity-70 interactive">
+        <h1 class="text-5xl font-bold text-white mb-4 text-center tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">TEMPLE DASH</h1>
+        <p class="text-white text-lg mb-8 text-center max-w-md px-4">
+            Swipe or use Arrow Keys to move.<br>
+            Up to Jump, Down to Slide.<br>
+            Collect coins, avoid obstacles!
+        </p>
+        <button id="start-btn" class="px-8 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold rounded-full text-xl hover:scale-105 transition transform shadow-lg shadow-orange-500/50">START RUNNING</button>
+    </div>
+
+    <div id="game-over-screen" class="ui-layer bg-black bg-opacity-80 interactive hidden">
+        <h1 class="text-6xl font-bold text-red-500 mb-2">GAME OVER</h1>
+        <p class="text-2xl text-white mb-2">Score: <span id="final-score" class="font-bold">0</span></p>
+        <p class="text-xl text-yellow-400 mb-8">Coins: <span id="final-coins" class="font-bold">0</span></p>
+        <button id="restart-btn" class="px-8 py-3 bg-white text-black font-bold rounded-full text-xl hover:bg-gray-200 transition transform shadow-lg">PLAY AGAIN</button>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'https://cdn.skypack.dev/three@0.136.0/build/three.module.js';
+
+        // --- Game State & Variables ---
+        let scene, camera, renderer;
+        let player, playerBox;
+        let objects = []; // obstacles and coins
+        let particles = [];
+        
+        const GAME_STATE = { START: 0, PLAYING: 1, GAMEOVER: 2 };
+        let currentState = GAME_STATE.START;
+        
+        let score = 0;
+        let coins = 0;
+        let distance = 0;
+        let baseSpeed = 0.3;
+        let currentSpeed = baseSpeed;
+        
+        // Player properties
+        const LANE_WIDTH = 3;
+        let currentLane = 0; // -1 (left), 0 (center), 1 (right)
+        let isJumping = false;
+        let isSliding = false;
+        let velocityY = 0;
+        const GRAVITY = -0.015;
+        const JUMP_FORCE = 0.25;
+        const PLAYER_SIZE = 1;
+        
+        // World generation
+        let furthestZ = 0;
+        const CHUNK_SIZE = 50;
+        const RENDER_DISTANCE = 200;
+
+        // Colors
+        const COLOR_GROUND = 0x2A3b2c;
+        const COLOR_PLAYER = 0x3498db;
+        const COLOR_OBSTACLE = 0x8b0000;
+        const COLOR_COIN = 0xf1c40f;
+
+        // UI Elements
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const hud = document.getElementById('hud');
+        const scoreDisplay = document.getElementById('score-display');
+        const coinDisplay = document.getElementById('coin-display');
+        const finalScore = document.getElementById('final-score');
+        const finalCoins = document.getElementById('final-coins');
+
+        init();
+        animate();
+
+        function init() {
+            // Setup Scene
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x111111, 50, RENDER_DISTANCE);
+            scene.background = new THREE.Color(0x111111);
+
+            // Setup Camera
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, RENDER_DISTANCE + 50);
+            camera.position.set(0, 5, 10);
+            camera.lookAt(0, 0, -10);
+
+            // Setup Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(-10, 20, 10);
+            dirLight.castShadow = true;
+            dirLight.shadow.camera.left = -20;
+            dirLight.shadow.camera.right = 20;
+            dirLight.shadow.camera.top = 20;
+            dirLight.shadow.camera.bottom = -20;
+            scene.add(dirLight);
+
+            // Create Player
+            const playerGeo = new THREE.BoxGeometry(PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE);
+            const playerMat = new THREE.MeshStandardMaterial({ color: COLOR_PLAYER, roughness: 0.4 });
+            player = new THREE.Mesh(playerGeo, playerMat);
+            player.position.set(0, PLAYER_SIZE / 2, 0);
+            player.castShadow = true;
+            scene.add(player);
+            playerBox = new THREE.Box3();
+
+            // Create Initial Ground
+            createGroundBlock(0);
+            createGroundBlock(-CHUNK_SIZE);
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('keydown', handleKeyDown);
+            setupTouchControls();
+
+            document.getElementById('start-btn').addEventListener('click', startGame);
+            document.getElementById('restart-btn').addEventListener('click', resetGame);
+        }
+
+        function createGroundBlock(zPos) {
+            const geo = new THREE.PlaneGeometry(LANE_WIDTH * 3 + 2, CHUNK_SIZE);
+            const mat = new THREE.MeshStandardMaterial({ color: COLOR_GROUND, roughness: 1 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.rotation.x = -Math.PI / 2;
+            mesh.position.set(0, 0, zPos - CHUNK_SIZE / 2);
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+        }
+
+        function spawnWorld() {
+            while (player.position.z - RENDER_DISTANCE < furthestZ) {
+                furthestZ -= 15; // Gap between rows
+                
+                // Don't spawn immediately in front of start
+                if (furthestZ > -30) continue;
+
+                const rowType = Math.random();
+                
+                if (rowType < 0.6) {
+                    // Spawn Obstacle
+                    const lane = Math.floor(Math.random() * 3) - 1;
+                    const obsType = Math.random();
+                    
+                    if (obsType < 0.4) {
+                        // High block (slide under)
+                        createObstacle(lane, furthestZ, 1, 0.5, 1, 1.5);
+                    } else if (obsType < 0.7) {
+                        // Low block (jump over)
+                        createObstacle(lane, furthestZ, 3, 1, 1, 0); // Spans 3 lanes visually sometimes? No keep it 1
+                        createObstacle(lane, furthestZ, 1, 0.8, 1, 0);
+                    } else {
+                        // Full block (must switch lane)
+                        createObstacle(lane, furthestZ, 1, 2, 1, 0);
+                    }
+                } else if (rowType < 0.9) {
+                    // Spawn Coins
+                    const lane = Math.floor(Math.random() * 3) - 1;
+                    for (let i = 0; i < 3; i++) {
+                        createCoin(lane, furthestZ + i * 2);
+                    }
+                }
+            }
+        }
+
+        function createObstacle(lane, z, w, h, d, yOffset) {
+            const geo = new THREE.BoxGeometry(w * LANE_WIDTH * 0.8, h, d);
+            const mat = new THREE.MeshStandardMaterial({ color: COLOR_OBSTACLE });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(lane * LANE_WIDTH, h / 2 + yOffset, z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData = { type: 'obstacle' };
+            scene.add(mesh);
+            objects.push(mesh);
+        }
+
+        function createCoin(lane, z) {
+            const geo = new THREE.CylinderGeometry(0.3, 0.3, 0.1, 16);
+            const mat = new THREE.MeshStandardMaterial({ color: COLOR_COIN, metalness: 0.8, roughness: 0.2 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.rotation.x = Math.PI / 2;
+            mesh.position.set(lane * LANE_WIDTH, 0.5, z);
+            mesh.userData = { type: 'coin' };
+            scene.add(mesh);
+            objects.push(mesh);
+        }
+
+        function createExplosion(pos, color) {
+            const geo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+            const mat = new THREE.MeshBasicMaterial({ color: color });
+            for (let i = 0; i < 15; i++) {
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.copy(pos);
+                mesh.velocity = new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.5,
+                    Math.random() * 0.5,
+                    (Math.random() - 0.5) * 0.5
+                );
+                mesh.life = 1.0;
+                scene.add(mesh);
+                particles.push(mesh);
+            }
+        }
+
+        function startGame() {
+            startScreen.classList.add('hidden');
+            hud.classList.remove('hidden');
+            currentState = GAME_STATE.PLAYING;
+        }
+
+        function resetGame() {
+            // Clean up existing objects
+            objects.forEach(obj => scene.remove(obj));
+            objects = [];
+            particles.forEach(p => scene.remove(p));
+            particles = [];
+
+            score = 0;
+            coins = 0;
+            distance = 0;
+            currentSpeed = baseSpeed;
+            furthestZ = 0;
+            currentLane = 0;
+            
+            player.position.set(0, PLAYER_SIZE / 2, 0);
+            camera.position.set(0, 5, 10);
+            
+            updateHUD();
+            
+            gameOverScreen.classList.add('hidden');
+            hud.classList.remove('hidden');
+            currentState = GAME_STATE.PLAYING;
+        }
+
+        function gameOver() {
+            currentState = GAME_STATE.GAMEOVER;
+            hud.classList.add('hidden');
+            gameOverScreen.classList.remove('hidden');
+            finalScore.innerText = Math.floor(score);
+            finalCoins.innerText = coins;
+            createExplosion(player.position, COLOR_PLAYER);
+            player.visible = false;
+        }
+
+        // --- Controls ---
+        function handleKeyDown(e) {
+            if (currentState !== GAME_STATE.PLAYING) return;
+            switch(e.key) {
+                case 'ArrowLeft':
+                case 'a':
+                case 'A':
+                    moveLeft();
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                case 'D':
+                    moveRight();
+                    break;
+                case 'ArrowUp':
+                case 'w':
+                case 'W':
+                case ' ':
+                    jump();
+                    break;
+                case 'ArrowDown':
+                case 's':
+                case 'S':
+                    slide();
+                    break;
+            }
+        }
+
+        let touchStartX = 0;
+        let touchStartY = 0;
+        function setupTouchControls() {
+            document.addEventListener('touchstart', e => {
+                touchStartX = e.changedTouches[0].screenX;
+                touchStartY = e.changedTouches[0].screenY;
+            }, {passive: false});
+
+            document.addEventListener('touchend', e => {
+                if (currentState !== GAME_STATE.PLAYING) return;
+                let touchEndX = e.changedTouches[0].screenX;
+                let touchEndY = e.changedTouches[0].screenY;
+                handleSwipe(touchStartX, touchStartY, touchEndX, touchEndY);
+            }, {passive: false});
+        }
+
+        function handleSwipe(startX, startY, endX, endY) {
+            const dx = endX - startX;
+            const dy = endY - startY;
+            if (Math.abs(dx) > Math.abs(dy)) {
+                // Horizontal swipe
+                if (Math.abs(dx) > 30) {
+                    if (dx > 0) moveRight();
+                    else moveLeft();
+                }
+            } else {
+                // Vertical swipe
+                if (Math.abs(dy) > 30) {
+                    if (dy > 0) slide(); // Swipe down
+                    else jump(); // Swipe up
+                }
+            }
+        }
+
+        function moveLeft() { if (currentLane > -1) currentLane--; }
+        function moveRight() { if (currentLane < 1) currentLane++; }
+        
+        function jump() {
+            if (!isJumping && !isSliding) {
+                isJumping = true;
+                velocityY = JUMP_FORCE;
+            }
+        }
+
+        function slide() {
+            if (!isSliding && !isJumping) {
+                isSliding = true;
+                player.scale.y = 0.5;
+                player.position.y = PLAYER_SIZE / 4; // Move down to ground
+                setTimeout(() => {
+                    isSliding = false;
+                    player.scale.y = 1;
+                    if(!isJumping) player.position.y = PLAYER_SIZE / 2;
+                }, 800);
+            }
+        }
+
+        // --- Game Loop ---
+        function updatePlayer() {
+            if (currentState !== GAME_STATE.PLAYING) return;
+
+            // Move forward
+            player.position.z -= currentSpeed;
+            distance += currentSpeed;
+            score = distance * 10 + coins * 50;
+            
+            // Increase difficulty
+            currentSpeed = baseSpeed + (distance * 0.0001);
+            if(currentSpeed > 0.8) currentSpeed = 0.8;
+
+            // Smooth lane changing
+            const targetX = currentLane * LANE_WIDTH;
+            player.position.x += (targetX - player.position.x) * 0.2;
+
+            // Jump logic
+            if (isJumping) {
+                player.position.y += velocityY;
+                velocityY += GRAVITY;
+                
+                // Rotation effect during jump
+                player.rotation.x -= 0.1;
+
+                if (player.position.y <= PLAYER_SIZE / 2 && !isSliding) {
+                    player.position.y = PLAYER_SIZE / 2;
+                    isJumping = false;
+                    velocityY = 0;
+                    player.rotation.x = 0;
+                }
+            } else if (!isSliding) {
+                // Roll effect while running
+                player.rotation.x -= currentSpeed * 0.5;
+            }
+
+            // Camera follow
+            camera.position.z = player.position.z + 10;
+            camera.position.x += (player.position.x * 0.5 - camera.position.x) * 0.1;
+            
+            // Ground generation (infinite loop illusion by moving planes)
+            // Simpler to just spawn new visual chunks and delete old ones
+            if(Math.floor(distance) % CHUNK_SIZE === 0) {
+                 // createGroundBlock(player.position.z - RENDER_DISTANCE); 
+                 // Actually, a large static plane that follows Z is cheaper
+            }
+        }
+
+        function checkCollisions() {
+            if (currentState !== GAME_STATE.PLAYING) return;
+            
+            // Update player bounding box
+            playerBox.setFromObject(player);
+            // Shrink box slightly to be forgiving
+            playerBox.expandByScalar(-0.1); 
+
+            for (let i = objects.length - 1; i >= 0; i--) {
+                const obj = objects[i];
+                
+                // Animation for coins
+                if(obj.userData.type === 'coin') {
+                    obj.rotation.z += 0.05;
+                }
+
+                // Clean up objects behind camera
+                if (obj.position.z > player.position.z + 5) {
+                    scene.remove(obj);
+                    objects.splice(i, 1);
+                    continue;
+                }
+
+                const objBox = new THREE.Box3().setFromObject(obj);
+
+                if (playerBox.intersectsBox(objBox)) {
+                    if (obj.userData.type === 'obstacle') {
+                        gameOver();
+                    } else if (obj.userData.type === 'coin') {
+                        coins++;
+                        createExplosion(obj.position, COLOR_COIN);
+                        scene.remove(obj);
+                        objects.splice(i, 1);
+                        updateHUD();
+                    }
+                }
+            }
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.position.add(p.velocity);
+                p.life -= 0.05;
+                p.scale.setScalar(p.life);
+                if (p.life <= 0) {
+                    scene.remove(p);
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        function updateHUD() {
+            scoreDisplay.innerText = Math.floor(score);
+            coinDisplay.innerText = coins;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (currentState === GAME_STATE.PLAYING) {
+                updatePlayer();
+                spawnWorld();
+                checkCollisions();
+                if(Math.floor(distance)%5 === 0) updateHUD(); // throttle UI update slightly
+            }
+
+            updateParticles();
+
+            // Ensure player is visible when playing (resetting from game over)
+            if(currentState === GAME_STATE.PLAYING && !player.visible) {
+                player.visible = true;
+                player.rotation.set(0,0,0);
+            }
+
+            // Move the scene fog to follow player
+            scene.fog.near = 20;
+            scene.fog.far = RENDER_DISTANCE;
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>

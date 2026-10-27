@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gesture Blocks TV</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #08111f;
+      font-family: Arial, Helvetica, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    #game {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: radial-gradient(circle at 50% 30%, #14203a 0%, #08111f 55%, #050a14 100%);
+    }
+    #ui {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      color: #fff;
+    }
+    #topbar {
+      position: absolute;
+      left: 24px;
+      top: 20px;
+      display: flex;
+      gap: 18px;
+      align-items: center;
+      font-weight: bold;
+      font-size: 20px;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    .pill {
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.12);
+      padding: 10px 14px;
+      border-radius: 16px;
+      backdrop-filter: blur(6px);
+    }
+    #message {
+      position: absolute;
+      left: 50%;
+      top: 18px;
+      transform: translateX(-50%);
+      text-align: center;
+      font-size: 18px;
+      line-height: 1.4;
+      padding: 10px 18px;
+      border-radius: 18px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.12);
+      max-width: min(780px, calc(100vw - 40px));
+    }
+    #cameraPanel {
+      position: absolute;
+      right: 18px;
+      bottom: 18px;
+      width: 260px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 18px;
+      overflow: hidden;
+      pointer-events: auto;
+      backdrop-filter: blur(6px);
+    }
+    #cameraPanel header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: rgba(255,255,255,0.06);
+    }
+    #cameraPanel button {
+      pointer-events: auto;
+      background: #3b82f6;
+      color: white;
+      border: 0;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    #cameraPanel button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    #videoWrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: #000;
+    }
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    #overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    #hint {
+      position: absolute;
+      left: 24px;
+      bottom: 20px;
+      max-width: min(760px, calc(100vw - 320px));
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.12);
+      padding: 14px 16px;
+      border-radius: 18px;
+      font-size: 18px;
+      line-height: 1.5;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    #centerPrompt {
+      position: absolute;
+      left: 50%;
+      top: 52%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      font-size: 22px;
+      font-weight: bold;
+      padding: 18px 22px;
+      border-radius: 22px;
+      background: rgba(0,0,0,0.42);
+      border: 1px solid rgba(255,255,255,0.14);
+      text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="ui">
+    <div id="topbar">
+      <div class="pill">Score: <span id="score">0</span></div>
+      <div class="pill">Level: <span id="level">1</span></div>
+      <div class="pill">Lives: <span id="lives">3</span></div>
+    </div>
+    <div id="message">Wave your hand to move the paddle. Raise both hands to start.</div>
+    <div id="hint">Gesture controls: move your hand left/right to steer the paddle. Make a quick open-palm sweep to launch the ball. Use two raised hands to pause/resume.</div>
+    <div id="centerPrompt">Initializing camera...</div>
+
+    <div id="cameraPanel">
+      <header>
+        <span>Webcam Gesture View</span>
+        <button id="camBtn">Start Camera</button>
+      </header>
+      <div id="videoWrap">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const video = document.getElementById('video');
+    const overlay = document.getElementById('overlay');
+    const octx = overlay.getContext('2d');
+    const camBtn = document.getElementById('camBtn');
+    const scoreEl = document.getElementById('score');
+    const levelEl = document.getElementById('level');
+    const livesEl = document.getElementById('lives');
+    const messageEl = document.getElementById('message');
+    const centerPrompt = document.getElementById('centerPrompt');
+
+    let W=0,H=0,dpr=1;
+    function resize(){
+      dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      W = canvas.clientWidth = window.innerWidth;
+      H = canvas.clientHeight = window.innerHeight;
+      canvas.width = Math.floor(W*dpr);
+      canvas.height = Math.floor(H*dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      overlay.width = overlay.clientWidth * dpr;
+      overlay.height = overlay.clientHeight * dpr;
+      octx.setTransform(dpr,0,0,dpr,0,0);
+    }
+    window.addEventListener('resize', resize);
+
+    const paddle = { x: 0, y: 0, w: 150, h: 18, targetX: 0 };
+    const ball = { x: 0, y: 0, r: 10, vx: 4, vy: -4, stuck: true };
+    let blocks = [];
+    let score = 0, level = 1, lives = 3;
+    let paused = false;
+    let gameOver = false;
+
+    let stream = null;
+    let gesture = { handX: 0.5, hands: 0, open: false, ready: false, sweep: false };
+
+    function resetBall(){
+      ball.x = paddle.x + paddle.w/2;
+      ball.y = paddle.y - ball.r - 2;
+      ball.vx = (Math.random() < 0.5 ? -1 : 1) * (4 + level * 0.4);
+      ball.vy = -(5 + level * 0.35);
+      ball.stuck = true;
+    }
+
+    function buildLevel(){
+      blocks = [];
+      const cols = 10;
+      const rows = Math.min(3 + level, 8);
+      const marginX = 48;
+      const gap = 8;
+      const bw = (W - marginX*2 - gap*(cols-1)) / cols;
+      const bh = 28;
+      const top = 120;
+      for(let r=0;r<rows;r++){
+        for(let c=0;c<cols;c++){
+          blocks.push({
+            x: marginX + c*(bw+gap),
+            y: top + r*(bh+gap),
+            w: bw,
+            h: bh,
+            hp: 1 + Math.floor(r/3),
+            alive: true,
+            color: `hsl(${200 - r*18 + c*2}, 85%, ${58 - r*2}%)`
+          });
+        }
+      }
+    }
+
+    function startGame(){
+      score=0; level=1; lives=3; paused=false; gameOver=false;
+      paddle.w = 150;
+      paddle.h = 18;
+      paddle.y = H - 60;
+      paddle.x = (W - paddle.w)/2;
+      paddle.targetX = paddle.x;
+      resetBall();
+      buildLevel();
+      updateUI();
+      messageEl.textContent = 'Wave your hand to move the paddle. Launch the ball with an open-palm sweep!';
+      centerPrompt.style.display = 'none';
+    }
+
+    function nextLevel(){
+      level++;
+      paddle.w = Math.max(110, 150 - level * 4);
+      buildLevel();
+      resetBall();
+      updateUI();
+      messageEl.textContent = 'Level ' + level + ' — faster ball, more blocks!';
+    }
+
+    function updateUI(){
+      scoreEl.textContent = score;
+      levelEl.textContent = level;
+      livesEl.textContent = lives;
+    }
+
+    function drawRoundedRect(x,y,w,h,r){
+      ctx.beginPath();
+      ctx.moveTo(x+r,y);
+      ctx.arcTo(x+w,y,x+w,y+h,r);
+      ctx.arcTo(x+w,y+h,x,y+h,r);
+      ctx.arcTo(x,y+h,x,y,r);
+      ctx.arcTo(x,y,x+w,y,r);
+      ctx.closePath();
+    }
+
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+
+      const grad = ctx.createLinearGradient(0,0,0,H);
+      grad.addColorStop(0,'#0d1730');
+      grad.addColorStop(1,'#050a14');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0,0,W,H);
+
+      ctx.save();
+      ctx.globalAlpha = 0.14;
+      for(let i=0;i<80;i++){
+        ctx.fillStyle = i%2===0 ? '#7dd3fc' : '#a78bfa';
+        ctx.beginPath();
+        ctx.arc((i*97)%W, (i*53 + (performance.now()*0.02))%H, 1.5, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      blocks.forEach(b=>{
+        if(!b.alive) return;
+        ctx.fillStyle = b.color;
+        drawRoundedRect(b.x,b.y,b.w,b.h,10);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      });
+
+      ctx.fillStyle = '#e2e8f0';
+      drawRoundedRect(paddle.x,paddle.y,paddle.w,paddle.h,10);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      drawRoundedRect(paddle.x+6,paddle.y+4,paddle.w-12,paddle.h-8,8);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.fillStyle = '#f8fafc';
+      ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);
+      ctx.fill();
+      ctx.shadowColor = '#60a5fa';
+      ctx.shadowBlur = 18;
+      ctx.beginPath();
+      ctx.fillStyle = '#93c5fd';
+      ctx.arc(ball.x-2,ball.y-2,ball.r*0.55,0,Math.PI*2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      if(paused || gameOver){
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.fillRect(0,0,W,H);
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 44px Arial';
+        ctx.fillText(gameOver ? 'Game Over' : 'Paused', W/2, H/2 - 20);
+        ctx.font = '22px Arial';
+        ctx.fillText(gameOver ? 'Raise both hands or press Start Camera to restart' : 'Raise both hands to resume', W/2, H/2 + 20);
+      }
+    }
+
+    function updateGame(){
+      if(!paused && !gameOver){
+        paddle.targetX = Math.max(0, Math.min(W - paddle.w, gesture.handX * W - paddle.w/2));
+        paddle.x += (paddle.targetX - paddle.x) * 0.2;
+
+        if(ball.stuck){
+          ball.x = paddle.x + paddle.w/2;
+          ball.y = paddle.y - ball.r - 2;
+        } else {
+          ball.x += ball.vx;
+          ball.y += ball.vy;
+
+          if(ball.x < ball.r){ ball.x = ball.r; ball.vx *= -1; }
+          if(ball.x > W - ball.r){ ball.x = W - ball.r; ball.vx *= -1; }
+          if(ball.y < ball.r){ ball.y = ball.r; ball.vy *= -1; }
+
+          if(ball.y + ball.r >= paddle.y && ball.y + ball.r <= paddle.y + paddle.h + 10 &&
+             ball.x >= paddle.x && ball.x <= paddle.x + paddle.w && ball.vy > 0){
+            const hit = (ball.x - (paddle.x + paddle.w/2)) / (paddle.w/2);
+            const speed = Math.min(11, Math.hypot(ball.vx, ball.vy) * 1.02 + 0.03);
+            const angle = hit * Math.PI * 0.38;
+            ball.vx = Math.sin(angle) * speed;
+            ball.vy = -Math.cos(angle) * speed;
+            ball.y = paddle.y - ball.r - 1;
+          }
+
+          for(const b of blocks){
+            if(!b.alive) continue;
+            if(ball.x + ball.r > b.x && ball.x - ball.r < b.x + b.w && ball.y + ball.r > b.y && ball.y - ball.r < b.y + b.h){
+              b.hp--;
+              if(b.hp <= 0){ b.alive = false; score += 10; updateUI(); }
+              else score += 4;
+              updateUI();
+              const dx = Math.min(Math.abs(ball.x - b.x), Math.abs(ball.x - (b.x+b.w)));
+              const dy = Math.min(Math.abs(ball.y - b.y), Math.abs(ball.y - (b.y+b.h)));
+              if(dx < dy) ball.vx *= -1; else ball.vy *= -1;
+              break;
+            }
+          }
+
+          if(blocks.every(b=>!b.alive)){
+            nextLevel();
+          }
+
+          if(ball.y - ball.r > H){
+            lives--;
+            updateUI();
+            if(lives <= 0){
+              gameOver = true;
+              centerPrompt.style.display = 'block';
+              centerPrompt.textContent = 'Game Over — Raise both hands to restart';
+              messageEl.textContent = 'Game over. Make a two-hand gesture to restart.';
+            } else {
+              resetBall();
+              messageEl.textContent = 'Missed! Shake open palm to relaunch.';
+            }
+          }
+        }
+      }
+      draw();
+      requestAnimationFrame(updateGame);
+    }
+
+    function estimateGestureFromVideo(){
+      if(!video.videoWidth || !video.videoHeight) return;
+      const w = 160, h = 120;
+      octx.drawImage(video, 0, 0, overlay.clientWidth, overlay.clientHeight);
+      const img = octx.getImageData(0, 0, w, h);
+      let sumX = 0, brightCount = 0;
+      let handPixels = 0;
+      for(let y=0;y<h;y++){
+        for(let x=0;x<w;x++){
+          const i = (y*w+x)*4;
+          const r = img.data[i], g = img.data[i+1], b = img.data[i+2];
+          const brightness = (r+g+b)/3;
+          if(brightness > 170){
+            sumX += x / w;
+            brightCount++;
+          }
+          if(r > 95 && g > 40 && b > 20 && r > g && g > b){
+            handPixels++;
+          }
+        }
+      }
+      if(brightCount > 60){
+        gesture.handX = sumX / brightCount;
+        gesture.ready = true;
+      }
+      gesture.hands = handPixels > 900 ? 2 : (handPixels > 300 ? 1 : 0);
+      gesture.open = brightCount > 120;
+    }
+
+    async function startCamera(){
+      try{
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false
+        });
+        video.srcObject = stream;
+        await video.play();
+        camBtn.textContent = 'Camera On';
+        camBtn.disabled = true;
+        centerPrompt.style.display = 'none';
+        messageEl.textContent = 'Camera active. Show your hand to control the paddle.';
+        startGame();
+      } catch (e) {
+        centerPrompt.style.display = 'block';
+        centerPrompt.textContent = 'Camera access required. Allow webcam permission and try again.';
+        messageEl.textContent = 'Webcam not available. Please grant camera permission.';
+      }
+    }
+
+    camBtn.addEventListener('click', startCamera);
+
+    let sweepCooldown = 0;
+    function gestureLoop(){
+      if(stream && video.readyState >= 2){
+        estimateGestureFromVideo();
+        if(gesture.hands >= 2){
+          if(gameOver){
+            startGame();
+          } else {
+            paused = !paused;
+            messageEl.textContent = paused ? 'Paused by two-hand gesture.' : 'Resumed.';
+          }
+          gesture.hands = 0;
+          setTimeout(()=>{}, 0);
+        }
+        if(gesture.open && !paused && !gameOver && ball.stuck && performance.now() > sweepCooldown){
+          ball.stuck = false;
+          sweepCooldown = performance.now() + 1200;
+          messageEl.textContent = 'Ball launched!';
+        }
+        if(gesture.ready && !paused && !gameOver && ball.stuck){
+          centerPrompt.style.display = 'none';
+        }
+      }
+      requestAnimationFrame(gestureLoop);
+    }
+
+    resize();
+    paddle.y = H - 60;
+    paddle.x = (W - paddle.w)/2;
+    resetBall();
+    buildLevel();
+    updateUI();
+    draw();
+    requestAnimationFrame(updateGame);
+    requestAnimationFrame(gestureLoop);
+
+    centerPrompt.textContent = 'Press Start Camera to begin';
+    centerPrompt.style.display = 'block';
+  </script>
+</body>
+</html>

@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+<title>FIFA Card Duel</title>
+<style>
+  :root{
+    --bg:#0a1220;
+    --panel:#111c2f;
+    --panel2:#172641;
+    --line:#2e4369;
+    --accent:#32d17c;
+    --danger:#ff5b6e;
+    --text:#e7f0ff;
+    --muted:#9bb1d2;
+    --gold:#f5c542;
+    --silver:#c7d2e2;
+    --bronze:#c68a4a;
+    --special:#d06bff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  body{
+    margin:0;
+    background:linear-gradient(180deg,#08101c,#101c31 45%,#0a1220);
+    color:var(--text);
+    display:flex;justify-content:center;
+    height:100vh;overflow:hidden;
+  }
+  #app{
+    width:min(100vw,500px);
+    height:100vh;
+    display:flex;
+    flex-direction:column;
+    position:relative;
+    border-left:1px solid #223a60;
+    border-right:1px solid #223a60;
+    background:radial-gradient(circle at 50% 25%,#183055 0,#0e1c33 40%,#0a1220 100%);
+  }
+  .hidden{display:none!important}
+  .screen{
+    width:100%;
+    height:100%;
+    display:flex;
+    flex-direction:column;
+  }
+
+  #menuScreen{
+    padding:18px 14px 24px;
+    gap:10px;
+    overflow:auto;
+  }
+  .title{
+    font-size:28px;font-weight:900;letter-spacing:.5px;
+    text-align:center;margin-top:10px;
+    text-shadow:0 2px 14px #000;
+  }
+  .subtitle{text-align:center;color:var(--muted);margin-bottom:10px}
+  .cardPanel{
+    background:rgba(17,28,47,.88);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:12px;
+  }
+  .modeBtn{
+    width:100%;border:none;border-radius:10px;
+    background:linear-gradient(180deg,#274773,#1a3052);
+    color:#fff;padding:12px;font-weight:700;font-size:15px;margin-top:8px;
+  }
+  .modeBtn:active{transform:scale(.99)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  input,select{
+    background:#0d1729;border:1px solid #355482;color:#dce9ff;
+    border-radius:8px;padding:8px;
+  }
+  .small{font-size:12px;color:var(--muted)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  #deliverables details{
+    border:1px solid #2f4a75;border-radius:8px;padding:8px;margin-top:8px;
+    background:#0d1729;
+  }
+  #deliverables pre{
+    margin:6px 0 0;
+    max-height:180px;overflow:auto;
+    font-size:11px;line-height:1.35;background:#08101c;padding:8px;border-radius:8px;
+    border:1px solid #1f3760;color:#cfe2ff;
+  }
+
+  /* Game UI */
+  #topBar{
+    display:grid;
+    grid-template-columns:1fr auto 1fr;
+    gap:6px;
+    padding:8px;
+    border-bottom:1px solid #29466f;
+    background:rgba(8,16,28,.8);
+    backdrop-filter: blur(6px);
+    align-items:center;
+  }
+  #topLeft,#topRight{font-size:12px;color:var(--muted)}
+  #scoreBox{text-align:center;font-size:19px;font-weight:900}
+  #timerWrap{font-size:12px;text-align:center;color:#cfe2ff}
+  #phaseText{font-size:12px;text-align:center;color:var(--accent);font-weight:700}
+  #field{
+    flex:1;
+    display:grid;
+    grid-template-rows:1fr auto 1fr;
+    padding:10px 8px 0;
+    gap:8px;
+  }
+  .side{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    gap:6px;
+    align-items:stretch;
+  }
+  .divider{
+    height:12px;
+    display:flex;align-items:center;justify-content:center;
+    color:#7da2d9;font-size:11px;letter-spacing:1px
+  }
+  .zone{
+    min-height:86px;
+    background:rgba(14,28,51,.75);
+    border:1px dashed #3a5b8f;
+    border-radius:10px;
+    position:relative;
+    display:flex;align-items:center;justify-content:center;
+    text-align:center;
+    font-size:11px;color:#7da2d9;
+    padding:2px;
+  }
+  .zone.activeDrop{border-color:#57df93;box-shadow:0 0 0 2px #57df9355 inset}
+  .zoneLabel{
+    position:absolute;top:2px;left:4px;font-size:9px;opacity:.8
+  }
+
+  .card{
+    width:100%;
+    height:100%;
+    border-radius:8px;
+    border:1px solid #5377ad;
+    background:linear-gradient(180deg,#1c3154,#132544);
+    color:#f0f6ff;
+    display:flex;flex-direction:column;
+    justify-content:space-between;
+    padding:4px;
+    font-size:10px;
+    position:relative;
+    user-select:none;
+    touch-action:none;
+  }
+  .card.dragging{opacity:.5}
+  .rarity-Bronze{box-shadow:0 0 0 1px var(--bronze) inset}
+  .rarity-Silver{box-shadow:0 0 0 1px var(--silver) inset}
+  .rarity-Gold{box-shadow:0 0 0 1px var(--gold) inset}
+  .rarity-Special{box-shadow:0 0 0 1px var(--special) inset}
+  .cardName{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stars{font-size:9px}
+  .statsGrid{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:2px;font-size:9px
+  }
+  .mini{font-size:9px;color:#b7cced}
+  .trap{
+    background:linear-gradient(180deg,#46295f,#2f1f42)!important;
+    border-color:#b07cff!important;
+  }
+  .tactic{
+    background:linear-gradient(180deg,#375230,#273d23)!important;
+    border-color:#8bd17f!important;
+  }
+  .exhaust{filter:grayscale(.7);opacity:.7}
+
+  #bottomUI{
+    border-top:1px solid #29466f;
+    background:rgba(8,16,28,.88);
+    padding:6px 6px calc(6px + env(safe-area-inset-bottom));
+    display:flex;flex-direction:column;gap:6px;
+  }
+  #controls{display:flex;gap:6px}
+  .btn{
+    flex:1;border:none;border-radius:9px;background:#274773;color:#fff;
+    padding:9px;font-weight:700;font-size:13px;
+  }
+  .btn.secondary{background:#1d2f4f}
+  .btn.warn{background:#7b2c37}
+  #hand{
+    display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;
+    scroll-snap-type:x mandatory;padding-bottom:2px;
+  }
+  #hand .handCard{
+    min-width:95px;height:128px;scroll-snap-align:start;flex:0 0 auto;
+  }
+
+  #log{
+    position:absolute;right:6px;top:84px;width:44%;
+    max-height:180px;overflow:auto;
+    background:rgba(7,13,24,.66);
+    border:1px solid #29466f;border-radius:8px;padding:6px;font-size:10px;
+  }
+  #log div{margin-bottom:3px;color:#bcd3f7}
+  #toast{
+    position:absolute;left:50%;transform:translateX(-50%);
+    top:76px;background:#0b1a30;border:1px solid #41659b;color:#fff;
+    padding:8px 12px;border-radius:999px;font-size:12px;opacity:0;pointer-events:none;
+    transition:opacity .2s;
+  }
+
+  #zoomModal{
+    position:absolute;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;
+    z-index:30;
+  }
+  #zoomCard{
+    width:72%;max-width:320px;aspect-ratio:3/4;
+    background:#162847;border-radius:14px;border:1px solid #6085bc;padding:10px;
+    display:flex;flex-direction:column;justify-content:space-between;
+  }
+  #zoomClose{position:absolute;top:16px;right:16px;border:none;border-radius:50%;width:34px;height:34px;background:#fff;color:#123;font-weight:900}
+
+  .pill{
+    padding:4px 8px;border-radius:999px;font-size:11px;border:1px solid #385b8f;background:#0f1f38;color:#bcd1f1;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="menuScreen" class="screen">
+    <div class="title">FIFA Card Duel</div>
+    <div class="subtitle">2D turn-based football card battle • portrait mode</div>
+
+    <div class="cardPanel">
+      <div class="row" style="justify-content:space-between">
+        <div><strong>Energy</strong> <span id="energyText">10/10</span></div>
+        <div class="small">Regen: 1 every 10 min</div>
+      </div>
+      <div class="small" id="regenText">Next energy in --:--</div>
+      <button class="modeBtn" id="quickBtn">Quick Match (3 min)</button>
+      <button class="modeBtn" id="rankedBtn">Ranked (Divisions)</button>
+      <button class="modeBtn" id="draftBtn">Draft Mode (4 wins)</button>
+      <div class="small" style="margin-top:6px">Cosmetic IAP only: card backs, badges, emotes (no P2W).</div>
+    </div>
+
+    <div class="cardPanel">
+      <strong>Async Multiplayer (Local Turn Sync)</strong>
+      <div class="small">Create match code and exchange turns asynchronously.</div>
+      <div class="row" style="margin-top:8px">
+        <button class="modeBtn" id="createAsyncBtn" style="margin:0">Create Async Match</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input id="asyncCodeInput" placeholder="Enter match code" class="mono" />
+        <button class="modeBtn" id="loadAsyncBtn" style="margin:0;flex:1">Load</button>
+      </div>
+      <div class="small" id="asyncStatus">Not connected</div>
+    </div>
+
+    <div class="cardPanel">
+      <strong>Rank & Storage</strong>
+      <div id="rankText" class="small">Division 10 • 0 RP</div>
+      <div class="small">Local data: SQLite equivalent via localStorage. Cloud save: Firebase-style mock endpoint placeholder.</div>
+    </div>
+
+    <div id="deliverables" class="cardPanel">
+      <strong>Deliverables</strong>
+      <details>
+        <summary>Card.cs</summary>
+        <pre id="cardCsOut"></pre>
+      </details>
+      <details>
+        <summary>GameManager.cs</summary>
+        <pre id="gmCsOut"></pre>
+      </details>
+      <details>
+        <summary>CombatSystem.cs</summary>
+        <pre id="combatCsOut"></pre>
+      </details>
+      <details>
+        <summary>UIManager.cs</summary>
+        <pre id="uiCsOut"></pre>
+      </details>
+      <details>
+        <summary>50-card JSON database</summary>
+        <pre id="jsonOut"></pre>
+      </details>
+    </div>
+  </div>
+
+  <div id="gameScreen" class="screen hidden">
+    <div id="topBar">
+      <div id="topLeft">
+        <div id="modeLabel">Quick</div>
+        <div id="energyHud"></div>
+      </div>
+      <div>
+        <div id="scoreBox">0 - 0</div>
+        <div id="timerWrap">Match 03:00 | Turn 01:30</div>
+        <div id="phaseText">Draw Phase</div>
+      </div>
+      <div id="topRight" style="text-align:right">
+        <div id="turnLabel">Your Turn</div>
+        <div id="aiLabel">AI: Balanced</div>
+      </div>
+    </div>
+
+    <div id="field">
+      <div class="side" id="oppSide"></div>
+      <div class="divider">— HALF LINE —</div>
+      <div class="side" id="playerSide"></div>
+    </div>
+
+    <div id="bottomUI">
+      <div id="controls">
+        <button class="btn secondary" id="drawBtn">Draw</button>
+        <button class="btn" id="phaseBtn">Next Phase</button>
+        <button class="btn warn" id="endTurnBtn">End Turn</button>
+      </div>
+      <div id="hand"></div>
+    </div>
+
+    <div id="log"></div>
+    <div id="toast"></div>
+  </div>
+
+  <div id="zoomModal" class="hidden">
+    <button id="zoomClose">✕</button>
+    <div id="zoomCard"></div>
+  </div>
+</div>
+
+<script id="card-cs" type="text/plain">
+using UnityEngine;
+
+[System.Serializable]
+public class Card {
+    public string id;
+    public string cardName;
+    public CardType type; // Player, Tactic, Reaction
+    public Rarity rarity; // Bronze/Silver/Gold/Special
+    public int stars; // 1-5
+    public string club;
+    public string nation;
+    public Position position; // GK/DEF/MID/ATT
+    public int PAC;
+    public int SHO;
+    public int PAS;
+    public int DRI;
+    public int DEF;
+    public int PHY;
+    public string effect;
+}
+
+public enum CardType { Player, Tactic, Reaction }
+public enum Rarity { Bronze, Silver, Gold, Special }
+public enum Position { GK, DEF, MID, ATT }
+</script>
+
+<script id="gm-cs" type="text/plain">
+using UnityEngine;
+using System.Collections.Generic;
+
+public class GameManager : MonoBehaviour {
+    public List<Card> database;
+    public List<Card> playerDeck;
+    public List<Card> opponentDeck;
+    public List<Card> playerHand;
+    public int turnTime = 90;
+    public int matchTime = 180;
+
+    private int playerScore, opponentScore;
+    private Phase phase = Phase.Draw;
+    private bool playerTurn = true;
+
+    void Start() {
+        BuildDecks();
+        StartTurn();
+    }
+
+    public void StartTurn() {
+        phase = Phase.Draw;
+        DrawCard(playerTurn ? playerDeck : opponentDeck, playerTurn);
+    }
+
+    public void EndTurn() {
+        playerTurn = !playerTurn;
+        StartTurn();
+    }
+
+    public void ResolveAttack(Card attacker, Card defender) {
+        CombatSystem.Resolve(attacker, defender, this);
+    }
+}
+
+public enum Phase { Draw, Place, Attack, End }
+</script>
+
+<script id="combat-cs" type="text/plain">
+using UnityEngine;
+
+public static class CombatSystem {
+    public static bool Resolve(Card attacker, Card defender, GameManager gm) {
+        int attackValue = Mathf.Max(attacker.SHO, attacker.DRI, attacker.PAC);
+        int defendValue = Mathf.Max(defender.DEF, defender.PHY);
+
+        if (attackValue >= defendValue) {
+            // attacker wins
+            if (defender.position == Position.GK) {
+                // GOAL
+                // gm.AddGoal(...)
+            }
+            return true;
+        }
+        return false;
+    }
+}
+</script>
+
+<script id="ui-cs" type="text/plain">
+using UnityEngine;
+using UnityEngine.UI;
+
+public class UIManager : MonoBehaviour {
+    public Text scoreText;
+    public Text timerText;
+    public Transform handRoot;
+    public GameObject cardPrefab;
+
+    public void RenderHand(System.Collections.Generic.List<Card> hand) {
+        foreach (Transform c in handRoot) Destroy(c.gameObject);
+        foreach (var card in hand) {
+            var go = Instantiate(cardPrefab, handRoot);
+            go.GetComponent<CardView>().Bind(card);
+        }
+    }
+
+    public void SetScore(int player, int opponent) {
+        scoreText.text = player + " - " + opponent;
+    }
+}
+</script>
+
+<script>
+/* ---------- 50-card JSON DB ---------- */
+const CARD_DB = [
+{"id":"P001","name":"A. Varela","type":"Player","rarity":"Bronze","stars":1,"club":"Port Vale","nation":"URU","position":"GK","PAC":32,"SHO":18,"PAS":40,"DRI":28,"DEF":62,"PHY":58},
+{"id":"P002","name":"L. Kramer","type":"Player","rarity":"Bronze","stars":1,"club":"Augsburg","nation":"GER","position":"DEF","PAC":49,"SHO":24,"PAS":42,"DRI":39,"DEF":61,"PHY":63},
+{"id":"P003","name":"R. N'Diaye","type":"Player","rarity":"Bronze","stars":1,"club":"Metz","nation":"SEN","position":"DEF","PAC":54,"SHO":29,"PAS":45,"DRI":41,"DEF":64,"PHY":66},
+{"id":"P004","name":"T. Hino","type":"Player","rarity":"Bronze","stars":1,"club":"Cerezo","nation":"JPN","position":"MID","PAC":58,"SHO":41,"PAS":55,"DRI":57,"DEF":43,"PHY":48},
+{"id":"P005","name":"B. Silva Jr","type":"Player","rarity":"Bronze","stars":2,"club":"Braga","nation":"POR","position":"MID","PAC":63,"SHO":48,"PAS":59,"DRI":62,"DEF":45,"PHY":52},
+{"id":"P006","name":"E. Watson","type":"Player","rarity":"Bronze","stars":2,"club":"Burnley","nation":"ENG","position":"ATT","PAC":67,"SHO":56,"PAS":44,"DRI":61,"DEF":28,"PHY":54},
+{"id":"P007","name":"J. Roldan","type":"Player","rarity":"Bronze","stars":2,"club":"Getafe","nation":"ESP","position":"ATT","PAC":69,"SHO":58,"PAS":47,"DRI":64,"DEF":30,"PHY":56},
+{"id":"P008","name":"C. Okoye","type":"Player","rarity":"Bronze","stars":2,"club":"Genk","nation":"NGA","position":"DEF","PAC":62,"SHO":31,"PAS":46,"DRI":44,"DEF":67,"PHY":70},
+{"id":"P009","name":"M. Jankovic","type":"Player","rarity":"Bronze","stars":2,"club":"Rapid","nation":"SRB","position":"MID","PAC":60,"SHO":49,"PAS":61,"DRI":58,"DEF":51,"PHY":55},
+{"id":"P010","name":"N. Petrov","type":"Player","rarity":"Bronze","stars":2,"club":"CSKA","nation":"BUL","position":"GK","PAC":30,"SHO":16,"PAS":44,"DRI":27,"DEF":68,"PHY":62},
+
+{"id":"P011","name":"G. Molina","type":"Player","rarity":"Silver","stars":3,"club":"Sevilla","nation":"ARG","position":"DEF","PAC":72,"SHO":38,"PAS":60,"DRI":59,"DEF":74,"PHY":73},
+{"id":"P012","name":"I. Kovac","type":"Player","rarity":"Silver","stars":3,"club":"Dinamo","nation":"CRO","position":"MID","PAC":74,"SHO":63,"PAS":71,"DRI":70,"DEF":58,"PHY":65},
+{"id":"P013","name":"Y. Tanaka","type":"Player","rarity":"Silver","stars":3,"club":"Yokohama","nation":"JPN","position":"ATT","PAC":81,"SHO":72,"PAS":64,"DRI":78,"DEF":37,"PHY":61},
+{"id":"P014","name":"D. Kim","type":"Player","rarity":"Silver","stars":3,"club":"Ulsan","nation":"KOR","position":"MID","PAC":77,"SHO":66,"PAS":73,"DRI":75,"DEF":55,"PHY":64},
+{"id":"P015","name":"P. Demir","type":"Player","rarity":"Silver","stars":3,"club":"Besiktas","nation":"TUR","position":"DEF","PAC":70,"SHO":34,"PAS":62,"DRI":57,"DEF":76,"PHY":78},
+{"id":"P016","name":"S. Costa","type":"Player","rarity":"Silver","stars":3,"club":"Porto","nation":"POR","position":"GK","PAC":36,"SHO":20,"PAS":58,"DRI":32,"DEF":80,"PHY":75},
+{"id":"P017","name":"H. Morel","type":"Player","rarity":"Silver","stars":3,"club":"Lyon","nation":"FRA","position":"ATT","PAC":83,"SHO":74,"PAS":58,"DRI":79,"DEF":35,"PHY":66},
+{"id":"P018","name":"V. Ruiz","type":"Player","rarity":"Silver","stars":3,"club":"Valencia","nation":"ESP","position":"MID","PAC":75,"SHO":67,"PAS":77,"DRI":76,"DEF":57,"PHY":62},
+{"id":"P019","name":"A. Nwosu","type":"Player","rarity":"Silver","stars":3,"club":"Anderlecht","nation":"NGA","position":"DEF","PAC":73,"SHO":36,"PAS":59,"DRI":56,"DEF":78,"PHY":80},
+{"id":"P020","name":"L. Berg","type":"Player","rarity":"Silver","stars":3,"club":"Malmo","nation":"SWE","position":"ATT","PAC":79,"SHO":71,"PAS":60,"DRI":74,"DEF":39,"PHY":68},
+
+{"id":"P021","name":"M. Salahov","type":"Player","rarity":"Gold","stars":4,"club":"Zenit","nation":"RUS","position":"ATT","PAC":89,"SHO":83,"PAS":74,"DRI":86,"DEF":41,"PHY":71},
+{"id":"P022","name":"K. Diallo","type":"Player","rarity":"Gold","stars":4,"club":"Monaco","nation":"SEN","position":"MID","PAC":84,"SHO":78,"PAS":82,"DRI":84,"DEF":65,"PHY":73},
+{"id":"P023","name":"R. Bianchi","type":"Player","rarity":"Gold","stars":4,"club":"Inter","nation":"ITA","position":"DEF","PAC":81,"SHO":42,"PAS":74,"DRI":69,"DEF":85,"PHY":84},
+{"id":"P024","name":"J. Alvarez","type":"Player","rarity":"Gold","stars":4,"club":"Atleti","nation":"ARG","position":"ATT","PAC":87,"SHO":85,"PAS":72,"DRI":85,"DEF":44,"PHY":76},
+{"id":"P025","name":"C. Mendes","type":"Player","rarity":"Gold","stars":4,"club":"Benfica","nation":"BRA","position":"MID","PAC":83,"SHO":79,"PAS":84,"DRI":86,"DEF":61,"PHY":70},
+{"id":"P026","name":"F. Obiang","type":"Player","rarity":"Gold","stars":4,"club":"Napoli","nation":"CMR","position":"DEF","PAC":80,"SHO":39,"PAS":72,"DRI":68,"DEF":86,"PHY":87},
+{"id":"P027","name":"T. Richter","type":"Player","rarity":"Gold","stars":4,"club":"Dortmund","nation":"GER","position":"GK","PAC":41,"SHO":22,"PAS":70,"DRI":39,"DEF":88,"PHY":83},
+{"id":"P028","name":"N. Ibrahim","type":"Player","rarity":"Gold","stars":4,"club":"Ajax","nation":"MAR","position":"MID","PAC":85,"SHO":77,"PAS":85,"DRI":87,"DEF":62,"PHY":72},
+{"id":"P029","name":"Y. Park","type":"Player","rarity":"Gold","stars":4,"club":"Spurs","nation":"KOR","position":"ATT","PAC":91,"SHO":84,"PAS":76,"DRI":88,"DEF":42,"PHY":74},
+{"id":"P030","name":"D. Vukic","type":"Player","rarity":"Gold","stars":4,"club":"Leipzig","nation":"SRB","position":"DEF","PAC":82,"SHO":41,"PAS":73,"DRI":67,"DEF":84,"PHY":86},
+
+{"id":"P031","name":"L. Phoenix","type":"Player","rarity":"Special","stars":5,"club":"Legends","nation":"FRA","position":"ATT","PAC":95,"SHO":93,"PAS":88,"DRI":95,"DEF":50,"PHY":82},
+{"id":"P032","name":"A. Titan","type":"Player","rarity":"Special","stars":5,"club":"Legends","nation":"BRA","position":"MID","PAC":92,"SHO":89,"PAS":94,"DRI":93,"DEF":76,"PHY":84},
+{"id":"P033","name":"S. Wall","type":"Player","rarity":"Special","stars":5,"club":"Legends","nation":"ITA","position":"DEF","PAC":88,"SHO":52,"PAS":86,"DRI":80,"DEF":94,"PHY":95},
+{"id":"P034","name":"M. Guardian","type":"Player","rarity":"Special","stars":5,"club":"Legends","nation":"GER","position":"GK","PAC":50,"SHO":30,"PAS":84,"DRI":47,"DEF":96,"PHY":92},
+{"id":"P035","name":"K. Cyclone","type":"Player","rarity":"Special","stars":5,"club":"Legends","nation":"POR","position":"ATT","PAC":97,"SHO":92,"PAS":86,"DRI":96,"DEF":48,"PHY":80},
+{"id":"P036","name":"J. Maestro","type":"Player","rarity":"Special","stars":5,"club":"Legends","nation":"ESP","position":"MID","PAC":90,"SHO":87,"PAS":96,"DRI":94,"DEF":74,"PHY":81},
+
+{"id":"T001","name":"Tiki-Taka 4-3-3","type":"Tactic","rarity":"Silver","stars":3,"effect":"+8 PAS to MID this turn"},
+{"id":"T002","name":"Low Block 5-4-1","type":"Tactic","rarity":"Silver","stars":3,"effect":"+10 DEF to DEF/GK this turn"},
+{"id":"T003","name":"High Press 4-2-3-1","type":"Tactic","rarity":"Gold","stars":4,"effect":"+8 PAC and DRI to ATT this turn"},
+{"id":"T004","name":"Wing Overload","type":"Tactic","rarity":"Gold","stars":4,"effect":"+10 SHO to one ATT card"},
+{"id":"T005","name":"Direct Counter","type":"Tactic","rarity":"Bronze","stars":2,"effect":"First attack gets +12 PAC"},
+{"id":"T006","name":"False Nine","type":"Tactic","rarity":"Special","stars":5,"effect":"MID can attack GK directly once"},
+{"id":"T007","name":"Set Piece Routine","type":"Tactic","rarity":"Bronze","stars":2,"effect":"+14 SHO when attacking GK"},
+{"id":"T008","name":"Compact Midfield","type":"Tactic","rarity":"Silver","stars":3,"effect":"+7 DEF to MID this turn"},
+
+{"id":"R001","name":"Last-Ditch Tackle","type":"Reaction","rarity":"Bronze","stars":2,"effect":"When attacked in DEF, +12 DEF"},
+{"id":"R002","name":"Offside Trap","type":"Reaction","rarity":"Silver","stars":3,"effect":"Cancel one ATT attack if PAC < 85"},
+{"id":"R003","name":"Time Wasting","type":"Reaction","rarity":"Bronze","stars":2,"effect":"Reduce enemy turn timer by 10s"},
+{"id":"R004","name":"Keeper Rush","type":"Reaction","rarity":"Gold","stars":4,"effect":"+15 DEF for GK when attacked"},
+{"id":"R005","name":"Crowd Roar","type":"Reaction","rarity":"Silver","stars":3,"effect":"+8 PHY to defender on trigger"},
+{"id":"R006","name":"Heroic Block","type":"Reaction","rarity":"Special","stars":5,"effect":"Negate first goal attempt this turn"}
+];
+
+/* ---------- Utility ---------- */
+const ZONES = ["GK","DEF","MID","ATT1","ATT2"];
+const archetypes = [
+  {name:"Defensive",form:"5-4-1",bias:{DEF:3,MID:2,ATT:1},attackChance:.35},
+  {name:"Balanced",form:"4-3-3",bias:{DEF:2,MID:3,ATT:2},attackChance:.62},
+  {name:"Aggressive",form:"4-2-3-1",bias:{DEF:1,MID:2,ATT:4},attackChance:.82}
+];
+const PHASES = ["Draw","Place","Attack","End"];
+
+const $ = s => document.querySelector(s);
+const rand = arr => arr[Math.floor(Math.random()*arr.length)];
+const clone = obj => JSON.parse(JSON.stringify(obj));
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]]}return a}
+function fmtTime(sec){sec=Math.max(0,sec|0);const m=(sec/60|0).toString().padStart(2,"0");const s=(sec%60).toString().padStart(2,"0");return `${m}:${s}`}
+function rarityClass(r){return `rarity-${r}`}
+
+/* ---------- Core Classes ---------- */
+class Card{
+  constructor(data){
+    Object.assign(this, data);
+    this.uid = data.id + "_" + Math.random().toString(36).slice(2,8);
+    this.exhausted = false;
+    this.faceDown = false;
+    this.zone = null;
+  }
+  isPlayer(){return this.type==="Player"}
+  isTactic(){return this.type==="Tactic"}
+  isReaction(){return this.type==="Reaction"}
+  baseStat(n){return this[n]||0}
+}
+
+class CombatSystem{
+  static getAttackStat(card, fromZone){
+    if(card.isPlayer()){
+      if(fromZone==="MID") return Math.max(card.PAS, card.DRI);
+      if(fromZone==="DEF") return Math.max(card.PAS, card.PHY);
+      return Math.max(card.SHO, card.DRI, card.PAC);
+    }
+    return 0;
+  }
+  static getDefenseStat(card, toZone){
+    if(!card) return 0;
+    if(card.isPlayer()){
+      if(toZone==="GK") return Math.max(card.DEF, card.PHY)+4;
+      if(toZone==="MID") return Math.max(card.DEF, card.PAS);
+      return Math.max(card.DEF, card.PHY);
+    }
+    return 0;
+  }
+  static resolve(attacker, defender, fromZone, toZone, atkBuff=0, defBuff=0){
+    const atk = this.getAttackStat(attacker,fromZone)+atkBuff;
+    const def = this.getDefenseStat(defender,toZone)+defBuff;
+    const win = atk>=def;
+    return {atk,def,win};
+  }
+}
+
+class UIManager{
+  constructor(game){this.g=game}
+  cardHTML(card, compact=false){
+    if(!card) return "";
+    const stars = "★".repeat(card.stars||1);
+    const stats = card.isPlayer()?`
+      <div class="statsGrid">
+        <div>PAC ${card.PAC}</div><div>SHO ${card.SHO}</div><div>PAS ${card.PAS}</div>
+        <div>DRI ${card.DRI}</div><div>DEF ${card.DEF}</div><div>PHY ${card.PHY}</div>
+      </div>`:`<div class="mini">${card.effect||""}</div>`;
+    const extraCls = card.isReaction()?"trap":card.isTactic()?"tactic":"";
+    return `
+      <div class="card ${rarityClass(card.rarity)} ${extraCls} ${card.exhausted?'exhaust':''}" data-uid="${card.uid}">
+        <div>
+          <div class="cardName">${card.name}</div>
+          <div class="mini">${card.type}${card.position?` • ${card.position}`:""}</div>
+        </div>
+        ${compact?`<div class="mini">${card.isPlayer()?`ATK ${Math.max(card.SHO,card.DRI)} DEF ${Math.max(card.DEF,card.PHY)}`:card.effect.slice(0,26)+"..."}</div>`:stats}
+        <div class="row" style="justify-content:space-between">
+          <div class="stars">${stars}</div>
+          <div class="mini">${card.club||""} ${card.nation||""}</div>
+        </div>
+      </div>`;
+  }
+  renderField(){
+    for(const side of ["player","opponent"]){
+      for(const z of ZONES){
+        const zoneEl = document.querySelector(`.zone[data-side="${side}"][data-zone="${z}"]`);
+        const entry = this.g.board[side][z];
+        zoneEl.innerHTML = `<div class="zoneLabel">${z}</div>`;
+        if(entry && entry.card){
+          const card = entry.card;
+          const hidden = side==="opponent" && card.faceDown;
+          zoneEl.insertAdjacentHTML("beforeend", hidden ? `<div class="card trap"><div class="cardName">Reaction</div><div class="mini">Face-down trap</div></div>` : this.cardHTML(card,true));
+          const cEl = zoneEl.querySelector(".card");
+          cEl.draggable = side==="player";
+          cEl.addEventListener("click",()=> this.g.showZoom(card, side==="opponent"&&card.faceDown));
+          cEl.addEventListener("dragstart",e=>this.g.onFieldDragStart(e, side, z));
+          cEl.addEventListener("dragend",e=>e.target.classList.remove("dragging"));
+        } else if(side==="player" && this.g.phase===1){
+          zoneEl.classList.add("activeDrop");
+        } else zoneEl.classList.remove("activeDrop");
+      }
+    }
+  }
+  renderHand(){
+    const hand = $("#hand");
+    hand.innerHTML="";
+    this.g.player.hand.forEach((card,i)=>{
+      const wrap=document.createElement("div");
+      wrap.className="handCard";
+      wrap.dataset.idx=i;
+      wrap.draggable=true;
+      wrap.innerHTML=this.cardHTML(card,false);
+      wrap.addEventListener("click",()=>this.g.showZoom(card,false));
+      wrap.addEventListener("dragstart",(e)=>this.g.onHandDragStart(e,i));
+      wrap.addEventListener("dragend",(e)=>e.target.classList.remove("dragging"));
+      hand.appendChild(wrap);
+    });
+  }
+  renderTop(){
+    $("#scoreBox").textContent=`${this.g.score.player} - ${this.g.score.opponent}`;
+    $("#modeLabel").textContent=this.g.modeLabel;
+    $("#phaseText").textContent=`${PHASES[this.g.phase]} Phase`;
+    $("#turnLabel").textContent=this.g.turn==="player"?"Your Turn":"Opponent Turn";
+    $("#aiLabel").textContent=`AI: ${this.g.ai.name} (${this.g.ai.form})`;
+    $("#timerWrap").textContent=`Match ${fmtTime(this.g.matchTimer)} | Turn ${fmtTime(this.g.turnTimer)}`;
+    $("#energyHud").textContent=`Energy ${this.g.energy.current}/${this.g.energy.max}`;
+    $("#drawBtn").disabled=!(this.g.turn==="player"&&this.g.phase===0);
+    $("#phaseBtn").disabled=!(this.g.turn==="player");
+    $("#endTurnBtn").disabled=!(this.g.turn==="player");
+  }
+  renderAll(){this.renderTop();this.renderField();this.renderHand();}
+}
+
+/* ---------- Game Manager ---------- */
+class GameManager{
+  constructor(){
+    this.mode="quick";
+    this.modeLabel="Quick Match";
+    this.matchLength=180;
+    this.turnLimit=90;
+    this.phase=0;
+    this.turn="player";
+    this.ai=rand(archetypes);
+    this.score={player:0,opponent:0};
+    this.board={player:{},opponent:{}};
+    this.player={deck:[],hand:[],bench:[],discard:[],activeTactics:[]};
+    this.opponent={deck:[],hand:[],bench:[],discard:[],activeTactics:[]};
+    this.turnTimer=this.turnLimit;
+    this.matchTimer=this.matchLength;
+    this.interval=null;
+    this.matchId=null;
+    this.asyncRole="none";
+    this.attacksThisTurn=0;
+    this.energy=this.loadEnergy();
+    this.rank=this.loadRank();
+    this.ui=new UIManager(this);
+    this.dragData=null;
+    this.boot();
+  }
+
+  boot(){
+    this.initZones();
+    this.bindUI();
+    this.pushDeliverables();
+    this.updateMenuStats();
+    this.attachZoneDnD();
+    setInterval(()=>this.energyTick(),1000);
+  }
+
+  initZones(){
+    const opp=$("#oppSide"), pl=$("#playerSide");
+    opp.innerHTML=""; pl.innerHTML="";
+    ZONES.forEach(z=>{
+      const o=document.createElement("div");
+      o.className="zone";o.dataset.side="opponent";o.dataset.zone=z;o.innerHTML=`<div class="zoneLabel">${z}</div>`;
+      opp.appendChild(o);
+      const p=document.createElement("div");
+      p.className="zone";p.dataset.side="player";p.dataset.zone=z;p.innerHTML=`<div class="zoneLabel">${z}</div>`;
+      pl.appendChild(p);
+    });
+  }
+
+  bindUI(){
+    $("#quickBtn").onclick=()=>this.startMatch("quick");
+    $("#rankedBtn").onclick=()=>this.startMatch("ranked");
+    $("#draftBtn").onclick=()=>this.startDraft();
+    $("#drawBtn").onclick=()=>this.drawCard("player");
+    $("#phaseBtn").onclick=()=>this.nextPhase();
+    $("#endTurnBtn").onclick=()=>this.endTurn();
+    $("#zoomClose").onclick=()=>$("#zoomModal").classList.add("hidden");
+
+    $("#createAsyncBtn").onclick=()=>{
+      const code="M"+Math.random().toString(36).slice(2,8).toUpperCase();
+      localStorage.setItem("async_"+code, JSON.stringify({created:Date.now(),state:null}));
+      $("#asyncStatus").textContent=`Created code: ${code} (share with opponent)`;
+      $("#asyncCodeInput").value=code;
+    };
+    $("#loadAsyncBtn").onclick=()=>{
+      const code=$("#asyncCodeInput").value.trim().toUpperCase();
+      const raw=localStorage.getItem("async_"+code);
+      if(!raw){$("#asyncStatus").textContent="Code not found.";return;}
+      this.matchId=code; this.asyncRole="client";
+      $("#asyncStatus").textContent=`Loaded ${code}. You can sync turns from local storage.`;
+      this.syncFromAsync();
+    };
+  }
+
+  pushDeliverables(){
+    $("#cardCsOut").textContent=$("#card-cs").textContent.trim();
+    $("#gmCsOut").textContent=$("#gm-cs").textContent.trim();
+    $("#combatCsOut").textContent=$("#combat-cs").textContent.trim();
+    $("#uiCsOut").textContent=$("#ui-cs").textContent.trim();
+    $("#jsonOut").textContent=JSON.stringify(CARD_DB,null,2);
+  }
+
+  loadEnergy(){
+    const max=10;
+    const k="fcd_energy";
+    const raw=localStorage.getItem(k);
+    let data=raw?JSON.parse(raw):{current:max,last:Date.now()};
+    if(data.current>max)data.current=max;
+    return {max,current:data.current,last:data.last,key:k};
+  }
+  saveEnergy(){localStorage.setItem(this.energy.key,JSON.stringify({current:this.energy.current,last:this.energy.last}))}
+  energyTick(){
+    const now=Date.now();
+    const elapsed=Math.floor((now-this.energy.last)/1000);
+    if(this.energy.current<this.energy.max && elapsed>=600){
+      const gain=Math.floor(elapsed/600);
+      this.energy.current=Math.min(this.energy.max,this.energy.current+gain);
+      this.energy.last += gain*600000;
+      this.saveEnergy();
+      this.updateMenuStats();
+      this.ui.renderTop?.();
+    }
+    this.updateMenuStats();
+  }
+  nextEnergyCountdown(){
+    if(this.energy.current>=this.energy.max) return "--:--";
+    const sec=600-Math.floor((Date.now()-this.energy.last)/1000)%600;
+    return fmtTime(sec);
+  }
+
+  loadRank(){
+    const raw=localStorage.getItem("fcd_rank");
+    return raw?JSON.parse(raw):{rp:0,division:10,draft:{wins:0,losses:0,active:false}};
+  }
+  saveRank(){localStorage.setItem("fcd_rank",JSON.stringify(this.rank))}
+  updateRank(win){
+    if(this.mode==="ranked"){
+      this.rank.rp += win?25:-15;
+      this.rank.rp=Math.max(0,this.rank.rp);
+      this.rank.division=Math.max(1,10-Math.floor(this.rank.rp/100));
+      this.saveRank();
+    }
+  }
+
+  updateMenuStats(){
+    $("#energyText").textContent=`${this.energy.current}/${this.energy.max}`;
+    $("#regenText").textContent=`Next energy in ${this.nextEnergyCountdown()}`;
+    $("#rankText").textContent=`Division ${this.rank.division} • ${this.rank.rp} RP`;
+  }
+
+  consumeEnergyOrBlock(){
+    if(this.energy.current<=0){this.toast("No energy. Wait for regen.");return false;}
+    this.energy.current--; this.energy.last=Date.now(); this.saveEnergy(); this.updateMenuStats(); return true;
+  }
+
+  buildDeck(){
+    let pool=shuffle(CARD_DB.map(c=>clone(c)));
+    let players=pool.filter(c=>c.type==="Player");
+    let non=pool.filter(c=>c.type!=="Player");
+    const deck=[];
+    deck.push(...players.splice(0,11)); // min 11 players
+    const rest=shuffle(players.concat(non));
+    deck.push(...rest.slice(0,29));
+    return shuffle(deck).slice(0,40).map(c=>new Card(c));
+  }
+
+  startDraft(){
+    if(!this.consumeEnergyOrBlock())return;
+    this.mode="draft"; this.modeLabel="Draft";
+    const picks=[];
+    for(let i=0;i<15;i++){
+      const opts=shuffle(CARD_DB.filter(c=>c.type==="Player")).slice(0,3);
+      picks.push(rand(opts));
+    }
+    const drafted = picks.concat(shuffle(CARD_DB).slice(0,25));
+    this.player.deck=shuffle(drafted.map(c=>new Card(clone(c)))).slice(0,40);
+    this.opponent.deck=this.buildDeck();
+    this.rank.draft={wins:0,losses:0,active:true};
+    this.saveRank();
+    this.beginGameState();
+  }
+
+  startMatch(mode="quick"){
+    if(!this.consumeEnergyOrBlock()) return;
+    this.mode=mode;
+    this.modeLabel = mode==="quick"?"Quick Match":"Ranked";
+    this.matchLength = mode==="quick"?180:240;
+    this.ai = rand(archetypes);
+    this.player.deck=this.buildDeck();
+    this.opponent.deck=this.buildDeck();
+    this.beginGameState();
+  }
+
+  beginGameState(){
+    this.turn="player";
+    this.phase=0;
+    this.turnTimer=this.turnLimit;
+    this.matchTimer=this.matchLength;
+    this.score={player:0,opponent:0};
+    this.attacksThisTurn=0;
+    this.board={player:{},opponent:{}};
+    ZONES.forEach(z=>{this.board.player[z]=null;this.board.opponent[z]=null;});
+    this.player.hand=[];this.opponent.hand=[];this.player.discard=[];this.opponent.discard=[];
+    this.player.activeTactics=[];this.opponent.activeTactics=[];
+    this.player.bench=this.player.deck.splice(0,5);
+    this.opponent.bench=this.opponent.deck.splice(0,5);
+    for(let i=0;i<5;i++){this.drawCard("player",true);this.drawCard("opponent",true);}
+    $("#menuScreen").classList.add("hidden");
+    $("#gameScreen").classList.remove("hidden");
+    this.log("Match started.");
+    this.startTimers();
+    this.ui.renderAll();
+  }
+
+  startTimers(){
+    clearInterval(this.interval);
+    this.interval=setInterval(()=>{
+      this.turnTimer--;
+      this.matchTimer--;
+      if(this.turnTimer<=0){
+        this.log(`${this.turn==="player"?"You":"AI"} timed out.`);
+        this.endTurn(true);
+      }
+      if(this.matchTimer<=0){
+        this.endMatch();
+      }
+      this.ui.renderTop();
+    },1000);
+  }
+
+  endMatch(){
+    clearInterval(this.interval);
+    const win = this.score.player>this.score.opponent;
+    this.updateRank(win);
+    if(this.mode==="draft" && this.rank.draft.active){
+      if(win)this.rank.draft.wins++; else this.rank.draft.losses++;
+      if(this.rank.draft.wins>=4 || this.rank.draft.losses>=2) this.rank.draft.active=false;
+      this.saveRank();
+    }
+    this.toast(win?"Victory!":"Defeat!");
+    this.log(`Match ended ${this.score.player}-${this.score.opponent}`);
+    setTimeout(()=>{
+      $("#gameScreen").classList.add("hidden");
+      $("#menuScreen").classList.remove("hidden");
+      this.updateMenuStats();
+    },1800);
+  }
+
+  drawCard(side, silent=false){
+    const obj=this[side];
+    if(this.phase!==0 && side==="player"){this.toast("Draw phase only.");return;}
+    if(!obj.deck.length){if(!silent)this.toast("Deck empty");return;}
+    if(obj.hand.length>=7){if(!silent)this.toast("Hand full");return;}
+    const card=obj.deck.shift();
+    obj.hand.push(card);
+    if(side==="player") this.nextPhase();
+    this.ui.renderAll();
+  }
+
+  nextPhase(){
+    if(this.turn!=="player") return;
+    this.phase=Math.min(3,this.phase+1);
+    if(this.phase===3) this.toast("End phase. Tap End Turn.");
+    this.ui.renderTop();
+    this.ui.renderField();
+  }
+
+  endTurn(timeout=false){
+    if(this.turn!=="player" && !timeout) return;
+    this.clearTurnBuffs("player");
+    this.turn="opponent";
+    this.phase=0;
+    this.turnTimer=this.turnLimit;
+    this.resetExhaust("player");
+    this.ui.renderAll();
+    setTimeout(()=>this.aiTurn(),500);
+  }
+
+  aiTurn(){
+    this.log("AI turn started.");
+    this.drawCard("opponent",true);
+
+    // place phase
+    const hand=this.opponent.hand;
+    const placeCard = this.chooseAiPlacement(hand);
+    if(placeCard) this.playCardToBoard("opponent", placeCard.idx, placeCard.zone, true);
+
+    // attack phase
+    this.aiAttackRoutine();
+
+    // end
+    this.turn="player";
+    this.phase=0;
+    this.turnTimer=this.turnLimit;
+    this.resetExhaust("opponent");
+    this.clearTurnBuffs("opponent");
+    this.ui.renderAll();
+    this.log("Your turn.");
+    this.saveAsyncState();
+  }
+
+  chooseAiPlacement(hand){
+    for(let i=0;i<hand.length;i++){
+      const c=hand[i];
+      if(c.isReaction()){
+        const target=rand(["DEF","MID","GK"]);
+        if(!this.board.opponent[target]) return {idx:i,zone:target};
+      }
+    }
+    for(let i=0;i<hand.length;i++){
+      const c=hand[i];
+      if(c.isTactic()) return {idx:i,zone:null};
+    }
+    const pref = ["DEF","MID","ATT","GK"].sort((a,b)=>(this.ai.bias[b]||1)-(this.ai.bias[a]||1));
+    for(const p of pref){
+      for(let i=0;i<hand.length;i++){
+        const c=hand[i];
+        if(!c.isPlayer()) continue;
+        const zones=this.validZonesForCard(c);
+        const z = zones.find(zx=>!this.board.opponent[zx]);
+        if((p==="ATT"&&c.position==="ATT")||(p===c.position)|| (p==="ATT"&&c.position==="MID")){
+          if(z) return {idx:i,zone:z};
+        }
+      }
+    }
+    return null;
+  }
+
+  aiAttackRoutine(){
+    const attackers=[];
+    for(const z of ZONES){
+      const ent=this.board.opponent[z];
+      if(ent?.card?.isPlayer() && !ent.card.exhausted) attackers.push({z,card:ent.card});
+    }
+    for(const a of attackers){
+      if(Math.random()>this.ai.attackChance) continue;
+      const targets = this.getAttackTargets("opponent",a.z,a.card);
+      if(!targets.length) continue;
+      targets.sort((x,y)=>x.priority-y.priority);
+      const t=targets[0];
+      this.resolveAttack("opponent",a.z,t.zone);
+    }
+  }
+
+  validZonesForCard(card){
+    if(card.type==="Player"){
+      if(card.position==="GK") return ["GK"];
+      if(card.position==="DEF") return ["DEF"];
+      if(card.position==="MID") return ["MID"];
+      if(card.position==="ATT") return ["ATT1","ATT2"];
+    }
+    if(card.type==="Reaction") return ["GK","DEF","MID","ATT1","ATT2"];
+    return [];
+  }
+
+  canPlace(side,card,zone){
+    if(this.board[side][zone]) return false;
+    if(card.isTactic()) return true;
+    return this.validZonesForCard(card).includes(zone);
+  }
+
+  playCardToBoard(side, handIdx, zone, silent=false){
+    const obj=this[side];
+    const card=obj.hand[handIdx];
+    if(!card) return false;
+    if(card.isTactic()){
+      obj.activeTactics.push({card,turn:Date.now()});
+      obj.hand.splice(handIdx,1);
+      if(!silent)this.log(`${side==="player"?"You":"AI"} played tactic ${card.name}`);
+      if(side==="player") this.phase=Math.max(this.phase,2);
+      this.ui.renderAll();
+      return true;
+    }
+    if(!this.canPlace(side,card,zone)){if(side==="player")this.toast("Invalid zone.");return false;}
+    card.zone=zone;
+    if(card.isReaction()) card.faceDown = side==="opponent";
+    this.board[side][zone]={card};
+    obj.hand.splice(handIdx,1);
+    this.applyChemistry(side);
+    if(!silent)this.log(`${side==="player"?"You":"AI"} placed ${card.name} at ${zone}`);
+    if(side==="player" && this.phase<2) this.phase=2;
+    this.ui.renderAll();
+    return true;
+  }
+
+  applyChemistry(side){
+    // same club or nation adjacent zone boost +5 all
+    const line=ZONES;
+    for(const z of line){
+      const e=this.board[side][z];
+      if(!e||!e.card||!e.card.isPlayer()) continue;
+      const card=e.card;
+      // reset to base from DB copy
+      const base=CARD_DB.find(c=>c.id===card.id);
+      ["PAC","SHO","PAS","DRI","DEF","PHY"].forEach(k=>card[k]=base[k]);
+    }
+    for(let i=0;i<line.length;i++){
+      const z=line[i], e=this.board[side][z];
+      if(!e||!e.card||!e.card.isPlayer()) continue;
+      const left=i>0?this.board[side][line[i-1]]:null;
+      const right=i<line.length-1?this.board[side][line[i+1]]:null;
+      [left,right].forEach(n=>{
+        if(n?.card?.isPlayer()){
+          if(n.card.club===e.card.club || n.card.nation===e.card.nation){
+            ["PAC","SHO","PAS","DRI","DEF","PHY"].forEach(k=>e.card[k]+=5);
+          }
+        }
+      });
+    }
+  }
+
+  clearTurnBuffs(side){
+    this.applyChemistry(side);
+  }
+
+  getTacticBuff(side, type, card, fromZone, toZone){
+    let buff=0;
+    const tactics=this[side].activeTactics.map(t=>t.card.name);
+    if(tactics.includes("High Press 4-2-3-1") && card.position==="ATT" && type==="atk") buff+=8;
+    if(tactics.includes("Tiki-Taka 4-3-3") && card.position==="MID" && type==="atk") buff+=8;
+    if(tactics.includes("Set Piece Routine") && toZone==="GK" && type==="atk") buff+=14;
+    if(tactics.includes("Direct Counter") && type==="atk" && this.attacksThisTurn===0) buff+=12;
+    if(tactics.includes("Low Block 5-4-1") && type==="def" && (toZone==="DEF"||toZone==="GK")) buff+=10;
+    if(tactics.includes("Compact Midfield") && type==="def" && toZone==="MID") buff+=7;
+    return buff;
+  }
+
+  triggerReaction(defSide, zone, attacker){
+    const entry=this.board[defSide][zone];
+    if(!entry||!entry.card||!entry.card.isReaction()) return {atkMod:0,defMod:0,negate:false,text:null};
+    const r=entry.card;
+    this.board[defSide][zone]=null;
+    const defMod = /(\+(\d+)\sDEF)/.test(r.effect)?Number(RegExp.$2):0;
+    const phyMod = /(\+(\d+)\sPHY)/.test(r.effect)?Number(RegExp.$2):0;
+    let negate=false;
+    if(r.name==="Offside Trap" && attacker.PAC<85) negate=true;
+    const out={atkMod:0,defMod:defMod+phyMod,negate,text:r.name};
+    this.log(`Reaction triggered: ${r.name}`);
+    return out;
+  }
+
+  getAttackTargets(attSide, fromZone, card){
+    const defSide=attSide==="player"?"opponent":"player";
+    const targets=[];
+    for(const z of ZONES){
+      const d=this.board[defSide][z];
+      if(d) targets.push({zone:z,priority:z==="GK"?0:1});
+    }
+    if(!targets.length) targets.push({zone:"GK",priority:2});
+    return targets;
+  }
+
+  resolveAttack(attSide, fromZone, toZone){
+    const defSide=attSide==="player"?"opponent":"player";
+    const aEntry=this.board[attSide][fromZone];
+    if(!aEntry||!aEntry.card||aEntry.card.exhausted) return false;
+    const attacker=aEntry.card;
+    if(attacker.isReaction()||attacker.isTactic()) return false;
+
+    let dEntry=this.board[defSide][toZone];
+    if(!dEntry && toZone!=="GK"){ this.toast("No defender there."); return false; }
+
+    const reaction = this.triggerReaction(defSide,toZone,attacker);
+    if(reaction.negate){
+      attacker.exhausted=true;
+      this.ui.renderAll();
+      this.log("Attack canceled by trap.");
+      return true;
+    }
+
+    const atkBuff=this.getTacticBuff(attSide,"atk",attacker,fromZone,toZone)+reaction.atkMod;
+    const defender=dEntry?dEntry.card:new Card({id:"VIRTUAL_GK",name:"Open Goal",type:"Player",rarity:"Bronze",stars:1,club:"",nation:"",position:"GK",PAC:1,SHO:1,PAS:1,DRI:1,DEF:45,PHY:45});
+    const defBuff=this.getTacticBuff(defSide,"def",defender,fromZone,toZone)+reaction.defMod;
+
+    const result=CombatSystem.resolve(attacker,defender,fromZone,toZone,atkBuff,defBuff);
+    attacker.exhausted=true;
+    this.attacksThisTurn++;
+
+    if(result.win){
+      if(toZone==="GK"){
+        // check Heroic Block style from any reaction before goal? (already triggered by zone)
+        this.score[attSide]++;
+        this.log(`${attSide==="player"?"You":"AI"} scored! (${result.atk} vs ${result.def})`);
+      }else{
+        this.log(`Attack won (${result.atk} vs ${result.def}). Defender removed.`);
+        this[defSide].discard.push(defender);
+        this.board[defSide][toZone]=null;
+      }
+    }else{
+      this.log(`Attack lost (${result.atk} vs ${result.def}). Attacker removed.`);
+      this[attSide].discard.push(attacker);
+      this.board[attSide][fromZone]=null;
+    }
+    this.ui.renderAll();
+    if(this.score.player>=5 || this.score.opponent>=5) this.endMatch();
+    return true;
+  }
+
+  resetExhaust(side){
+    ZONES.forEach(z=>{
+      const c=this.board[side][z]?.card;
+      if(c) c.exhausted=false;
+    });
+    this.attacksThisTurn=0;
+  }
+
+  attachZoneDnD(){
+    document.addEventListener("dragover",e=>e.preventDefault());
+    document.addEventListener("drop",e=>e.preventDefault());
+    document.querySelectorAll(".zone").forEach(zone=>{
+      zone.addEventListener("dragover",e=>{
+        e.preventDefault();
+        zone.classList.add("activeDrop");
+      });
+      zone.addEventListener("dragleave",()=>zone.classList.remove("activeDrop"));
+      zone.addEventListener("drop",e=>{
+        zone.classList.remove("activeDrop");
+        const side=zone.dataset.side, z=zone.dataset.zone;
+        if(this.dragData?.type==="hand" && this.turn==="player" && this.phase===1 && side==="player"){
+          this.playCardToBoard("player", this.dragData.index, z);
+        }
+        if(this.dragData?.type==="field" && this.turn==="player" && this.phase===2 && this.dragData.side==="player" && side==="opponent"){
+          this.resolveAttack("player", this.dragData.zone, z);
+        }
+        this.dragData=null;
+      });
+      zone.addEventListener("click",()=>{
+        if(this.turn==="player" && this.phase===2 && zone.dataset.side==="opponent" && this.selectedAttackerZone){
+          this.resolveAttack("player",this.selectedAttackerZone,zone.dataset.zone);
+          this.selectedAttackerZone=null;
+        }
+      });
+    });
+  }
+
+  onHandDragStart(e,index){
+    e.target.classList.add("dragging");
+    this.dragData={type:"hand",index};
+  }
+  onFieldDragStart(e,side,zone){
+    e.target.classList.add("dragging");
+    if(this.turn==="player" && this.phase===2 && side==="player"){
+      this.dragData={type:"field",side,zone};
+      this.selectedAttackerZone=zone;
+    }
+  }
+
+  showZoom(card, hidden){
+    const z=$("#zoomCard");
+    if(hidden){
+      z.innerHTML=`<div class="card trap"><div class="cardName">Face-down Reaction</div><div class="mini">Unknown trap</div></div>`;
+    }else{
+      z.innerHTML=this.ui.cardHTML(card,false);
+    }
+    $("#zoomModal").classList.remove("hidden");
+  }
+
+  log(msg){
+    const d=document.createElement("div");
+    d.textContent=`• ${msg}`;
+    $("#log").prepend(d);
+  }
+  toast(msg){
+    const t=$("#toast");
+    t.textContent=msg;
+    t.style.opacity=1;
+    clearTimeout(this.toastTimer);
+    this.toastTimer=setTimeout(()=>t.style.opacity=0,1200);
+  }
+
+  saveAsyncState(){
+    if(!this.matchId) return;
+    const key="async_"+this.matchId;
+    const raw=localStorage.getItem(key); if(!raw) return;
+    const data=JSON.parse(raw);
+    data.state={
+      score:this.score,turn:this.turn,phase:this.phase,board:this.serializeBoard(),
+      playerHand:this.player.hand.length,opponentHand:this.opponent.hand.length,
+      updated:Date.now()
+    };
+    localStorage.setItem(key,JSON.stringify(data));
+    $("#asyncStatus").textContent=`Synced ${this.matchId} @ ${new Date().toLocaleTimeString()}`;
+  }
+  syncFromAsync(){
+    if(!this.matchId) return;
+    const raw=localStorage.getItem("async_"+this.matchId); if(!raw)return;
+    const data=JSON.parse(raw);
+    if(data.state){
+      $("#asyncStatus").textContent=`Loaded snapshot: ${new Date(data.state.updated).toLocaleTimeString()}`;
+    }
+  }
+  serializeBoard(){
+    const out={player:{},opponent:{}};
+    for(const s of ["player","opponent"])for(const z of ZONES){
+      const c=this.board[s][z]?.card;
+      out[s][z]=c?{id:c.id,name:c.name,type:c.type}:null;
+    }
+    return out;
+  }
+}
+
+const game = new GameManager();
+</script>
+</body>
+</html>

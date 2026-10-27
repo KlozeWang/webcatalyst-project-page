@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brainrot Base Defense & Racing Simulator</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;user-select:none}
+body{background:#1a1a2e;color:#fff;overflow:hidden;height:100vh;display:flex;flex-direction:column}
+#ui-layer{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10}
+#ui-layer>*{pointer-events:auto}
+#stats-bar{display:flex;justify-content:space-between;padding:10px 20px;background:rgba(0,0,0,0.7);border-bottom:2px solid #444}
+.stat{display:flex;flex-direction:column;align-items:center;font-size:14px}
+.stat span{font-size:18px;font-weight:bold;color:#ffd700}
+#main-area{flex:1;display:flex;position:relative}
+#game-canvas{background:#0f0f1a;cursor:crosshair}
+#controls{width:280px;background:rgba(20,20,35,0.9);border-left:2px solid #444;padding:10px;display:flex;flex-direction:column;gap:10px;overflow-y:auto}
+.tab-btn{background:#2a2a4a;border:1px solid #555;color:#fff;padding:8px;cursor:pointer;border-radius:4px;font-weight:bold}
+.tab-btn:hover,.tab-btn.active{background:#4a4a7a;border-color:#888}
+.panel{display:none;flex-direction:column;gap:8px}
+.panel.active{display:flex}
+.btn{background:#3a3a6a;border:1px solid #666;color:#fff;padding:10px;cursor:pointer;border-radius:4px;font-weight:bold;text-align:center}
+.btn:hover{background:#5a5a9a}
+.btn:disabled{background:#222;color:#666;cursor:not-allowed}
+.progress-bar{width:100%;height:10px;background:#333;border-radius:5px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,#00b4d8,#0077b6);transition:width 0.2s}
+#modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:none;justify-content:center;align-items:center;z-index:100}
+#modal-content{background:#1e1e3a;border:2px solid #555;border-radius:8px;padding:20px;width:400px;max-height:80vh;overflow-y:auto}
+#modal-title{font-size:20px;margin-bottom:15px;text-align:center;color:#ffd700}
+.racing-track{width:100%;height:30px;background:#333;border-radius:15px;position:relative;margin:15px 0}
+.racer{position:absolute;top:0;width:20px;height:100%;background:#00b4d8;border-radius:15px;transition:left 0.1s linear}
+.racer.enemy{background:#ff4444}
+#log{position:absolute;bottom:10px;left:10px;width:300px;max-height:150px;overflow-y:auto;background:rgba(0,0,0,0.6);padding:5px;border-radius:4px;font-size:12px;pointer-events:none}
+.log-entry{margin-bottom:2px;opacity:0.9}
+#aura-btn{background:linear-gradient(45deg,#9b59b6,#8e44ad);border:none;padding:12px;border-radius:6px;font-weight:bold;cursor:pointer;margin-top:auto}
+#aura-btn:hover{filter:brightness(1.2)}
+.vehicle-card,.pet-card,.upgrade-card{background:#2a2a4a;padding:8px;border-radius:4px;display:flex;justify-content:space-between;align-items:center;border:1px solid #444}
+.vehicle-card.equipped,.pet-card.equipped{border-color:#ffd700;background:#3a3a5a}
+</style>
+</head>
+<body>
+<div id="ui-layer">
+  <div id="stats-bar">
+    <div class="stat">💰 Money<span id="money-val">0</span></div>
+    <div class="stat">🧠 Brainrot<span id="brainrot-val">0</span>/<span id="brainrot-cap">5</span></div>
+    <div class="stat">✨ Aura<span id="aura-val">50</span>/<span id="aura-max">100</span></div>
+    <div class="stat">⚡ Multiplier<span id="multi-val">1.0x</span></div>
+    <div class="stat">🛡️ Defense<span id="def-val">1</span></div>
+    <div class="stat">🏎️ Vehicle<span id="veh-val">None</span></div>
+  </div>
+  <div id="main-area">
+    <canvas id="game-canvas"></canvas>
+    <div id="controls">
+      <button class="tab-btn active" data-tab="base">🏠 Base</button>
+      <button class="tab-btn" data-tab="vehicles">🚗 Vehicles</button>
+      <button class="tab-btn" data-tab="pets">🐾 Pets</button>
+      <button class="tab-btn" data-tab="racing">🏁 Racing</button>
+      <div id="panel-base" class="panel active">
+        <div class="upgrade-card">Base Level: <span id="base-lvl">1</span></div>
+        <button class="btn" id="upgrade-base">Upgrade Base ($<span id="base-cost">100</span>)</button>
+        <div class="upgrade-card">Defense Lvl: <span id="def-lvl">1</span></div>
+        <button class="btn" id="upgrade-def">Upgrade Defense ($<span id="def-cost">150</span>)</button>
+        <div style="font-size:12px;color:#aaa">Passive: <span id="passive-rate">0</span>/s</div>
+      </div>
+      <div id="panel-vehicles" class="panel">
+        <div id="vehicle-list"></div>
+        <button class="btn" id="buy-vehicle">Buy Vehicle ($<span id="veh-cost">500</span>)</button>
+      </div>
+      <div id="panel-pets" class="panel">
+        <div id="pet-list"></div>
+        <button class="btn" id="hatch-pet">Hatch Egg ($<span id="egg-cost">300</span>)</button>
+      </div>
+      <div id="panel-racing" class="panel">
+        <div style="font-size:12px;color:#aaa;margin-bottom:5px">Select Vehicle to Race:</div>
+        <select id="race-veh-select" style="width:100%;padding:5px;background:#222;color:#fff;border:1px solid #555"></select>
+        <button class="btn" id="start-race">Start Race</button>
+        <div id="race-status" style="text-align:center;margin-top:10px;font-weight:bold"></div>
+      </div>
+      <button id="aura-btn">🔮 Click to Generate Aura</button>
+    </div>
+  </div>
+  <div id="log"></div>
+</div>
+<div id="modal-overlay">
+  <div id="modal-content">
+    <div id="modal-title">Racing Track</div>
+    <div class="racing-track">
+      <div class="racer" id="player-racer"></div>
+      <div class="racer enemy" id="enemy-racer"></div>
+    </div>
+    <div id="race-info" style="text-align:center;margin-top:10px">Position: <span id="race-pos">1st</span> | Time: <span id="race-time">0.00</span>s</div>
+    <button class="btn" id="close-race" style="display:none;margin-top:15px">Continue</button>
+  </div>
+</div>
+
+<script>
+const canvas=document.getElementById('game-canvas');
+const ctx=canvas.getContext('2d');
+let W,H;
+function resize(){W=canvas.width=canvas.parentElement.clientWidth-280;H=canvas.height=canvas.parentElement.clientHeight}
+window.addEventListener('resize',resize);resize();
+
+const state={
+  money:200,aura:50,maxAura:100,multiplier:1,
+  brainrotCarried:0,brainrotCap:5,
+  baseLevel:1,defenseLevel:1,
+  vehicles:[],currentVehicle:null,
+  pets:[],
+  lastTick:Date.now(),passiveAccum:0,
+  worldW:2000,worldH:1500,
+  player:{x:1000,y:750,r:12,speed:3,carrying:false},
+  camera:{x:0,y:0},
+  keys:{},mouse:{x:0,y:0,down:false},
+  brainrots:[],ai:[],particles:[],
+  raceActive:false,raceTimer:0,raceDist:0,raceEnemyDist:0,raceSpeed:0,raceEnemySpeed:0
+};
+
+const VEHICLES=[
+  {id:0,name:'Rusty Sedan',speed:4,def:2,cap:8,cost:500},
+  {id:1,name:'Sport Coupe',speed:6,def:3,cap:12,cost:1200},
+  {id:2,name:'Turbo Truck',speed:5,def:5,cap:20,cost:2500},
+  {id:3,name:'Neon Drifter',speed:8,def:4,cap:15,cost:5000}
+];
+const PET_TYPES=[
+  {name:'Speed Fox',racing:0.2,steal:0.1,income:0},
+  {name:'Shield Bear',racing:0,steal:0.3,income:0},
+  {name:'Gold Squirrel',racing:0,steal:0,income:0.2},
+  {name:'Chaos Dragon',racing:0.3,steal:0.2,income:0.1}
+];
+
+function log(msg){
+  const el=document.getElementById('log');
+  const d=document.createElement('div');d.className='log-entry';d.textContent=msg;
+  el.prepend(d);if(el.children.length>10)el.lastChild.remove();
+}
+
+function updateUI(){
+  document.getElementById('money-val').textContent=Math.floor(state.money);
+  document.getElementById('brainrot-val').textContent=state.brainrotCarried;
+  document.getElementById('brainrot-cap').textContent=state.brainrotCap;
+  document.getElementById('aura-val').textContent=Math.floor(state.aura);
+  document.getElementById('aura-max').textContent=state.maxAura;
+  document.getElementById('multi-val').textContent=state.multiplier.toFixed(1)+'x';
+  document.getElementById('def-val').textContent=state.defenseLevel;
+  document.getElementById('veh-val').textContent=state.currentVehicle?state.currentVehicle.name:'None';
+  document.getElementById('base-lvl').textContent=state.baseLevel;
+  document.getElementById('def-lvl').textContent=state.defenseLevel;
+  document.getElementById('base-cost').textContent=Math.floor(100*Math.pow(1.5,state.baseLevel));
+  document.getElementById('def-cost').textContent=Math.floor(150*Math.pow(1.6,state.defenseLevel));
+  document.getElementById('egg-cost').textContent=300+state.pets.length*100;
+  document.getElementById('passive-rate').textContent=(state.baseLevel*state.brainrotCarried*state.multiplier).toFixed(1);
+  
+  const vList=document.getElementById('vehicle-list');vList.innerHTML='';
+  VEHICLES.forEach(v=>{
+    const owned=state.vehicles.includes(v.id);
+    const div=document.createElement('div');div.className='vehicle-card';
+    div.innerHTML=`<div>${v.name} | Spd:${v.speed} Def:${v.def}</div><button class="btn" style="padding:4px 8px;font-size:12px">${owned?'Owned':'Buy'}</button>`;
+    div.querySelector('button').onclick=()=>buyVehicle(v.id);
+    vList.appendChild(div);
+  });
+  
+  const pList=document.getElementById('pet-list');pList.innerHTML='';
+  state.pets.forEach((p,i)=>{
+    const div=document.createElement('div');div.className='pet-card';
+    div.innerHTML=`<div>${p.name} | +${(p.racing*100).toFixed(0)}% Race, +${(p.steal*100).toFixed(0)}% Steal, +${(p.income*100).toFixed(0)}% Inc</div>`;
+    pList.appendChild(div);
+  });
+  
+  const sel=document.getElementById('race-veh-select');sel.innerHTML='';
+  state.vehicles.forEach(id=>{
+    const v=VEHICLES.find(x=>x.id===id);
+    const opt=document.createElement('option');opt.value=id;opt.textContent=v.name;sel.appendChild(opt);
+  });
+}
+
+function buyVehicle(id){
+  const v=VEHICLES.find(x=>x.id===id);
+  if(state.vehicles.includes(id)){state.currentVehicle=v;log('Equipped '+v.name);updateUI();return}
+  if(state.money>=v.cost){state.money-=v.cost;state.vehicles.push(id);state.currentVehicle=v;log('Bought '+v.name);updateUI()}
+  else log('Not enough money!')
+}
+
+function hatchPet(){
+  const cost=300+state.pets.length*100;
+  if(state.money>=cost){
+    state.money-=cost;
+    const type=PET_TYPES[Math.floor(Math.random()*PET_TYPES.length)];
+    state.pets.push({...type,level:1});
+    log('Hatched '+type.name+'!');updateUI()
+  }else log('Not enough money for egg!')
+}
+
+function upgradeBase(){
+  const cost=Math.floor(100*Math.pow(1.5,state.baseLevel));
+  if(state.money>=cost){state.money-=cost;state.baseLevel++;log('Base upgraded to '+state.baseLevel);updateUI()}
+  else log('Not enough money!')
+}
+
+function upgradeDef(){
+  const cost=Math.floor(150*Math.pow(1.6,state.defenseLevel));
+  if(state.money>=cost){state.money-=cost;state.defenseLevel++;log('Defense upgraded to '+state.defenseLevel);updateUI()}
+  else log('Not enough money!')
+}
+
+function startRace(){
+  if(state.vehicles.length===0){log('Buy a vehicle first!');return}
+  const sel=document.getElementById('race-veh-select');
+  const v=VEHICLES.find(x=>x.id===parseInt(sel.value));
+  state.raceActive=true;state.raceTimer=0;state.raceDist=0;state.raceEnemyDist=0;
+  state.raceSpeed=v.speed*1.5+state.pets.reduce((a,p)=>a+p.racing,0)*2;
+  state.raceEnemySpeed=3+Math.random()*3;
+  document.getElementById('modal-overlay').style.display='flex';
+  document.getElementById('close-race').style.display='none';
+  document.getElementById('race-status').style.display='none';
+  updateRaceUI();
+}
+
+function updateRaceUI(){
+  const pct=Math.min(100,(state.raceDist/100)*100);
+  const epct=Math.min(100,(state.raceEnemyDist/100)*100);
+  document.getElementById('player-racer').style.left=pct+'%';
+  document.getElementById('enemy-racer').style.left=epct+'%';
+  document.getElementById('race-time').textContent=state.raceTimer.toFixed(2);
+  document.getElementById('race-pos').textContent=state.raceDist>=state.raceEnemyDist?'1st':'2nd';
+}
+
+function endRace(){
+  state.raceActive=false;
+  const won=state.raceDist>=state.raceEnemyDist;
+  const reward=Math.floor((won?500:200)*state.multiplier*(1+state.pets.reduce((a,p)=>a+p.income,0)));
+  state.money+=reward;
+  document.getElementById('race-status').textContent=won?'🏆 Victory! +$'+reward:'💨 Defeat! +$'+reward;
+  document.getElementById('race-status').style.display='block';
+  document.getElementById('close-race').style.display='block';
+  log(won?'Won race!':'Lost race.');updateUI();
+}
+
+document.getElementById('close-race').onclick=()=>{document.getElementById('modal-overlay').style.display='none';updateUI()};
+document.getElementById('start-race').onclick=startRace;
+document.getElementById('upgrade-base').onclick=upgradeBase;
+document.getElementById('upgrade-def').onclick=upgradeDef;
+document.getElementById('hatch-pet').onclick=hatchPet;
+document.getElementById('aura-btn').onclick=()=>{
+  if(state.aura<state.maxAura){state.aura=Math.min(state.maxAura,state.aura+10);state.multiplier=1+state.aura/100;updateUI()}
+};
+
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+  }
+});
+
+window.addEventListener('keydown',e=>state.keys[e.key.toLowerCase()]=true);
+window.addEventListener('keyup',e=>state.keys[e.key.toLowerCase()]=false);
+canvas.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect();state.mouse.x=e.clientX-r.left;state.mouse.y=e.clientY-r.top});
+canvas.addEventListener('mousedown',()=>state.mouse.down=true);
+canvas.addEventListener('mouseup',()=>state.mouse.down=false);
+
+function spawnBrainrot(){
+  if(state.brainrots.length<5){
+    state.brainrots.push({
+      x:state.worldW/2+(Math.random()-0.5)*200,
+      y:state.worldH/2+(Math.random()-0.5)*200,
+      val:1,life:10
+    })
+  }
+}
+setInterval(spawnBrainrot,2000);
+
+function spawnAI(){
+  if(state.ai.length<3){
+    const side=Math.floor(Math.random()*4);
+    let x,y;
+    if(side===0){x=0;y=Math.random()*state.worldH}
+    else if(side===1){x=state.worldW;y=Math.random()*state.worldH}
+    else if(side===2){x=Math.random()*state.worldW;y=0}
+    else{x=Math.random()*state.worldW;y=state.worldH}
+    state.ai.push({x,y,speed:2+Math.random(),stealTimer:0})
+  }
+}
+setInterval(spawnAI,5000);
+
+function update(){
+  const now=Date.now();const dt=(now-state.lastTick)/1000;state.lastTick=now;
+  
+  // Player movement
+  let dx=0,dy=0;
+  if(state.keys['w']||state.keys['arrowup'])dy=-1;
+  if(state.keys['s']||state.keys['arrowdown'])dy=1;
+  if(state.keys['a']||state.keys['arrowleft'])dx=-1;
+  if(state.keys['d']||state.keys['arrowright'])dx=1;
+  if(dx||dy){
+    const len=Math.sqrt(dx*dx+dy*dy);dx/=len;dy/=len;
+    let spd=state.player.speed;
+    if(state.currentVehicle)spd+=state.currentVehicle.speed*0.5;
+    if(state.brainrotCarried>0)spd-=state.brainrotCarried*0.2;
+    state.player.x+=dx*spd*60*dt;
+    state.player.y+=dy*spd*60*dt;
+    state.player.x=Math.max(10,Math.min(state.worldW-10,state.player.x));
+    state.player.y=Math.max(10,Math.min(state.worldH-10,state.player.y));
+  }
+  
+  // Camera
+  state.camera.x=state.player.x-W/2;
+  state.camera.y=state.player.y-H/2;
+  state.camera.x=Math.max(0,Math.min(state.worldW-W,state.camera.x));
+  state.camera.y=Math.max(0,Math.min(state.worldH-H,state.camera.y));
+  
+  // Brainrot collection
+  state.brainrots.forEach((b,i)=>{
+    b.life-=dt;
+    const dist=Math.hypot(b.x-state.player.x,b.y-state.player.y);
+    if(dist<20&&state.brainrotCarried<state.brainrotCap){
+      state.brainrotCarried++;
+      state.brainrots.splice(i,1);
+      log('Picked up Brainrot! ('+state.brainrotCarried+'/'+state.brainrotCap+')');
+    }
+  });
+  state.brainrots=state.brainrots.filter(b=>b.life>0);
+  
+  // Passive income
+  const rate=state.baseLevel*state.brainrotCarried*state.multiplier;
+  state.passiveAccum+=rate*dt;
+  if(state.passiveAccum>=1){
+    const add=Math.floor(state.passiveAccum);
+    state.money+=add;state.passiveAccum-=add;
+  }
+  
+  // Aura decay
+  state.aura=Math.max(0,state.aura-0.5*dt);
+  state.multiplier=1+state.aura/100;
+  
+  // AI & Stealing
+  state.ai.forEach(ai=>{
+    const dx=state.player.x-ai.x,dy=state.player.y-ai.y;
+    const dist=Math.hypot(dx,dy);
+    if(dist>0){ai.x+=dx/dist*ai.speed*60*dt;ai.y+=dy/dist*ai.speed*60*dt}
+    if(dist<25&&state.brainrotCarried>0){
+      ai.stealTimer+=dt;
+      let resist=state.defenseLevel*0.1;
+      if(state.currentVehicle)resist+=state.currentVehicle.def*0.05;
+      state.pets.forEach(p=>resist+=p.steal*0.1);
+      if(ai.stealTimer>=2&&Math.random()>resist){
+        const stolen=Math.min(state.brainrotCarried,Math.ceil(Math.random()*2));
+        state.brainrotCarried-=stolen;
+        log('AI stole '+stolen+' Brainrot!');
+        ai.stealTimer=0;
+      }
+    }else{ai.stealTimer=0}
+  });
+  
+  // Race
+  if(state.raceActive){
+    state.raceTimer+=dt;
+    state.raceDist+=state.raceSpeed*dt;
+    state.raceEnemyDist+=state.raceEnemySpeed*dt;
+    updateRaceUI();
+    if(state.raceDist>=100||state.raceEnemyDist>=100)endRace();
+  }
+  
+  updateUI();
+}
+
+function render(){
+  ctx.fillStyle='#0f0f1a';ctx.fillRect(0,0,W,H);
+  ctx.save();ctx.translate(-state.camera.x,-state.camera.y);
+  
+  // Grid
+  ctx.strokeStyle='#222';ctx.lineWidth=1;
+  for(let x=0;x<=state.worldW;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,state.worldH);ctx.stroke()}
+  for(let y=0;y<=state.worldH;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(state.worldW,y);ctx.stroke()}
+  
+  // Central Zone
+  ctx.fillStyle='rgba(0,180,216,0.2)';ctx.beginPath();ctx.arc(state.worldW/2,state.worldH/2,100,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#00b4d8';ctx.lineWidth=3;ctx.stroke();
+  ctx.fillStyle='#fff';ctx.font='16px sans-serif';ctx.textAlign='center';
+  ctx.fillText('🧠 Brainrot Zone',state.worldW/2,state.worldH/2-110);
+  
+  // Brainrots
+  state.brainrots.forEach(b=>{
+    ctx.fillStyle='#39ff14';ctx.fillRect(b.x-8,b.y-8,16,16);
+    ctx.fillStyle='#000';ctx.font='10px sans-serif';ctx.textAlign='center';
+    ctx.fillText('🧠',b.x,b.y+4);
+  });
+  
+  // Base
+  ctx.fillStyle='#444';ctx.fillRect(200,600,100,100);
+  ctx.fillStyle='#ffd700';ctx.font='14px sans-serif';ctx.textAlign='center';
+  ctx.fillText('🏠 Base',250,650);
+  
+  // AI
+  state.ai.forEach(ai=>{
+    ctx.fillStyle='#ff4444';ctx.beginPath();ctx.arc(ai.x,ai.y,10,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';ctx.font='12px sans-serif';ctx.textAlign='center';
+    ctx.fillText('👤',ai.x,ai.y+4);
+  });
+  
+  // Player
+  ctx.fillStyle='#00b4d8';ctx.beginPath();ctx.arc(state.player.x,state.player.y,state.player.r,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle='#fff';ctx.font='12px sans-serif';ctx.textAlign='center';
+  ctx.fillText(state.brainrotCarried>0?'🧠':'👤',state.player.x,state.player.y+4);
+  
+  ctx.restore();
+}
+
+function loop(){update();render();requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+updateUI();
+log('Welcome! Collect 🧠 from the center zone. Carry it to earn money. Beware of thieves!');
+</script>
+</body>
+</html>

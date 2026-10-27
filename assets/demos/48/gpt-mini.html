@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>How a Hacker Thinks: Mindset, Recon, and Exploitation</title>
+<style>
+  :root{
+    --bg:#07111a;
+    --panel:#0d1a26;
+    --panel2:#122536;
+    --text:#d9f1ff;
+    --muted:#8fb4c7;
+    --accent:#41f0a3;
+    --accent2:#57b7ff;
+    --warn:#ffcf5a;
+    --danger:#ff6b6b;
+    --shadow: 0 20px 50px rgba(0,0,0,.35);
+    --glow: 0 0 18px rgba(65,240,163,.18);
+    --border: rgba(135, 190, 220, .18);
+  }
+  html,body{
+    margin:0;
+    height:100%;
+    background:
+      radial-gradient(circle at top, rgba(24,70,93,.35), transparent 40%),
+      linear-gradient(180deg, #061019 0%, #07111a 45%, #04080d 100%);
+    color:var(--text);
+    font-family: Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    overflow:hidden;
+  }
+  #game{
+    position:relative;
+    width:100vw;
+    height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .screen{
+    position:absolute;
+    inset:0;
+    display:none;
+  }
+  .screen.active{ display:block; }
+  .centerWrap{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+  }
+  .card{
+    width:min(980px, 95vw);
+    background: linear-gradient(180deg, rgba(19,39,56,.92), rgba(9,19,28,.92));
+    border:1px solid var(--border);
+    border-radius:22px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(8px);
+    overflow:hidden;
+    position:relative;
+  }
+  .card::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    background: linear-gradient(135deg, rgba(65,240,163,.06), transparent 30%, rgba(87,183,255,.06));
+    pointer-events:none;
+  }
+  .hero{
+    padding:34px 34px 22px;
+    display:grid;
+    gap:16px;
+  }
+  h1,h2,h3,p{ margin:0; }
+  h1{
+    font-size: clamp(32px, 5vw, 58px);
+    line-height:1.02;
+    letter-spacing:-.03em;
+  }
+  .sub{
+    color:var(--muted);
+    font-size:18px;
+    max-width: 72ch;
+    line-height:1.5;
+  }
+  .chips{ display:flex; flex-wrap:wrap; gap:10px; }
+  .chip{
+    padding:8px 12px;
+    border-radius:999px;
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.08);
+    color:#c7e7f4;
+    font-size:13px;
+    letter-spacing:.02em;
+  }
+  .chip.accent{ background:rgba(65,240,163,.08); border-color:rgba(65,240,163,.28); color:#9ef1cb; }
+  .chip.blue{ background:rgba(87,183,255,.08); border-color:rgba(87,183,255,.28); color:#b0dbff; }
+  .grid{
+    display:grid;
+    grid-template-columns: 1.1fr .9fr;
+    gap:18px;
+    padding:0 34px 34px;
+  }
+  .panel{
+    background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015));
+    border:1px solid rgba(255,255,255,.07);
+    border-radius:18px;
+    padding:18px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+  }
+  .panel h3{
+    font-size:18px;
+    margin-bottom:10px;
+    color:#effbff;
+  }
+  .panel p, .panel li{
+    color:var(--muted);
+    line-height:1.55;
+    font-size:15px;
+  }
+  .panel ul{ margin:10px 0 0 18px; padding:0; }
+  .btnRow{ display:flex; flex-wrap:wrap; gap:12px; margin-top:12px; }
+  button{
+    appearance:none;
+    border:none;
+    border-radius:14px;
+    padding:14px 18px;
+    color:#07111a;
+    background: linear-gradient(180deg, #7ff5be, #41f0a3);
+    font-weight:800;
+    font-size:15px;
+    cursor:pointer;
+    box-shadow: 0 10px 28px rgba(65,240,163,.18);
+    transition: transform .12s ease, filter .12s ease;
+  }
+  button:hover{ transform: translateY(-1px); filter:brightness(1.02); }
+  button.secondary{
+    background: linear-gradient(180deg, #9ad7ff, #57b7ff);
+    box-shadow: 0 10px 28px rgba(87,183,255,.18);
+  }
+  button.ghost{
+    color:var(--text);
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.09);
+    box-shadow:none;
+    font-weight:700;
+  }
+  .hud{
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+  }
+  .topbar{
+    position:absolute;
+    top:12px;
+    left:12px;
+    right:12px;
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+  }
+  .hudBox{
+    pointer-events:auto;
+    background:rgba(10,19,27,.72);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:16px;
+    padding:12px 14px;
+    backdrop-filter: blur(10px);
+    box-shadow: var(--shadow);
+  }
+  .stats{
+    display:flex;
+    gap:14px;
+    flex-wrap:wrap;
+    align-items:center;
+    color:#dff7ff;
+    font-size:14px;
+  }
+  .stat b{ color:#fff; }
+  .bar{
+    width:180px;
+    height:10px;
+    border-radius:999px;
+    background:rgba(255,255,255,.08);
+    overflow:hidden;
+    display:inline-block;
+    vertical-align:middle;
+    margin-left:8px;
+  }
+  .bar > i{ display:block; height:100%; width:50%; background:linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .gameWrap{
+    position:absolute;
+    inset:0;
+    display:grid;
+    grid-template-columns: 1fr 340px;
+    gap:12px;
+    padding:72px 12px 12px;
+  }
+  .board{
+    position:relative;
+    background: linear-gradient(180deg, rgba(12,22,33,.82), rgba(7,14,20,.88));
+    border:1px solid rgba(255,255,255,.07);
+    border-radius:20px;
+    overflow:hidden;
+    box-shadow: var(--shadow);
+  }
+  canvas{ display:block; width:100%; height:100%; }
+  .side{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .log{
+    flex:1;
+    overflow:auto;
+    font-size:14px;
+    line-height:1.5;
+    color:#c9e7f2;
+  }
+  .log .entry{
+    margin-bottom:10px;
+    padding-bottom:10px;
+    border-bottom:1px solid rgba(255,255,255,.06);
+  }
+  .entry .tag{
+    display:inline-block;
+    font-size:11px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:#8fdcff;
+    margin-bottom:4px;
+  }
+  .entry.good .tag{ color:#9ef1cb; }
+  .entry.warn .tag{ color:#ffd86a; }
+  .entry.bad .tag{ color:#ff9b9b; }
+  .choiceGrid{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:10px;
+  }
+  .choice{
+    text-align:left;
+    background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.08);
+    color:var(--text);
+    box-shadow:none;
+    padding:12px 14px;
+    border-radius:14px;
+    font-size:14px;
+    font-weight:700;
+  }
+  .choice small{
+    display:block;
+    color:var(--muted);
+    font-weight:500;
+    margin-top:4px;
+    line-height:1.35;
+  }
+  .overlay{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:rgba(4,10,14,.66);
+    backdrop-filter: blur(4px);
+  }
+  .overlay .box{
+    width:min(720px, 92vw);
+    background: linear-gradient(180deg, rgba(19,39,56,.96), rgba(8,16,24,.96));
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:22px;
+    padding:28px;
+    box-shadow: var(--shadow);
+  }
+  .overlay h2{
+    font-size:30px;
+    margin-bottom:8px;
+  }
+  .overlay p{
+    color:var(--muted);
+    line-height:1.6;
+    margin-bottom:14px;
+  }
+  .hidden{ display:none !important; }
+  .mini{
+    font-size:12px;
+    color:var(--muted);
+    margin-top:8px;
+  }
+  .fx{
+    position:absolute; inset:0; pointer-events:none;
+    background: radial-gradient(circle at 20% 20%, rgba(65,240,163,.08), transparent 20%),
+                radial-gradient(circle at 80% 30%, rgba(87,183,255,.08), transparent 18%);
+  }
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="menu" class="screen active">
+    <div class="centerWrap">
+      <div class="card">
+        <div class="hero">
+          <div class="chips">
+            <span class="chip accent">Mindset</span>
+            <span class="chip blue">Recon</span>
+            <span class="chip">Exploitation</span>
+          </div>
+          <h1>How a Hacker Thinks</h1>
+          <p class="sub">A stylized, educational strategy game about the phases of security thinking: observe carefully, reason about systems, and choose ethical, defensive actions to understand how attackers find weak spots.</p>
+        </div>
+        <div class="grid">
+          <div class="panel">
+            <h3>How to play</h3>
+            <p>Progress through three phases. Each round, pick the best defensive-thinking response to the scenario.</p>
+            <ul>
+              <li><b>Mindset:</b> spot assumptions, boundaries, and incentives.</li>
+              <li><b>Recon:</b> identify what is visible and what should remain private.</li>
+              <li><b>Exploitation:</b> recognize weak links and apply the safest response.</li>
+            </ul>
+            <div class="btnRow">
+              <button id="startBtn">Start Game</button>
+              <button id="practiceBtn" class="secondary">Practice Mode</button>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Goal</h3>
+            <p>Earn insight points by choosing secure, ethical, and practical responses.</p>
+            <p style="margin-top:10px;">No real-world hacking instructions are included. The game focuses on awareness and prevention.</p>
+            <div class="mini">Tip: Reading between the lines is often more valuable than guessing.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="play" class="screen">
+    <div class="hud">
+      <div class="topbar">
+        <div class="hudBox stats">
+          <div class="stat">Phase: <b id="phaseLabel">Mindset</b></div>
+          <div class="stat">Insight: <b id="scoreLabel">0</b></div>
+          <div class="stat">Risk: <b id="riskLabel">0</b><span class="bar"><i id="riskBar"></i></span></div>
+        </div>
+        <div class="hudBox">
+          <button id="restartBtn" class="ghost">Restart</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="gameWrap">
+      <div class="board">
+        <canvas id="canvas" width="1200" height="700"></canvas>
+        <div id="overlay" class="overlay hidden">
+          <div class="box">
+            <h2 id="ovTitle">Round Complete</h2>
+            <p id="ovText"></p>
+            <div class="btnRow">
+              <button id="nextBtn">Next</button>
+              <button id="menuBtn" class="ghost">Menu</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="side">
+        <div class="hudBox">
+          <h3 style="margin-bottom:8px;">Scenario</h3>
+          <p id="scenarioText" style="color:var(--muted); line-height:1.5; font-size:14px;"></p>
+        </div>
+        <div class="hudBox">
+          <h3 style="margin-bottom:8px;">Choices</h3>
+          <div id="choices" class="choiceGrid"></div>
+        </div>
+        <div class="hudBox log" id="log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const menu = document.getElementById('menu');
+  const play = document.getElementById('play');
+  const startBtn = document.getElementById('startBtn');
+  const practiceBtn = document.getElementById('practiceBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const menuBtn = document.getElementById('menuBtn');
+  const overlay = document.getElementById('overlay');
+  const ovTitle = document.getElementById('ovTitle');
+  const ovText = document.getElementById('ovText');
+  const phaseLabel = document.getElementById('phaseLabel');
+  const scoreLabel = document.getElementById('scoreLabel');
+  const riskLabel = document.getElementById('riskLabel');
+  const riskBar = document.getElementById('riskBar');
+  const scenarioText = document.getElementById('scenarioText');
+  const choicesEl = document.getElementById('choices');
+  const logEl = document.getElementById('log');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+
+  const phases = [
+    {
+      name: 'Mindset',
+      scenario: 'A company rushes a launch. The team assumes “secure by default” means “secure enough.” What should a defensive thinker ask first?',
+      choices: [
+        { t: 'What assumptions are we making about users, data, and trust boundaries?', s: 'Excellent. Hacker-minded defenders question assumptions before systems do.', good: true },
+        { t: 'How can we make the launch appear secure in a demo?', s: 'Looks polished, but it ignores the real threat model.', good: false },
+        { t: 'Can we skip documentation to move faster?', s: 'Speed without clarity creates blind spots.', good: false }
+      ]
+    },
+    {
+      name: 'Recon',
+      scenario: 'You notice a public website exposes more detail than intended through page content, file names, and error messages. What is the safest response?',
+      choices: [
+        { t: 'Inventory what is publicly visible and remove unnecessary disclosure.', s: 'Correct. Recon is about reducing the attack surface and exposed information.', good: true },
+        { t: 'Add more hidden text and hope nobody notices.', s: 'Security by obscurity is weak and unreliable.', good: false },
+        { t: 'Ignore it because only “advanced” attackers notice.', s: 'Small leaks often become useful clues.', good: false }
+      ]
+    },
+    {
+      name: 'Exploitation',
+      scenario: 'A weak link is identified: inconsistent access control between components. Which defensive action best reduces misuse?',
+      choices: [
+        { t: 'Enforce authorization checks at every sensitive boundary and test them continuously.', s: 'Strong choice. Defense should fail closed and be verified often.', good: true },
+        { t: 'Trust the front-end because users cannot see the backend.', s: 'Never trust the client alone.', good: false },
+        { t: 'Wait for an incident and patch later.', s: 'Reactive fixes are costly and risky.', good: false }
+      ]
+    }
+  ];
+
+  let state = {
+    phaseIndex: 0,
+    score: 0,
+    risk: 0,
+    mode: 'normal',
+    roundDone: false,
+    particles: []
+  };
+
+  function showScreen(which){
+    menu.classList.toggle('active', which === 'menu');
+    play.classList.toggle('active', which === 'play');
+  }
+
+  function log(type, tag, text){
+    const div = document.createElement('div');
+    div.className = `entry ${type}`;
+    div.innerHTML = `<div class="tag">${tag}</div><div>${text}</div>`;
+    logEl.prepend(div);
+  }
+
+  function updateHUD(){
+    phaseLabel.textContent = phases[state.phaseIndex]?.name || 'Complete';
+    scoreLabel.textContent = state.score;
+    riskLabel.textContent = state.risk;
+    riskBar.style.width = Math.min(100, state.risk * 10) + '%';
+  }
+
+  function renderChoices(){
+    choicesEl.innerHTML = '';
+    const phase = phases[state.phaseIndex];
+    phase.choices.forEach((c, i) => {
+      const b = document.createElement('button');
+      b.className = 'choice';
+      b.innerHTML = `${i+1}. ${c.t}<small>${c.s}</small>`;
+      b.onclick = () => choose(c);
+      choicesEl.appendChild(b);
+    });
+    scenarioText.textContent = phase.scenario;
+  }
+
+  function choose(choice){
+    if(state.roundDone) return;
+    state.roundDone = true;
+    if(choice.good){
+      state.score += 100;
+      log('good', phases[state.phaseIndex].name, choice.s);
+      ovTitle.textContent = 'Good thinking';
+      ovText.textContent = choice.s + ' You gained insight by focusing on systems, boundaries, and verification.';
+    }else{
+      state.risk += 1;
+      log('bad', phases[state.phaseIndex].name, choice.s);
+      ovTitle.textContent = 'Reconsider';
+      ovText.textContent = choice.s + ' In security, convenience should not replace verification.';
+    }
+    updateHUD();
+    draw();
+    overlay.classList.remove('hidden');
+  }
+
+  function nextRound(){
+    overlay.classList.add('hidden');
+    state.phaseIndex++;
+    state.roundDone = false;
+    if(state.phaseIndex >= phases.length){
+      ovTitle.textContent = 'Simulation complete';
+      ovText.textContent = `Final insight: ${state.score}. Risk flags: ${state.risk}. Security thinking starts with curiosity, but succeeds with discipline.`;
+      overlay.classList.remove('hidden');
+      nextBtn.textContent = 'Play Again';
+      choicesEl.innerHTML = '';
+      scenarioText.textContent = 'The exercise is complete.';
+      state.phaseIndex = 0;
+      state.score = 0;
+      state.risk = 0;
+      state.roundDone = true;
+      updateHUD();
+      draw();
+      return;
+    }
+    nextBtn.textContent = 'Next';
+    updateHUD();
+    renderChoices();
+  }
+
+  function resetGame(){
+    state.phaseIndex = 0;
+    state.score = 0;
+    state.risk = 0;
+    state.roundDone = false;
+    nextBtn.textContent = 'Next';
+    logEl.innerHTML = '';
+    overlay.classList.add('hidden');
+    updateHUD();
+    renderChoices();
+    draw();
+  }
+
+  function draw(){
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0,0,w,h);
+
+    const g = ctx.createLinearGradient(0,0,0,h);
+    g.addColorStop(0, '#08131d');
+    g.addColorStop(1, '#05090d');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,w,h);
+
+    for(let y=0;y<h;y+=35){
+      ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+    }
+    for(let x=0;x<w;x+=45){
+      ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
+    }
+
+    const cx = w/2, cy = h/2;
+    ctx.save();
+    ctx.translate(cx,cy);
+    const pulse = 1 + Math.sin(Date.now()/500)*0.02;
+    ctx.scale(pulse,pulse);
+
+    const colors = ['#41f0a3','#57b7ff','#ffcf5a'];
+    for(let i=0;i<3;i++){
+      ctx.strokeStyle = colors[i] + '66';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0,0,110 + i*62, 0, Math.PI*2);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = '#0f1f2d';
+    ctx.strokeStyle = 'rgba(255,255,255,.16)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(-110,-80,220,160,24);
+    ctx.fill(); ctx.stroke();
+
+    ctx.fillStyle = '#e8fbff';
+    ctx.font = 'bold 26px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(phases[state.phaseIndex]?.name || 'Complete', 0, -10);
+    ctx.fillStyle = '#8fb4c7';
+    ctx.font = '15px sans-serif';
+    ctx.fillText('Observe • Reason • Verify', 0, 20);
+    ctx.restore();
+
+    const t = Date.now()/1000;
+    state.particles.forEach(p => {
+      p.x += p.vx; p.y += p.vy; p.life -= 0.01;
+    });
+    state.particles = state.particles.filter(p => p.life > 0);
+    if(state.particles.length < 80){
+      state.particles.push({
+        x: Math.random()*w, y: Math.random()*h,
+        vx: (Math.random()-.5)*0.15, vy: (Math.random()-.5)*0.15,
+        life: 0.5 + Math.random()*0.5,
+        r: 1 + Math.random()*2,
+        c: Math.random()>.5 ? '65,240,163' : '87,183,255'
+      });
+    }
+    for(const p of state.particles){
+      ctx.fillStyle = `rgba(${p.c},${p.life*0.8})`;
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+
+  startBtn.onclick = () => { showScreen('play'); resetGame(); };
+  practiceBtn.onclick = () => { showScreen('play'); resetGame(); state.score = 50; updateHUD(); log('good','Practice','You can learn by looking for patterns, not by looking for shortcuts.'); };
+  restartBtn.onclick = resetGame;
+  nextBtn.onclick = nextRound;
+  menuBtn.onclick = () => showScreen('menu');
+
+  CanvasRenderingContext2D.prototype.roundRect ||= function(x,y,w,h,r){
+    r = Array.isArray(r) ? r : [r,r,r,r];
+    this.beginPath();
+    this.moveTo(x+r[0], y);
+    this.lineTo(x+w-r[1], y);
+    this.quadraticCurveTo(x+w, y, x+w, y+r[1]);
+    this.lineTo(x+w, y+h-r[2]);
+    this.quadraticCurveTo(x+w, y+h, x+w-r[2], y+h);
+    this.lineTo(x+r[3], y+h);
+    this.quadraticCurveTo(x, y+h, x, y+h-r[3]);
+    this.lineTo(x, y+r[0]);
+    this.quadraticCurveTo(x, y, x+r[0], y);
+    this.closePath();
+  };
+
+  updateHUD();
+  draw();
+})();
+</script>
+</body>
+</html>

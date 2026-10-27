@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Persib Bandung - Liga Satu Indonesia & Luar</title>
+<style>
+  :root{
+    --bg:#07111f;
+    --panel:#0f1a2c;
+    --panel2:#14233a;
+    --accent:#28d17c;
+    --accent2:#2f7cff;
+    --danger:#ff5e6c;
+    --text:#e9f2ff;
+    --muted:#9bb0d0;
+    --line:#20314d;
+    --gold:#ffd166;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; width:100%; height:100%; overflow:hidden;
+    background: radial-gradient(circle at top, #13315b 0%, #07111f 55%, #04080f 100%);
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    color:var(--text);
+  }
+  #app{position:relative; width:100vw; height:100vh; user-select:none; touch-action:none;}
+  canvas{display:block; width:100%; height:100%; background:linear-gradient(#0d2a4f, #0a1730 60%, #081321);}
+  .hud{
+    position:absolute; left:0; top:0; width:100%; pointer-events:none;
+    padding:10px;
+  }
+  .topbar{
+    display:flex; justify-content:space-between; align-items:flex-start; gap:8px;
+  }
+  .badge{
+    pointer-events:none;
+    background:rgba(10,18,32,.72); border:1px solid rgba(255,255,255,.08);
+    backdrop-filter: blur(6px);
+    border-radius:14px; padding:10px 12px; box-shadow:0 10px 25px rgba(0,0,0,.25);
+  }
+  .title{font-weight:800; font-size:15px; letter-spacing:.3px; line-height:1.1;}
+  .sub{font-size:11px; color:var(--muted); margin-top:2px;}
+  .scoreline{display:flex; gap:8px; align-items:center; font-weight:700;}
+  .score{
+    min-width:92px; text-align:center;
+    font-size:24px; letter-spacing:1px;
+  }
+  .clock{font-size:12px; color:var(--muted); margin-top:2px;}
+  .pill{
+    display:inline-flex; align-items:center; gap:6px;
+    background:rgba(40,209,124,.12); color:#baf7da;
+    border:1px solid rgba(40,209,124,.3); border-radius:999px;
+    padding:4px 8px; font-size:11px; margin-top:6px;
+  }
+  .msg{
+    position:absolute; left:50%; top:52%; transform:translate(-50%,-50%);
+    padding:12px 18px; border-radius:16px;
+    background:rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.1);
+    color:#fff; font-weight:700; text-align:center;
+    opacity:0; transition:opacity .25s ease; pointer-events:none;
+  }
+  .msg.show{opacity:1;}
+  .menu, .overlay{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(180deg, rgba(5,10,20,.62), rgba(5,10,20,.85));
+    z-index:10;
+  }
+  .card{
+    width:min(92vw, 760px);
+    max-height:90vh; overflow:auto;
+    border-radius:24px; padding:18px;
+    background:rgba(12,18,32,.92);
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow:0 30px 70px rgba(0,0,0,.45);
+  }
+  h1,h2,h3,p{margin:0}
+  h1{font-size:28px; line-height:1.05;}
+  .hero{display:flex; gap:16px; align-items:flex-start; justify-content:space-between; flex-wrap:wrap;}
+  .hero .left{min-width:240px; flex:1;}
+  .hero .right{min-width:220px; flex:1; display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap;}
+  .desc{margin-top:10px; color:var(--muted); font-size:14px; line-height:1.5;}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-top:14px;}
+  .box{
+    background:linear-gradient(180deg, rgba(20,35,58,.95), rgba(11,18,32,.95));
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:18px; padding:14px;
+  }
+  .box h3{font-size:15px; margin-bottom:8px;}
+  .team-list{display:flex; flex-direction:column; gap:8px; max-height:240px; overflow:auto; padding-right:4px;}
+  .team{
+    display:flex; justify-content:space-between; gap:8px; align-items:center;
+    background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.06);
+    padding:10px 12px; border-radius:12px; cursor:pointer;
+  }
+  .team:hover{background:rgba(255,255,255,.07);}
+  .team strong{font-size:14px;}
+  .team span{font-size:12px; color:var(--muted);}
+  .btnrow{display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;}
+  button{
+    appearance:none; border:none; cursor:pointer;
+    background:linear-gradient(180deg, #2f7cff, #205bd6);
+    color:white; font-weight:800; letter-spacing:.2px;
+    padding:12px 16px; border-radius:14px; box-shadow:0 10px 24px rgba(47,124,255,.28);
+  }
+  button.secondary{
+    background:linear-gradient(180deg, #17304f, #0f2239);
+    box-shadow:none; border:1px solid rgba(255,255,255,.08);
+  }
+  button.green{background:linear-gradient(180deg, #2ddc86, #18a95f);}
+  .controls{
+    position:absolute; left:0; bottom:0; width:100%;
+    display:flex; justify-content:space-between; align-items:flex-end;
+    padding:14px; pointer-events:none; z-index:5;
+  }
+  .joy{
+    width:min(38vw, 170px); height:min(38vw, 170px); max-width:170px; max-height:170px;
+    border-radius:50%;
+    background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.08);
+    position:relative; pointer-events:auto;
+  }
+  .stick{
+    width:62px; height:62px; border-radius:50%;
+    background:radial-gradient(circle at 30% 30%, #7ea9ff, #2f7cff 60%, #2051b8 100%);
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    box-shadow:0 12px 24px rgba(0,0,0,.3);
+  }
+  .buttons{display:flex; flex-direction:column; gap:10px; pointer-events:auto; align-items:flex-end;}
+  .row{display:flex; gap:10px;}
+  .btn{
+    width:72px; height:72px; border-radius:22px; display:flex; align-items:center; justify-content:center;
+    font-weight:900; font-size:14px; text-align:center; user-select:none;
+    background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.1); color:#fff;
+    box-shadow:0 10px 24px rgba(0,0,0,.18);
+    touch-action:none;
+  }
+  .btn.kick{background:linear-gradient(180deg, rgba(255,94,108,.98), rgba(208,56,70,.95));}
+  .btn.pass{background:linear-gradient(180deg, rgba(47,124,255,.98), rgba(37,93,205,.95));}
+  .btn.sprint{background:linear-gradient(180deg, rgba(255,209,102,.98), rgba(220,160,30,.95)); color:#0b1220;}
+  .btn.def{background:linear-gradient(180deg, rgba(40,209,124,.98), rgba(17,142,79,.95));}
+  .mini{
+    font-size:10px; color:var(--muted); margin-top:4px;
+  }
+  .toggle{
+    display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;
+  }
+  .tag{
+    padding:8px 10px; border-radius:999px; background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.08); font-size:12px; color:#d6e4ff;
+  }
+  @media (max-width: 760px){
+    .score{font-size:20px; min-width:80px;}
+    .btn{width:64px; height:64px; border-radius:18px;}
+    .joy{width:150px; height:150px;}
+    .card{padding:14px; border-radius:18px;}
+    h1{font-size:24px;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+
+  <div class="hud">
+    <div class="topbar">
+      <div class="badge">
+        <div class="title">Persib Bandung</div>
+        <div class="sub" id="leagueText">Liga Satu Indonesia & Luar</div>
+        <div class="pill" id="matchState">SIAP BERTANDING</div>
+      </div>
+      <div class="badge" style="text-align:center; min-width:140px;">
+        <div class="scoreline">
+          <span id="homeName">PBR</span>
+          <div class="score" id="scoreText">0 - 0</div>
+          <span id="awayName">OPP</span>
+        </div>
+        <div class="clock" id="clockText">00:00</div>
+      </div>
+      <div class="badge" style="text-align:right;">
+        <div class="title" style="font-size:13px;">Kontrol</div>
+        <div class="sub">Joystick gerak + tombol oper/tendang</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="msg" id="msg"></div>
+
+  <div class="controls">
+    <div class="joy" id="joy">
+      <div class="stick" id="stick"></div>
+    </div>
+    <div class="buttons">
+      <div class="row">
+        <div class="btn sprint" id="btnSprint">SPRINT<div class="mini">tahan</div></div>
+        <div class="btn def" id="btnSwitch">SWITCH<div class="mini">tahan</div></div>
+      </div>
+      <div class="row">
+        <div class="btn pass" id="btnPass">PASS<div class="mini">umpan</div></div>
+        <div class="btn kick" id="btnKick">SHOOT<div class="mini">tendang</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="menu" id="menu">
+    <div class="card">
+      <div class="hero">
+        <div class="left">
+          <h1>Persib Bandung Soccer</h1>
+          <p class="desc">Game sepak bola arcade 2D terinspirasi gaya eFootball. Main sebagai Persib Bandung melawan tim Liga Satu Indonesia dan tim luar negeri dalam mode cepat.</p>
+        </div>
+        <div class="right">
+          <div class="tag">Mode: 5 vs 5 arcade</div>
+          <div class="tag">Durasi: 3 menit</div>
+          <div class="tag">Liga: Indonesia & Luar</div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="box">
+          <h3>Pilih Lawan</h3>
+          <div class="team-list" id="teamList"></div>
+        </div>
+        <div class="box">
+          <h3>Instruksi</h3>
+          <p class="desc">Gerakkan pemain dengan joystick. Saat menguasai bola, gunakan PASS untuk memberi umpan dan SHOOT untuk menendang ke gawang. Tahan SPRINT agar lari lebih cepat. Jika kehilangan bola, dekatkan pemain untuk merebut kembali.</p>
+          <div class="toggle">
+            <div class="tag">Gol lebih dulu menang</div>
+            <div class="tag">AI lawan aktif</div>
+            <div class="tag">Bisa dimainkan di HP</div>
+          </div>
+          <div class="btnrow">
+            <button class="green" id="startBtn">Mulai Pertandingan</button>
+            <button class="secondary" id="randomBtn">Pilih Lawan Acak</button>
+            <button class="secondary" id="resetBtn">Reset Skor</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const menu = document.getElementById('menu');
+  const msg = document.getElementById('msg');
+  const scoreText = document.getElementById('scoreText');
+  const clockText = document.getElementById('clockText');
+  const matchState = document.getElementById('matchState');
+  const teamList = document.getElementById('teamList');
+  const homeName = document.getElementById('homeName');
+  const awayName = document.getElementById('awayName');
+  const leagueText = document.getElementById('leagueText');
+
+  let W=0,H=0,dpr=1;
+  function resize(){ dpr=Math.max(1,Math.min(2,devicePixelRatio||1)); W=canvas.clientWidth=innerWidth; H=canvas.clientHeight=innerHeight; canvas.width=W*dpr; canvas.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+  addEventListener('resize', resize); resize();
+
+  const field = { x: 40, y: 60, w: () => W-80, h: () => H-130 };
+  const teams = [
+    {name:'PERSIB BANDUNG', short:'PBR', color:'#2f7cff', style:'#dff0ff', nation:'Indonesia'},
+    {name:'BALI UNITED', short:'BAL', color:'#ff5f6d', style:'#ffe5e8', nation:'Indonesia'},
+    {name:'AREMA FC', short:'ARM', color:'#7c4dff', style:'#efe5ff', nation:'Indonesia'},
+    {name:'PERSIJA', short:'PSJ', color:'#ffb703', style:'#fff3d4', nation:'Indonesia'},
+    {name:'MANCHESTER', short:'MNC', color:'#d61f2c', style:'#ffe0e3', nation:'Luar'},
+    {name:'REAL MADRID', short:'RMD', color:'#f7f7f7', style:'#ffffff', nation:'Luar'},
+    {name:'BARCELONA', short:'BAR', color:'#f03a47', style:'#ffe4e7', nation:'Luar'},
+    {name:'LIVERPOOL', short:'LIV', color:'#c8102e', style:'#ffe1e5', nation:'Luar'}
+  ];
+  let selectedTeam = teams[1];
+
+  teamList.innerHTML = teams.map(t => `<div class="team" data-team="${t.name}"><div><strong>${t.name}</strong><div><span>${t.nation}</span></div></div><span>${t.short}</span></div>`).join('');
+  teamList.addEventListener('click', e=>{
+    const el = e.target.closest('.team'); if(!el) return;
+    selectedTeam = teams.find(t=>t.name===el.dataset.team) || teams[1];
+    setMsg(`Lawan: ${selectedTeam.name}`, 1200);
+  });
+
+  const joy = {active:false, id:null, cx:0, cy:0, x:0, y:0, dx:0, dy:0};
+  const stick = document.getElementById('stick');
+  function setStick(px,py){
+    const rect = joyEl().getBoundingClientRect();
+    const r = rect.width/2 - 30;
+    const dx = px - joy.cx, dy = py - joy.cy;
+    const d = Math.hypot(dx,dy);
+    const nx = d>r ? dx/d*r : dx, ny = d>r ? dy/d*r : dy;
+    joy.dx = nx / r; joy.dy = ny / r;
+    stick.style.left = (rect.width/2 + nx) + 'px';
+    stick.style.top = (rect.height/2 + ny) + 'px';
+  }
+  function resetStick(){ joy.dx=joy.dy=0; const rect=joyEl().getBoundingClientRect(); stick.style.left=(rect.width/2)+'px'; stick.style.top=(rect.height/2)+'px'; }
+  function joyEl(){ return document.getElementById('joy'); }
+  joyEl().addEventListener('pointerdown', e=>{ joy.active=true; joy.id=e.pointerId; joyEl().setPointerCapture(e.pointerId); const r=joyEl().getBoundingClientRect(); joy.cx=r.left+r.width/2; joy.cy=r.top+r.height/2; setStick(e.clientX,e.clientY); });
+  joyEl().addEventListener('pointermove', e=>{ if(!joy.active||e.pointerId!==joy.id)return; setStick(e.clientX,e.clientY); });
+  joyEl().addEventListener('pointerup', e=>{ if(e.pointerId!==joy.id)return; joy.active=false; joy.id=null; resetStick(); });
+  joyEl().addEventListener('pointercancel', ()=>{ joy.active=false; joy.id=null; resetStick(); });
+
+  const input = {kick:false, pass:false, sprint:false, switch:false};
+  const bindBtn = (id,key) => {
+    const el=document.getElementById(id);
+    const down = e=>{ e.preventDefault(); input[key]=true; };
+    const up = e=>{ e.preventDefault(); input[key]=false; };
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointerleave', up);
+    el.addEventListener('pointercancel', up);
+  };
+  bindBtn('btnKick','kick'); bindBtn('btnPass','pass'); bindBtn('btnSprint','sprint'); bindBtn('btnSwitch','switch');
+
+  const ball = {x:0,y:0,vx:0,vy:0,r:7,owner:null};
+  const game = {running:false, time:180, scoreH:0, scoreA:0, target:selectedTeam};
+  const players = [];
+  const home = [];
+  const away = [];
+  function mkPlayer(team, x, y, isHome, idx){
+    return {team, x, y, vx:0, vy:0, r:12, speed:isHome?2.2:2.0, max: isHome?2.2:2.0, sprint: 3.2, hasBall:false, idx, homeX:x, homeY:y, isHome, cool:0};
+  }
+  function setup(){
+    players.length=0; home.length=0; away.length=0;
+    const fx=field.x, fy=field.y, fw=field.w(), fh=field.h();
+    const formationH = [[fx+80, fy+fh*0.78],[fx+180, fy+fh*0.58],[fx+180, fy+fh*0.30],[fx+300, fy+fh*0.66],[fx+330, fy+fh*0.38]];
+    const formationA = [[fx+fw-80, fy+fh*0.22],[fx+fw-180, fy+fh*0.42],[fx+fw-180, fy+fh*0.70],[fx+fw-300, fy+fh*0.34],[fx+fw-330, fy+fh*0.62]];
+    formationH.forEach((p,i)=>home.push(mkPlayer(teams[0],p[0],p[1],true,i)));
+    formationA.forEach((p,i)=>away.push(mkPlayer(selectedTeam,p[0],p[1],false,i)));
+    players.push(...home,...away);
+    ball.x=fx+fw/2; ball.y=fy+fh/2; ball.vx=ball.vy=0; ball.owner=null;
+    home[2].hasBall=true; ball.owner=home[2];
+    homeName.textContent = teams[0].short; awayName.textContent = selectedTeam.short;
+    leagueText.textContent = `Liga Satu Indonesia & Luar — vs ${selectedTeam.name}`;
+  }
+
+  function setMsg(text, t=1000){ msg.textContent=text; msg.classList.add('show'); clearTimeout(setMsg._t); setMsg._t=setTimeout(()=>msg.classList.remove('show'), t); }
+  function startMatch(){ setup(); game.running=true; game.time=180; game.scoreH=0; game.scoreA=0; menu.style.display='none'; matchState.textContent='PERTANDINGAN DIMULAI'; setMsg('Kick-off!'); }
+  document.getElementById('startBtn').onclick = startMatch;
+  document.getElementById('randomBtn').onclick = ()=>{ selectedTeam = teams[1 + Math.floor(Math.random()*(teams.length-1))]; setMsg(`Lawan acak: ${selectedTeam.name}`, 1200); };
+  document.getElementById('resetBtn').onclick = ()=>{ game.scoreH=0; game.scoreA=0; game.time=180; scoreText.textContent='0 - 0'; clockText.textContent='03:00'; setMsg('Skor direset'); };
+  setup();
+
+  function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+  function dist(a,b,c,d){ return Math.hypot(a-c,b-d); }
+  function nearestOpponent(p, arr){
+    let best=null, bd=1e9;
+    for(const o of arr){ const d=dist(p.x,p.y,o.x,o.y); if(d<bd){bd=d; best=o;} }
+    return best;
+  }
+  function updatePlayer(p, targetX, targetY, chaseBall=false){
+    let ax=0, ay=0;
+    if(chaseBall){ ax = targetX - p.x; ay = targetY - p.y; }
+    else { ax = targetX - p.x; ay = targetY - p.y; }
+    const d = Math.hypot(ax,ay) || 1;
+    const sp = (p.isHome && (joy.active && input.sprint)) || (!p.isHome && d<140) ? p.sprint : p.max;
+    p.vx += (ax/d)*0.18;
+    p.vy += (ay/d)*0.18;
+    const v = Math.hypot(p.vx,p.vy);
+    const lim = sp;
+    if(v>lim){ p.vx = p.vx/v*lim; p.vy = p.vy/v*lim; }
+    p.vx *= 0.92; p.vy *= 0.92;
+    p.x += p.vx; p.y += p.vy;
+    p.x = clamp(p.x, field.x+20, field.x+field.w()-20);
+    p.y = clamp(p.y, field.y+20, field.y+field.h()-20);
+    if(p.cool>0)p.cool--;
+  }
+
+  function passBall(from, to, power=4){
+    ball.owner = null; from.hasBall = false;
+    const dx=to.x-from.x, dy=to.y-from.y, d=Math.hypot(dx,dy)||1;
+    ball.vx = dx/d*power; ball.vy = dy/d*power;
+  }
+  function shootBall(from, towardLeft){
+    ball.owner = null; from.hasBall = false;
+    const goalY = H/2;
+    const targetX = towardLeft ? field.x+12 : field.x+field.w()-12;
+    const dx = targetX-from.x, dy = goalY-from.y, d = Math.hypot(dx,dy)||1;
+    ball.vx = dx/d*6.2; ball.vy = dy/d*3.2;
+  }
+
+  function score(side){
+    if(side==='home') game.scoreH++; else game.scoreA++;
+    scoreText.textContent = `${game.scoreH} - ${game.scoreA}`;
+    setMsg(side==='home' ? 'GOOOL Persib!' : 'Gol lawan!', 1400);
+    setup();
+  }
+
+  function tick(){
+    requestAnimationFrame(tick);
+    ctx.clearRect(0,0,W,H);
+    drawField();
+    if(!game.running){ drawPlayers(); return; }
+
+    game.time -= 1/60;
+    if(game.time<=0){ game.time=0; game.running=false; matchState.textContent='SELESAI'; setMsg(game.scoreH>game.scoreA?'Persib menang!':game.scoreH<game.scoreA?'Persib kalah!':'Seri!', 2500); menu.style.display='flex'; }
+    clockText.textContent = `${String(Math.floor(game.time/60)).padStart(2,'0')}:${String(Math.floor(game.time%60)).padStart(2,'0')}`;
+
+    const user = home[2];
+    const ux = joy.dx*1, uy = joy.dy*1;
+    user.vx += ux*(input.sprint?0.22:0.16);
+    user.vy += uy*(input.sprint?0.22:0.16);
+    if(ball.owner===user){
+      if(input.pass){ const mates = home.filter(p=>p!==user).sort((a,b)=>dist(user.x,user.y,a.x,a.y)-dist(user.x,user.y,b.x,b.y)); passBall(user, mates[0], 4.6); input.pass=false; }
+      if(input.kick){ shootBall(user,false); input.kick=false; }
+    }
+    for(const p of home){
+      if(p!==user){
+        const mate = ball.owner===p ? p : user;
+        updatePlayer(p, p.homeX + Math.sin((performance.now()/1000)+p.idx)*10, p.homeY + Math.cos((performance.now()/1000)+p.idx)*8, false);
+      } else updatePlayer(p, p.x + ux*18, p.y + uy*18, false);
+    }
+
+    const poss = ball.owner;
+    if(poss && poss.isHome){
+      ball.x = poss.x + 12; ball.y = poss.y;
+    } else if(poss && !poss.isHome){
+      ball.x = poss.x - 12; ball.y = poss.y;
+    } else {
+      ball.x += ball.vx; ball.y += ball.vy;
+      ball.vx *= 0.985; ball.vy *= 0.985;
+    }
+
+    const enemyGoal = {x: field.x+field.w()-10, y:H/2};
+    for(const p of away){
+      const target = ball.owner && ball.owner.isHome ? ball.owner : nearestOpponent(p, home) || user;
+      updatePlayer(p, ball.owner ? (ball.owner.x + 28) : ball.x, ball.owner ? (ball.owner.y) : ball.y, true);
+      if(dist(p.x,p.y,ball.x,ball.y)<18 && !ball.owner){
+        ball.owner = p; p.hasBall=true;
+      }
+      if(ball.owner===p){
+        const toward = enemyGoal.x - p.x;
+        const open = p.x < field.x+field.w()*0.55;
+        if(open && p.cool===0 && Math.random()<0.02){
+          if(Math.random()<0.65) shootBall(p,true);
+          else { const mate = away[Math.floor(Math.random()*away.length)]; if(mate!==p) passBall(p,mate,4.2); }
+          p.cool=60;
+        } else {
+          p.vx += 0.14; 
+        }
+      }
+    }
+
+    if(!ball.owner){
+      for(const p of players){
+        if(dist(p.x,p.y,ball.x,ball.y)<p.r+ball.r+1){
+          ball.owner = p; p.hasBall = true; ball.vx=ball.vy=0;
+          break;
+        }
+      }
+    }
+
+    if(ball.owner){
+      const p=ball.owner;
+      if(p.isHome){
+        if(dist(p.x,p.y,field.x+field.w()-22,H/2)<24 && p.x>field.x+field.w()*0.82){ score('home'); return; }
+      }else{
+        if(dist(p.x,p.y,field.x+22,H/2)<24 && p.x<field.x+field.w()*0.18){ score('away'); return; }
+      }
+    } else {
+      if(ball.x<field.x-20 || ball.x>field.x+field.w()+20 || ball.y<field.y-20 || ball.y>field.y+field.h()+20){
+        ball.x=field.x+field.w()/2; ball.y=field.y+field.h()/2; ball.vx=ball.vy=0; ball.owner=home[2]; home[2].hasBall=true; setMsg('Bola keluar, kick-off ulang', 1000);
+      }
+    }
+
+    // tackle
+    for(const p of home){
+      for(const o of away){
+        if(dist(p.x,p.y,o.x,o.y)<22 && o.hasBall){
+          if(Math.random()<0.08){ o.hasBall=false; ball.owner=p; p.hasBall=true; setMsg('Bola direbut Persib!', 900); }
+        }
+      }
+    }
+    if(ball.owner && ball.owner.isHome && ball.owner!==user) user.hasBall=false;
+
+    drawPlayers();
+    drawBall();
+    drawMiniHUD();
+  }
+
+  function drawField(){
+    const x=field.x,y=field.y,w=field.w(),h=field.h();
+    ctx.save();
+    ctx.fillStyle = '#0e5e2c';
+    ctx.fillRect(x,y,w,h);
+    ctx.fillStyle = 'rgba(255,255,255,.05)';
+    for(let i=0;i<18;i++){ ctx.fillRect(x+i*w/18,y,1,h); }
+    ctx.strokeStyle = 'rgba(255,255,255,.9)';
+    ctx.lineWidth=2;
+    ctx.strokeRect(x,y,w,h);
+    ctx.beginPath(); ctx.moveTo(x+w/2,y); ctx.lineTo(x+w/2,y+h); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x+w/2,y+h/2,70,0,Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x+w/2,y+h/2,3,0,Math.PI*2); ctx.fillStyle='white'; ctx.fill();
+    // goals
+    ctx.fillStyle='rgba(255,255,255,.95)';
+    ctx.fillRect(x-4,y+h/2-40,4,80);
+    ctx.fillRect(x+w,y+h/2-40,4,80);
+    ctx.fillStyle='rgba(255,255,255,.08)';
+    ctx.fillRect(x+1,y+1,w-2,h-2);
+    ctx.restore();
+  }
+  function drawCircle(x,y,r,c){ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fillStyle=c; ctx.fill(); }
+  function drawPlayers(){
+    for(const p of players){
+      drawCircle(p.x,p.y,p.r+5,'rgba(0,0,0,.22)');
+      drawCircle(p.x,p.y,p.r,p.team.color);
+      ctx.strokeStyle = p.isHome ? 'rgba(255,255,255,.5)' : 'rgba(0,0,0,.3)';
+      ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = p.isHome ? '#eef6ff' : '#fff';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(p.team.short, p.x, p.y-1);
+      if(p.hasBall){
+        ctx.beginPath(); ctx.arc(p.x+15,p.y-8,4,0,Math.PI*2); ctx.fillStyle='var(--gold)'; ctx.fill();
+      }
+    }
+  }
+  function drawBall(){
+    drawCircle(ball.x,ball.y,ball.r,'#f6f0da');
+    ctx.beginPath(); ctx.arc(ball.x-2,ball.y-2,2,0,Math.PI*2); ctx.fillStyle='#b89d6a'; ctx.fill();
+  }
+  function drawMiniHUD(){
+    ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(14, H-26, 180, 12);
+    ctx.fillStyle='rgba(47,124,255,.8)'; ctx.fillRect(14, H-26, 180*(game.scoreH/10), 12);
+  }
+
+  tick();
+})();
+</script>
+</body>
+</html>

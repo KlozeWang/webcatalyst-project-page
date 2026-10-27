@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ramp Runner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #1e3c72, #2a5298);
+            touch-action: none; /* Prevent pinch zoom etc on mobile */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .ui-panel {
+            pointer-events: auto;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 1rem;
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            transition: opacity 0.3s;
+        }
+        .btn {
+            background: linear-gradient(to right, #ff416c, #ff4b2b);
+            border: none;
+            color: white;
+            padding: 10px 30px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-radius: 9999px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(255, 75, 43, 0.4);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .btn:active {
+            transform: scale(0.95);
+            box-shadow: 0 2px 10px rgba(255, 75, 43, 0.4);
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="hud" class="hidden">
+        Score: <span id="scoreDisplay">0</span>
+    </div>
+
+    <div id="ui-layer">
+        <!-- Start Screen -->
+        <div id="startScreen" class="ui-panel">
+            <h1 class="text-5xl font-extrabold text-white mb-2 drop-shadow-lg">Ramp Runner</h1>
+            <p class="text-gray-200 mb-6 text-lg">Tap, Click, or Space to Jump.</p>
+            <button id="startBtn" class="btn">Play Now</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="ui-panel hidden">
+            <h1 class="text-5xl font-extrabold text-red-400 mb-2 drop-shadow-lg">Game Over</h1>
+            <p class="text-gray-200 mb-2 text-xl">Score: <span id="finalScore" class="font-bold text-white">0</span></p>
+            <p class="text-gray-300 mb-6 text-md">High Score: <span id="highScore" class="font-bold text-yellow-300">0</span></p>
+            <button id="restartBtn" class="btn">Play Again</button>
+        </div>
+    </div>
+
+<script>
+/**
+ * Simple Audio Synthesizer for retro sounds
+ */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const Sound = {
+    playTone: (freq, type, duration, vol=0.1, slideFreq=null) => {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        if(slideFreq) {
+            osc.frequency.exponentialRampToValueAtTime(slideFreq, audioCtx.currentTime + duration);
+        }
+        
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+    },
+    jump: () => Sound.playTone(300, 'square', 0.2, 0.05, 600),
+    coin: () => Sound.playTone(800, 'sine', 0.1, 0.1, 1200),
+    die: () => Sound.playTone(200, 'sawtooth', 0.5, 0.1, 50)
+};
+
+/**
+ * Game Setup
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let cw, ch;
+function resize() {
+    cw = canvas.width = window.innerWidth;
+    ch = canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// UI Elements
+const startScreen = document.getElementById('startScreen');
+const gameOverScreen = document.getElementById('gameOverScreen');
+const hud = document.getElementById('hud');
+const scoreDisplay = document.getElementById('scoreDisplay');
+const finalScore = document.getElementById('finalScore');
+const highScoreDisplay = document.getElementById('highScore');
+const startBtn = document.getElementById('startBtn');
+const restartBtn = document.getElementById('restartBtn');
+
+// Game State
+let gameState = 'start'; // start, playing, gameover
+let score = 0;
+let highScore = localStorage.getItem('rampRunnerHighScore') || 0;
+let gameSpeed = 5;
+let gravity = 0.6;
+let frameCount = 0;
+
+// Entities
+let player;
+let platforms = [];
+let coins = [];
+let particles = [];
+
+class Player {
+    constructor() {
+        this.size = 30;
+        this.x = cw * 0.2;
+        this.y = ch / 2;
+        this.vy = 0;
+        this.jumpForce = -12;
+        this.grounded = false;
+        this.color = '#00ffcc';
+        this.trail = [];
+    }
+
+    jump() {
+        if (this.grounded) {
+            this.vy = this.jumpForce;
+            this.grounded = false;
+            Sound.jump();
+            this.createDust();
+        }
+    }
+
+    createDust() {
+        for(let i=0; i<5; i++){
+            particles.push(new Particle(this.x + this.size/2, this.y + this.size, 'white', true));
+        }
+    }
+
+    update() {
+        this.vy += gravity;
+        this.y += this.vy;
+        this.grounded = false;
+
+        // Platform Collision
+        for (let p of platforms) {
+            // AABB Collision (simplified for falling down on platforms)
+            if (this.x < p.x + p.w &&
+                this.x + this.size > p.x &&
+                this.y + this.size > p.y &&
+                this.y + this.size < p.y + p.h + this.vy + 2 && // Check if falling onto it
+                this.vy >= 0) 
+            {
+                this.grounded = true;
+                this.vy = 0;
+                this.y = p.y - this.size;
+            }
+        }
+
+        // Trail
+        this.trail.push({x: this.x, y: this.y});
+        if(this.trail.length > 10) this.trail.shift();
+
+        // Death condition
+        if (this.y > ch) {
+            gameOver();
+        }
+    }
+
+    draw() {
+        // Draw Trail
+        ctx.fillStyle = 'rgba(0, 255, 204, 0.2)';
+        this.trail.forEach((t, i) => {
+            let s = this.size * (i / this.trail.length);
+            ctx.fillRect(t.x + (this.size-s)/2, t.y + (this.size-s)/2, s, s);
+        });
+
+        // Draw Player (Cube)
+        ctx.fillStyle = this.color;
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 10;
+        ctx.fillRect(this.x, this.y, this.size, this.size);
+        
+        // Eyes
+        ctx.fillStyle = 'black';
+        ctx.shadowBlur = 0;
+        ctx.fillRect(this.x + 18, this.y + 8, 4, 4);
+        ctx.fillRect(this.x + 24, this.y + 8, 4, 4);
+    }
+}
+
+class Platform {
+    constructor(x, y, w) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = ch - y; // extend to bottom
+        this.color = '#334155'; // slate-700
+        this.topColor = '#475569'; // slate-600
+    }
+
+    update() {
+        this.x -= gameSpeed;
+    }
+
+    draw() {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y + 10, this.w, this.h);
+        
+        // Top edge for 3D-ish feel
+        ctx.fillStyle = this.topColor;
+        ctx.fillRect(this.x, this.y, this.w, 10);
+        
+        // Striping pattern
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for(let i=0; i<this.w; i+=40) {
+            ctx.moveTo(this.x + i, this.y);
+            ctx.lineTo(this.x + i - 20, this.y + this.h);
+        }
+        ctx.stroke();
+    }
+}
+
+class Coin {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.r = 10;
+        this.collected = false;
+        this.bobOffset = Math.random() * Math.PI * 2;
+    }
+
+    update() {
+        this.x -= gameSpeed;
+        
+        // Bobbing animation
+        this.y += Math.sin(frameCount * 0.1 + this.bobOffset) * 0.5;
+
+        // Collision with player
+        if (!this.collected) {
+            let dx = (this.x) - (player.x + player.size/2);
+            let dy = (this.y) - (player.y + player.size/2);
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            
+            if (dist < this.r + player.size/2) {
+                this.collected = true;
+                score += 10;
+                scoreDisplay.innerText = score;
+                Sound.coin();
+                
+                // Particles
+                for(let i=0; i<8; i++) {
+                    particles.push(new Particle(this.x, this.y, '#fbbf24'));
+                }
+            }
+        }
+    }
+
+    draw() {
+        if (this.collected) return;
+        ctx.fillStyle = '#fbbf24'; // yellow-400
+        ctx.shadowColor = '#fbbf24';
+        ctx.shadowBlur = 15;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        
+        // Inner highlight
+        ctx.fillStyle = '#fef3c7';
+        ctx.beginPath();
+        ctx.arc(this.x - 3, this.y - 3, this.r/3, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+class Particle {
+    constructor(x, y, color, isDust=false) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.isDust = isDust;
+        this.vx = (Math.random() - 0.5) * (isDust ? 2 : 6) - (isDust ? gameSpeed*0.5 : 0);
+        this.vy = (Math.random() - 0.5) * (isDust ? 2 : 6);
+        this.life = 1;
+        this.decay = Math.random() * 0.05 + 0.02;
+        this.size = Math.random() * 4 + 2;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= this.decay;
+    }
+    draw() {
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.size, this.size);
+        ctx.globalAlpha = 1;
+    }
+}
+
+/**
+ * World Generation
+ */
+function spawnPlatform() {
+    let lastP = platforms[platforms.length - 1];
+    let startX = lastP ? lastP.x + lastP.w : 0;
+    
+    // Add a gap occasionally
+    if (lastP && Math.random() < 0.3) {
+        startX += Math.random() * 150 + 50; // Gap size
+    }
+
+    let w = Math.random() * 300 + 200; // Platform width
+    
+    // Determine Y (Ramp height logic)
+    let y = ch * 0.7; // default
+    if (lastP) {
+        // Change height relative to last, but keep within bounds
+        let yOffset = (Math.random() - 0.5) * 200; 
+        y = lastP.y + yOffset;
+        if(y < ch * 0.3) y = ch * 0.3; // max height
+        if(y > ch * 0.8) y = ch * 0.8; // min height
+    }
+
+    platforms.push(new Platform(startX, y, w));
+
+    // Spawn coins on this platform
+    if (Math.random() < 0.7) {
+        let numCoins = Math.floor(Math.random() * 3) + 1;
+        let spacing = 40;
+        let cStartX = startX + (w/2) - ((numCoins * spacing)/2);
+        for(let i=0; i<numCoins; i++){
+            coins.push(new Coin(cStartX + (i * spacing), y - 30));
+        }
+    }
+}
+
+/**
+ * Game Flow
+ */
+function initGame() {
+    player = new Player();
+    platforms = [];
+    coins = [];
+    particles = [];
+    score = 0;
+    gameSpeed = 6;
+    frameCount = 0;
+    scoreDisplay.innerText = score;
+    
+    // Initial platforms
+    platforms.push(new Platform(0, ch * 0.7, cw));
+    spawnPlatform();
+    spawnPlatform();
+
+    gameState = 'playing';
+    startScreen.classList.add('hidden');
+    gameOverScreen.classList.add('hidden');
+    hud.classList.remove('hidden');
+    
+    // Attempt audio context resume on user interaction
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    
+    gameLoop();
+}
+
+function gameOver() {
+    gameState = 'gameover';
+    Sound.die();
+    hud.classList.add('hidden');
+    gameOverScreen.classList.remove('hidden');
+    finalScore.innerText = score;
+    
+    if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('rampRunnerHighScore', highScore);
+    }
+    highScoreDisplay.innerText = highScore;
+}
+
+function gameLoop() {
+    if (gameState !== 'playing') return;
+    
+    ctx.clearRect(0, 0, cw, ch);
+    frameCount++;
+
+    // Increase difficulty
+    if (frameCount % 600 === 0) gameSpeed += 0.5;
+
+    // Background parallax effect (simple grid)
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    let bgOffset = (frameCount * (gameSpeed * 0.2)) % 50;
+    for(let i= -bgOffset; i<cw; i+=50) {
+        ctx.moveTo(i, 0); ctx.lineTo(i, ch);
+    }
+    for(let i=0; i<ch; i+=50) {
+        ctx.moveTo(0, i); ctx.lineTo(cw, i);
+    }
+    ctx.stroke();
+
+    // Generate terrain
+    let lastP = platforms[platforms.length - 1];
+    if (lastP && lastP.x + lastP.w < cw + 500) {
+        spawnPlatform();
+    }
+
+    // Update & Draw Platforms
+    for (let i = platforms.length - 1; i >= 0; i--) {
+        let p = platforms[i];
+        p.update();
+        p.draw();
+        if (p.x + p.w < -100) platforms.splice(i, 1);
+    }
+
+    // Update & Draw Coins
+    for (let i = coins.length - 1; i >= 0; i--) {
+        let c = coins[i];
+        c.update();
+        c.draw();
+        if (c.x < -50 || c.collected) coins.splice(i, 1);
+    }
+
+    // Update & Draw Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.update();
+        p.draw();
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    // Player
+    player.update();
+    player.draw();
+
+    // Increment score passively based on survival
+    if(frameCount % 10 === 0) {
+        score += 1;
+        scoreDisplay.innerText = score;
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+/**
+ * Input Handling
+ */
+function handleInput(e) {
+    if(e.type !== 'keydown' || e.code === 'Space') {
+        if(e.type === 'keydown' || e.type === 'touchstart') e.preventDefault(); // prevent scrolling
+        
+        if (gameState === 'start') {
+            initGame();
+        } else if (gameState === 'playing') {
+            player.jump();
+        } else if (gameState === 'gameover' && gameOverScreen.style.opacity !== '0') {
+            // Slight delay to prevent immediate restart on frantic clicking
+            setTimeout(() => initGame(), 100);
+        }
+    }
+}
+
+window.addEventListener('keydown', handleInput);
+window.addEventListener('mousedown', handleInput);
+window.addEventListener('touchstart', handleInput, {passive: false});
+
+startBtn.addEventListener('click', (e) => { e.stopPropagation(); initGame(); });
+restartBtn.addEventListener('click', (e) => { e.stopPropagation(); initGame(); });
+
+// Initial render for background
+ctx.fillStyle = '#1e3c72';
+ctx.fillRect(0,0,cw,ch);
+
+</script>
+</body>
+</html>

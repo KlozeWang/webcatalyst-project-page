@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Red Dead Showdown</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; user-select:none; -webkit-tap-highlight-color:transparent; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#000; font-family: 'Georgia', serif; }
+  #game { position:relative; width:100vw; height:100vh; cursor:crosshair;
+    background: linear-gradient(to bottom, #f5b06b 0%, #e8884d 35%, #b85a2a 60%, #6b3a1c 80%, #3a2010 100%);
+    overflow:hidden;
+  }
+  .sun { position:absolute; top:8%; left:50%; transform:translateX(-50%); width:120px; height:120px;
+    background: radial-gradient(circle, #fff5c2, #ffd966 60%, rgba(255,200,100,0) 75%);
+    border-radius:50%; filter: blur(2px);
+  }
+  .mountains { position:absolute; bottom:38%; left:0; width:100%; height:25%;
+    background: linear-gradient(to top, #5a2e16, #7a4020);
+    clip-path: polygon(0% 100%, 0% 60%, 10% 30%, 18% 55%, 28% 20%, 38% 50%, 50% 15%, 60% 45%, 72% 25%, 82% 55%, 92% 30%, 100% 60%, 100% 100%);
+    opacity:0.85;
+  }
+  .ground { position:absolute; bottom:0; left:0; width:100%; height:38%;
+    background: linear-gradient(to bottom, #8b4a23, #4a2510);
+  }
+  .target {
+    position:absolute; transform: translate(-50%, -50%); pointer-events:none;
+    transition: opacity 0.2s;
+  }
+  .bandit {
+    width: 70px; height: 100px; position:relative;
+  }
+  .bandit .hat { position:absolute; top:0; left:50%; transform:translateX(-50%);
+    width:50px; height:18px; background:#1a0d05; border-radius:25px 25px 4px 4px;
+    box-shadow: 0 -6px 0 -2px #1a0d05;
+  }
+  .bandit .face { position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    width:34px; height:34px; background:#c8956d; border-radius:50%;
+  }
+  .bandit .scarf { position:absolute; top:32px; left:50%; transform:translateX(-50%);
+    width:36px; height:14px; background:#a02020; border-radius:4px;
+  }
+  .bandit .body { position:absolute; top:42px; left:50%; transform:translateX(-50%);
+    width:50px; height:55px; background:#3a2510; border-radius:8px 8px 4px 4px;
+  }
+  .bandit .gun { position:absolute; top:55px; right:-8px;
+    width:22px; height:8px; background:#222; border-radius:2px;
+  }
+  .barrel {
+    position:absolute; bottom:-10px; left:50%; transform:translateX(-50%);
+    width:80px; height:50px;
+    background: linear-gradient(to bottom, #6b3a1c, #4a2510);
+    border-radius:6px;
+    box-shadow: inset 0 0 0 2px #2a1505;
+  }
+  .hud {
+    position:absolute; top:0; left:0; width:100%; padding:14px 18px;
+    display:flex; justify-content:space-between; align-items:center;
+    color:#fff5c2; font-size:18px; text-shadow:2px 2px 4px #000;
+    z-index:10; pointer-events:none;
+  }
+  .hud .stat { background:rgba(0,0,0,0.4); padding:8px 14px; border-radius:6px;
+    border:1px solid #8b6a3a;
+  }
+  .crosshair {
+    position:absolute; width:60px; height:60px; pointer-events:none;
+    transform:translate(-50%, -50%); z-index:20;
+    border:2px solid #ff3030; border-radius:50%;
+    box-shadow: 0 0 8px rgba(255,0,0,0.6), inset 0 0 8px rgba(255,0,0,0.4);
+    display:none;
+  }
+  .crosshair::before, .crosshair::after {
+    content:''; position:absolute; background:#ff3030;
+  }
+  .crosshair::before { left:50%; top:-8px; width:2px; height:16px; transform:translateX(-50%); }
+  .crosshair::after { top:50%; left:-8px; height:2px; width:16px; transform:translateY(-50%); }
+  
+  .flash {
+    position:absolute; width:80px; height:80px; transform:translate(-50%,-50%);
+    background: radial-gradient(circle, #fff 0%, #ffdd44 30%, rgba(255,150,0,0) 70%);
+    border-radius:50%; pointer-events:none; z-index:15;
+    animation: flash 0.3s forwards;
+  }
+  @keyframes flash {
+    0% { opacity:1; transform:translate(-50%,-50%) scale(0.5); }
+    100% { opacity:0; transform:translate(-50%,-50%) scale(1.8); }
+  }
+  .blood {
+    position:absolute; width:50px; height:50px; transform:translate(-50%,-50%);
+    background: radial-gradient(circle, #8b0000, rgba(139,0,0,0));
+    border-radius:50%; pointer-events:none; z-index:14;
+    animation: flash 0.5s forwards;
+  }
+  .overlay {
+    position:absolute; inset:0; background:rgba(0,0,0,0.75);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:#f5b06b; z-index:50; padding:20px; text-align:center;
+  }
+  .overlay h1 {
+    font-size:48px; margin-bottom:10px; color:#ffd966;
+    text-shadow: 3px 3px 0 #6b3a1c, 0 0 20px rgba(255,150,0,0.5);
+    letter-spacing:3px;
+  }
+  .overlay p { font-size:18px; margin:8px 0; color:#fff5c2; max-width:400px; line-height:1.5;}
+  .overlay button {
+    margin-top:24px; padding:14px 40px; font-size:22px; font-family:'Georgia',serif;
+    background: linear-gradient(to bottom, #c8923a, #8b5a1a);
+    color:#fff5c2; border:2px solid #6b3a1c; border-radius:6px;
+    cursor:pointer; text-shadow:1px 1px 2px #000; letter-spacing:2px;
+  }
+  .overlay button:active { transform:scale(0.95); }
+  .damage {
+    position:absolute; inset:0; background:radial-gradient(circle at center, transparent 40%, rgba(255,0,0,0.5));
+    pointer-events:none; opacity:0; z-index:30; transition: opacity 0.3s;
+  }
+  .reload-bar {
+    position:absolute; bottom:30px; left:50%; transform:translateX(-50%);
+    width:200px; height:14px; background:rgba(0,0,0,0.6); border:1px solid #8b6a3a;
+    border-radius:7px; overflow:hidden; display:none; z-index:10;
+  }
+  .reload-bar .fill { height:100%; background:linear-gradient(to right, #c8923a, #ffd966); width:0%; }
+  .reload-text { position:absolute; bottom:50px; left:50%; transform:translateX(-50%);
+    color:#ffd966; font-size:14px; text-shadow:1px 1px 2px #000; display:none; z-index:10;}
+  @media (max-width:600px) {
+    .overlay h1 { font-size:34px; }
+    .hud { font-size:14px; }
+  }
+</style>
+</head>
+<body>
+<div id="game">
+  <div class="sun"></div>
+  <div class="mountains"></div>
+  <div class="ground"></div>
+  <div class="hud">
+    <div class="stat">❤️ HP: <span id="hp">100</span></div>
+    <div class="stat">🎯 <span id="score">0</span></div>
+    <div class="stat">🔫 <span id="ammo">6</span>/6</div>
+  </div>
+  <div class="crosshair" id="crosshair"></div>
+  <div class="damage" id="damage"></div>
+  <div class="reload-text" id="reloadText">RELOADING...</div>
+  <div class="reload-bar" id="reloadBar"><div class="fill" id="reloadFill"></div></div>
+  
+  <div class="overlay" id="startScreen">
+    <h1>RED DEAD SHOWDOWN</h1>
+    <p>🤠 Bandits are coming! Tap/click to shoot 'em before they shoot you.</p>
+    <p>You have 6 shots — auto-reloads when empty.</p>
+    <p>Survive as long as you can, partner.</p>
+    <button id="startBtn">DRAW!</button>
+  </div>
+  
+  <div class="overlay" id="gameOver" style="display:none;">
+    <h1>YOU'RE DEAD</h1>
+    <p id="finalScore">Bandits killed: 0</p>
+    <button id="restartBtn">RIDE AGAIN</button>
+  </div>
+</div>
+
+<script>
+const game = document.getElementById('game');
+const hpEl = document.getElementById('hp');
+const scoreEl = document.getElementById('score');
+const ammoEl = document.getElementById('ammo');
+const crosshair = document.getElementById('crosshair');
+const damageEl = document.getElementById('damage');
+const startScreen = document.getElementById('startScreen');
+const gameOverScreen = document.getElementById('gameOver');
+const finalScore = document.getElementById('finalScore');
+const reloadBar = document.getElementById('reloadBar');
+const reloadFill = document.getElementById('reloadFill');
+const reloadText = document.getElementById('reloadText');
+
+let state = { playing:false, hp:100, score:0, ammo:6, reloading:false };
+let bandits = [];
+let spawnTimer = 0, lastTime=0;
+
+// Audio
+let audioCtx;
+function sound(type) {
+  if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  const ctx = audioCtx;
+  if (type==='shot') {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type='square'; o.frequency.setValueAtTime(180, ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(40, ctx.currentTime+0.15);
+    g.gain.setValueAtTime(0.3, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.15);
+    o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime+0.15);
+  } else if (type==='hit') {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type='sawtooth'; o.frequency.setValueAtTime(120,ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(30,ctx.currentTime+0.2);
+    g.gain.setValueAtTime(0.2,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.2);
+    o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime+0.2);
+  } else if (type==='empty') {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type='square'; o.frequency.value=80; g.gain.value=0.1;
+    o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime+0.05);
+  } else if (type==='reload') {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type='triangle'; o.frequency.setValueAtTime(400,ctx.currentTime);
+    o.frequency.linearRampToValueAtTime(800,ctx.currentTime+0.1);
+    g.gain.setValueAtTime(0.15,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.1);
+    o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime+0.1);
+  }
+}
+
+function spawnBandit() {
+  const W = game.clientWidth, H = game.clientHeight;
+  const x = 80 + Math.random()*(W-160);
+  const y = H*0.55 + Math.random()*(H*0.3);
+  
+  const wrap = document.createElement('div');
+  wrap.className='target';
+  wrap.style.left = x+'px';
+  wrap.style.top = y+'px';
+  
+  const scale = 0.6 + (y/H)*0.7;
+  wrap.style.transform = `translate(-50%, -50%) scale(${scale})`;
+  
+  wrap.innerHTML = `
+    <div class="bandit">
+      <div class="hat"></div>
+      <div class="face"></div>
+      <div class="scarf"></div>
+      <div class="body"></div>
+      <div class="gun"></div>
+    </div>
+    <div class="barrel"></div>
+  `;
+  wrap.style.opacity='0';
+  game.appendChild(wrap);
+  
+  // Rise animation
+  const bandit = wrap.querySelector('.bandit');
+  bandit.style.transform = 'translateY(40px)';
+  bandit.style.transition = 'transform 0.4s ease-out';
+  setTimeout(()=>{ wrap.style.opacity='1'; bandit.style.transform = 'translateY(0)'; }, 20);
+  
+  const aimTime = 1400 + Math.random()*1200;
+  const obj = { el:wrap, x, y, scale, dead:false, shootAt: performance.now()+aimTime, hasShot:false };
+  
+  // Visual cue when about to shoot
+  setTimeout(()=>{
+    if (!obj.dead) {
+      const gun = wrap.querySelector('.gun');
+      gun.style.background='#ff3030';
+      gun.style.boxShadow='0 0 8px #ff3030';
+    }
+  }, aimTime - 500);
+  
+  bandits.push(obj);
+}
+
+function shoot(clientX, clientY) {
+  if (!state.playing || state.reloading) return;
+  if (state.ammo<=0) { sound('empty'); return; }
+  state.ammo--;
+  ammoEl.textContent = state.ammo;
+  sound('shot');
+  
+  // muzzle flash
+  const f = document.createElement('div');
+  f.className='flash';
+  f.style.left = clientX+'px'; f.style.top = clientY+'px';
+  game.appendChild(f);
+  setTimeout(()=>f.remove(), 300);
+  
+  // Hit detection
+  for (let b of bandits) {
+    if (b.dead) continue;
+    const r = b.el.getBoundingClientRect();
+    if (clientX>=r.left && clientX<=r.right && clientY>=r.top && clientY<=r.bottom) {
+      b.dead = true;
+      state.score++;
+      scoreEl.textContent = state.score;
+      sound('hit');
+      const blood = document.createElement('div');
+      blood.className='blood';
+      blood.style.left = clientX+'px'; blood.style.top=clientY+'px';
+      game.appendChild(blood);
+      setTimeout(()=>blood.remove(),500);
+      b.el.style.transition='all 0.4s';
+      b.el.style.opacity='0';
+      b.el.style.transform = b.el.style.transform + ' translateY(30px) rotate(15deg)';
+      setTimeout(()=>b.el.remove(), 400);
+      break;
+    }
+  }
+  
+  if (state.ammo<=0) reload();
+}
+
+function reload() {
+  state.reloading = true;
+  reloadBar.style.display='block';
+  reloadText.style.display='block';
+  reloadFill.style.width='0%';
+  const dur = 1500;
+  const start = performance.now();
+  function tick() {
+    const p = Math.min(1, (performance.now()-start)/dur);
+    reloadFill.style.width = (p*100)+'%';
+    if (p<1 && state.playing) requestAnimationFrame(tick);
+    else {
+      state.reloading=false;
+      state.ammo=6;
+      ammoEl.textContent=6;
+      reloadBar.style.display='none';
+      reloadText.style.display='none';
+      sound('reload');
+    }
+  }
+  tick();
+}
+
+function takeDamage(d) {
+  state.hp -= d;
+  if (state.hp<0) state.hp=0;
+  hpEl.textContent = state.hp;
+  damageEl.style.opacity='1';
+  setTimeout(()=>damageEl.style.opacity='0', 200);
+  if (state.hp<=0) endGame();
+}
+
+function endGame() {
+  state.playing=false;
+  bandits.forEach(b=>b.el.remove());
+  bandits=[];
+  finalScore.textContent = 'Bandits killed: ' + state.score;
+  gameOverScreen.style.display='flex';
+  crosshair.style.display='none';
+}
+
+function startGame() {
+  state = { playing:true, hp:100, score:0, ammo:6, reloading:false };
+  hpEl.textContent=100; scoreEl.textContent=0; ammoEl.textContent=6;
+  startScreen.style.display='none';
+  gameOverScreen.style.display='none';
+  bandits.forEach(b=>b.el.remove());
+  bandits=[];
+  spawnTimer = 0;
+  lastTime = performance.now();
+  if (!audioCtx) { try { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){} }
+  requestAnimationFrame(loop);
+}
+
+function loop(t) {
+  if (!state.playing) return;
+  const dt = t - lastTime;
+  lastTime = t;
+  spawnTimer -= dt;
+  
+  const maxBandits = Math.min(5, 2 + Math.floor(state.score/5));
+  const spawnRate = Math.max(600, 1800 - state.score*30);
+  if (spawnTimer<=0 && bandits.filter(b=>!b.dead).length < maxBandits) {
+    spawnBandit();
+    spawnTimer = spawnRate + Math.random()*500;
+  }
+  
+  // Check bandit shooting
+  for (let b of bandits) {
+    if (b.dead || b.hasShot) continue;
+    if (t >= b.shootAt) {
+      b.hasShot = true;
+      takeDamage(10 + Math.floor(Math.random()*8));
+      // muzzle flash on bandit
+      const r = b.el.getBoundingClientRect();
+      const f = document.createElement('div');
+      f.className='flash';
+      f.style.left = (r.right-10)+'px'; f.style.top=(r.top+r.height*0.6)+'px';
+      f.style.width='40px'; f.style.height='40px';
+      game.appendChild(f);
+      setTimeout(()=>f.remove(),300);
+      sound('shot');
+      // bandit retreats
+      setTimeout(()=>{
+        if (!b.dead) {
+          b.dead=true;
+          b.el.style.transition='all 0.4s';
+          b.el.style.opacity='0';
+          setTimeout(()=>b.el.remove(),400);
+        }
+      }, 400);
+    }
+  }
+  
+  // cleanup
+  bandits = bandits.filter(b=>b.el.parentNode);
+  
+  requestAnimationFrame(loop);
+}
+
+// Input
+game.addEventListener('mousemove', e=>{
+  crosshair.style.display='block';
+  crosshair.style.left=e.clientX+'px';
+  crosshair.style.top=e.clientY+'px';
+});
+game.addEventListener('mousedown', e=>{
+  if (e.target.tagName==='BUTTON') return;
+  shoot(e.clientX, e.clientY);
+});
+game.addEventListener('touchstart', e=>{
+  if (e.target.tagName==='BUTTON') return;
+  e.preventDefault();
+  const t = e.touches[0];
+  crosshair.style.display='block';
+  crosshair.style.left=t.clientX+'px';
+  crosshair.style.top=t.clientY+'px';
+  shoot(t.clientX, t.clientY);
+}, {passive:false});
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+</script>
+</body>
+</html>

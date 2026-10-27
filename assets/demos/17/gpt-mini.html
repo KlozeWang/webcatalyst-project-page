@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Sky Runner - Aviation Endless Runner</title>
+  <style>
+    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#07111f; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    canvas { display:block; width:100%; height:100%; touch-action:none; }
+    #ui {
+      position:fixed; inset:0; pointer-events:none; color:#fff;
+      text-shadow:0 2px 10px rgba(0,0,0,.35);
+      user-select:none;
+    }
+    .hud {
+      position:absolute; top:12px; left:12px; right:12px; display:flex; justify-content:space-between; gap:10px; align-items:flex-start;
+    }
+    .panel {
+      background:rgba(12,20,35,.38); border:1px solid rgba(255,255,255,.12);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border-radius:16px; padding:10px 12px;
+    }
+    .stat { font-size:12px; opacity:.8; margin-bottom:2px; }
+    .value { font-size:18px; font-weight:700; letter-spacing:.3px; }
+    .stack { display:flex; gap:10px; flex-wrap:wrap; }
+    .barWrap { width:170px; }
+    .bar {
+      height:10px; border-radius:999px; overflow:hidden; background:rgba(255,255,255,.1); margin-top:6px;
+    }
+    .bar > div { height:100%; width:50%; background:linear-gradient(90deg,#2fe6ff,#86ffb4); }
+    .small { font-size:12px; opacity:.82; line-height:1.35; }
+    #centerMessage {
+      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+      text-align:center; width:min(92vw, 600px);
+      background:rgba(10,16,28,.48); border:1px solid rgba(255,255,255,.12);
+      border-radius:22px; padding:20px 18px; display:none;
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    }
+    #centerMessage h1 { margin:0 0 8px; font-size:28px; }
+    #centerMessage p { margin:6px 0; opacity:.88; line-height:1.45; }
+    #menu {
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(180deg, rgba(7,17,31,.18), rgba(7,17,31,.58));
+    }
+    .menuCard {
+      width:min(92vw, 760px);
+      background:rgba(12,20,35,.52); border:1px solid rgba(255,255,255,.12);
+      border-radius:28px; padding:22px; backdrop-filter: blur(10px);
+      box-shadow:0 20px 60px rgba(0,0,0,.28);
+      pointer-events:auto;
+    }
+    .title { font-size:40px; font-weight:900; margin:0 0 6px; letter-spacing:.5px; }
+    .subtitle { margin:0 0 18px; opacity:.85; }
+    .row { display:flex; gap:14px; flex-wrap:wrap; }
+    .planeChoice {
+      flex:1 1 180px; min-width:180px; background:rgba(255,255,255,.07);
+      border:1px solid rgba(255,255,255,.1); border-radius:18px; padding:14px; cursor:pointer;
+      transition:transform .15s ease, background .15s ease, border-color .15s ease;
+    }
+    .planeChoice:hover { transform:translateY(-2px); background:rgba(255,255,255,.1); }
+    .planeChoice.selected { border-color:#7ef0ff; box-shadow:0 0 0 2px rgba(126,240,255,.18) inset; }
+    .planeBadge { display:inline-block; font-size:12px; padding:4px 8px; border-radius:999px; background:rgba(126,240,255,.14); color:#bff8ff; margin-bottom:10px; }
+    .planeName { font-weight:800; font-size:18px; margin-bottom:6px; }
+    .btnRow { display:flex; gap:12px; margin-top:18px; flex-wrap:wrap; }
+    button {
+      pointer-events:auto; appearance:none; border:none; border-radius:16px; padding:14px 18px;
+      font-weight:800; font-size:15px; color:#07111f; background:linear-gradient(180deg,#7ef0ff,#55d8ff);
+      cursor:pointer;
+    }
+    .ghostBtn { background:rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.14); }
+    .footerHint { margin-top:14px; font-size:12px; opacity:.72; line-height:1.4; }
+    #mobileControls {
+      position:fixed; left:0; right:0; bottom:0; padding:14px; display:flex; justify-content:space-between; gap:12px;
+      pointer-events:none;
+    }
+    .pad {
+      display:grid; grid-template-columns:repeat(3,56px); grid-template-rows:repeat(2,56px); gap:8px; pointer-events:auto;
+    }
+    .pad button, .rollBtn {
+      width:56px; height:56px; border-radius:16px; background:rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.14);
+      font-size:20px; font-weight:900;
+    }
+    .rollBtn { width:92px; }
+    @media (min-width: 900px) {
+      #mobileControls { display:none; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="ui">
+    <div class="hud">
+      <div class="stack">
+        <div class="panel">
+          <div class="stat">SCORE</div>
+          <div class="value" id="score">0</div>
+        </div>
+        <div class="panel">
+          <div class="stat">COINS</div>
+          <div class="value" id="coins">0</div>
+        </div>
+        <div class="panel barWrap">
+          <div class="stat">FUEL</div>
+          <div class="bar"><div id="fuelBar"></div></div>
+        </div>
+      </div>
+      <div class="panel" style="min-width:160px">
+        <div class="stat">ALTITUDE</div>
+        <div class="value" id="altitude">0m</div>
+        <div class="small" id="status">Clear skies</div>
+      </div>
+    </div>
+
+    <div id="centerMessage"></div>
+
+    <div id="menu">
+      <div class="menuCard">
+        <div class="title">Sky Runner</div>
+        <p class="subtitle">Aviation endless runner with lanes, altitude, fuel, storms, and power-ups.</p>
+        <div class="row">
+          <div class="planeChoice selected" data-plane="0">
+            <div class="planeBadge">Starter</div>
+            <div class="planeName">Cloud Dart</div>
+            <div class="small">Balanced handling, good fuel efficiency.</div>
+          </div>
+          <div class="planeChoice" data-plane="1">
+            <div class="planeBadge">Speed</div>
+            <div class="planeName">Sunstrike</div>
+            <div class="small">Faster boost, slightly tougher to control.</div>
+          </div>
+          <div class="planeChoice" data-plane="2">
+            <div class="planeBadge">Heavy</div>
+            <div class="planeName">Storm Kite</div>
+            <div class="small">More durable, slower lane changes.</div>
+          </div>
+        </div>
+        <div class="btnRow">
+          <button id="playBtn">Take Off</button>
+          <button id="leaderBtn" class="ghostBtn">Leaderboard</button>
+          <button id="dailyBtn" class="ghostBtn">Daily Challenge</button>
+        </div>
+        <div class="footerHint">
+          Controls: Swipe/Arrow Up = climb, Down = dive, Left/Right = lane change, Double tap/Space = barrel roll.<br>
+          Collect fuel orbs, cargo, and golden propellers. Avoid aircraft, towers, birds, and storm clouds.
+        </div>
+      </div>
+    </div>
+
+    <div id="mobileControls">
+      <div class="pad">
+        <button id="upBtn">▲</button>
+        <button id="rollBtn" class="rollBtn">ROLL</button>
+        <button id="boostBtn">⚡</button>
+        <button id="leftBtn">◀</button>
+        <button id="downBtn">▼</button>
+        <button id="rightBtn">▶</button>
+      </div>
+      <div></div>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const ui = {
+      score: document.getElementById('score'),
+      coins: document.getElementById('coins'),
+      fuelBar: document.getElementById('fuelBar'),
+      altitude: document.getElementById('altitude'),
+      status: document.getElementById('status'),
+      menu: document.getElementById('menu'),
+      playBtn: document.getElementById('playBtn'),
+      leaderBtn: document.getElementById('leaderBtn'),
+      dailyBtn: document.getElementById('dailyBtn'),
+      centerMessage: document.getElementById('centerMessage')
+    };
+
+    let W=0,H=0,DPR=1;
+    function resize(){ DPR = Math.min(2, window.devicePixelRatio || 1); W = canvas.clientWidth = innerWidth; H = canvas.clientHeight = innerHeight; canvas.width = Math.floor(W*DPR); canvas.height = Math.floor(H*DPR); ctx.setTransform(DPR,0,0,DPR,0,0); }
+    addEventListener('resize', resize, {passive:true}); resize();
+
+    const state = {
+      running:false, gameOver:false, paused:false, t:0, score:0, coins:0, fuel:100, distance:0,
+      lane:1, targetLane:1, y:0.52, targetY:0.52, roll:0, rollTimer:0, invincible:0, boost:0,
+      magnet:0, shield:0, weather:'clear', weatherTimer:12, difficulty:1, speed:0.32,
+      selectedPlane:0, combo:0, shake:0, spawnZ:0, dayPhase:0.15, challenge:{text:'Collect 20 fuel orbs', goal:20, progress:0},
+      highscore: +(localStorage.getItem('skyRunnerHighScore')||0)
+    };
+
+    const lanes = [-1,0,1];
+    const world = { objects:[], pools:{}, particles:[], clouds:[], stars:[] };
+    function rand(a,b){ return a + Math.random()*(b-a); }
+    function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+    function lerp(a,b,t){ return a+(b-a)*t; }
+    function laneX(lane){ return W*0.5 + lanes[lane] * Math.min(W*0.22, 170); }
+
+    function makePool(type){ world.pools[type] = []; }
+    ['fuel','cargo','prop','boost','shield','magnet','aircraft','cloud','bird','tower','turbo'].forEach(makePool);
+
+    const planeStats = [
+      {name:'Cloud Dart', accel:1.0, turn:1.0, fuelUse:1.0, durability:1.0, color:'#6fe7ff', accent:'#ffffff'},
+      {name:'Sunstrike', accel:1.1, turn:1.12, fuelUse:1.08, durability:0.92, color:'#ffb45c', accent:'#ffe6b7'},
+      {name:'Storm Kite', accel:0.92, turn:0.88, fuelUse:0.92, durability:1.18, color:'#d7dde7', accent:'#8ed7ff'}
+    ];
+
+    function resetGame(){
+      state.running=true; state.gameOver=false; state.t=0; state.score=0; state.coins=0; state.fuel=100; state.distance=0;
+      state.lane=1; state.targetLane=1; state.y=0.52; state.targetY=0.52; state.roll=0; state.rollTimer=0; state.invincible=0; state.boost=0;
+      state.magnet=0; state.shield=0; state.weather='clear'; state.weatherTimer=10; state.difficulty=1; state.speed=0.32; state.spawnZ=0;
+      state.combo=0; state.shake=0; world.objects.length=0; world.particles.length=0;
+      world.clouds = Array.from({length:18},()=>({x:Math.random()*W,y:Math.random()*H*.8,z:Math.random(),s:rand(30,120),a:rand(.08,.22)}));
+      world.stars = Array.from({length:110},()=>({x:Math.random()*W,y:Math.random()*H*.55,s:rand(.5,1.7),a:rand(.2,.9)}));
+      state.challenge = randomChallenge();
+      ui.menu.style.display='none';
+      ui.centerMessage.style.display='none';
+      for(let i=0;i<12;i++) spawnObject(20+i*10);
+    }
+
+    function randomChallenge(){
+      const modes = [
+        {text:'Collect 20 fuel orbs', type:'fuel', goal:20},
+        {text:'Dodge 12 birds', type:'birdDodge', goal:12},
+        {text:'Collect 10 cargo crates', type:'cargo', goal:10},
+        {text:'Use 5 barrel rolls', type:'roll', goal:5}
+      ];
+      return {...modes[(Math.random()*modes.length)|0], progress:0};
+    }
+
+    function pushMessage(title, subtitle=''){
+      ui.centerMessage.innerHTML = `<h1>${title}</h1><p>${subtitle}</p>`;
+      ui.centerMessage.style.display='block';
+      clearTimeout(pushMessage._t);
+      pushMessage._t = setTimeout(()=>ui.centerMessage.style.display='none', 1800);
+    }
+
+    function spawnObject(z=0){
+      const r = Math.random(), lane = (Math.random()*3)|0;
+      let type = 'fuel';
+      if (r < 0.22) type='fuel';
+      else if (r < 0.36) type='cargo';
+      else if (r < 0.44) type='prop';
+      else if (r < 0.54) type='aircraft';
+      else if (r < 0.66) type='bird';
+      else if (r < 0.76) type='tower';
+      else if (r < 0.84) type='cloud';
+      else if (r < 0.90) type='magnet';
+      else if (r < 0.96) type='shield';
+      else type='boost';
+      const obj = {type,lane,z:z||state.spawnZ, y:rand(.28,.84), w:1,h:1, hit:false, vx:0, vy:0, color:''};
+      state.spawnZ += rand(16,28);
+      world.objects.push(obj);
+    }
+
+    function takeObject(o){
+      o.hit = true; state.score += o.type==='cargo' ? 75 : o.type==='prop' ? 20 : o.type==='boost' ? 40 : 15;
+      if (o.type==='fuel') { state.fuel = clamp(state.fuel + 16, 0, 100); state.challenge.type==='fuel' && (state.challenge.progress++); }
+      if (o.type==='cargo') { state.coins += 8; state.challenge.type==='cargo' && (state.challenge.progress++); }
+      if (o.type==='prop') { state.coins += 1; }
+      if (o.type==='boost') state.boost = 6;
+      if (o.type==='shield') state.shield = 8;
+      if (o.type==='magnet') state.magnet = 8;
+      burst(o);
+    }
+
+    function burst(o){
+      const n = 16 + ((Math.random()*10)|0);
+      for(let i=0;i<n;i++) world.particles.push({
+        x:o._sx,y:o._sy,vx:rand(-2.4,2.4),vy:rand(-2.4,2.4),life:rand(.4,.9),r:rand(1.5,3.5),
+        c: o.type==='fuel' ? '#59f0ff' : o.type==='cargo' ? '#ffd36a' : o.type==='prop' ? '#ffef8c' : '#bfe8ff'
+      });
+    }
+
+    function hit(){
+      if(state.invincible>0 || state.rollTimer>0 || state.shield>0) return;
+      state.fuel -= 18; state.shake = 14; state.combo = 0;
+      if (state.fuel <= 0){ die(); } else pushMessage('Hit!', 'Avoid obstacles or use shield / roll.'); 
+    }
+
+    function die(){
+      state.gameOver = true; state.running = false;
+      state.highscore = Math.max(state.highscore, Math.floor(state.score));
+      localStorage.setItem('skyRunnerHighScore', state.highscore);
+      ui.menu.style.display='flex';
+      pushMessage('Game Over', `Score ${Math.floor(state.score)} · High Score ${state.highscore}`);
+    }
+
+    function laneAction(dir){ state.targetLane = clamp(state.targetLane + dir, 0, 2); }
+    function climb(){ state.targetY = clamp(state.targetY - 0.12, 0.16, 0.88); }
+    function dive(){ state.targetY = clamp(state.targetY + 0.12, 0.16, 0.88); }
+    function barrelRoll(){ if(state.rollTimer<=0){ state.rollTimer = 0.65; state.invincible = 0.2; state.challenge.type==='roll' && (state.challenge.progress++); } }
+    function boost(){ state.boost = Math.max(state.boost, 3.5); }
+
+    function drawSky(){
+      const g = ctx.createLinearGradient(0,0,0,H);
+      const night = Math.max(0, Math.sin(state.dayPhase*Math.PI*2 - 1.2));
+      g.addColorStop(0, night>0.55 ? '#0a1530' : '#78d6ff');
+      g.addColorStop(0.55, night>0.55 ? '#13234b' : '#78bff2');
+      g.addColorStop(1, night>0.55 ? '#07111f' : '#ffd5a6');
+      ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+      world.stars.forEach(s=>{ if(night>0.25){ ctx.fillStyle=`rgba(255,255,255,${s.a*night})`; ctx.beginPath(); ctx.arc(s.x,s.y,s.s,0,Math.PI*2); ctx.fill(); }});
+      world.clouds.forEach(c=>{
+        c.x -= 0.12 + state.speed*0.45; if(c.x < -160) c.x = W + rand(30,180), c.y = rand(10,H*.55), c.s = rand(30,120);
+        ctx.fillStyle = `rgba(255,255,255,${c.a})`;
+        for(let i=0;i<3;i++){ ctx.beginPath(); ctx.ellipse(c.x+i*18, c.y+Math.sin(c.x*.01+i)*4, c.s*.75, c.s*.36, 0,0,Math.PI*2); ctx.fill(); }
+      });
+    }
+
+    function project(z, y){
+      const perspective = 900;
+      const scale = perspective / (perspective + z*28);
+      return { x: laneX(y.lane), y: H*(0.72 - y.alt*0.42), s: scale };
+    }
+
+    function render(){
+      drawSky();
+
+      const centerX = laneX(state.targetLane);
+      const planeX = lerp(laneX(state.lane), centerX, 0.13);
+      const planeY = lerp(H*(0.72 - state.y*0.42), H*(0.72 - state.targetY*0.42), 0.12);
+
+      const roadY = H*0.78;
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      for(let i=0;i<3;i++){
+        ctx.strokeStyle = i===1 ? '#bcecff' : '#ffffff';
+        ctx.lineWidth = i===1 ? 3 : 1.4;
+        ctx.beginPath();
+        ctx.moveTo(W*0.5 + (i-1)*W*0.22, roadY);
+        ctx.lineTo(W*0.5 + (i-1)*W*0.28, H*0.25);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // objects
+      const player = {lane:state.targetLane, alt:state.targetY};
+      for(const o of world.objects){
+        o.z -= (state.speed + (state.boost>0?0.34:0))*14;
+        if(o.z < -10) { o.z = state.spawnZ + rand(10,35); o.lane=(Math.random()*3)|0; o.y=rand(.24,.84); o.type = ['fuel','cargo','prop','aircraft','bird','tower','cloud','magnet','shield','boost'][(Math.random()*10)|0]; o.hit=false; }
+        const s = 900/(900+o.z*28);
+        const x = laneX(o.lane);
+        const y = H*(0.72 - o.y*0.42) + Math.sin((state.t+o.z)*0.03)*8;
+        o._sx=x; o._sy=y;
+        const near = s > 0.18;
+        if(!near) continue;
+
+        const pulse = 1 + Math.sin(state.t*0.12 + o.z)*0.05;
+        ctx.save();
+        ctx.translate(x,y);
+        if(o.type==='fuel'){ ctx.fillStyle='#52e8ff'; drawOrb(10*s*pulse, true); }
+        else if(o.type==='cargo'){ ctx.fillStyle='#ffd16a'; drawCrate(14*s*pulse); }
+        else if(o.type==='prop'){ ctx.fillStyle='#fff08c'; drawPropeller(10*s*pulse); }
+        else if(o.type==='magnet'){ ctx.fillStyle='#ff6bd6'; drawMagnet(10*s*pulse); }
+        else if(o.type==='shield'){ ctx.fillStyle='#7ef0ff'; drawShield(12*s*pulse); }
+        else if(o.type==='boost'){ ctx.fillStyle='#ff9d52'; drawBoost(12*s*pulse); }
+        else if(o.type==='bird'){ ctx.fillStyle='#1b1e25'; drawBird(14*s*pulse); }
+        else if(o.type==='cloud'){ ctx.fillStyle='rgba(255,255,255,.65)'; drawStorm(22*s*pulse); }
+        else if(o.type==='tower'){ ctx.fillStyle='#8894a8'; drawTower(18*s*pulse); }
+        else if(o.type==='aircraft'){ ctx.fillStyle='#d7dde7'; drawEnemyPlane(18*s*pulse); }
+        ctx.restore();
+
+        const px = planeX, py = planeY;
+        const dx = Math.abs(x-px), dy = Math.abs(y-py);
+        const hitRadius = 26*s + 18;
+        const collide = dx < hitRadius && dy < hitRadius*0.78 && s>0.24 && !o.hit;
+        if(collide){
+          if(['fuel','cargo','prop','magnet','shield','boost'].includes(o.type)) takeObject(o);
+          else if(o.type==='cloud'){ state.speed = Math.max(0.18, state.speed - 0.04); state.weather='storm'; hit(); }
+          else hit();
+          o.hit=true; o.z = state.spawnZ + rand(20,45);
+        }
+      }
+
+      // player
+      state.lane = lerp(state.lane, state.targetLane, 0.16);
+      state.y = lerp(state.y, state.targetY, 0.11);
+      const planeStatsCur = planeStats[state.selectedPlane];
+      const wobble = Math.sin(state.t*0.16)*2;
+      ctx.save();
+      ctx.translate(planeX, planeY + wobble);
+      const tilt = (state.targetLane - 1) * 0.22 + (state.rollTimer>0 ? state.t*0.35 : 0);
+      ctx.rotate(tilt);
+      if(state.shake>0) ctx.translate(rand(-state.shake,state.shake), rand(-state.shake,state.shake));
+      drawPlayerPlane(38, planeStatsCur.color, planeStatsCur.accent, state.rollTimer>0);
+      ctx.restore();
+
+      // particles
+      for(let i=world.particles.length-1;i>=0;i--){
+        const p = world.particles[i];
+        p.life -= 0.016;
+        p.x += p.vx; p.y += p.vy; p.vx *= 0.98; p.vy *= 0.98;
+        ctx.fillStyle = p.c; ctx.globalAlpha = Math.max(0,p.life);
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+        if(p.life<=0) world.particles.splice(i,1);
+      }
+      ctx.globalAlpha = 1;
+
+      // overlays
+      if(state.boost>0){
+        ctx.fillStyle='rgba(126,240,255,.12)'; ctx.fillRect(0,0,W,H);
+      }
+      if(state.weather==='storm'){
+        ctx.fillStyle='rgba(20,28,48,.14)'; ctx.fillRect(0,0,W,H);
+      }
+      if(state.shake>0) state.shake *= 0.9;
+    }
+
+    function drawPlayerPlane(size, bodyColor, accentColor, rolling){
+      ctx.fillStyle=bodyColor; roundedPoly([
+        [-size*0.9,0],[-size*0.2,-size*0.26],[size*1.1,0],[-size*0.2,size*0.26]
+      ]);
+      ctx.fill();
+
+      ctx.fillStyle=accentColor; ctx.beginPath(); ctx.moveTo(-size*0.08,-size*0.16); ctx.lineTo(size*0.55,0); ctx.lineTo(-size*0.08,size*0.16); ctx.closePath(); ctx.fill();
+
+      ctx.fillStyle='rgba(10,16,28,.55)'; ctx.beginPath(); ctx.ellipse(-size*0.12,0,size*0.18,size*0.12,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(-size*0.15,-size*0.03,size*0.07,0,Math.PI*2); ctx.fill();
+
+      ctx.fillStyle='rgba(255,255,255,.25)'; ctx.fillRect(-size*0.68,-size*0.07,size*1.1,size*0.03);
+      ctx.fillStyle='rgba(255,170,70,.95)'; ctx.beginPath(); ctx.moveTo(-size*1.02,-size*0.06); ctx.lineTo(-size*1.22,0); ctx.lineTo(-size*1.02,size*0.06); ctx.closePath(); ctx.fill();
+      if(rolling){ ctx.strokeStyle='rgba(126,240,255,.9)'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(0,0,size*0.55,0,Math.PI*2); ctx.stroke(); }
+    }
+
+    function roundedPoly(points){ ctx.beginPath(); ctx.moveTo(points[0][0],points[0][1]); for(let i=1;i<points.length;i++) ctx.lineTo(points[i][0],points[i][1]); ctx.closePath(); }
+    function drawOrb(r){ ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill(); ctx.fillStyle='rgba(255,255,255,.35)'; ctx.beginPath(); ctx.arc(-r*.25,-r*.25,r*.28,0,Math.PI*2); ctx.fill(); }
+    function drawCrate(r){ ctx.fillRect(-r,-r,r*2,r*2); ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.lineWidth=2; ctx.strokeRect(-r,-r,r*2,r*2); }
+    function drawPropeller(r){ ctx.strokeStyle='#fff7b0'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(0,0,r*.25,0,Math.PI*2); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-r,0); ctx.lineTo(r,0); ctx.moveTo(0,-r); ctx.lineTo(0,r); ctx.stroke(); }
+    function drawMagnet(r){ ctx.lineWidth=4; ctx.strokeStyle='#ff75da'; ctx.beginPath(); ctx.arc(0,0,r,.2*Math.PI,.8*Math.PI); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-r*.65,r*.2); ctx.lineTo(-r*.65,r*.9); ctx.moveTo(r*.65,r*.2); ctx.lineTo(r*.65,r*.9); ctx.stroke(); }
+    function drawShield(r){ ctx.strokeStyle='rgba(126,240,255,.9)'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.stroke(); }
+    function drawBoost(r){ ctx.fillStyle='#ff9f4a'; ctx.beginPath(); ctx.moveTo(-r*.9,r*.2); ctx.lineTo(0,-r); ctx.lineTo(r*.2,-r*.15); ctx.lineTo(r*.9,-r*.15); ctx.lineTo(0,r); ctx.lineTo(-r*.2,r*.15); ctx.closePath(); ctx.fill(); }
+    function drawBird(r){ ctx.fillStyle='#25272e'; ctx.beginPath(); ctx.moveTo(-r,0); ctx.quadraticCurveTo(-r*.25,-r*.55,0,0); ctx.quadraticCurveTo(r*.25,-r*.55,r,0); ctx.quadraticCurveTo(r*.3,r*.2,0,0); ctx.quadraticCurveTo(-r*.3,r*.2,-r,0); ctx.fill(); }
+    function drawStorm(r){ ctx.fillStyle='rgba(220,230,255,.7)'; ctx.beginPath(); ctx.arc(-r*.25,0,r*.5,0,Math.PI*2); ctx.arc(r*.05,-r*.12,r*.62,0,Math.PI*2); ctx.arc(r*.35,0,r*.45,0,Math.PI*2); ctx.fill(); }
+    function drawTower(r){ ctx.fillRect(-r*.25,-r,r*.5,r*2); ctx.fillRect(-r*.7,r*.4,r*1.4,r*.18); }
+    function drawEnemyPlane(r){ ctx.fillRect(-r, -r*.12, r*1.6, r*.24); ctx.fillRect(-r*.1,-r*.45,r*.5,r*.9); }
+
+    function update(dt){
+      if(!state.running) return;
+      state.t += dt; state.distance += state.speed * dt * 120;
+      state.score += dt * (10 + state.speed*40);
+      state.fuel -= dt * (4.2 * planeStats[state.selectedPlane].fuelUse) * (state.boost>0 ? 0.58 : 1);
+      if(state.boost>0) state.boost -= dt;
+      if(state.rollTimer>0) state.rollTimer -= dt;
+      if(state.invincible>0) state.invincible -= dt;
+      if(state.shield>0) state.shield -= dt;
+      if(state.magnet>0) state.magnet -= dt;
+
+      const plane = planeStats[state.selectedPlane];
+      const turnFactor = plane.turn * (state.weather==='wind' ? 0.8 : 1);
+      state.targetLane = clamp(state.targetLane,0,2);
+      state.targetY = clamp(state.targetY,0.16,0.88);
+      state.speed = lerp(state.speed, 0.32 + Math.min(0.38, state.distance/6000) + (state.boost>0?0.25:0), 0.02);
+      if(state.weatherTimer -= dt, state.weatherTimer <= 0){
+        const w = ['clear','wind','rain','storm'][(Math.random()*4)|0];
+        state.weather = w; state.weatherTimer = rand(10,18);
+        pushMessage(w==='clear'?'Clear skies':w==='wind'?'Crosswind!':'Weather Shift', w==='wind'?'Lane drift active.':w==='rain'?'Reduced traction, stay sharp.':'Storm clouds ahead!');
+      }
+      if(state.weather==='wind' && Math.random()<0.02) state.targetLane = clamp(state.targetLane + (Math.random()<0.5?-1:1),0,2);
+      if(state.weather==='rain') state.y = lerp(state.y, state.y + Math.sin(state.t*0.8)*0.002, 0.01);
+
+      if(state.fuel<=0) die();
+      if(Math.floor(state.distance/350) > state.difficulty){ state.difficulty++; state.spawnZ += 60; spawnObject(); }
+
+      if(state.challenge.progress >= state.challenge.goal) { state.challenge = randomChallenge(); pushMessage('Challenge Complete!', 'New daily mission assigned.'); }
+
+      ui.score.textContent = Math.floor(state.score).toString();
+      ui.coins.textContent = state.coins.toString();
+      ui.fuelBar.style.width = `${clamp(state.fuel,0,100)}%`;
+      ui.altitude.textContent = `${Math.floor(state.y*1000)}m`;
+      ui.status.textContent = state.weather === 'clear' ? 'Clear skies' : state.weather === 'wind' ? 'Crosswind' : state.weather === 'rain' ? 'Rain' : 'Storm';
+    }
+
+    let last = performance.now();
+    function loop(now){
+      const dt = Math.min(.033, (now-last)/1000); last = now;
+      update(dt); render();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    // Input
+    const keys = {};
+    addEventListener('keydown', e => {
+      keys[e.code]=true;
+      if(e.code==='ArrowLeft') laneAction(-1);
+      if(e.code==='ArrowRight') laneAction(1);
+      if(e.code==='ArrowUp') climb();
+      if(e.code==='ArrowDown') dive();
+      if(e.code==='Space') barrelRoll();
+      if(e.code==='KeyX') boost();
+      if(e.code==='Enter' && !state.running) resetGame();
+    });
+    addEventListener('keyup', e => keys[e.code]=false);
+
+    let touchStart=null, lastTap=0;
+    canvas.addEventListener('touchstart', e => { touchStart = {x:e.touches[0].clientX,y:e.touches[0].clientY,t:performance.now()}; }, {passive:true});
+    canvas.addEventListener('touchend', e => {
+      const t=performance.now();
+      if(t-lastTap<280){ barrelRoll(); lastTap=0; return; }
+      lastTap=t;
+      if(!touchStart) return;
+      const dx=(e.changedTouches[0].clientX-touchStart.x), dy=(e.changedTouches[0].clientY-touchStart.y);
+      if(Math.abs(dx)>Math.abs(dy) && Math.abs(dx)>24) laneAction(dx>0?1:-1);
+      else if(dy<-24) climb();
+      else if(dy>24) dive();
+    }, {passive:true});
+
+    document.getElementById('upBtn').onclick = climb;
+    document.getElementById('downBtn').onclick = dive;
+    document.getElementById('leftBtn').onclick = () => laneAction(-1);
+    document.getElementById('rightBtn').onclick = () => laneAction(1);
+    document.getElementById('rollBtn').onclick = barrelRoll;
+    document.getElementById('boostBtn').onclick = boost;
+
+    document.querySelectorAll('.planeChoice').forEach(el => el.onclick = () => {
+      document.querySelectorAll('.planeChoice').forEach(x=>x.classList.remove('selected'));
+      el.classList.add('selected');
+      state.selectedPlane = +el.dataset.plane;
+    });
+
+    ui.playBtn.onclick = () => resetGame();
+    ui.leaderBtn.onclick = () => pushMessage('Leaderboard', 'Global / friends integration placeholder.');
+    ui.dailyBtn.onclick = () => pushMessage('Daily Challenge', state.challenge.text);
+
+    // Auto-demo clouds
+    for(let i=0;i<6;i++) world.particles.push({x:rand(0,W), y:rand(0,H), vx:0, vy:0, life:1, r:0, c:'#fff'});
+    ui.menu.style.display='flex';
+    pushMessage('Welcome to Sky Runner', 'Choose a plane and take off.');
+  })();
+  </script>
+</body>
+</html>

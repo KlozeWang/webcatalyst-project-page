@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🧩 Photo Puzzle Game</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #fff;
+  overflow-x: hidden;
+}
+
+h1 {
+  margin-top: 20px;
+  font-size: 2rem;
+  background: linear-gradient(90deg, #f093fb, #f5576c, #4facfe);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+  letter-spacing: 2px;
+}
+
+.subtitle {
+  font-size: 0.9rem;
+  color: #aaa;
+  margin-bottom: 15px;
+}
+
+/* Upload Area */
+.upload-area {
+  width: 90%;
+  max-width: 400px;
+  border: 3px dashed rgba(255,255,255,0.3);
+  border-radius: 20px;
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: rgba(255,255,255,0.05);
+  margin-bottom: 15px;
+}
+
+.upload-area:hover {
+  border-color: #4facfe;
+  background: rgba(79, 172, 254, 0.1);
+  transform: scale(1.02);
+}
+
+.upload-area .icon { font-size: 3rem; margin-bottom: 10px; }
+.upload-area p { color: #ccc; font-size: 1rem; }
+.upload-area input { display: none; }
+
+/* Game Controls */
+.game-controls {
+  display: none;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 15px;
+  width: 90%;
+  max-width: 500px;
+}
+
+.game-controls.active { display: flex; }
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  color: #fff;
+}
+
+.btn:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(0,0,0,0.3); }
+.btn:active { transform: translateY(0); }
+
+.btn-shuffle { background: linear-gradient(135deg, #f093fb, #f5576c); }
+.btn-hint { background: linear-gradient(135deg, #4facfe, #00f2fe); color: #000; }
+.btn-size { background: linear-gradient(135deg, #43e97b, #38f9d7); color: #000; }
+.btn-new { background: linear-gradient(135deg, #fa709a, #fee140); color: #000; }
+
+.size-selector {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.size-selector span {
+  font-size: 0.85rem;
+  color: #aaa;
+  margin-right: 5px;
+}
+
+.size-btn {
+  padding: 8px 14px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.05);
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.3s;
+}
+
+.size-btn.active {
+  border-color: #4facfe;
+  background: rgba(79, 172, 254, 0.3);
+}
+
+.size-btn:hover { border-color: #4facfe; }
+
+/* Stats Bar */
+.stats-bar {
+  display: none;
+  justify-content: center;
+  gap: 30px;
+  margin-bottom: 15px;
+  width: 90%;
+  max-width: 400px;
+}
+
+.stats-bar.active { display: flex; }
+
+.stat {
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: linear-gradient(90deg, #4facfe, #00f2fe);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Puzzle Board */
+.puzzle-container {
+  display: none;
+  position: relative;
+}
+
+.puzzle-container.active { display: block; }
+
+.puzzle-board {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.tile {
+  background-size: cover;
+  background-position: center;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tile:hover {
+  transform: scale(0.96);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+}
+
+.tile.empty {
+  background: rgba(0,0,0,0.3) !important;
+  cursor: default;
+  border: 2px dashed rgba(255,255,255,0.1);
+}
+
+.tile.empty:hover { transform: none; box-shadow: none; }
+
+.tile-number {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+  background: rgba(0,0,0,0.5);
+  padding: 2px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.tile.correct {
+  box-shadow: inset 0 0 0 2px rgba(67, 233, 123, 0.5);
+}
+
+/* Preview */
+.preview-area {
+  display: none;
+  margin-top: 15px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.preview-area.active { display: block; }
+
+.preview-label {
+  font-size: 0.8rem;
+  color: #888;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.preview-img {
+  max-width: 150px;
+  max-height: 150px;
+  border-radius: 12px;
+  border: 3px solid rgba(255,255,255,0.2);
+  object-fit: cover;
+}
+
+/* Win Overlay */
+.win-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.85);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+.win-overlay.active { display: flex; }
+
+.win-content {
+  text-align: center;
+  animation: winPop 0.5s ease;
+}
+
+@keyframes winPop {
+  0% { transform: scale(0.5); opacity: 0; }
+  70% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.win-content .trophy { font-size: 5rem; margin-bottom: 10px; }
+.win-content h2 {
+  font-size: 2.5rem;
+  background: linear-gradient(90deg, #f093fb, #f5576c, #4facfe);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 10px;
+}
+.win-content p { color: #aaa; margin-bottom: 5px; font-size: 1.1rem; }
+.win-content .btn { margin-top: 20px; font-size: 1rem; padding: 14px 30px; }
+
+/* Confetti */
+.confetti-container {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 1001;
+  overflow: hidden;
+}
+
+.confetti {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  top: -10px;
+  animation: confettiFall linear forwards;
+}
+
+@keyframes confettiFall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
+/* Hint overlay */
+.hint-overlay {
+  display: none;
+  position: absolute;
+  top: 8px; left: 8px;
+  right: 8px; bottom: 8px;
+  border-radius: 16px;
+  z-index: 10;
+  pointer-events: none;
+  animation: hintFade 2s ease forwards;
+}
+
+.hint-overlay.active { display: block; }
+
+.hint-overlay img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 16px;
+  opacity: 0.8;
+}
+
+@keyframes hintFade {
+  0% { opacity: 0; }
+  20% { opacity: 0.8; }
+  80% { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+
+/* Responsive */
+@media (max-width: 500px) {
+  h1 { font-size: 1.5rem; }
+  .stats-bar { gap: 20px; }
+  .stat-value { font-size: 1.2rem; }
+}
+</style>
+</head>
+<body>
+
+<h1>🧩 Photo Puzzle</h1>
+<p class="subtitle">Upload a photo and solve the puzzle!</p>
+
+<!-- Upload Area -->
+<div class="upload-area" id="uploadArea">
+  <div class="icon">📷</div>
+  <p>Tap to choose a photo from your gallery</p>
+  <input type="file" id="fileInput" accept="image/*">
+</div>
+
+<!-- Game Controls -->
+<div class="game-controls" id="gameControls">
+  <button class="btn btn-shuffle" id="shuffleBtn">🔀 Shuffle</button>
+  <button class="btn btn-hint" id="hintBtn">💡 Hint</button>
+  <div class="size-selector">
+    <span>Size:</span>
+    <button class="size-btn active" data-size="3">3×3</button>
+    <button class="size-btn" data-size="4">4×4</button>
+    <button class="size-btn" data-size="5">5×5</button>
+  </div>
+  <button class="btn btn-new" id="newBtn">📷 New Photo</button>
+</div>
+
+<!-- Stats -->
+<div class="stats-bar" id="statsBar">
+  <div class="stat">
+    <div class="stat-value" id="moveCount">0</div>
+    <div class="stat-label">Moves</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" id="timer">0:00</div>
+    <div class="stat-label">Time</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value" id="gridSize">3×3</div>
+    <div class="stat-label">Grid</div>
+  </div>
+</div>
+
+<!-- Puzzle -->
+<div class="puzzle-container" id="puzzleContainer">
+  <div class="puzzle-board" id="puzzleBoard"></div>
+</div>
+
+<!-- Preview -->
+<div class="preview-area" id="previewArea">
+  <div class="preview-label">Original Photo</div>
+  <img class="preview-img" id="previewImg" src="" alt="Preview">
+</div>
+
+<!-- Win Overlay -->
+<div class="win-overlay" id="winOverlay">
+  <div class="win-content">
+    <div class="trophy">🏆</div>
+    <h2>Puzzle Solved!</h2>
+    <p id="winMoves">Moves: 0</p>
+    <p id="winTime">Time: 0:00</p>
+    <button class="btn btn-shuffle" id="playAgainBtn">🔄 Play Again</button>
+  </div>
+</div>
+
+<!-- Confetti Container -->
+<div class="confetti-container" id="confettiContainer"></div>
+
+<script>
+(function() {
+  // State
+  let gridSize = 3;
+  let tiles = [];
+  let emptyIndex;
+  let moves = 0;
+  let timerInterval = null;
+  let seconds = 0;
+  let gameStarted = false;
+  let imageSrc = null;
+  let isAnimating = false;
+
+  // DOM
+  const uploadArea = document.getElementById('uploadArea');
+  const fileInput = document.getElementById('fileInput');
+  const gameControls = document.getElementById('gameControls');
+  const statsBar = document.getElementById('statsBar');
+  const puzzleContainer = document.getElementById('puzzleContainer');
+  const puzzleBoard = document.getElementById('puzzleBoard');
+  const previewArea = document.getElementById('previewArea');
+  const previewImg = document.getElementById('previewImg');
+  const moveCount = document.getElementById('moveCount');
+  const timerEl = document.getElementById('timer');
+  const gridSizeEl = document.getElementById('gridSize');
+  const winOverlay = document.getElementById('winOverlay');
+  const confettiContainer = document.getElementById('confettiContainer');
+  const hintBtn = document.getElementById('hintBtn');
+
+  // Upload handling
+  uploadArea.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      imageSrc = ev.target.result;
+      previewImg.src = imageSrc;
+      startGame();
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // Drag & drop
+  uploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadArea.style.borderColor = '#4facfe';
+    uploadArea.style.background = 'rgba(79,172,254,0.15)';
+  });
+
+  uploadArea.addEventListener('dragleave', () => {
+    uploadArea.style.borderColor = 'rgba(255,255,255,0.3)';
+    uploadArea.style.background = 'rgba(255,255,255,0.05)';
+  });
+
+  uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.style.borderColor = 'rgba(255,255,255,0.3)';
+    uploadArea.style.background = 'rgba(255,255,255,0.05)';
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        imageSrc = ev.target.result;
+        previewImg.src = imageSrc;
+        startGame();
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+
+  // Size buttons
+  document.querySelectorAll('.size-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      gridSize = parseInt(btn.dataset.size);
+      gridSizeEl.textContent = gridSize + '×' + gridSize;
+      if (imageSrc) startGame();
+    });
+  });
+
+  // Shuffle button
+  document.getElementById('shuffleBtn').addEventListener('click', () => {
+    if (!imageSrc) return;
+    shuffleTiles();
+    resetStats();
+    startTimer();
+  });
+
+  // Hint button
+  hintBtn.addEventListener('click', () => {
+    if (!imageSrc) return;
+    showHint();
+  });
+
+  // New photo button
+  document.getElementById('newBtn').addEventListener('click', () => {
+    fileInput.click();
+  });
+
+  // Play again
+  document.getElementById('playAgainBtn').addEventListener('click', () => {
+    winOverlay.classList.remove('active');
+    confettiContainer.innerHTML = '';
+    shuffleTiles();
+    resetStats();
+    startTimer();
+  });
+
+  function startGame() {
+    uploadArea.style.display = 'none';
+    gameControls.classList.add('active');
+    statsBar.classList.add('active');
+    puzzleContainer.classList.add('active');
+    previewArea.classList.add('active');
+
+    gridSizeEl.textContent = gridSize + '×' + gridSize;
+    createPuzzle();
+    shuffleTiles();
+  }
+
+  function createPuzzle() {
+    const totalTiles = gridSize * gridSize;
+    tiles = [];
+    for (let i = 0; i < totalTiles; i++) {
+      tiles.push(i);
+    }
+    emptyIndex = totalTiles - 1;
+    renderBoard();
+  }
+
+  function renderBoard() {
+    const boardSize = Math.min(window.innerWidth * 0.85, 450);
+    puzzleBoard.style.width = boardSize + 'px';
+    puzzleBoard.style.height = boardSize + 'px';
+    puzzleBoard.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
+    puzzleBoard.style.gridTemplateRows = `repeat(${gridSize}, 1fr)`;
+
+    puzzleBoard.innerHTML = '';
+
+    tiles.forEach((tileVal, index) => {
+      const tile = document.createElement('div');
+      tile.className = 'tile';
+      tile.style.width = '100%';
+      tile.style.height = '100%';
+
+      if (tileVal === -1) {
+        // Empty tile
+        tile.classList.add('empty');
+      } else {
+        // Calculate position in original image
+        const row = Math.floor((tileVal) / gridSize);
+        const col = (tileVal) % gridSize;
+        const bgX = (col / (gridSize - 1)) * 100;
+        const bgY = (row / (gridSize - 1)) * 100;
+
+        tile.style.backgroundImage = `url(${imageSrc})`;
+        tile.style.backgroundPosition = `${bgX}% ${bgY}%`;
+        tile.style.backgroundSize = `${gridSize * 100}%`;
+
+        // Show number
+        const num = document.createElement('span');
+        num.className = 'tile-number';
+        num.textContent = tileVal;
+        tile.appendChild(num);
+
+        // Check if in correct position
+        if (tileVal === index) {
+          tile.classList.add('correct');
+        }
+
+        tile.addEventListener('click', () => handleTileClick(index));
+      }
+
+      puzzleBoard.appendChild(tile);
+    });
+  }
+
+  function handleTileClick(index) {
+    if (!gameStarted) {
+      gameStarted = true;
+      startTimer();
+    }
+
+    if (isAdjacent(index, emptyIndex)) {
+      // Swap
+      tiles[emptyIndex] = tiles[index];
+      tiles[index] = -1;
+      emptyIndex = index;
+      moves++;
+      moveCount.textContent = moves;
+
+      renderBoard();
+      checkWin();
+    }
+  }
+
+  function isAdjacent(idx1, idx2) {
+    const row1 = Math.floor(idx1 / gridSize);
+    const col1 = idx1 % gridSize;
+    const row2 = Math.floor(idx2 / gridSize);
+    const col2 = idx2 % gridSize;
+    return (Math.abs(row1 - row2) + Math.abs(col1 - col2)) === 1;
+  }
+
+  function shuffleTiles() {
+    // Reset
+    const totalTiles = gridSize * gridSize;
+    tiles = [];
+    for (let i = 0; i < totalTiles; i++) {
+      tiles.push(i);
+    }
+    emptyIndex = totalTiles - 1;
+
+    // Perform random valid moves to ensure solvability
+    const totalMoves = gridSize * gridSize * 20;
+    let lastMove = -1;
+
+    for (let i = 0; i < totalMoves; i++) {
+      const neighbors = getNeighbors(emptyIndex);
+      // Avoid undoing the last move
+      const filtered = neighbors.filter(n => n !== lastMove);
+      const pick = filtered[Math.floor(Math.random() * filtered.length)];
+
+      tiles[emptyIndex] = tiles[pick];
+      tiles[pick] = -1;
+      lastMove = emptyIndex;
+      emptyIndex = pick;
+    }
+
+    moves = 0;
+    moveCount.textContent = '0';
+    gameStarted = false;
+    resetTimer();
+    renderBoard();
+  }
+
+  function getNeighbors(index) {
+    const row = Math.floor(index / gridSize);
+    const col = index % gridSize;
+    const neighbors = [];
+
+    if (row > 0) neighbors.push(index - gridSize);
+    if (row < gridSize - 1) neighbors.push(index + gridSize);
+    if (col > 0) neighbors.push(index - 1);
+    if (col < gridSize - 1) neighbors.push(index + 1);
+
+    return neighbors;
+  }
+
+  function checkWin() {
+    for (let i = 0; i < tiles.length - 1; i++) {
+      if (tiles[i] !== i) return;
+    }
+    // Win!
+    stopTimer();
+    setTimeout(() => {
+      showWin();
+    }, 300);
+  }
+
+  function showWin() {
+    document.getElementById('winMoves').textContent = `Moves: ${moves}`;
+    document.getElementById('winTime').textContent = `Time: ${formatTime(seconds)}`;
+    winOverlay.classList.add('active');
+    launchConfetti();
+  }
+
+  function launchConfetti() {
+    confettiContainer.innerHTML = '';
+    const colors = ['#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b', '#fee140', '#fa709a'];
+
+    for (let i = 0; i < 80; i++) {
+      const confetti = document.createElement('div');
+      confetti.className = 'confetti';
+      confetti.style.left = Math.random() * 100 + '%';
+      confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+      confetti.style.width = (Math.random() * 10 + 5) + 'px';
+      confetti.style.height = (Math.random() * 10 + 5) + 'px';
+      confetti.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+      confetti.style.animationDuration = (Math.random() * 2 + 2) + 's';
+      confetti.style.animationDelay = (Math.random() * 1.5) + 's';
+      confettiContainer.appendChild(confetti);
+    }
+
+    setTimeout(() => { confettiContainer.innerHTML = ''; }, 5000);
+  }
+
+  function showHint() {
+    // Create a temporary overlay showing the solved puzzle
+    const hintOverlay = document.createElement('div');
+    hintOverlay.className = 'hint-overlay active';
+
+    const img = document.createElement('img');
+    img.src = imageSrc;
+    img.style.objectFit = 'cover';
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.borderRadius = '12px';
+
+    hintOverlay.appendChild(img);
+    puzzleContainer.appendChild(hintOverlay);
+
+    setTimeout(() => {
+      hintOverlay.remove();
+    }, 2000);
+  }
+
+  // Timer
+  function startTimer() {
+    if (timerInterval) return;
+    timerInterval = setInterval(() => {
+      seconds++;
+      timerEl.textContent = formatTime(seconds);
+    }, 1000);
+  }
+
+  function stopTimer() {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+
+  function resetTimer() {
+    stopTimer();
+    seconds = 0;
+    timerEl.textContent = '0:00';
+  }
+
+  function resetStats() {
+    moves = 0;
+    moveCount.textContent = '0';
+    resetTimer();
+    gameStarted = false;
+  }
+
+  function formatTime(s) {
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
+    return mins + ':' + (secs < 10 ? '0' : '') + secs;
+  }
+
+  // Handle window resize
+  window.addEventListener('resize', () => {
+    if (imageSrc) renderBoard();
+  });
+
+  // Keyboard support
+  document.addEventListener('keydown', (e) => {
+    if (!imageSrc) return;
+
+    let targetIndex = -1;
+    const row = Math.floor(emptyIndex / gridSize);
+    const col = emptyIndex % gridSize;
+
+    switch(e.key) {
+      case 'ArrowUp':
+        if (row < gridSize - 1) targetIndex = emptyIndex + gridSize;
+        break;
+      case 'ArrowDown':
+        if (row > 0) targetIndex = emptyIndex - gridSize;
+        break;
+      case 'ArrowLeft':
+        if (col < gridSize - 1) targetIndex = emptyIndex + 1;
+        break;
+      case 'ArrowRight':
+        if (col > 0) targetIndex = emptyIndex - 1;
+        break;
+    }
+
+    if (targetIndex >= 0) {
+      e.preventDefault();
+      handleTileClick(targetIndex);
+    }
+  });
+})();
+</script>
+</body>
+</html>

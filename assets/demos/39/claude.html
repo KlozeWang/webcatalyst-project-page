@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Shadeforge — Deck of the Damned</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Georgia', serif;
+    background: radial-gradient(ellipse at center, #1a0a14 0%, #050208 100%);
+    color: #d4c5a9;
+    min-height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+  #game {
+    width: 100vw; height: 100vh;
+    display: flex; flex-direction: column;
+    position: relative;
+  }
+  .screen { display: none; flex: 1; flex-direction: column; padding: 12px; }
+  .screen.active { display: flex; }
+
+  /* Start Screen */
+  #start { justify-content: center; align-items: center; text-align: center; }
+  #start h1 {
+    font-size: clamp(2rem, 6vw, 4.5rem);
+    color: #c8102e;
+    text-shadow: 0 0 20px #6b0014, 0 0 40px #2a0008;
+    letter-spacing: 6px;
+    margin-bottom: 8px;
+    font-variant: small-caps;
+  }
+  #start h2 {
+    font-style: italic; color: #8a7050;
+    margin-bottom: 30px; letter-spacing: 3px;
+  }
+  #start p { max-width: 500px; margin-bottom: 20px; line-height: 1.6; color: #a89878; }
+  button.btn {
+    background: linear-gradient(180deg, #3a1820, #1a0810);
+    border: 1px solid #6b0014;
+    color: #d4c5a9;
+    padding: 12px 28px;
+    font-family: inherit;
+    font-size: 1.1rem;
+    cursor: pointer;
+    letter-spacing: 2px;
+    font-variant: small-caps;
+    transition: all 0.2s;
+    border-radius: 2px;
+  }
+  button.btn:hover:not(:disabled) {
+    background: linear-gradient(180deg, #5a1820, #2a0810);
+    box-shadow: 0 0 15px #6b0014;
+    transform: translateY(-2px);
+  }
+  button.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Map */
+  #map-screen { padding: 10px; }
+  #map-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 16px;
+    border-bottom: 1px solid #3a2018;
+    margin-bottom: 10px;
+  }
+  #map-header h2 { color: #c8102e; letter-spacing: 4px; font-variant: small-caps; }
+  .stats { display: flex; gap: 20px; font-size: 0.95rem; }
+  .stat { color: #a89878; }
+  .stat b { color: #d4c5a9; }
+  #map-area {
+    flex: 1;
+    position: relative;
+    background: radial-gradient(ellipse at top, #1a0a18 0%, #0a0408 70%);
+    border: 1px solid #2a1810;
+    overflow: auto;
+  }
+  #map-svg { display: block; }
+  .node {
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .node:hover .node-circle { filter: brightness(1.5); }
+  .node.disabled { cursor: not-allowed; opacity: 0.4; }
+  .node.visited { opacity: 0.5; }
+  .node.current .node-circle { stroke: #ffd700; stroke-width: 3; filter: drop-shadow(0 0 8px #ffd700); }
+  .node.available .node-circle { animation: pulse 1.5s infinite; }
+  @keyframes pulse {
+    0%,100% { filter: drop-shadow(0 0 4px currentColor); }
+    50% { filter: drop-shadow(0 0 14px currentColor); }
+  }
+
+  /* Combat */
+  #combat-screen { padding: 0; }
+  #combat-top {
+    flex: 1;
+    background: linear-gradient(180deg, #1a0a14 0%, #0a0408 100%);
+    display: flex; flex-direction: column;
+    position: relative;
+    min-height: 0;
+  }
+  #combat-header {
+    display: flex; justify-content: space-between; padding: 10px 16px;
+    background: rgba(0,0,0,0.5);
+    border-bottom: 1px solid #3a2018;
+    z-index: 5;
+  }
+  #battlefield {
+    flex: 1;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 20px;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .combatant {
+    text-align: center;
+    padding: 14px;
+    background: rgba(20,8,12,0.7);
+    border: 1px solid #3a2018;
+    border-radius: 4px;
+    min-width: 140px;
+    position: relative;
+    transition: all 0.15s;
+  }
+  .combatant.targetable { cursor: pointer; border-color: #c8102e; }
+  .combatant.targetable:hover { box-shadow: 0 0 18px #c8102e; transform: scale(1.05); }
+  .combatant.hit { animation: shake 0.3s; }
+  @keyframes shake {
+    0%,100%{transform:translateX(0);}
+    25%{transform:translateX(-8px);}
+    75%{transform:translateX(8px);}
+  }
+  .sprite {
+    font-size: 4rem;
+    margin-bottom: 6px;
+    filter: drop-shadow(0 0 8px rgba(200,16,46,0.4));
+  }
+  .name { color: #d4c5a9; font-variant: small-caps; letter-spacing: 2px; font-size: 0.9rem; }
+  .hp-bar {
+    height: 14px; background: #2a0810;
+    border: 1px solid #6b0014;
+    border-radius: 2px;
+    margin-top: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hp-fill {
+    height: 100%; background: linear-gradient(90deg,#8a0014,#c8102e);
+    transition: width 0.3s;
+  }
+  .hp-text {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; color: #fff;
+    text-shadow: 1px 1px 2px #000;
+  }
+  .intent {
+    background: rgba(0,0,0,0.6);
+    padding: 4px 8px;
+    margin-top: 6px;
+    border-radius: 2px;
+    font-size: 0.85rem;
+    color: #ffaa66;
+  }
+  .block {
+    color: #88aaff; font-size: 0.85rem; margin-top: 3px;
+  }
+
+  /* Player hand */
+  #player-area {
+    background: linear-gradient(180deg, #0a0408, #1a0a14);
+    border-top: 2px solid #3a2018;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 230px;
+  }
+  #player-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0 12px;
+  }
+  #energy {
+    background: radial-gradient(circle, #ffaa00 0%, #6b0014 70%);
+    width: 50px; height: 50px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem; font-weight: bold;
+    color: #fff;
+    text-shadow: 1px 1px 2px #000;
+    border: 2px solid #ffd700;
+    box-shadow: 0 0 12px #ffaa00;
+  }
+  #end-turn {
+    background: linear-gradient(180deg, #6b0014, #2a0008);
+    color: #fff;
+    border: 1px solid #c8102e;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-family: inherit;
+    font-variant: small-caps;
+    letter-spacing: 2px;
+    border-radius: 2px;
+  }
+  #end-turn:hover { background: linear-gradient(180deg, #8a1024, #3a0818); }
+
+  #hand {
+    display: flex; justify-content: center; gap: 8px;
+    min-height: 170px;
+    padding: 4px;
+    flex-wrap: wrap;
+  }
+  .card {
+    width: 115px; height: 160px;
+    background: linear-gradient(160deg, #2a1820, #0a0408);
+    border: 2px solid #6b4830;
+    border-radius: 6px;
+    padding: 6px;
+    cursor: pointer;
+    display: flex; flex-direction: column;
+    transition: transform 0.2s, box-shadow 0.2s;
+    font-size: 0.75rem;
+    position: relative;
+  }
+  .card:hover {
+    transform: translateY(-15px);
+    box-shadow: 0 0 18px #ffaa00;
+    z-index: 10;
+  }
+  .card.unplayable { opacity: 0.5; }
+  .card.selected { transform: translateY(-25px); box-shadow: 0 0 25px #ffd700; border-color: #ffd700; }
+  .card-cost {
+    position: absolute; top: -8px; left: -8px;
+    width: 28px; height: 28px;
+    background: radial-gradient(circle, #ffaa00, #6b0014);
+    border: 2px solid #ffd700;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: bold; color: #fff;
+    text-shadow: 1px 1px 2px #000;
+  }
+  .card-name {
+    text-align: center; font-variant: small-caps; letter-spacing: 1px;
+    color: #d4c5a9; font-weight: bold;
+    padding: 4px 0; border-bottom: 1px solid #6b4830;
+    margin-bottom: 6px;
+  }
+  .card-art {
+    text-align: center; font-size: 2.5rem;
+    flex: 0 0 auto; margin-bottom: 4px;
+  }
+  .card-desc {
+    flex: 1; text-align: center; color: #c8b898;
+    line-height: 1.3;
+  }
+  .card.attack { border-color: #c8102e; }
+  .card.skill { border-color: #4488cc; }
+  .card.power { border-color: #cc44cc; }
+
+  /* Reward / overlay */
+  #overlay {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  #overlay.active { display: flex; }
+  .overlay-content {
+    background: linear-gradient(180deg, #1a0a14, #0a0408);
+    border: 2px solid #6b0014;
+    padding: 30px; max-width: 700px;
+    text-align: center;
+    border-radius: 4px;
+  }
+  .overlay-content h2 {
+    color: #c8102e; font-variant: small-caps; letter-spacing: 4px;
+    margin-bottom: 20px;
+  }
+  .card-choices {
+    display: flex; gap: 14px; justify-content: center; flex-wrap: wrap;
+    margin: 20px 0;
+  }
+  .card-choices .card { cursor: pointer; }
+  .floating-text {
+    position: absolute;
+    font-size: 1.8rem; font-weight: bold;
+    pointer-events: none;
+    animation: float 1s forwards;
+    z-index: 50;
+    text-shadow: 2px 2px 4px #000;
+  }
+  @keyframes float {
+    0%{transform:translateY(0);opacity:1;}
+    100%{transform:translateY(-60px);opacity:0;}
+  }
+  .log {
+    position: absolute;
+    bottom: 240px; right: 10px;
+    width: 240px; max-height: 120px;
+    overflow-y: auto;
+    font-size: 0.75rem;
+    color: #8a7050;
+    pointer-events: none;
+  }
+  @media (max-width: 700px) {
+    .card { width: 95px; height: 140px; font-size: 0.7rem; }
+    .sprite { font-size: 3rem; }
+    .combatant { min-width: 100px; padding: 8px; }
+    #start h1 { letter-spacing: 3px; }
+  }
+</style>
+</head>
+<body>
+<div id="game">
+
+  <!-- Start screen -->
+  <div id="start" class="screen active">
+    <h1>Shadeforge</h1>
+    <h2>~ Deck of the Damned ~</h2>
+    <p>The crimson moon weeps. Forge your deck from shadow and steel, ascend through three nightmarish floors, and slay the Wraith King who waits at the apex.</p>
+    <p style="color:#6b4830;font-style:italic;font-size:0.9rem;">Click cards to play • Click enemies to target • Manage energy wisely</p>
+    <br>
+    <button class="btn" onclick="startGame()">Begin the Descent</button>
+  </div>
+
+  <!-- Map screen -->
+  <div id="map-screen" class="screen">
+    <div id="map-header">
+      <h2>The Path</h2>
+      <div class="stats">
+        <span class="stat">❤ HP: <b id="map-hp"></b></span>
+        <span class="stat">💰 Gold: <b id="map-gold"></b></span>
+        <span class="stat">🃏 Deck: <b id="map-deck"></b></span>
+        <span class="stat">📍 Floor: <b id="map-floor"></b></span>
+      </div>
+    </div>
+    <div id="map-area">
+      <svg id="map-svg"></svg>
+    </div>
+  </div>
+
+  <!-- Combat -->
+  <div id="combat-screen" class="screen">
+    <div id="combat-top">
+      <div id="combat-header">
+        <div>
+          <div class="name">YOU</div>
+          <div class="hp-bar" style="width:160px;">
+            <div class="hp-fill" id="player-hp-fill"></div>
+            <div class="hp-text" id="player-hp-text"></div>
+          </div>
+          <div class="block" id="player-block"></div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:center;">
+          <span>Draw: <b id="draw-count">0</b></span>
+          <span>Disc: <b id="disc-count">0</b></span>
+        </div>
+      </div>
+      <div id="battlefield"></div>
+      <div class="log" id="log"></div>
+    </div>
+    <div id="player-area">
+      <div id="player-bar">
+        <div id="energy">0/0</div>
+        <button id="end-turn" onclick="endTurn()">End Turn</button>
+      </div>
+      <div id="hand"></div>
+    </div>
+  </div>
+
+  <div id="overlay"><div class="overlay-content" id="overlay-content"></div></div>
+</div>
+
+<script>
+// ====== Audio ======
+const AC = window.AudioContext || window.webkitAudioContext;
+let actx;
+function sfx(freq, dur=0.1, type='square', vol=0.1) {
+  try {
+    if (!actx) actx = new AC();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + dur);
+  } catch(e){}
+}
+
+// ====== Card Library ======
+const CARDS = {
+  strike:   { name:"Strike",      cost:1, type:"attack", art:"⚔", desc:"Deal 6 damage.", effect:(g,t)=>dealDamage(t,6) },
+  defend:   { name:"Defend",      cost:1, type:"skill",  art:"🛡", desc:"Gain 5 block.", effect:(g,t)=>{ g.player.block+=5; } },
+  bash:     { name:"Bash",        cost:2, type:"attack", art:"🔨", desc:"Deal 10 damage.", effect:(g,t)=>dealDamage(t,10) },
+  cleave:   { name:"Cleave",      cost:1, type:"attack", art:"🌀", desc:"Deal 4 to ALL.", effect:(g,t)=>{ g.enemies.forEach(e=>dealDamage(e,4)); }, aoe:true },
+  ironwave: { name:"Iron Wave",   cost:1, type:"attack", art:"⛓", desc:"Deal 5, gain 5 block.", effect:(g,t)=>{ dealDamage(t,5); g.player.block+=5; } },
+  drain:    { name:"Soul Drain",  cost:2, type:"attack", art:"🩸", desc:"Deal 8, heal 3.", effect:(g,t)=>{ dealDamage(t,8); heal(3); } },
+  hex:      { name:"Hex",         cost:1, type:"skill",  art:"☠", desc:"Weaken enemy (deal -2 dmg) 2 turns.", effect:(g,t)=>{ t.weak=(t.weak||0)+2; } },
+  shadow:   { name:"Shadowstep",  cost:0, type:"skill",  art:"👤", desc:"Gain 4 block. Draw 1.", effect:(g,t)=>{ g.player.block+=4; drawCards(1); } },
+  rage:     { name:"Rage",        cost:1, type:"power",  art:"😈", desc:"+2 dmg to attacks this combat.", effect:(g,t)=>{ g.player.strength+=2; } },
+  fortify:  { name:"Fortify",     cost:2, type:"skill",  art:"🏰", desc:"Gain 12 block.", effect:(g,t)=>{ g.player.block+=12; } },
+  pierce:   { name:"Pierce",      cost:2, type:"attack", art:"🗡", desc:"Deal 14 damage. Ignores block.", effect:(g,t)=>{ t.hp-=14; floatText(t,'-14','#ff4466'); } },
+  inferno:  { name:"Inferno",     cost:3, type:"attack", art:"🔥", desc:"Deal 8 to ALL.", effect:(g,t)=>{ g.enemies.forEach(e=>dealDamage(e,8)); }, aoe:true },
+  meditate: { name:"Meditate",    cost:1, type:"skill",  art:"🧘", desc:"Draw 2.", effect:(g,t)=>drawCards(2) },
+};
+
+const STARTER = ['strike','strike','strike','strike','defend','defend','defend','defend','bash'];
+
+// ====== Enemies ======
+const ENEMY_TYPES = {
+  ghoul:    { name:"Ghoul",        sprite:"👹", hp:[18,24], moves:[{type:'atk',dmg:6},{type:'atk',dmg:4},{type:'def',amt:5}] },
+  shade:    { name:"Shade",        sprite:"👻", hp:[14,18], moves:[{type:'atk',dmg:8},{type:'atk',dmg:5}] },
+  cultist:  { name:"Cultist",      sprite:"🧙", hp:[22,28], moves:[{type:'atk',dmg:5},{type:'buff'},{type:'atk',dmg:7}] },
+  abomination: { name:"Abomination", sprite:"🦑", hp:[35,45], moves:[{type:'atk',dmg:10},{type:'atk',dmg:6},{type:'def',amt:8}] },
+  wraith:   { name:"Wraith Knight",sprite:"💀", hp:[40,50], moves:[{type:'atk',dmg:9},{type:'atk',dmg:12},{type:'def',amt:10}] },
+  king:     { name:"WRAITH KING",  sprite:"☠️", hp:[80,80], moves:[{type:'atk',dmg:14},{type:'atk',dmg:10},{type:'atk',dmg:8},{type:'def',amt:12}], boss:true },
+};
+
+// ====== Game State ======
+let g;
+
+function newGame() {
+  g = {
+    player: { hp:70, maxHp:70, gold:0, deck:[...STARTER], block:0, strength:0 },
+    floor: 1,
+    map: null,
+    currentNode: null,
+    enemies: [],
+    hand: [], draw: [], discard: [],
+    energy: 0, maxEnergy: 3,
+    pendingTarget: null,
+  };
+}
+
+function startGame() {
+  newGame();
+  generateMap();
+  showScreen('map-screen');
+  renderMap();
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ====== Map Generation ======
+function generateMap() {
+  // 6 rows, each row has 2-4 nodes. Connect each node to 1-2 nodes in next row.
+  const rows = 6;
+  const nodes = [];
+  for (let r=0; r<rows; r++) {
+    const count = r===0 ? 1 : r===rows-1 ? 1 : 2 + Math.floor(Math.random()*3);
+    const row = [];
+    for (let i=0; i<count; i++) {
+      let type;
+      if (r === rows-1) type = 'boss';
+      else if (r === 0) type = 'combat';
+      else if (r === rows-2) type = 'elite';
+      else {
+        const roll = Math.random();
+        if (roll < 0.15) type = 'rest';
+        else if (roll < 0.3) type = 'shop';
+        else if (roll < 0.45) type = 'elite';
+        else type = 'combat';
+      }
+      row.push({ row:r, idx:i, type, connections:[], visited:false, id:`${r}-${i}` });
+    }
+    nodes.push(row);
+  }
+  // Connect
+  for (let r=0; r<rows-1; r++) {
+    nodes[r].forEach((n, i) => {
+      const next = nodes[r+1];
+      const targets = new Set();
+      // connect to 1-2
+      const num = 1 + Math.floor(Math.random()*2);
+      for (let k=0; k<num; k++) {
+        const ti = Math.min(next.length-1, Math.max(0, i + Math.floor(Math.random()*3)-1));
+        targets.add(ti);
+      }
+      // ensure at least 1
+      if (targets.size===0) targets.add(Math.min(next.length-1, i));
+      n.connections = [...targets];
+    });
+  }
+  // Ensure every node in r>0 is reachable: connect orphans
+  for (let r=1; r<rows; r++) {
+    nodes[r].forEach((n,i) => {
+      const reached = nodes[r-1].some(p => p.connections.includes(i));
+      if (!reached) {
+        // give nearest parent a link to it
+        const parent = nodes[r-1][Math.min(nodes[r-1].length-1, i)];
+        if (!parent.connections.includes(i)) parent.connections.push(i);
+      }
+    });
+  }
+  g.map = nodes;
+  g.currentNode = null;
+}
+
+function renderMap() {
+  document.getElementById('map-hp').textContent = `${g.player.hp}/${g.player.maxHp}`;
+  document.getElementById('map-gold').textContent = g.player.gold;
+  document.getElementById('map-deck').textContent = g.player.deck.length;
+  document.getElementById('map-floor').textContent = g.floor;
+
+  const svg = document.getElementById('map-svg');
+  const W = Math.max(600, document.getElementById('map-area').clientWidth - 20);
+  const H = Math.max(500, document.getElementById('map-area').clientHeight - 20);
+  svg.setAttribute('width', W); svg.setAttribute('height', H);
+  svg.innerHTML = '';
+
+  const rows = g.map.length;
+  const xPos = (n, rowLen) => (W / (rowLen+1)) * (n.idx+1);
+  const yPos = (r) => H - 40 - (r * (H-80) / (rows-1));
+
+  // edges
+  g.map.forEach((row,r) => {
+    if (r === rows-1) return;
+    row.forEach(n => {
+      n.connections.forEach(ti => {
+        const target = g.map[r+1][ti];
+        if (!target) return;
+        const x1 = xPos(n,row.length), y1 = yPos(r);
+        const x2 = xPos(target,g.map[r+1].length), y2 = yPos(r+1);
+        const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+        line.setAttribute('x1',x1); line.setAttribute('y1',y1);
+        line.setAttribute('x2',x2); line.setAttribute('y2',y2);
+        line.setAttribute('stroke','#3a2018');
+        line.setAttribute('stroke-width',2);
+        line.setAttribute('stroke-dasharray','4,4');
+        svg.appendChild(line);
+      });
+    });
+  });
+
+  // nodes
+  const ICONS = { combat:'⚔', elite:'💀', rest:'🔥', shop:'💰', boss:'👑' };
+  const COLORS = { combat:'#c8102e', elite:'#aa00ff', rest:'#ffaa00', shop:'#ffd700', boss:'#ff0033' };
+
+  const available = getAvailableNodes();
+  g.map.forEach((row, r) => {
+    row.forEach(n => {
+      const x = xPos(n,row.length), y = yPos(r);
+      const grp = document.createElementNS('http://www.w3.org/2000/svg','g');
+      grp.setAttribute('class', 'node ' +
+        (n.visited?'visited ':'') +
+        (g.currentNode===n?'current ':'') +
+        (available.includes(n)?'available ':'') +
+        (!available.includes(n)&&!n.visited&&g.currentNode!==n?'disabled':'')
+      );
+      grp.setAttribute('transform',`translate(${x},${y})`);
+
+      const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('class','node-circle');
+      c.setAttribute('r',22);
+      c.setAttribute('fill','#1a0a14');
+      c.setAttribute('stroke',COLORS[n.type]);
+      c.setAttribute('stroke-width',2);
+      c.style.color = COLORS[n.type];
+      grp.appendChild(c);
+
+      const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('text-anchor','middle');
+      t.setAttribute('dominant-baseline','central');
+      t.setAttribute('font-size','20');
+      t.textContent = ICONS[n.type];
+      grp.appendChild(t);
+
+      if (available.includes(n)) {
+        grp.addEventListener('click',()=>enterNode(n));
+      }
+      svg.appendChild(grp);
+    });
+  });
+}
+
+function getAvailableNodes() {
+  if (!g.currentNode) return g.map[0]; // start row
+  return g.currentNode.connections.map(ti => g.map[g.currentNode.row+1][ti]).filter(Boolean);
+}
+
+function enterNode(node) {
+  g.currentNode = node;
+  node.visited = true;
+  if (node.type === 'combat' || node.type === 'elite' || node.type === 'boss') {
+    startCombat(node.type);
+  } else if (node.type === 'rest') {
+    showRest();
+  } else if (node.type === 'shop') {
+    showShop();
+  }
+}
+
+// ====== Combat ======
+function startCombat(level) {
+  g.player.block = 0;
+  g.player.strength = 0;
+  g.hand = []; g.discard = [];
+  g.draw = shuffle([...g.player.deck]);
+
+  // Spawn enemies
+  let pool;
+  if (level==='boss') {
+    g.enemies = [makeEnemy('king')];
+  } else if (level==='elite') {
+    g.enemies = [makeEnemy(pickRand(['abomination','wraith']))];
+    if (Math.random()<0.3) g.enemies.push(makeEnemy('shade'));
+  } else {
+    const n = 1 + Math.floor(Math.random()*2);
+    g.enemies = [];
+    for (let i=0; i<n; i++) g.enemies.push(makeEnemy(pickRand(['ghoul','shade','cultist'])));
+  }
+  g.enemies.forEach(e=>setNextIntent(e));
+
+  showScreen('combat-screen');
+  startTurn();
+}
+
+function makeEnemy(type) {
+  const t = ENEMY_TYPES[type];
+  const hp = randInt(t.hp[0], t.hp[1]);
+  return { ...t, type, hp, maxHp:hp, block:0, weak:0, moveIdx:0, intent:null, id:Math.random() };
+}
+
+function setNextIntent(e) {
+  const move = e.moves[e.moveIdx % e.moves.length];
+  e.intent = move;
+  e.moveIdx++;
+}
+
+function startTurn() {
+  g.energy = g.maxEnergy;
+  g.player.block = 0;
+  drawCards(5);
+  renderCombat();
+}
+
+function drawCards(n) {
+  for (let i=0; i<n; i++) {
+    if (g.draw.length===0) {
+      if (g.discard.length===0) break;
+      g.draw = shuffle(g.discard); g.discard = [];
+    }
+    g.hand.push(g.draw.pop());
+  }
+}
+
+function shuffle(arr) {
+  for (let i=arr.length-1; i>0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+  return arr;
+}
+
+function renderCombat() {
+  // Player
+  const p = g.player;
+  document.getElementById('player-hp-fill').style.width = (p.hp/p.maxHp*100)+'%';
+  document.getElementById('player-hp-text').textContent = `${p.hp}/${p.maxHp}`;
+  document.getElementById('player-block').textContent = p.block>0 ? `🛡 ${p.block}` : '';
+  document.getElementById('energy').textContent = `${g.energy}/${g.maxEnergy}`;
+  document.getElementById('draw-count').textContent = g.draw.length;
+  document.getElementById('disc-count').textContent = g.discard.length;
+
+  // Enemies
+  const bf = document.getElementById('battlefield');
+  bf.innerHTML = '';
+  g.enemies.forEach((e,i) => {
+    const div = document.createElement('div');
+    div.className = 'combatant';
+    div.dataset.idx = i;
+    if (g.pendingTarget) div.classList.add('targetable');
+    let intentTxt = '';
+    if (e.intent.type==='atk') {
+      let dmg = e.intent.dmg + (e.strength||0);
+      if (e.weak>0) dmg = Math.floor(dmg*0.75);
+      intentTxt = `⚔ ${dmg}`;
+    }
+    else if (e.intent.type==='def') intentTxt = `🛡 ${e.intent.amt}`;
+    else if (e.intent.type==='buff') intentTxt = `✨ Empower`;
+    div.innerHTML = `
+      <div class="sprite">${e.sprite}</div>
+      <div class="name">${e.name}</div>
+      <div class="hp-bar">
+        <div class="hp-fill" style="width:${e.hp/e.maxHp*100}%"></div>
+        <div class="hp-text">${e.hp}/${e.maxHp}</div>
+      </div>
+      ${e.block>0?`<div class="block">🛡 ${e.block}</div>`:''}
+      ${e.weak>0?`<div class="block" style="color:#ff88ff;">Weak ${e.weak}</div>`:''}
+      <div class="intent">${intentTxt}</div>
+    `;
+    div.addEventListener('click',()=>{
+      if (g.pendingTarget) playCardOnTarget(g.pendingTarget, e);
+    });
+    bf.appendChild(div);
+  });
+
+  // Hand
+  const hand = document.getElementById('hand');
+  hand.innerHTML = '';
+  g.hand.forEach((cid, i) => {
+    const card = CARDS[cid];
+    const div = document.createElement('div');
+    div.className = `card ${card.type}`;
+    if (card.cost > g.energy) div.classList.add('unplayable');
+    if (g.pendingTarget === i) div.classList.add('selected');
+    div.innerHTML = `
+      <div class="card-cost">${card.cost}</div>
+      <div class="card-name">${card.name}</div>
+      <div class="card-art">${card.art}</div>
+      <div class="card-desc">${card.desc}</div>
+    `;
+    div.addEventListener('click',()=>tryPlayCard(i));
+    hand.appendChild(div);
+  });
+}
+
+function tryPlayCard(handIdx) {
+  const cid = g.hand[handIdx];
+  const card = CARDS[cid];
+  if (card.cost > g.energy) { sfx(150,0.1,'sawtooth'); return; }
+  // Needs target?
+  const needsTarget = card.type==='attack' && !card.aoe;
+  if (needsTarget) {
+    if (g.enemies.length===1) {
+      playCardOnTarget(handIdx, g.enemies[0]);
+    } else {
+      g.pendingTarget = handIdx;
+      renderCombat();
+    }
+  } else {
+    playCardOnTarget(handIdx, null);
+  }
+}
+
+function playCardOnTarget(handIdx, target) {
+  const cid = g.hand[handIdx];
+  const card = CARDS[cid];
+  g.energy -= card.cost;
+  card.effect(g, target);
+  if (target) {
+    const el = document.querySelector(`.combatant[data-idx="${g.enemies.indexOf(target)}"]`);
+    if (el) { el.classList.add('hit'); setTimeout(()=>el.classList.remove('hit'),300); }
+  }
+  g.hand.splice(handIdx,1);
+  g.discard.push(cid);
+  g.pendingTarget = null;
+  sfx(card.type==='attack'?220:330, 0.12, 'square');
+
+  // Cleanup dead enemies
+  g.enemies = g.enemies.filter(e=>{
+    if (e.hp<=0) { sfx(80,0.3,'sawtooth'); return false; }
+    return true;
+  });
+
+  renderCombat();
+
+  if (g.enemies.length===0) {
+    setTimeout(()=>winCombat(),400);
+  }
+}
+
+function dealDamage(target, amt) {
+  if (!target || target.hp<=0) return;
+  let dmg = amt + g.player.strength;
+  if (target.weak>0) dmg = Math.floor(dmg*0.75);
+  if (target.block>0) {
+    const absorbed = Math.min(target.block, dmg);
+    target.block -= absorbed;
+    dmg -= absorbed;
+  }
+  target.hp -= dmg;
+  floatText(target, '-'+amt, '#ff4466');
+}
+
+function heal(amt) {
+  g.player.hp = Math.min(g.player.maxHp, g.player.hp+amt);
+  log(`Healed ${amt}.`);
+}
+
+function floatText(target, txt, color) {
+  const idx = g.enemies.indexOf(target);
+  const el = document.querySelector(`.combatant[data-idx="${idx}"]`);
+  if (!el) return;
+  const ft = document.createElement('div');
+  ft.className = 'floating-text';
+  ft.textContent = txt;
+  ft.style.color = color;
+  const rect = el.getBoundingClientRect();
+  const parentRect = document.getElementById('combat-top').getBoundingClientRect();
+  ft.style.left = (rect.left - parentRect.left + rect.width/2) + 'px';
+  ft.style.top  = (rect.top - parentRect.top + 10) + 'px';
+  document.getElementById('combat-top').appendChild(ft);
+  setTimeout(()=>ft.remove(),1000);
+}
+
+function endTurn() {
+  // discard hand
+  g.discard.push(...g.hand);
+  g.hand = [];
+  g.pendingTarget = null;
+
+  // Enemy turns
+  let delay = 200;
+  g.enemies.forEach(e => {
+    setTimeout(()=>enemyAct(e), delay);
+    delay += 500;
+  });
+  setTimeout(()=>{
+    // weak decrement
+    g.enemies.forEach(e=>{ if(e.weak>0) e.weak--; });
+    if (g.player.hp<=0) {
+      gameOver(false);
+    } else {
+      g.enemies.forEach(e=>setNextIntent(e));
+      startTurn();
+    }
+  }, delay + 200);
+}
+
+function enemyAct(e) {
+  if (e.hp<=0) return;
+  const m = e.intent;
+  if (m.type==='atk') {
+    let dmg = m.dmg + (e.strength||0);
+    if (e.weak>0) dmg = Math.floor(dmg*0.75);
+    let actualDmg = dmg;
+    if (g.player.block>0) {
+      const a = Math.min(g.player.block, actualDmg);
+      g.player.block -= a;
+      actualDmg -= a;
+    }
+    g.player.hp -= actualDmg;
+    sfx(180,0.15,'sawtooth');
+    // player shake
+    const ph = document.getElementById('combat-top');
+    ph.classList.add('hit');
+    setTimeout(()=>ph.classList.remove('hit'),300);
+  } else if (m.type==='def') {
+    e.block += m.amt;
+  } else if (m.type==='buff') {
+    e.strength = (e.strength||0) + 2;
+  }
+  renderCombat();
+}
+
+function log(txt) {
+  const l = document.getElementById('log');
+  const d = document.createElement('div');
+  d.textContent = '› ' + txt;
+  l.appendChild(d);
+  l.scrollTop = l.scrollHeight;
+  while (l.children.length>6) l.removeChild(l.firstChild);
+}
+
+// ====== Win / Reward ======
+function winCombat() {
+  if (g.currentNode.type === 'boss') {
+    gameOver(true);
+    return;
+  }
+  const gold = g.currentNode.type==='elite' ? randInt(25,40) : randInt(10,20);
+  g.player.gold += gold;
+
+  // Card choices
+  const allCards = Object.keys(CARDS).filter(c=>!['strike','defend'].includes(c));
+  const choices = [];
+  while (choices.length<3) {
+    const c = pickRand(allCards);
+    if (!choices.includes(c)) choices.push(c);
+  }
+
+  showOverlay(`
+    <h2>Victory</h2>
+    <p>You found <b style="color:#ffd700;">${gold} gold</b>.</p>
+    <p style="margin:15px 0;">Choose a card to add to your deck:</p>
+    <div class="card-choices">
+      ${choices.map(cid=>{
+        const c=CARDS[cid];
+        return `<div class="card ${c.type}" data-card="${cid}">
+          <div class="card-cost">${c.cost}</div>
+          <div class="card-name">${c.name}</div>
+          <div class="card-art">${c.art}</div>
+          <div class="card-desc">${c.desc}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <button class="btn" onclick="skipReward()">Skip</button>
+  `);
+  document.querySelectorAll('#overlay .card').forEach(el=>{
+    el.addEventListener('click',()=>{
+      g.player.deck.push(el.dataset.card);
+      sfx(440,0.2,'triangle');
+      hideOverlay();
+      renderMap();
+      showScreen('map-screen');
+    });
+  });
+}
+
+function skipReward() {
+  hideOverlay();
+  renderMap();
+  showScreen('map-screen');
+}
+
+function showRest() {
+  showOverlay(`
+    <h2>Bonfire</h2>
+    <p>The flames whisper of healing... and forbidden power.</p>
+    <div style="display:flex;gap:15px;justify-content:center;margin-top:25px;">
+      <button class="btn" onclick="rest('heal')">Rest (Heal 30 HP)</button>
+      <button class="btn" onclick="rest('upgrade')">Sacrifice (+8 Max HP)</button>
+    </div>
+  `);
+}
+
+function rest(choice) {
+  if (choice==='heal') {
+    g.player.hp = Math.min(g.player.maxHp, g.player.hp+30);
+  } else {
+    g.player.maxHp += 8;
+    g.player.hp += 8;
+  }
+  sfx(330,0.3,'sine');
+  hideOverlay();
+  renderMap();
+}
+
+function showShop() {
+  const allCards = Object.keys(CARDS).filter(c=>!['strike','defend'].includes(c));
+  const stock = [];
+  while (stock.length<4) {
+    const c = pickRand(allCards);
+    if (!stock.find(s=>s.id===c)) stock.push({ id:c, price:randInt(40,75) });
+  }
+  let html = `<h2>Cursed Bazaar</h2><p>Gold: <b style="color:#ffd700;">${g.player.gold}</b></p>
+    <div class="card-choices">`;
+  stock.forEach((s,i)=>{
+    const c = CARDS[s.id];
+    html += `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+      <div class="card ${c.type}">
+        <div class="card-cost">${c.cost}</div>
+        <div class="card-name">${c.name}</div>
+        <div class="card-art">${c.art}</div>
+        <div class="card-desc">${c.desc}</div>
+      </div>
+      <button class="btn" data-buy="${i}" ${g.player.gold<s.price?'disabled':''}>${s.price} gold</button>
+    </div>`;
+  });
+  html += `</div><button class="btn" onclick="leaveShop()">Leave</button>`;
+  showOverlay(html);
+  document.querySelectorAll('[data-buy]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const i = +b.dataset.buy;
+      const s = stock[i];
+      if (g.player.gold>=s.price) {
+        g.player.gold -= s.price;
+        g.player.deck.push(s.id);
+        sfx(660,0.2,'triangle');
+        b.disabled = true;
+        b.textContent = 'SOLD';
+        document.querySelector('#overlay h2').nextElementSibling.innerHTML = `Gold: <b style="color:#ffd700;">${g.player.gold}</b>`;
+      }
+    });
+  });
+}
+
+function leaveShop() {
+  hideOverlay();
+  renderMap();
+}
+
+function gameOver(won) {
+  showOverlay(`
+    <h2 style="color:${won?'#ffd700':'#c8102e'};">${won?'The King Falls':'You Have Perished'}</h2>
+    <p>${won?'The Wraith King crumbles to ash. The crimson moon fades. For now, you are free.':'The shadows claim another soul. Your deck scatters in the wind.'}</p>
+    <p style="margin:20px 0;">Final Deck Size: <b>${g.player.deck.length}</b></p>
+    <button class="btn" onclick="hideOverlay();showScreen('start')">Return to Menu</button>
+  `);
+}
+
+function showOverlay(html) {
+  document.getElementById('overlay-content').innerHTML = html;
+  document.getElementById('overlay').classList.add('active');
+}
+function hideOverlay() {
+  document.getElementById('overlay').classList.remove('active');
+}
+
+// ====== Utils ======
+function randInt(a,b){ return a+Math.floor(Math.random()*(b-a+1)); }
+function pickRand(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+window.addEventListener('resize',()=>{ if(document.getElementById('map-screen').classList.contains('active')) renderMap(); });
+</script>
+</body>
+</html>

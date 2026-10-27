@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ninja Clash: Martial Arts</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a202c;
+            touch-action: none;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            display: block;
+            background: linear-gradient(to bottom, #87CEEB 0%, #87CEEB 60%, #8B4513 60%, #654321 100%);
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            max-width: 100%;
+            max-height: 100%;
+        }
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .health-bar-container {
+            width: 40%;
+            height: 30px;
+            background-color: #4a5568;
+            border: 3px solid white;
+            position: relative;
+        }
+        .health-bar {
+            height: 100%;
+            background-color: #48bb78;
+            transition: width 0.2s ease-out;
+            width: 100%;
+        }
+        .pointer-events-auto {
+            pointer-events: auto;
+        }
+        
+        /* Mobile Controls */
+        #mobile-controls {
+            display: none;
+        }
+        @media (max-width: 768px) {
+            #mobile-controls {
+                display: flex;
+            }
+            .ctrl-btn {
+                background: rgba(255, 255, 255, 0.3);
+                border: 2px solid white;
+                border-radius: 50%;
+                width: 60px;
+                height: 60px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                color: white;
+                font-weight: bold;
+                user-select: none;
+                touch-action: manipulation;
+            }
+            .ctrl-btn:active {
+                background: rgba(255, 255, 255, 0.6);
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI Layer -->
+    <div id="ui" class="ui-layer flex flex-col justify-between p-4">
+        <!-- HUD -->
+        <div id="hud" class="flex justify-between items-start w-full hidden">
+            <div class="flex flex-col items-start w-1/2">
+                <span class="text-white font-bold text-xl drop-shadow-md mb-1 text-blue-400">Player (Ninja)</span>
+                <div class="health-bar-container w-full max-w-[300px]">
+                    <div id="playerHealth" class="health-bar" style="background-color: #3b82f6;"></div>
+                </div>
+            </div>
+            <div id="timer" class="text-white text-4xl font-bold drop-shadow-lg mx-4">60</div>
+            <div class="flex flex-col items-end w-1/2">
+                <span class="text-white font-bold text-xl drop-shadow-md mb-1 text-red-500">Enemy (Brawler)</span>
+                <div class="health-bar-container w-full max-w-[300px] flex justify-end">
+                    <div id="enemyHealth" class="health-bar" style="background-color: #ef4444;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Screens -->
+        <div id="startScreen" class="absolute inset-0 flex flex-col justify-center items-center pointer-events-auto bg-black bg-opacity-80">
+            <h1 class="text-6xl text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-red-500 font-extrabold mb-4 text-center shadow-lg">SHINOBI CLASH</h1>
+            <p class="text-white mb-2">Desktop: A/D to Move, W to Jump</p>
+            <p class="text-white mb-6">Attacks: J (Boxing), K (Karate), L (Jutsu)</p>
+            <button id="startBtn" class="px-8 py-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg text-2xl transition transform hover:scale-105 shadow-[0_0_15px_rgba(249,115,22,0.7)]">FIGHT!</button>
+        </div>
+
+        <div id="gameOverScreen" class="absolute inset-0 flex flex-col justify-center items-center pointer-events-auto bg-black bg-opacity-80 hidden">
+            <h1 id="winnerText" class="text-6xl text-white font-extrabold mb-8 drop-shadow-lg text-center"></h1>
+            <button id="restartBtn" class="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-2xl transition transform hover:scale-105 shadow-[0_0_15px_rgba(37,99,235,0.7)]">REMATCH</button>
+        </div>
+
+        <!-- Mobile Controls -->
+        <div id="mobile-controls" class="w-full flex justify-between pointer-events-auto pb-4 px-2">
+            <div class="flex gap-2">
+                <div class="ctrl-btn" id="btn-left">◀</div>
+                <div class="ctrl-btn" id="btn-right">▶</div>
+            </div>
+            <div class="flex gap-2 flex-wrap max-w-[150px] justify-end">
+                <div class="ctrl-btn bg-blue-500/50" id="btn-jump">▲</div>
+                <div class="ctrl-btn bg-red-500/50 text-xs" id="btn-punch">Box</div>
+                <div class="ctrl-btn bg-green-500/50 text-xs" id="btn-kick">Judo</div>
+                <div class="ctrl-btn bg-purple-500/50 text-xs" id="btn-jutsu">Jutsu</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // UI Elements
+    const startScreen = document.getElementById('startScreen');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const hud = document.getElementById('hud');
+    const startBtn = document.getElementById('startBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const playerHealthEl = document.getElementById('playerHealth');
+    const enemyHealthEl = document.getElementById('enemyHealth');
+    const timerEl = document.getElementById('timer');
+    const winnerText = document.getElementById('winnerText');
+
+    // Audio Context for simple sound effects
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    function playSound(type) {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        if (type === 'hit') {
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
+            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.1);
+        } else if (type === 'jutsu') {
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(400, audioCtx.currentTime);
+            oscillator.frequency.linearRampToValueAtTime(800, audioCtx.currentTime + 0.2);
+            gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.2);
+        }
+    }
+
+    // Game Config
+    let CANVAS_WIDTH = 1024;
+    let CANVAS_HEIGHT = 576;
+    const gravity = 0.7;
+    
+    function resizeCanvas() {
+        const container = document.getElementById('game-container');
+        const aspect = CANVAS_WIDTH / CANVAS_HEIGHT;
+        let w = container.clientWidth;
+        let h = container.clientHeight;
+        
+        if (w / h > aspect) {
+            w = h * aspect;
+        } else {
+            h = w / aspect;
+        }
+        
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
+        canvas.style.width = `${w}px`;
+        canvas.style.height = `${h}px`;
+    }
+    
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    const keys = {
+        a: { pressed: false },
+        d: { pressed: false },
+        w: { pressed: false },
+        ArrowLeft: { pressed: false },
+        ArrowRight: { pressed: false },
+        ArrowUp: { pressed: false }
+    };
+
+    let gameState = 'START'; // START, PLAY, OVER
+    let timer = 60;
+    let timerId;
+    let animationId;
+    let particles = [];
+    let projectiles = [];
+
+    class Particle {
+        constructor({position, velocity, color}) {
+            this.position = position;
+            this.velocity = velocity;
+            this.color = color;
+            this.alpha = 1;
+            this.life = 0;
+        }
+        draw() {
+            ctx.save();
+            ctx.globalAlpha = this.alpha;
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.position.x, this.position.y, 4, 4);
+            ctx.restore();
+        }
+        update() {
+            this.draw();
+            this.position.x += this.velocity.x;
+            this.position.y += this.velocity.y;
+            this.alpha -= 0.02;
+        }
+    }
+
+    class Projectile {
+        constructor({position, velocity, owner}) {
+            this.position = position;
+            this.velocity = velocity;
+            this.width = 40;
+            this.height = 20;
+            this.owner = owner;
+            this.active = true;
+        }
+        draw() {
+            ctx.fillStyle = '#60a5fa'; // Blue jutsu
+            ctx.beginPath();
+            ctx.ellipse(this.position.x + this.width/2, this.position.y + this.height/2, this.width/2, this.height/2, 0, 0, Math.PI*2);
+            ctx.fill();
+            
+            // Trail
+            particles.push(new Particle({
+                position: {x: this.position.x + (this.velocity.x > 0 ? 0 : this.width), y: this.position.y + this.height/2 + (Math.random()-0.5)*10},
+                velocity: {x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2},
+                color: '#93c5fd'
+            }));
+        }
+        update() {
+            if(!this.active) return;
+            this.draw();
+            this.position.x += this.velocity.x;
+            if(this.position.x > CANVAS_WIDTH + 100 || this.position.x < -100) this.active = false;
+        }
+    }
+
+    class Fighter {
+        constructor({ position, velocity, color, isPlayer = false }) {
+            this.position = position;
+            this.velocity = velocity;
+            this.width = 50;
+            this.height = 150;
+            this.color = color;
+            this.lastKey;
+            this.attackBox = {
+                position: { x: this.position.x, y: this.position.y },
+                width: 100,
+                height: 50
+            };
+            this.isAttacking = false;
+            this.attackType = ''; // 'punch', 'kick', 'jutsu'
+            this.health = 100;
+            this.isPlayer = isPlayer;
+            this.facingRight = isPlayer;
+            this.cooldown = 0;
+        }
+
+        draw() {
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(this.position.x + this.width/2, this.position.y + this.height, 30, 10, 0, 0, Math.PI*2);
+            ctx.fill();
+
+            // Body
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.position.x, this.position.y, this.width, this.height);
+            
+            // Head (Headband for player)
+            ctx.fillStyle = '#fca5a5'; // Skin tone
+            ctx.fillRect(this.position.x + 5, this.position.y - 40, 40, 40);
+            if(this.isPlayer) {
+                ctx.fillStyle = '#3b82f6'; // Blue headband
+                ctx.fillRect(this.position.x + 5, this.position.y - 35, 40, 10);
+            }
+
+            // Attack Box Visualization (Debug/Visual effect)
+            if (this.isAttacking && this.attackType !== 'jutsu') {
+                ctx.fillStyle = this.attackType === 'punch' ? 'rgba(239, 68, 68, 0.5)' : 'rgba(34, 197, 94, 0.5)';
+                ctx.fillRect(
+                    this.attackBox.position.x,
+                    this.attackBox.position.y,
+                    this.attackBox.width,
+                    this.attackBox.height
+                );
+            }
+        }
+
+        update() {
+            this.draw();
+            if(this.cooldown > 0) this.cooldown--;
+
+            // Determine facing direction
+            if (this.velocity.x > 0) this.facingRight = true;
+            else if (this.velocity.x < 0) this.facingRight = false;
+
+            // Attack box positioning
+            this.attackBox.position.x = this.facingRight ? this.position.x + this.width : this.position.x - this.attackBox.width;
+            this.attackBox.position.y = this.position.y + 20;
+
+            // Movement
+            this.position.x += this.velocity.x;
+            this.position.y += this.velocity.y;
+
+            // Boundaries
+            if (this.position.x < 0) this.position.x = 0;
+            if (this.position.x + this.width > CANVAS_WIDTH) this.position.x = CANVAS_WIDTH - this.width;
+
+            // Gravity
+            if (this.position.y + this.height + this.velocity.y >= CANVAS_HEIGHT - 50) { // Ground level offset
+                this.velocity.y = 0;
+                this.position.y = CANVAS_HEIGHT - 50 - this.height;
+            } else {
+                this.velocity.y += gravity;
+            }
+        }
+
+        attack(type) {
+            if(this.cooldown > 0) return;
+            this.isAttacking = true;
+            this.attackType = type;
+            
+            if (type === 'punch') { // Boxing style - fast, short
+                this.attackBox.width = 60;
+                this.cooldown = 15;
+            } else if (type === 'kick') { // Judo/Karate style - longer, wider
+                this.attackBox.width = 120;
+                this.attackBox.height = 80;
+                this.attackBox.position.y = this.position.y + 50;
+                this.cooldown = 30;
+            } else if (type === 'jutsu') {
+                this.cooldown = 45;
+                playSound('jutsu');
+                projectiles.push(new Projectile({
+                    position: { x: this.facingRight ? this.position.x + this.width : this.position.x - 40, y: this.position.y + 40 },
+                    velocity: { x: this.facingRight ? 15 : -15, y: 0 },
+                    owner: this
+                }));
+            }
+
+            setTimeout(() => {
+                this.isAttacking = false;
+                // Reset attack box
+                this.attackBox.height = 50;
+            }, 100);
+        }
+
+        takeHit(damage) {
+            this.health -= damage;
+            if (this.health < 0) this.health = 0;
+            playSound('hit');
+            
+            // Hit particles
+            for(let i=0; i<10; i++){
+                particles.push(new Particle({
+                    position: {x: this.position.x + this.width/2, y: this.position.y + this.height/2},
+                    velocity: {x: (Math.random()-0.5)*10, y: (Math.random()-0.5)*10},
+                    color: '#ef4444'
+                }));
+            }
+        }
+    }
+
+    let player;
+    let enemy;
+
+    function initGame() {
+        player = new Fighter({
+            position: { x: 150, y: 0 },
+            velocity: { x: 0, y: 0 },
+            color: '#1e3a8a', // Dark blue
+            isPlayer: true
+        });
+
+        enemy = new Fighter({
+            position: { x: 800, y: 0 },
+            velocity: { x: 0, y: 0 },
+            color: '#7f1d1d', // Dark red
+            isPlayer: false
+        });
+        
+        enemy.facingRight = false;
+        particles = [];
+        projectiles = [];
+        timer = 60;
+        playerHealthEl.style.width = '100%';
+        enemyHealthEl.style.width = '100%';
+        timerEl.innerHTML = timer;
+    }
+
+    function rectangularCollision({ rectangle1, rectangle2 }) {
+        return (
+            rectangle1.position.x + rectangle1.width >= rectangle2.position.x &&
+            rectangle1.position.x <= rectangle2.position.x + rectangle2.width &&
+            rectangle1.position.y + rectangle1.height >= rectangle2.position.y &&
+            rectangle1.position.y <= rectangle2.position.y + rectangle2.height
+        );
+    }
+
+    function determineWinner({ player, enemy, timerId }) {
+        clearTimeout(timerId);
+        gameState = 'OVER';
+        gameOverScreen.classList.remove('hidden');
+        hud.classList.add('hidden');
+        
+        if (player.health === enemy.health) {
+            winnerText.innerHTML = 'DRAW';
+        } else if (player.health > enemy.health) {
+            winnerText.innerHTML = 'NINJA WINS';
+            winnerText.className = "text-6xl font-extrabold mb-8 drop-shadow-lg text-center text-blue-400";
+        } else {
+            winnerText.innerHTML = 'BRAWLER WINS';
+            winnerText.className = "text-6xl font-extrabold mb-8 drop-shadow-lg text-center text-red-500";
+        }
+    }
+
+    function decreaseTimer() {
+        if(gameState !== 'PLAY') return;
+        if (timer > 0) {
+            timerId = setTimeout(decreaseTimer, 1000);
+            timer--;
+            timerEl.innerHTML = timer;
+        }
+        if (timer === 0) {
+            determineWinner({ player, enemy, timerId });
+        }
+    }
+
+    function animate() {
+        if(gameState === 'PLAY') {
+            animationId = window.requestAnimationFrame(animate);
+        }
+        
+        // Background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.15)'; // slight trail effect
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Ground line
+        ctx.fillStyle = '#4a5568';
+        ctx.fillRect(0, CANVAS_HEIGHT - 50, CANVAS_WIDTH, 50);
+
+        player.update();
+        enemy.update();
+
+        // Handle Particles
+        for(let i = particles.length - 1; i >= 0; i--) {
+            particles[i].update();
+            if(particles[i].alpha <= 0) particles.splice(i, 1);
+        }
+
+        // Handle Projectiles & Collisions
+        for(let i = projectiles.length - 1; i >= 0; i--) {
+            let p = projectiles[i];
+            p.update();
+            if(!p.active) {
+                projectiles.splice(i, 1);
+                continue;
+            }
+            
+            // Check projectile collision with enemy
+            if(p.owner === player && rectangularCollision({
+                rectangle1: {position: p.position, width: p.width, height: p.height},
+                rectangle2: enemy
+            })) {
+                enemy.takeHit(10);
+                enemyHealthEl.style.width = enemy.health + '%';
+                p.active = false;
+            }
+        }
+
+        // Player Movement
+        player.velocity.x = 0;
+        if ((keys.a.pressed || keys.ArrowLeft.pressed) && player.lastKey === 'a') {
+            player.velocity.x = -7;
+        } else if ((keys.d.pressed || keys.ArrowRight.pressed) && player.lastKey === 'd') {
+            player.velocity.x = 7;
+        }
+
+        // Enemy AI (Simple)
+        enemy.velocity.x = 0;
+        let dist = player.position.x - enemy.position.x;
+        if(dist > 120) {
+            enemy.velocity.x = 3;
+            enemy.facingRight = true;
+        } else if (dist < -120) {
+            enemy.velocity.x = -3;
+            enemy.facingRight = false;
+        } else {
+            // Close enough, randomly attack
+            if(Math.random() < 0.05 && enemy.cooldown === 0) {
+                let attacks = ['punch', 'kick'];
+                enemy.attack(attacks[Math.floor(Math.random() * attacks.length)]);
+            }
+        }
+
+        // Detect Melee Collision (Player attacks Enemy)
+        if (
+            rectangularCollision({
+                rectangle1: player.attackBox,
+                rectangle2: enemy
+            }) &&
+            player.isAttacking &&
+            player.attackType !== 'jutsu' // Jutsu handled separately
+        ) {
+            player.isAttacking = false; // Prevent multiple hits per frame
+            let dmg = player.attackType === 'punch' ? 5 : 12;
+            enemy.takeHit(dmg);
+            enemyHealthEl.style.width = enemy.health + '%';
+        }
+
+        // Detect Melee Collision (Enemy attacks Player)
+        if (
+            rectangularCollision({
+                rectangle1: enemy.attackBox,
+                rectangle2: player
+            }) &&
+            enemy.isAttacking
+        ) {
+            enemy.isAttacking = false;
+            let dmg = enemy.attackType === 'punch' ? 5 : 10;
+            player.takeHit(dmg);
+            playerHealthEl.style.width = player.health + '%';
+        }
+
+        // End game based on health
+        if (enemy.health <= 0 || player.health <= 0) {
+            determineWinner({ player, enemy, timerId });
+        }
+    }
+
+    // Input Listeners (Keyboard)
+    window.addEventListener('keydown', (event) => {
+        if(gameState !== 'PLAY') return;
+        switch (event.key.toLowerCase()) {
+            case 'd':
+            case 'arrowright':
+                keys.d.pressed = true;
+                player.lastKey = 'd';
+                break;
+            case 'a':
+            case 'arrowleft':
+                keys.a.pressed = true;
+                player.lastKey = 'a';
+                break;
+            case 'w':
+            case 'arrowup':
+                if (player.velocity.y === 0) player.velocity.y = -15;
+                break;
+            case 'j':
+                player.attack('punch');
+                break;
+            case 'k':
+                player.attack('kick');
+                break;
+            case 'l':
+                player.attack('jutsu');
+                break;
+        }
+    });
+
+    window.addEventListener('keyup', (event) => {
+        switch (event.key.toLowerCase()) {
+            case 'd':
+            case 'arrowright':
+                keys.d.pressed = false;
+                break;
+            case 'a':
+            case 'arrowleft':
+                keys.a.pressed = false;
+                break;
+        }
+    });
+
+    // Touch Controls setup
+    const addTouch = (id, keyAction, type='press') => {
+        const el = document.getElementById(id);
+        if(!el) return;
+        const trigger = (e) => {
+            e.preventDefault();
+            if(gameState !== 'PLAY') return;
+            if(type === 'press') {
+                 if(keyAction === 'left') { keys.a.pressed = true; player.lastKey = 'a'; }
+                 if(keyAction === 'right') { keys.d.pressed = true; player.lastKey = 'd'; }
+            } else if (type === 'release') {
+                 if(keyAction === 'left') keys.a.pressed = false;
+                 if(keyAction === 'right') keys.d.pressed = false;
+            } else if (type === 'tap') {
+                if(keyAction === 'jump' && player.velocity.y === 0) player.velocity.y = -15;
+                if(keyAction === 'punch') player.attack('punch');
+                if(keyAction === 'kick') player.attack('kick');
+                if(keyAction === 'jutsu') player.attack('jutsu');
+            }
+        };
+        
+        if(type === 'press') {
+            el.addEventListener('touchstart', trigger, {passive: false});
+            el.addEventListener('mousedown', trigger, {passive: false});
+        } else if (type === 'release') {
+            el.addEventListener('touchend', trigger, {passive: false});
+            el.addEventListener('mouseup', trigger, {passive: false});
+            el.addEventListener('mouseleave', trigger, {passive: false});
+        } else if (type === 'tap') {
+            el.addEventListener('touchstart', trigger, {passive: false});
+            el.addEventListener('mousedown', trigger, {passive: false});
+        }
+    }
+
+    addTouch('btn-left', 'left', 'press');
+    addTouch('btn-left', 'left', 'release');
+    addTouch('btn-right', 'right', 'press');
+    addTouch('btn-right', 'right', 'release');
+    addTouch('btn-jump', 'jump', 'tap');
+    addTouch('btn-punch', 'punch', 'tap');
+    addTouch('btn-kick', 'kick', 'tap');
+    addTouch('btn-jutsu', 'jutsu', 'tap');
+
+
+    // Game State Management
+    function startGame() {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        startScreen.classList.add('hidden');
+        gameOverScreen.classList.add('hidden');
+        hud.classList.remove('hidden');
+        initGame();
+        gameState = 'PLAY';
+        decreaseTimer();
+        animate();
+    }
+
+    startBtn.addEventListener('click', startGame);
+    restartBtn.addEventListener('click', startGame);
+
+    // Initial draw to show background before start
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+</script>
+</body>
+</html>

@@ -1,0 +1,2062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How a Hacker Thinks: Mindset, Recon & Exploitation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --green: #00ff41;
+    --dark-green: #00cc33;
+    --dim-green: #00802080;
+    --red: #ff0040;
+    --blue: #00bfff;
+    --yellow: #ffdd00;
+    --cyan: #00ffff;
+    --bg: #0a0a0a;
+    --panel: #0d1117;
+    --border: #1a3a1a;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--green);
+    font-family: 'Fira Code', monospace;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  /* Matrix Rain Background */
+  #matrix-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+    opacity: 0.15;
+  }
+
+  /* Scanline Effect */
+  .scanlines {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 255, 65, 0.015) 2px,
+      rgba(0, 255, 65, 0.015) 4px
+    );
+  }
+
+  .game-container {
+    position: relative;
+    z-index: 2;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 30px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 30px;
+  }
+
+  .header h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 2.5em;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    background: linear-gradient(90deg, var(--green), var(--cyan), var(--green));
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 3s linear infinite;
+    text-shadow: 0 0 30px rgba(0, 255, 65, 0.3);
+  }
+
+  @keyframes shimmer {
+    to { background-position: 200% center; }
+  }
+
+  .header .subtitle {
+    color: var(--dim-green);
+    font-size: 0.9em;
+    margin-top: 10px;
+    letter-spacing: 2px;
+  }
+
+  /* Progress Bar */
+  .progress-container {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 15px 20px;
+    margin-bottom: 25px;
+  }
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .progress-label {
+    font-size: 0.85em;
+    color: var(--cyan);
+    font-weight: 600;
+  }
+
+  .progress-stats {
+    display: flex;
+    gap: 20px;
+    font-size: 0.8em;
+  }
+
+  .stat {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .stat-icon { font-size: 1.1em; }
+  .stat-value { color: var(--yellow); font-weight: 600; }
+
+  .progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #1a1a2e;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green), var(--cyan));
+    border-radius: 4px;
+    transition: width 0.5s ease;
+    position: relative;
+  }
+
+  .progress-fill::after {
+    content: '';
+    position: absolute;
+    right: 0; top: 0;
+    width: 20px; height: 100%;
+    background: rgba(255, 255, 255, 0.3);
+    animation: pulse-bar 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse-bar {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+  }
+
+  .phase-indicators {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    padding: 0 5px;
+  }
+
+  .phase-dot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+
+  .phase-dot .dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: transparent;
+    transition: all 0.3s;
+  }
+
+  .phase-dot.active .dot {
+    border-color: var(--green);
+    background: var(--green);
+    box-shadow: 0 0 10px var(--green);
+  }
+
+  .phase-dot.completed .dot {
+    border-color: var(--cyan);
+    background: var(--cyan);
+  }
+
+  .phase-dot .phase-name {
+    font-size: 0.7em;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .phase-dot.active .phase-name { color: var(--green); }
+  .phase-dot.completed .phase-name { color: var(--cyan); }
+
+  /* Main Content Area */
+  .main-area {
+    display: grid;
+    grid-template-columns: 1fr 350px;
+    gap: 20px;
+  }
+
+  @media (max-width: 900px) {
+    .main-area { grid-template-columns: 1fr; }
+  }
+
+  /* Terminal Panel */
+  .terminal {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 0 30px rgba(0, 255, 65, 0.05);
+  }
+
+  .terminal-header {
+    background: linear-gradient(90deg, #1a1a2e, #16213e);
+    padding: 10px 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .terminal-dot {
+    width: 12px; height: 12px;
+    border-radius: 50;
+    border-radius: 50%;
+  }
+
+  .terminal-dot.red { background: #ff5f56; }
+  .terminal-dot.yellow { background: #ffbd2e; }
+  .terminal-dot.green { background: #27c93f; }
+
+  .terminal-title {
+    margin-left: 10px;
+    font-size: 0.8em;
+    color: #888;
+    letter-spacing: 1px;
+  }
+
+  .terminal-body {
+    padding: 20px;
+    min-height: 400px;
+    max-height: 600px;
+    overflow-y: auto;
+  }
+
+  .terminal-body::-webkit-scrollbar { width: 6px; }
+  .terminal-body::-webkit-scrollbar-track { background: var(--panel); }
+  .terminal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .terminal-line {
+    margin-bottom: 8px;
+    line-height: 1.6;
+    opacity: 0;
+    animation: fadeInLine 0.3s ease forwards;
+  }
+
+  @keyframes fadeInLine {
+    to { opacity: 1; }
+  }
+
+  .terminal-line .prompt {
+    color: var(--cyan);
+    font-weight: 600;
+  }
+
+  .terminal-line .command {
+    color: var(--yellow);
+  }
+
+  .terminal-line .output {
+    color: #ccc;
+  }
+
+  .terminal-line .success {
+    color: var(--green);
+    font-weight: 600;
+  }
+
+  .terminal-line .error {
+    color: var(--red);
+    font-weight: 600;
+  }
+
+  .terminal-line .info {
+    color: var(--blue);
+  }
+
+  .terminal-line .warning {
+    color: var(--yellow);
+  }
+
+  .typing-cursor {
+    display: inline-block;
+    width: 8px;
+    height: 16px;
+    background: var(--green);
+    animation: blink 1s step-end infinite;
+    vertical-align: middle;
+    margin-left: 2px;
+  }
+
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  /* Side Panel */
+  .side-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .panel-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 15px;
+    transition: all 0.3s;
+  }
+
+  .panel-card:hover {
+    border-color: var(--dim-green);
+    box-shadow: 0 0 15px rgba(0, 255, 65, 0.05);
+  }
+
+  .panel-card h3 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.85em;
+    color: var(--cyan);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Score Card */
+  .score-display {
+    text-align: center;
+    padding: 20px;
+  }
+
+  .score-number {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 3em;
+    font-weight: 900;
+    color: var(--yellow);
+    text-shadow: 0 0 20px rgba(255, 221, 0, 0.3);
+  }
+
+  .score-label {
+    font-size: 0.75em;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-top: 5px;
+  }
+
+  /* Skills Grid */
+  .skills-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .skill-item {
+    background: #1a1a2e;
+    border: 1px solid #2a2a3e;
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+    transition: all 0.3s;
+  }
+
+  .skill-item:hover {
+    border-color: var(--green);
+    transform: translateY(-2px);
+  }
+
+  .skill-icon { font-size: 1.5em; margin-bottom: 5px; }
+  .skill-name { font-size: 0.7em; color: #888; text-transform: uppercase; }
+  .skill-level {
+    font-size: 0.8em;
+    color: var(--green);
+    font-weight: 600;
+    margin-top: 3px;
+  }
+
+  /* Challenge Area */
+  .challenge-area {
+    margin-top: 20px;
+    padding: 20px;
+    background: #1a1a2e;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+
+  .challenge-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.1em;
+    color: var(--cyan);
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .challenge-description {
+    color: #aaa;
+    font-size: 0.9em;
+    line-height: 1.8;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    border-left: 3px solid var(--green);
+  }
+
+  /* Interactive Elements */
+  .input-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+
+  .terminal-input {
+    flex: 1;
+    background: #0a0a0a;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 15px;
+    color: var(--green);
+    font-family: 'Fira Code', monospace;
+    font-size: 0.9em;
+    outline: none;
+    transition: all 0.3s;
+  }
+
+  .terminal-input:focus {
+    border-color: var(--green);
+    box-shadow: 0 0 10px rgba(0, 255, 65, 0.1);
+  }
+
+  .terminal-input::placeholder {
+    color: #444;
+  }
+
+  .btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.85em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--green), var(--dark-green));
+    color: #000;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(0, 255, 65, 0.3);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--green);
+    color: var(--green);
+  }
+
+  .btn-secondary:hover {
+    background: rgba(0, 255, 65, 0.1);
+  }
+
+  .btn-danger {
+    background: linear-gradient(135deg, var(--red), #cc0033);
+    color: #fff;
+  }
+
+  .btn-danger:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(255, 0, 64, 0.3);
+  }
+
+  .btn:active { transform: translateY(0); }
+
+  /* Port Scanning Grid */
+  .port-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 8px;
+    margin: 15px 0;
+  }
+
+  .port-cell {
+    background: #0a0a0a;
+    border: 1px solid #2a2a3e;
+    border-radius: 8px;
+    padding: 12px 8px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+  }
+
+  .port-cell:hover {
+    border-color: var(--green);
+    transform: scale(1.05);
+  }
+
+  .port-cell.scanned {
+    border-color: var(--green);
+    background: rgba(0, 255, 65, 0.05);
+  }
+
+  .port-cell.open {
+    border-color: var(--green);
+    background: rgba(0, 255, 65, 0.1);
+    box-shadow: 0 0 10px rgba(0, 255, 65, 0.1);
+  }
+
+  .port-cell.closed {
+    border-color: var(--red);
+    background: rgba(255, 0, 64, 0.05);
+  }
+
+  .port-cell .port-number {
+    font-size: 0.9em;
+    font-weight: 600;
+    color: var(--green);
+  }
+
+  .port-cell .port-status {
+    font-size: 0.65em;
+    color: #888;
+    margin-top: 3px;
+    text-transform: uppercase;
+  }
+
+  .port-cell.open .port-status { color: var(--green); }
+  .port-cell.closed .port-status { color: var(--red); }
+
+  /* Vulnerability Cards */
+  .vuln-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin: 15px 0;
+  }
+
+  .vuln-card {
+    background: #0a0a0a;
+    border: 1px solid #2a2a3e;
+    border-radius: 10px;
+    padding: 15px;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+
+  .vuln-card:hover {
+    border-color: var(--yellow);
+    transform: translateX(5px);
+  }
+
+  .vuln-card.selected {
+    border-color: var(--green);
+    background: rgba(0, 255, 65, 0.05);
+  }
+
+  .vuln-card.exploited {
+    border-color: var(--green);
+    background: rgba(0, 255, 65, 0.1);
+  }
+
+  .vuln-severity {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .vuln-severity.critical { background: var(--red); box-shadow: 0 0 10px var(--red); }
+  .vuln-severity.high { background: var(--yellow); box-shadow: 0 0 10px var(--yellow); }
+  .vuln-severity.medium { background: var(--blue); box-shadow: 0 0 10px var(--blue); }
+  .vuln-severity.low { background: var(--green); box-shadow: 0 0 10px var(--green); }
+
+  .vuln-info { flex: 1; }
+  .vuln-name { font-size: 0.9em; font-weight: 600; color: #ddd; }
+  .vuln-desc { font-size: 0.75em; color: #888; margin-top: 3px; }
+  .vuln-cve { font-size: 0.7em; color: var(--cyan); margin-top: 5px; }
+
+  /* Puzzle Grid */
+  .puzzle-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin: 15px 0;
+  }
+
+  .puzzle-cell {
+    aspect-ratio: 1;
+    background: #0a0a0a;
+    border: 2px solid #2a2a3e;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5em;
+    cursor: pointer;
+    transition: all 0.3s;
+    user-select: none;
+  }
+
+  .puzzle-cell:hover {
+    border-color: var(--green);
+    transform: scale(1.05);
+  }
+
+  .puzzle-cell.revealed {
+    background: rgba(0, 255, 65, 0.1);
+    border-color: var(--green);
+  }
+
+  .puzzle-cell.matched {
+    background: rgba(0, 255, 65, 0.15);
+    border-color: var(--cyan);
+    animation: matchPulse 0.5s ease;
+  }
+
+  @keyframes matchPulse {
+    50% { transform: scale(1.1); }
+  }
+
+  /* Code Editor */
+  .code-editor {
+    background: #0a0a0a;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 15px 0;
+  }
+
+  .code-header {
+    background: #1a1a2e;
+    padding: 8px 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .code-line-num {
+    color: #444;
+    font-size: 0.8em;
+    min-width: 30px;
+    text-align: right;
+    margin-right: 15px;
+    user-select: none;
+  }
+
+  .code-line {
+    padding: 3px 15px 3px 0;
+    font-size: 0.85em;
+    line-height: 1.6;
+    white-space: pre;
+  }
+
+  .code-line .keyword { color: #ff79c6; }
+  .code-line .string { color: #f1fa8c; }
+  .code-line .comment { color: #6272a4; }
+  .code-line .function { color: #50fa7b; }
+  .code-line .number { color: #bd93f9; }
+  .code-line .variable { color: #8be9fd; }
+
+  /* Notification */
+  .notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 25px;
+    border-radius: 10px;
+    font-size: 0.9em;
+    font-weight: 600;
+    z-index: 1000;
+    transform: translateX(120%);
+    transition: transform 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .notification.show { transform: translateX(0); }
+  .notification.success { background: rgba(0, 255, 65, 0.15); border: 1px solid var(--green); color: var(--green); }
+  .notification.error { background: rgba(255, 0, 64, 0.15); border: 1px solid var(--red); color: var(--red); }
+  .notification.info { background: rgba(0, 191, 255, 0.15); border: 1px solid var(--blue); color: var(--blue); }
+  .notification.warning { background: rgba(255, 221, 0, 0.15); border: 1px solid var(--yellow); color: var(--yellow); }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(5px);
+  }
+
+  .modal-overlay.active { display: flex; }
+
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 30px;
+    max-width: 500px;
+    width: 90%;
+    text-align: center;
+    animation: modalIn 0.3s ease;
+  }
+
+  @keyframes modalIn {
+    from { transform: scale(0.8); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  .modal h2 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.5em;
+    margin-bottom: 15px;
+  }
+
+  .modal p {
+    color: #aaa;
+    line-height: 1.8;
+    margin-bottom: 20px;
+  }
+
+  .modal .btn { margin: 5px; }
+
+  /* Loading Animation */
+  .loading {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .loading-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: loadingBounce 1.4s ease-in-out infinite;
+  }
+
+  .loading-dot:nth-child(2) { animation-delay: 0.2s; }
+  .loading-dot:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes loadingBounce {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+
+  /* Hexagon Background Pattern */
+  .hex-pattern {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%2300ff41' fill-opacity='1'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+
+  /* Glitch Effect */
+  .glitch {
+    position: relative;
+  }
+
+  .glitch::before,
+  .glitch::after {
+    content: attr(data-text);
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+  }
+
+  .glitch::before {
+    animation: glitch-1 2s infinite linear alternate-reverse;
+    clip-path: polygon(0 0, 100% 0, 100% 35%, 0 35%);
+    -webkit-text-fill-color: var(--red);
+  }
+
+  .glitch::after {
+    animation: glitch-2 2s infinite linear alternate-reverse;
+    clip-path: polygon(0 65%, 100% 65%, 100% 100%, 0 100%);
+    -webkit-text-fill-color: var(--blue);
+  }
+
+  @keyframes glitch-1 {
+    0% { transform: translateX(0); }
+    20% { transform: translateX(-2px); }
+    40% { transform: translateX(2px); }
+    60% { transform: translateX(-1px); }
+    80% { transform: translateX(1px); }
+    100% { transform: translateX(0); }
+  }
+
+  @keyframes glitch-2 {
+    0% { transform: translateX(0); }
+    20% { transform: translateX(2px); }
+    40% { transform: translateX(-2px); }
+    60% { transform: translateX(1px); }
+    80% { transform: translateX(-1px); }
+    100% { transform: translateX(0); }
+  }
+
+  /* Tooltip */
+  .tooltip {
+    position: relative;
+  }
+
+  .tooltip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1a2e;
+    border: 1px solid var(--border);
+    color: #ccc;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 0.7em;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s;
+  }
+
+  .tooltip:hover::after {
+    opacity: 1;
+    bottom: calc(100% + 5px);
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .header h1 { font-size: 1.5em; }
+    .main-area { grid-template-columns: 1fr; }
+    .puzzle-grid { grid-template-columns: repeat(3, 1fr); }
+    .port-grid { grid-template-columns: repeat(3, 1fr); }
+    .skills-grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* Animation classes */
+  .fade-in { animation: fadeIn 0.5s ease forwards; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  .slide-in { animation: slideIn 0.5s ease forwards; }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+
+  /* Network Map */
+  .network-map {
+    position: relative;
+    height: 300px;
+    background: #0a0a0a;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 15px 0;
+  }
+
+  .network-node {
+    position: absolute;
+    width: 50px; height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2em;
+    cursor: pointer;
+    transition: all 0.3s;
+    z-index: 2;
+  }
+
+  .network-node:hover {
+    transform: scale(1.2);
+    z-index: 3;
+  }
+
+  .network-node.server {
+    background: rgba(0, 255, 65, 0.1);
+    border: 2px solid var(--green);
+    color: var(--green);
+  }
+
+  .network-node.client {
+    background: rgba(0, 191, 255, 0.1);
+    border: 2px solid var(--blue);
+    color: var(--blue);
+  }
+
+  .network-node.firewall {
+    background: rgba(255, 221, 0, 0.1);
+    border: 2px solid var(--yellow);
+    color: var(--yellow);
+  }
+
+  .network-node.vulnerable {
+    background: rgba(255, 0, 64, 0.1);
+    border: 2px solid var(--red);
+    color: var(--red);
+    animation: pulse-node 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-node {
+    0%, 100% { box-shadow: 0 0 5px rgba(255, 0, 64, 0.3); }
+    50% { box-shadow: 0 0 20px rgba(255, 0, 64, 0.6); }
+  }
+
+  .network-line {
+    position: absolute;
+    height: 2px;
+    background: var(--border);
+    z-index: 1;
+    transform-origin: left center;
+  }
+
+  .network-line.active {
+    background: var(--green);
+    animation: dataFlow 1s linear infinite;
+  }
+
+  @keyframes dataFlow {
+    0% { background-position: 0 0; }
+    100% { background-position: 20px 0; }
+  }
+
+  /* Flag capture */
+  .flag-display {
+    background: #0a0a0a;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
+    margin: 15px 0;
+    font-family: 'Orbitron', sans-serif;
+  }
+
+  .flag-text {
+    color: var(--yellow);
+    font-size: 1.2em;
+    letter-spacing: 3px;
+    word-break: break-all;
+  }
+
+  /* Achievement Badge */
+  .achievement {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 221, 0, 0.1);
+    border: 1px solid var(--yellow);
+    border-radius: 20px;
+    padding: 5px 12px;
+    font-size: 0.75em;
+    color: var(--yellow);
+    margin: 3px;
+  }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<canvas id="matrix-canvas"></canvas>
+<div class="hex-pattern"></div>
+<div class="scanlines"></div>
+
+<div class="notification" id="notification">
+  <span id="notif-icon">✓</span>
+  <span id="notif-text">Notification</span>
+</div>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal">
+    <h2 id="modal-title">Welcome, Hacker</h2>
+    <p id="modal-body">Loading...</p>
+    <div id="modal-actions"></div>
+  </div>
+</div>
+
+<div class="game-container">
+  <header class="header">
+    <h1 class="glitch" data-text="HOW A HACKER THINKS">HOW A HACKER THINKS</h1>
+    <div class="subtitle">[ MINDSET // RECON // EXPLOITATION ] — An Interactive Cybersecurity Simulation</div>
+  </header>
+
+  <!-- Progress Section -->
+  <div class="progress-container">
+    <div class="progress-header">
+      <span class="progress-label">⚡ MISSION PROGRESS</span>
+      <div class="progress-stats">
+        <div class="stat">
+          <span class="stat-icon">🏆</span>
+          <span class="stat-value" id="score-display">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-icon">🎯</span>
+          <span class="stat-value" id="challenges-completed">0/12</span>
+        </div>
+        <div class="stat">
+          <span class="stat-icon">⏱️</span>
+          <span class="stat-value" id="timer-display">00:00</span>
+        </div>
+      </div>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+    </div>
+    <div class="phase-indicators">
+      <div class="phase-dot active" data-phase="0">
+        <div class="dot"></div>
+        <span class="phase-name">Mindset</span>
+      </div>
+      <div class="phase-dot" data-phase="1">
+        <div class="dot"></div>
+        <span class="phase-name">Recon</span>
+      </div>
+      <div class="phase-dot" data-phase="2">
+        <div class="dot"></div>
+        <span class="phase-name">Exploitation</span>
+      </div>
+      <div class="phase-dot" data-phase="3">
+        <div class="dot"></div>
+        <span class="phase-name">Root</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Area -->
+  <div class="main-area">
+    <!-- Terminal -->
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">hacker@kali:~</span>
+      </div>
+      <div class="terminal-body" id="terminal-body">
+        <!-- Dynamic content -->
+      </div>
+    </div>
+
+    <!-- Side Panel -->
+    <div class="side-panel">
+      <!-- Score Card -->
+      <div class="panel-card">
+        <h3>🏆 Score</h3>
+        <div class="score-display">
+          <div class="score-number" id="side-score">0</div>
+          <div class="score-label">Points</div>
+        </div>
+      </div>
+
+      <!-- Skills Card -->
+      <div class="panel-card">
+        <h3>📊 Skills</h3>
+        <div class="skills-grid">
+          <div class="skill-item">
+            <div class="skill-icon">🧠</div>
+            <div class="skill-name">Mindset</div>
+            <div class="skill-level" id="skill-mindset">0%</div>
+          </div>
+          <div class="skill-item">
+            <div class="skill-icon">🔍</div>
+            <div class="skill-name">Recon</div>
+            <div class="skill-level" id="skill-recon">0%</div>
+          </div>
+          <div class="skill-item">
+            <div class="skill-icon">⚡</div>
+            <div class="skill-name">Exploit</div>
+            <div class="skill-level" id="skill-exploit">0%</div>
+          </div>
+          <div class="skill-item">
+            <div class="skill-icon">🛡️</div>
+            <div class="skill-name">Defense</div>
+            <div class="skill-level" id="skill-defense">0%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Achievements -->
+      <div class="panel-card">
+        <h3>🎖️ Achievements</h3>
+        <div id="achievements-list">
+          <span style="color: #555; font-size: 0.8em;">Complete challenges to earn achievements...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Challenge Area -->
+  <div class="challenge-area" id="challenge-area">
+    <!-- Dynamic challenge content -->
+  </div>
+</div>
+
+<script>
+// ==================== GAME STATE ====================
+const gameState = {
+  currentPhase: 0,
+  currentChallenge: 0,
+  score: 0,
+  challengesCompleted: 0,
+  totalChallenges: 12,
+  timer: 0,
+  timerInterval: null,
+  skills: {
+    mindset: 0,
+    recon: 0,
+    exploit: 0,
+    defense: 0
+  },
+  achievements: [],
+  flags: [],
+  scannedPorts: new Set(),
+  openPorts: new Set(),
+  selectedVulns: new Set(),
+  puzzleBoard: [],
+  puzzleMatches: 0,
+  memoryCards: [],
+  memoryRevealed: [],
+  memoryMatched: new Set(),
+  codeChallenge: {
+    currentLine: 0,
+    correctAnswers: 0
+  },
+  networkNodes: [],
+  gameStarted: false
+};
+
+// ==================== MATRIX RAIN ====================
+const matrixCanvas = document.getElementById('matrix-canvas');
+const matrixCtx = matrixCanvas.getContext('2d');
+
+function resizeMatrix() {
+  matrixCanvas.width = window.innerWidth;
+  matrixCanvas.height = window.innerHeight;
+}
+resizeMatrix();
+window.addEventListener('resize', resizeMatrix);
+
+const matrixChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()_+-=[]{}|;:,.<>?/~`アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+const matrixFontSize = 14;
+const matrixColumns = Math.floor(matrixCanvas.width / matrixFontSize);
+const matrixDrops = Array(matrixColumns).fill(1);
+
+function drawMatrix() {
+  matrixCtx.fillStyle = 'rgba(10, 10, 10, 0.05)';
+  matrixCtx.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
+  matrixCtx.fillStyle = '#00ff41';
+  matrixCtx.font = matrixFontSize + 'px Fira Code';
+
+  for (let i = 0; i < matrixDrops.length; i++) {
+    const text = matrixChars[Math.floor(Math.random() * matrixChars.length)];
+    matrixCtx.fillText(text, i * matrixFontSize, matrixDrops[i] * matrixFontSize);
+
+    if (matrixDrops[i] * matrixFontSize > matrixCanvas.height && Math.random() > 0.975) {
+      matrixDrops[i] = 0;
+    }
+    matrixDrops[i]++;
+  }
+}
+
+setInterval(drawMatrix, 50);
+
+// ==================== NOTIFICATION SYSTEM ====================
+function showNotification(message, type = 'success') {
+  const notif = document.getElementById('notification');
+  const icon = document.getElementById('notif-icon');
+  const text = document.getElementById('notif-text');
+
+  notif.className = `notification ${type}`;
+  text.textContent = message;
+
+  switch(type) {
+    case 'success': icon.textContent = '✓'; break;
+    case 'error': icon.textContent = '✗'; break;
+    case 'info': icon.textContent = 'ℹ'; break;
+    case 'warning': icon.textContent = '⚠'; break;
+  }
+
+  notif.classList.add('show');
+  setTimeout(() => notif.classList.remove('show'), 3000);
+}
+
+// ==================== MODAL SYSTEM ====================
+function showModal(title, body, actions = []) {
+  const overlay = document.getElementById('modal-overlay');
+  const modalTitle = document.getElementById('modal-title');
+  const modalBody = document.getElementById('modal-body');
+  const modalActions = document.getElementById('modal-actions');
+
+  modalTitle.textContent = title;
+  modalBody.innerHTML = body;
+  modalActions.innerHTML = '';
+
+  actions.forEach(action => {
+    const btn = document.createElement('button');
+    btn.className = `btn ${action.class || 'btn-primary'}`;
+    btn.textContent = action.text;
+    btn.onclick = () => {
+      overlay.classList.remove('active');
+      if (action.action) action.action();
+    };
+    modalActions.appendChild(btn);
+  });
+
+  overlay.classList.add('active');
+}
+
+// ==================== TERMINAL SYSTEM ====================
+function typeLine(text, type = 'output', delay = 30) {
+  return new Promise((resolve) => {
+    const terminal = document.getElementById('terminal-body');
+    const line = document.createElement('div');
+    line.className = 'terminal-line';
+
+    if (type === 'prompt') {
+      line.innerHTML = `<span class="prompt">hacker@kali:~$ </span><span class="command">${text}</span>`;
+    } else if (type === 'success') {
+      line.innerHTML = `<span class="success">${text}</span>`;
+    } else if (type === 'error') {
+      line.innerHTML = `<span class="error">${text}</span>`;
+    } else if (type === 'info') {
+      line.innerHTML = `<span class="info">${text}</span>`;
+    } else if (type === 'warning') {
+      line.innerHTML = `<span class="warning">${text}</span>`;
+    } else {
+      line.innerHTML = `<span class="output">${text}</span>`;
+    }
+
+    terminal.appendChild(line);
+    terminal.scrollTop = terminal.scrollHeight;
+
+    setTimeout(resolve, delay);
+  });
+}
+
+async function typeText(text, type = 'output', speed = 20) {
+  const terminal = document.getElementById('terminal-body');
+  const line = document.createElement('div');
+  line.className = 'terminal-line';
+  line.innerHTML = `<span class="${type}">${text}</span>`;
+  terminal.appendChild(line);
+  terminal.scrollTop = terminal.scrollHeight;
+  await new Promise(r => setTimeout(r, speed));
+}
+
+function clearTerminal() {
+  document.getElementById('terminal-body').innerHTML = '';
+}
+
+// ==================== TIMER ====================
+function startTimer() {
+  gameState.timerInterval = setInterval(() => {
+    gameState.timer++;
+    const mins = String(Math.floor(gameState.timer / 60)).padStart(2, '0');
+    const secs = String(gameState.timer % 60).padStart(2, '0');
+    document.getElementById('timer-display').textContent = `${mins}:${secs}`;
+  }, 1000);
+}
+
+function stopTimer() {
+  clearInterval(gameState.timerInterval);
+}
+
+// ==================== UPDATE UI ====================
+function updateScore(points) {
+  gameState.score += points;
+  document.getElementById('score-display').textContent = gameState.score;
+  document.getElementById('side-score').textContent = gameState.score;
+}
+
+function updateProgress() {
+  const progress = (gameState.challengesCompleted / gameState.totalChallenges) * 100;
+  document.getElementById('progress-fill').style.width = `${progress}%`;
+  document.getElementById('challenges-completed').textContent = `${gameState.challengesCompleted}/${gameState.totalChallenges}`;
+}
+
+function updateSkills() {
+  document.getElementById('skill-mindset').textContent = `${gameState.skills.mindset}%`;
+  document.getElementById('skill-recon').textContent = `${gameState.skills.recon}%`;
+  document.getElementById('skill-exploit').textContent = `${gameState.skills.exploit}%`;
+  document.getElementById('skill-defense').textContent = `${gameState.skills.defense}%`;
+}
+
+function addAchievement(name, icon) {
+  if (gameState.achievements.includes(name)) return;
+  gameState.achievements.push(name);
+
+  const list = document.getElementById('achievements-list');
+  if (list.querySelector('span')) list.innerHTML = '';
+
+  const badge = document.createElement('span');
+  badge.className = 'achievement';
+  badge.innerHTML = `${icon} ${name}`;
+  list.appendChild(badge);
+
+  showNotification(`Achievement: ${name}`, 'success');
+}
+
+function updatePhaseIndicator(phase) {
+  document.querySelectorAll('.phase-dot').forEach((dot, i) => {
+    dot.classList.remove('active', 'completed');
+    if (i < phase) dot.classList.add('completed');
+    if (i === phase) dot.classList.add('active');
+  });
+}
+
+// ==================== CHALLENGES ====================
+
+// Phase 1: Mindset Challenges
+const mindsetChallenges = [
+  {
+    title: "The Hacker's Mindset",
+    description: "Hackers think differently. They see problems as puzzles and obstacles as opportunities. Before writing a single line of code, a hacker asks: 'What am I trying to achieve?' and 'How can I break this?'",
+    question: "A security researcher finds a website with a login page. What's the FIRST thing a hacker would do?",
+    options: [
+      { text: "Brute force the password immediately", correct: false },
+      { text: "Reconnaissance - gather information about the target", correct: true },
+      { text: "Delete the database", correct: false },
+      { text: "Report it to the company", correct: false }
+    ],
+    explanation: "Reconnaissance is the foundation of any successful attack. Understanding the target before acting is what separates professionals from script kiddies.",
+    points: 100,
+    skill: 'mindset'
+  },
+  {
+    title: "Thinking Like an Attacker",
+    description: "Hackers constantly ask 'What if?' What if this input isn't validated? What if this permission is too broad? What if this encryption is weak?",
+    question: "You're reviewing a web application. Which question BEST represents hacker thinking?",
+    options: [
+      { text: "Does this feature work as intended?", correct: false },
+      { text: "How can I make this faster?", correct: false },
+      { text: "What happens if I send malicious input here?", correct: true },
+      { text: "Is the UI design appealing?", correct: false }
+    ],
+    explanation: "Hacker thinking is about probing boundaries and testing assumptions. Every input is a potential vector, every permission a potential privilege escalation.",
+    points: 100,
+    skill: 'mindset'
+  },
+  {
+    title: "The Persistence Principle",
+    description: "Most hackers fail. The difference between failure and success is persistence. A hacker will try 100 different approaches before giving up on a single target.",
+    question: "After 50 failed attempts to exploit a vulnerability, what does a persistent hacker do?",
+    options: [
+      { text: "Give up and move to an easier target", correct: false },
+      { text: "Try the same approach 50 more times", correct: false },
+      { text: "Analyze failures, adapt strategy, and try new approaches", correct: true },
+      { text: "Delete all tools and start over", correct: false }
+    ],
+    explanation: "Adaptability is key. Successful hackers analyze what didn't work, learn from it, and adjust their approach. Persistence without adaptation is just stubbornness.",
+    points: 150,
+    skill: 'mindset'
+  }
+];
+
+// Phase 2: Recon Challenges
+const reconChallenges = [
+  {
+    title: "Port Scanning",
+    description: "Port scanning is the art of discovering which services are running on a target. Each port represents a potential entry point. Common ports: 22 (SSH), 80 (HTTP), 443 (HTTPS), 3306 (MySQL), 8080 (HTTP-Alt).",
+    type: 'portScan',
+    ports: [21, 22, 25, 53, 80, 110, 143, 443, 993, 995, 3306, 3389, 5432, 8080, 8443, 9090],
+    openPorts: [22, 80, 443, 3306, 8080],
+    points: 200,
+    skill: 'recon'
+  },
+  {
+    title: "OSINT Gathering",
+    description: "Open Source Intelligence (OSINT) is the collection of information from publicly available sources. Email addresses, domain registrations, social media profiles, and job postings can all reveal valuable information.",
+    question: "Which of these is NOT a valid OSINT technique?",
+    options: [
+      { text: "Checking WHOIS records for domain information", correct: false },
+      { text: "Searching Google for exposed files and directories", correct: false },
+      { text: "Installing keyloggers on employee computers", correct: true },
+      { text: "Analyzing social media profiles for employee information", correct: false }
+    ],
+    explanation: "OSINT relies on publicly available information. Installing keyloggers is illegal and not OSINT — it's active malware deployment.",
+    points: 150,
+    skill: 'recon'
+  },
+  {
+    title: "Network Mapping",
+    description: "Understanding the network topology is crucial. You need to identify servers, workstations, firewalls, and the connections between them. This helps you find the path to your target.",
+    question: "You discover a network with these devices: External Firewall → DMZ Web Server → Internal Database Server. Where is the best initial target?",
+    options: [
+      { text: "The External Firewall", correct: false },
+      { text: "The DMZ Web Server", correct: true },
+      { text: "The Internal Database Server directly", correct: false },
+      { text: "Random internal workstations", correct: false }
+    ],
+    explanation: "The DMZ (Demilitarized Zone) is designed to be accessible from outside while protecting internal networks. It's the most common initial target because it's accessible and often has fewer security controls.",
+    points: 200,
+    skill: 'recon'
+  }
+];
+
+// Phase 3: Exploitation Challenges
+const exploitChallenges = [
+  {
+    title: "Vulnerability Assessment",
+    description: "Not all vulnerabilities are created equal. CVSS scores help prioritize which vulnerabilities to exploit first. Critical (9.0-10.0), High (7.0-8.9), Medium (4.0-6.9), Low (0.1-3.9).",
+    type: 'vulnSelect',
+    vulnerabilities: [
+      { name: "SQL Injection in Login Form", desc: "Allows attackers to bypass authentication and access database", cve: "CVE-2023-1234", severity: "critical" },
+      { name: "Cross-Site Scripting (XSS)", desc: "Injects malicious scripts into web pages viewed by others", cve: "CVE-2023-5678", severity: "high" },
+      { name: "Outdated SSL/TLS Configuration", desc: "Uses weak encryption protocols vulnerable to attacks", cve: "CVE-2023-9012", severity: "medium" },
+      { name: "Information Disclosure in Headers", desc: "Server headers reveal software version information", cve: "CVE-2023-3456", severity: "low" }
+    ],
+    correctVulns: [0, 1],
+    points: 300,
+    skill: 'exploit'
+  },
+  {
+    title: "Code Exploitation",
+    description: "Many exploits stem from simple coding mistakes. Buffer overflows, injection flaws, and improper input validation are the most common vulnerabilities. Let's practice identifying them.",
+    type: 'codeChallenge',
+    code: [
+      { line: "function loginUser(username, password) {", indent: 0 },
+      { line: "  const query = \"SELECT * FROM users WHERE username='\" +", indent: 1 },
+      { line: "    username + \"' AND password='\" + password + \"'\";", indent: 1 },
+      { line: "  return db.execute(query);", indent: 1 },
+      { line: "}", indent: 0 },
+      { line: "", indent: 0 },
+      { line: "// TODO: Add input validation", indent: 0 },
+      { line: "// TODO: Use parameterized queries", indent: 0 }
+    ],
+    question: "What vulnerability exists in this code?",
+    options: [
+      { text: "Buffer Overflow", correct: false },
+      { text: "SQL Injection", correct: true },
+      { text: "Cross-Site Scripting", correct: false },
+      { text: "Race Condition", correct: false }
+    ],
+    explanation: "The code concatenates user input directly into an SQL query. An attacker could input: ' OR '1'='1 to bypass authentication. The fix is to use parameterized queries.",
+    points: 250,
+    skill: 'exploit'
+  },
+  {
+    title: "Privilege Escalation",
+    description: "After gaining initial access, hackers often try to escalate their privileges. This could mean going from a regular user to an administrator, or from a web user to root.",
+    question: "You've gained access to a web server as 'www-data'. Which approach is MOST likely to escalate privileges?",
+    options: [
+      { text: "Try common default passwords", correct: false },
+      { text: "Look for SUID binaries, kernel exploits, and misconfigured services", correct: true },
+      { text: "Restart the server", correct: false },
+      { text: "Delete system files", correct: false }
+    ],
+    explanation: "Privilege escalation typically involves finding misconfigurations: SUID binaries that run with elevated privileges, outdated kernel exploits, or services running as root with exploitable vulnerabilities.",
+    points: 300,
+    skill: 'exploit'
+  }
+];
+
+// Phase 4: Root Challenge
+const rootChallenges = [
+  {
+    title: "The Final Exploit",
+    description: "You've completed reconnaissance, identified vulnerabilities, and exploited the initial entry point. Now you need to achieve root access and capture the flag.",
+    type: 'finalChallenge',
+    points: 500,
+    skill: 'exploit'
+  }
+];
+
+// ==================== RENDER CHALLENGES ====================
+function renderChallenge() {
+  const area = document.getElementById('challenge-area');
+  area.innerHTML = '';
+
+  let challenge;
+  if (gameState.currentPhase === 0) {
+    challenge = mindsetChallenges[gameState.currentChallenge];
+  } else if (gameState.currentPhase === 1) {
+    challenge = reconChallenges[gameState.currentChallenge];
+  } else if (gameState.currentPhase === 2) {
+    challenge = exploitChallenges[gameState.currentChallenge];
+  } else {
+    challenge = rootChallenges[gameState.currentChallenge];
+  }
+
+  if (!challenge) {
+    area.innerHTML = '<div style="text-align:center; padding: 40px; color: var(--green);">🎉 All challenges completed! You are a master hacker!</div>';
+    return;
+  }
+
+  const title = document.createElement('div');
+  title.className = 'challenge-title';
+  title.innerHTML = `⚡ ${challenge.title}`;
+  area.appendChild(title);
+
+  const desc = document.createElement('div');
+  desc.className = 'challenge-description';
+  desc.textContent = challenge.description;
+  area.appendChild(desc);
+
+  // Render based on challenge type
+  if (challenge.type === 'portScan') {
+    renderPortScan(challenge, area);
+  } else if (challenge.type === 'vulnSelect') {
+    renderVulnSelect(challenge, area);
+  } else if (challenge.type === 'codeChallenge') {
+    renderCodeChallenge(challenge, area);
+  } else if (challenge.type === 'finalChallenge') {
+    renderFinalChallenge(challenge, area);
+  } else {
+    renderQuizChallenge(challenge, area);
+  }
+}
+
+function renderQuizChallenge(challenge, container) {
+  const quiz = document.createElement('div');
+  quiz.style.marginTop = '15px';
+
+  const question = document.createElement('p');
+  question.style.color = '#ddd';
+  question.style.marginBottom = '15px';
+  question.style.fontSize = '0.95em';
+  question.textContent = challenge.question;
+  quiz.appendChild(question);
+
+  const options = document.createElement('div');
+  options.style.display = 'flex';
+  options.style.flexDirection = 'column';
+  options.style.gap = '10px';
+
+  challenge.options.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-secondary';
+    btn.style.width = '100%';
+    btn.style.textAlign = 'left';
+    btn.style.padding = '12px 15px';
+    btn.textContent = `${String.fromCharCode(65 + i)}) ${opt.text}`;
+    btn.onclick = () => handleQuizAnswer(challenge, opt.correct, btn, challenge.options);
+    options.appendChild(btn);
+  });
+
+  quiz.appendChild(options);
+  container.appendChild(quiz);
+}
+
+function handleQuizAnswer(challenge, isCorrect, btn, options) {
+  if (btn.disabled) return;
+
+  // Disable all buttons
+  options.forEach((_, i) => {
+    const b = btn.parentElement.children[i];
+    b.disabled = true;
+    if (challenge.options[i].correct) {
+      b.style.borderColor = 'var(--green)';
+      b.style.background = 'rgba(0, 255, 65, 0.1)';
+    }
+  });
+
+  if (isCorrect) {
+    btn.style.borderColor = 'var(--green)';
+    btn.style.background = 'rgba(0, 255, 65, 0.15)';
+    updateScore(challenge.points);
+    gameState.skills[challenge.skill] = Math.min(100, gameState.skills[challenge.skill] + 25);
+    updateSkills();
+    showNotification(`+${challenge.points} points! Correct!`, 'success');
+    addAchievement('Quick Thinker', '🧠');
+  } else {
+    btn.style.borderColor = 'var(--red)';
+    btn.style.background = 'rgba(255, 0, 64, 0.1)';
+    showNotification('Incorrect! Review the explanation.', 'error');
+  }
+
+  // Show explanation
+  const expl = document.createElement('div');
+  expl.style.marginTop = '15px';
+  expl.style.padding = '15px';
+  expl.style.background = 'rgba(0, 0, 0, 0.3)';
+  expl.style.borderRadius = '8px';
+  expl.style.borderLeft = '3px solid var(--cyan)';
+  expl.style.color = '#aaa';
+  expl.style.fontSize = '0.85em';
+  expl.style.lineHeight = '1.6';
+  expl.innerHTML = `<strong style="color: var(--cyan);">💡 Explanation:</strong> ${challenge.explanation}`;
+  btn.parentElement.appendChild(expl);
+
+  // Next button
+  const nextBtn = document.createElement('button');
+  nextBtn.className = 'btn btn-primary';
+  nextBtn.style.marginTop = '15px';
+  nextBtn.textContent = 'Next Challenge →';
+  nextBtn.onclick = () => nextChallenge();
+  btn.parentElement.appendChild(nextBtn);
+}
+
+function renderPortScan(challenge, container) {
+  const grid = document.createElement('div');
+  grid.className = 'port-grid';
+
+  challenge.ports.forEach(port => {
+    const cell = document.createElement('div');
+    cell.className = 'port-cell';
+    cell.innerHTML = `<div class="port-number">${port}</div><div class="port-status">???</div>`;
+    cell.onclick = () => scanPort(cell, port, challenge);
+    grid.appendChild(cell);
+  });
+
+  container.appendChild(grid);
+
+  const info = document.createElement('div');
+  info.style.marginTop = '10px';
+  info.style.color = '#888';
+  info.style.fontSize = '0.8em';
+  info.textContent = `🔍 Click ports to scan. Find all open ports to proceed. (${challenge.openPorts.length} open)`;
+  container.appendChild(info);
+}
+
+function scanPort(cell, port, challenge) {
+  if (cell.classList.contains('scanned')) return;
+
+  cell.classList.add('scanned');
+  gameState.scannedPorts.add(port);
+
+  if (challenge.openPorts.includes(port)) {
+    cell.classList.add('open');
+    cell.querySelector('.port-status').textContent = 'OPEN';
+    gameState.openPorts.add(port);
+    showNotification(`Port ${port} is OPEN!`, 'success');
+  } else {
+    cell.classList.add('closed');
+    cell.querySelector('.port-status').textContent = 'CLOSED';
+  }
+
+  // Check if all open ports found
+  if (gameState.openPorts.size === challenge.openPorts.length) {
+    updateScore(challenge.points);
+    gameState.skills[challenge.skill] = Math.min(100, gameState.skills[challenge.skill] + 25);
+    updateSkills();
+    showNotification(`+${challenge.points} points! All ports discovered!`, 'success');
+    addAchievement('Port Scanner', '🔍');
+
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'btn btn-primary';
+    nextBtn.style.marginTop = '15px';
+    nextBtn.textContent = 'Next Challenge →';
+    nextBtn.onclick = () => nextChallenge();
+    container.appendChild(nextBtn);
+  }
+}
+
+function renderVulnSelect(challenge, container) {
+  const grid = document.createElement('div');
+  grid.className = 'vuln-grid';
+
+  challenge.vulnerabilities.forEach((vuln, i) => {
+    const card = document.createElement('div');
+    card.className = 'vuln-card';
+    card.innerHTML = `
+      <div class="vuln-severity ${vuln.severity}"></div>
+      <div class="vuln-info">
+        <div class="vuln-name">${vuln.name}</div>
+        <div class="vuln-desc">${vuln.desc}</div>
+        <div class="vuln-cve">${vuln.cve}</div>
+      </div>
+    `;
+    card.onclick = () => toggleVuln(card, i, challenge);
+    grid.appendChild(card);
+  });
+
+  container.appendChild(grid);
+
+  const info = document.createElement('div');
+  info.style.marginTop = '10px';
+  info.style.color = '#888';
+  info.style.fontSize = '0.8em';
+  info.textContent = '🎯 Select the most critical vulnerabilities to exploit first.';
+  container.appendChild(info);
+
+  const submitBtn = document.createElement('button');
+  submitBtn.className = 'btn btn-primary';
+  submitBtn.style.marginTop = '15px';
+  submitBtn.textContent = 'Submit Selection';
+  submitBtn.onclick = () => submitVulnSelection(challenge, container);
+  container.appendChild(submitBtn);
+}
+
+function toggleVuln(card, index, challenge) {
+  if (gameState.selectedVulns.has(index)) {
+    gameState.selectedVulns.delete(index);
+    card.classList.remove('selected');
+  } else {
+    gameState.selectedVulns.add(index);
+    card.classList.add('selected');
+  }
+}
+
+function submitVulnSelection(challenge, container) {
+  const correct = challenge.correctVulns.every(v => gameState.selectedVulns.has(v));
+  const allSelected = challenge.correctVulns.every(v => gameState.selectedVulns.has(v)) &&
+                      gameState.selectedVulns.size === challenge.correctVulns.length;
+
+  if (allSelected) {
+    updateScore(challenge.points);
+    gameState.skills[challenge.skill] = Math.min(100, gameState.skills[challenge.skill] + 25);
+    updateSkills();
+    showNotification(`+${challenge.points} points! Excellent prioritization!`, 'success');
+    addAchievement('Vulnerability Hunter', '🎯');
+
+    challenge.vulnerabilities.forEach((_, i) => {
+      if (gameState.selectedVulns.has(i)) {
+        container.children[0].children[i].classList.add('exploited');
+      }
+    });
+
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'btn btn-primary';
+    nextBtn.style.marginTop = '15px';
+    nextBtn.textContent = 'Next Challenge →';
+    nextBtn.onclick = () => nextChallenge();
+    container.appendChild(nextBtn);
+  } else {
+    showNotification('Not quite right. Focus on the most critical vulnerabilities first.', 'error');
+  }
+}
+
+function renderCodeChallenge(challenge, container) {
+  const editor = document.createElement('div');
+  editor.className = 'code-editor';
+
+  const header = document.createElement('div');
+  header.className = 'code-header';
+  header.innerHTML = '<span style="color: #888; font-size: 0.8em;">📝 vulnerable_login.js</span>';
+  editor.appendChild(header);
+
+  const codeBody = document.createElement('div');
+  codeBody.style.padding = '15px';
+  codeBody.style.background = '#0a0a0a';
+  codeBody.style.maxHeight = '200px';
+  codeBody.style.overflowY = 'auto';
+
+  challenge.code.forEach((line, i) => {
+    const lineDiv = document.createElement('div');
+    lineDiv.className = 'code-line';
+    lineDiv.style.paddingLeft = `${line.indent * 20}px`;
+
+    let formatted = line.line;
+    // Simple syntax highlighting
+    formatted = formatted.replace(/(function|const|return|var|let|if|else|TODO)/g, '<span class="keyword">$1</span>');
+    formatted = formatted.replace(/(".*?")/g, '<span class="string">$1</span>');
+    formatted = formatted.replace(/(\/\/.*)/g, '<span class="comment">$1</span>');
+    formatted = formatted.replace(/(db|username|password|query)/g, '<span class="variable">$1</span>');
+
+    lineDiv.innerHTML = `<span class="code-line-num">${i + 1}</span>${formatted}`;
+    codeBody.appendChild(lineDiv);
+  });
+
+  editor.appendChild(codeBody);
+  container.appendChild(editor);
+
+  // Quiz part
+  const quiz = document.createElement('div');
+  quiz.style.marginTop = '15px';
+
+  const question = document.createElement('p');
+  question.style.color = '#ddd';
+  question.style.marginBottom = '15px';
+  question.style.fontSize = '0.95em';
+  question.textContent = challenge.question;
+  quiz.appendChild(question);
+
+  const options = document.createElement('div');
+  options.style.display = 'flex';
+  options.style.flexDirection = 'column';
+  options.style.gap = '10px';
+
+  challenge.options.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-secondary';
+    btn.style.width = '100%';
+    btn.style.textAlign = 'left';
+    btn.style.padding = '12px 15px';
+    btn.textContent = `${String.fromCharCode(65 + i)}) ${opt.text}`;
+    btn.onclick = () => handleQuizAnswer(challenge, opt.correct, btn, challenge.options);
+    options.appendChild(btn);
+  });
+
+  quiz.appendChild(options);
+  container.appendChild(quiz);
+}
+
+function renderFinalChallenge(challenge, container) {
+  const finalArea = document.createElement('div');
+  finalArea.style.textAlign = 'center';
+  finalArea.style.padding = '20px';
+
+  const title = document.createElement('h3');
+  title.style.color = 'var(--cyan)';
+  title.style.fontFamily = 'Orbitron, sans-serif';
+  title.style.marginBottom = '15px';
+  title.textContent = '🏴‍☠️ FINAL CHALLENGE: CAPTURE THE FLAG';
+  finalArea.appendChild(title);
+
+  const desc = document.createElement('p');
+  desc.style.color = '#aaa';
+  desc.style.marginBottom = '20px';
+  desc.style.lineHeight = '1.6';
+  desc.textContent = 'You\'ve reached the target system. Combine everything you\'ve learned: mindset, reconnaissance, and exploitation. Enter the root flag to complete the mission.';
+  finalArea.appendChild(desc);
+
+  const flagInput = document.createElement('input');
+  flagInput.className = 'terminal-input';
+  flagInput.style.width = '100%';
+  flagInput.style.marginBottom = '15px';
+  flagInput.placeholder = 'Enter the root flag... (hint: think about what you\'ve learned)';
+  flagInput.id = 'flag-input';
+  finalArea.appendChild(flagInput);
+
+  const submitBtn = document.createElement('button');
+  submitBtn.className = 'btn btn-primary';
+  submitBtn.textContent = '🚀 Submit Flag';
+  submitBtn.onclick = () => {
+    const flag = document.getElementById('flag-input').value.trim().toLowerCase();
+    if (flag === 'hacker' || flag === 'root' || flag === 'flag' || flag === 'ctf' || flag.length > 0) {
+      updateScore(challenge.points);
+      gameState.skills.exploit = Math.min(100, gameState.skills.exploit + 25);
+      updateSkills();
+      showNotification(`+${challenge.points} points! FLAG CAPTURED!`, 'success');
+      addAchievement('Root Access', '👑');
+      addAchievement('CTF Master', '🏆');
+
+      const flagDisplay = document.createElement('div');
+      flagDisplay.className = 'flag-display';
+      flagDisplay.innerHTML = `<div class="flag-text">🏴‍☠️ FLAG: {h4ck3r_m1nd53t_r00t_4cc3ss}</div>`;
+      finalArea.appendChild(flagDisplay);
+
+      const nextBtn = document.createElement('button');
+      nextBtn.className = 'btn btn-primary';
+      nextBtn.style.marginTop = '15px';
+      nextBtn.textContent = '🎉 Complete Mission';
+      nextBtn.onclick = () => completeMission();
+      finalArea.appendChild(nextBtn);
+    } else {
+      showNotification('Incorrect flag. Try again!', 'error');
+    }
+  };
+  finalArea.appendChild(submitBtn);
+
+  container.appendChild(finalArea);
+}
+
+// ==================== CHALLENGE NAVIGATION ====================
+function nextChallenge() {
+  gameState.currentChallenge++;
+
+  const phaseChallenges = [
+    mindsetChallenges,
+    reconChallenges,
+    exploitChallenges,
+    rootChallenges
+  ];
+
+  if (gameState.currentChallenge >= phaseChallenges[gameState.currentPhase].length) {
+    gameState.currentChallenge = 0;
+    gameState.currentPhase++;
+
+    if (gameState.currentPhase >= 4) {
+      completeMission();
+      return;
+    }
+
+    updatePhaseIndicator(gameState.currentPhase);
+    showNotification(`Phase ${gameState.currentPhase + 1} started!`, 'info');
+  }
+
+  updateProgress();
+  renderChallenge();
+}
+
+function completeMission() {
+  stopTimer();
+  updateProgress();
+
+  showModal(
+    '🎉 MISSION COMPLETE!',
+    `<p>Congratulations, hacker! You've completed all phases:</p>
+     <ul style="text-align: left; color: #aaa; line-height: 2;">
+       <li>🧠 <strong>Mindset</strong> — You think like an attacker</li>
+       <li>🔍 <strong>Recon</strong> — You gather intelligence effectively</li>
+       <li>⚡ <strong>Exploitation</strong> — You find and exploit vulnerabilities</li>
+       <li>👑 <strong>Root</strong> — You achieved full access</li>
+     </ul>
+     <p style="color: var(--yellow); font-size: 1.2em; margin-top: 15px;">
+       Final Score: <strong>${gameState.score}</strong> points
+     </p>
+     <p style="color: var(--cyan);">
+       Time: <strong>${document.getElementById('timer-display').textContent}</strong>
+     </p>`,
+    [
+      { text: '🔄 Play Again', class: 'btn-secondary', action: () => resetGame() },
+      { text: '📊 View Report', class: 'btn-primary', action: () => showReport() }
+    ]
+  );
+}
+
+function resetGame() {
+  gameState.currentPhase = 0;
+  gameState.currentChallenge = 0;
+  gameState.score = 0;
+  gameState.challengesCompleted = 0;
+  gameState.timer = 0;
+  gameState.skills = { mindset: 0, recon: 0, exploit: 0, defense: 0 };
+  gameState.achievements = [];
+  gameState.flags = [];
+  gameState.scannedPorts = new Set();
+  gameState.openPorts = new Set();
+  gameState.selectedVulns = new Set();
+
+  document.getElementById('score-display').textContent = '0';
+  document.getElementById('side-score').textContent = '0';
+  document.getElementById('challenges-completed').textContent = '0/12';
+  document.getElementById('timer-display').textContent = '00:00';
+  document.getElementById('progress-fill').style.width = '0%';
+  document.getElementById('achievements-list').innerHTML = '<span style="color: #555; font-size: 0.8em;">Complete challenges to earn achievements...</span>';
+
+  updatePhaseIndicator(0);
+  updateSkills();
+  clearTerminal();
+  renderChallenge();
+  startTimer();
+
+  showNotification('Game reset! Good luck, hacker!', 'info');
+}
+
+function showReport() {
+  showModal(
+    '📊 MISSION REPORT',
+    `<div style="text-align: left;">
+      <p><strong style="color: var(--green);">Final Score:</strong> ${gameState.score} points</p>
+      <p><strong style="color: var(--cyan);">Time Completed:</strong> ${document.getElementById('timer-display').textContent}</p>
+      <p><strong style="color: var(--yellow);">Challenges:</strong> ${gameState.challengesCompleted}/${gameState.totalChallenges}</p>
+      <hr style="border-color: var(--border); margin: 15px 0;">
+      <p><strong style="color: var(--green);">🧠 Mindset:</strong> ${gameState.skills.mindset}%</p>
+      <p><strong style="color: var(--cyan);">🔍 Recon:</strong> ${gameState.skills.recon}%</p>
+      <p><strong style="color: var(--yellow);">⚡ Exploit:</strong> ${gameState.skills.exploit}%</p>
+      <p><strong style="color: var(--blue);">🛡️ Defense:</strong> ${gameState.skills.defense}%</p>
+      <hr style="border-color: var(--border); margin: 15px 0;">
+      <p><strong style="color: var(--yellow);">🎖️ Achievements:</strong></p>
+      <p>${gameState.achievements.length > 0 ? gameState.achievements.map(a => `• ${a}`).join('<br>') : 'None yet'}</p>
+    </div>`,
+    [{ text: '🔄 Play Again', class: 'btn-primary', action: () => { resetGame(); document.getElementById('modal-overlay').classList.remove('active'); } }]
+  );
+}
+
+// ==================== INITIALIZATION ====================
+async function initGame() {
+  clearTerminal();
+
+  await typeLine('Initializing hacker environment...', 'prompt', 50);
+  await typeLine('Loading modules...', 'output', 30);
+  await typeLine('[✓] Mindset module loaded', 'success', 20);
+  await typeLine('[✓] Recon module loaded', 'success', 20);
+  await typeLine('[✓] Exploitation module loaded', 'success', 20);
+  await typeLine('[✓] CTF framework loaded', 'success', 20);
+  await typeLine('', 'output', 10);
+  await typeLine('Welcome, hacker. Today you will learn:', 'info', 30);
+  await typeLine('  • How hackers think (Mindset)', 'output', 20);
+  await typeLine('  • How to gather intelligence (Recon)', 'output', 20);
+  await typeLine('  • How to find and exploit vulnerabilities (Exploitation)', 'output', 20);
+  await typeLine('', 'output', 10);
+  await typeLine('This is an educational simulation. All targets are fictional.', 'warning', 20);
+  await typeLine('Always use your skills ethically and legally.', 'info', 20);
+  await typeLine('', 'output', 10);
+  await typeLine('Ready to begin? Type "START" to commence.', 'prompt', 50);
+
+  // Add input for starting
+  const terminal = document.getElementById('terminal-body');
+  const inputDiv = document.createElement('div');
+  inputDiv.className = 'terminal-line';
+  inputDiv.style.display = 'flex';
+  inputDiv.style.gap = '10px';
+  inputDiv.style.marginTop = '10px';
+
+  const promptSpan = document.createElement('span');
+  promptSpan.className = 'prompt';
+  promptSpan.textContent = 'hacker@kali:~$ ';
+
+  const input = document.createElement('input');
+  input.className = 'terminal-input';
+  input.style.flex = '1';
+  input.style.background = 'transparent';
+  input.style.border = 'none';
+  input.style.outline = 'none';
+  input.style.color = 'var(--green)';
+  input.style.fontFamily = 'Fira Code, monospace';
+  input.style.fontSize = '0.9em';
+  input.placeholder = 'Type START to begin...';
+  input.id = 'start-input';
+
+  inputDiv.appendChild(promptSpan);
+  inputDiv.appendChild(input);
+  terminal.appendChild(inputDiv);
+
+  input.focus();
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && input.value.trim().toUpperCase() === 'START') {
+      gameState.gameStarted = true;
+      input.disabled = true;
+      typeLine('START', 'command', 10);
+      typeLine('Bootstrapping...', 'info', 20);
+      setTimeout(() => {
+        startTimer();
+        renderChallenge();
+        showNotification('Mission started! Good luck!', 'success');
+      }, 500);
+    }
+  });
+}
+
+// Start the game
+window.addEventListener('DOMContentLoaded', initGame);
+</script>
+</body>
+</html>

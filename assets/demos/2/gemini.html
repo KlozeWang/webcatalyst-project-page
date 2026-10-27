@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jump & Shoot Platformer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a202c; /* Tailwind gray-900 */
+            touch-action: none; /* Prevent scroll on mobile */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Let clicks pass through to canvas by default */
+        }
+        .screen {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.7);
+            pointer-events: auto; /* Catch clicks on screens */
+            transition: opacity 0.3s;
+        }
+        .hidden {
+            opacity: 0;
+            pointer-events: none !important;
+        }
+        /* Mobile touch zones */
+        #touch-left, #touch-right {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 50%;
+            pointer-events: auto;
+            z-index: 10;
+        }
+        #touch-left { left: 0; }
+        #touch-right { right: 0; }
+        
+        /* Visual hints for touch zones */
+        .touch-hint {
+            position: absolute;
+            bottom: 10%;
+            font-size: 2rem;
+            color: rgba(255, 255, 255, 0.3);
+            pointer-events: none;
+            user-select: none;
+        }
+        #touch-left .touch-hint { left: 20%; }
+        #touch-right .touch-hint { right: 20%; }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-layer">
+        <!-- Touch Zones for Mobile -->
+        <div id="touch-left" class="hidden"><div class="touch-hint">JUMP</div></div>
+        <div id="touch-right" class="hidden"><div class="touch-hint">SHOOT</div></div>
+
+        <!-- HUD -->
+        <div id="hud" class="absolute top-4 left-4 text-white text-2xl font-bold drop-shadow-md hidden pointer-events-none">
+            Score: <span id="scoreVal">0</span>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="startScreen" class="screen text-white text-center">
+            <h1 class="text-5xl font-black mb-4 text-yellow-400 drop-shadow-lg tracking-wider">RUNNER<br>BLASTER</h1>
+            <p class="mb-8 text-xl text-gray-300">Left Screen: Jump | Right Screen: Shoot<br>Keyboard: Space (Jump), X (Shoot)</p>
+            <button id="startBtn" class="px-8 py-4 bg-blue-600 hover:bg-blue-500 rounded-full text-2xl font-bold shadow-lg transition-transform transform hover:scale-105 active:scale-95">
+                TAP TO START
+            </button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="screen text-white text-center hidden">
+            <h1 class="text-6xl font-black mb-2 text-red-500 drop-shadow-lg">GAME OVER</h1>
+            <p class="text-3xl mb-8">Score: <span id="finalScore" class="text-yellow-400 font-bold">0</span></p>
+            <button id="restartBtn" class="px-8 py-4 bg-green-600 hover:bg-green-500 rounded-full text-2xl font-bold shadow-lg transition-transform transform hover:scale-105 active:scale-95">
+                PLAY AGAIN
+            </button>
+        </div>
+    </div>
+
+<script>
+/**
+ * Simple Web Audio API Synthesizer for Sound Effects
+ */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+const Sound = {
+    play: function(type) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        const now = audioCtx.currentTime;
+        
+        switch (type) {
+            case 'jump':
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(300, now + 0.1);
+                gainNode.gain.setValueAtTime(0.1, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+                break;
+            case 'shoot':
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+                gainNode.gain.setValueAtTime(0.1, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+                break;
+            case 'hit':
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(100, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+                gainNode.gain.setValueAtTime(0.2, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+                break;
+            case 'die':
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(10, now + 0.5);
+                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+                break;
+        }
+    }
+};
+
+/**
+ * Game Logic
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// UI Elements
+const startScreen = document.getElementById('startScreen');
+const gameOverScreen = document.getElementById('gameOverScreen');
+const hud = document.getElementById('hud');
+const scoreVal = document.getElementById('scoreVal');
+const finalScore = document.getElementById('finalScore');
+const touchLeft = document.getElementById('touch-left');
+const touchRight = document.getElementById('touch-right');
+
+let width, height;
+let gameState = 'START'; // START, PLAYING, GAMEOVER
+let score = 0;
+let gameSpeed = 5;
+let frames = 0;
+let cameraX = 0;
+
+// Entities
+let player;
+let platforms = [];
+let enemies = [];
+let bullets = [];
+let particles = [];
+
+// Resize handler
+function resize() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.width = width;
+    canvas.height = height;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Input handling
+const keys = {};
+window.addEventListener('keydown', e => { 
+    keys[e.code] = true;
+    if(gameState === 'PLAYING') {
+        if(e.code === 'Space' || e.code === 'ArrowUp') player.jump();
+        if(e.code === 'KeyX' && !e.repeat) player.shoot();
+    }
+});
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+// Mobile Touch
+touchLeft.addEventListener('touchstart', (e) => { e.preventDefault(); if(gameState === 'PLAYING') player.jump(); });
+touchRight.addEventListener('touchstart', (e) => { e.preventDefault(); if(gameState === 'PLAYING') player.shoot(); });
+
+// Buttons
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+
+class Player {
+    constructor() {
+        this.w = 40;
+        this.h = 40;
+        this.x = width * 0.2;
+        this.y = height / 2;
+        this.vy = 0;
+        this.gravity = 0.6;
+        this.jumpForce = -12;
+        this.grounded = false;
+        this.color = '#3b82f6'; // blue-500
+        this.shootCooldown = 0;
+    }
+
+    update() {
+        this.vy += this.gravity;
+        this.y += this.vy;
+        
+        // Keep in horizontal position, world moves around player
+        // For visual flair, slight movement
+        
+        this.grounded = false;
+
+        // Platform collision
+        for (let p of platforms) {
+            // Check falling through platform
+            if (this.vy > 0 && 
+                this.x < p.x - cameraX + p.w && 
+                this.x + this.w > p.x - cameraX &&
+                this.y + this.h >= p.y && 
+                this.y + this.h - this.vy <= p.y + 10) { // +10 leniency
+                
+                this.grounded = true;
+                this.vy = 0;
+                this.y = p.y - this.h;
+            }
+        }
+
+        // Bottom death
+        if (this.y > height) {
+            endGame();
+        }
+        
+        if (this.shootCooldown > 0) this.shootCooldown--;
+    }
+
+    draw() {
+        ctx.fillStyle = this.color;
+        // Draw trailing effect based on velocity
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+        
+        // Eye
+        ctx.fillStyle = 'white';
+        ctx.fillRect(this.x + 25, this.y + 10, 8, 8);
+    }
+
+    jump() {
+        if (this.grounded) {
+            this.vy = this.jumpForce;
+            this.grounded = false;
+            Sound.play('jump');
+            createParticles(this.x + this.w/2, this.y + this.h, '#fff', 5);
+        }
+    }
+
+    shoot() {
+        if (this.shootCooldown <= 0) {
+            bullets.push(new Bullet(this.x + this.w, this.y + this.h/2));
+            this.shootCooldown = 15;
+            Sound.play('shoot');
+        }
+    }
+}
+
+class Platform {
+    constructor(x, y, w) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = height - y;
+        this.color = '#10b981'; // green-500
+    }
+    draw() {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - cameraX, this.y, this.w, this.h);
+        
+        // Grass top
+        ctx.fillStyle = '#34d399';
+        ctx.fillRect(this.x - cameraX, this.y, this.w, 10);
+    }
+}
+
+class Enemy {
+    constructor(x, y) {
+        this.w = 30;
+        this.h = 30;
+        this.x = x;
+        this.y = y - this.h;
+        this.color = '#ef4444'; // red-500
+        this.markedForDeletion = false;
+    }
+    update() {
+        // Simple animation
+        this.y += Math.sin(frames * 0.1) * 0.5;
+        
+        // Collision with player
+        if (checkCollision(player, {x: this.x - cameraX, y: this.y, w: this.w, h: this.h})) {
+            endGame();
+        }
+    }
+    draw() {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - cameraX, this.y, this.w, this.h);
+        // Spikes
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.moveTo(this.x - cameraX + 5, this.y);
+        ctx.lineTo(this.x - cameraX + 15, this.y - 10);
+        ctx.lineTo(this.x - cameraX + 25, this.y);
+        ctx.fill();
+    }
+}
+
+class Bullet {
+    constructor(x, y) {
+        this.x = x + cameraX; // Store absolute world position
+        this.y = y;
+        this.w = 15;
+        this.h = 5;
+        this.speed = 15;
+        this.color = '#fbbf24'; // yellow-400
+        this.markedForDeletion = false;
+    }
+    update() {
+        this.x += this.speed;
+        
+        // Screen bounds (relative to camera)
+        if (this.x - cameraX > width) {
+            this.markedForDeletion = true;
+        }
+
+        // Collision with enemies
+        for (let e of enemies) {
+            if (!e.markedForDeletion && checkCollision(
+                {x: this.x - cameraX, y: this.y, w: this.w, h: this.h}, 
+                {x: e.x - cameraX, y: e.y, w: e.w, h: e.h})) {
+                
+                e.markedForDeletion = true;
+                this.markedForDeletion = true;
+                score += 10;
+                Sound.play('hit');
+                createParticles(e.x - cameraX + e.w/2, e.y + e.h/2, e.color, 15);
+            }
+        }
+    }
+    draw() {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - cameraX, this.y, this.w, this.h);
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.size = Math.random() * 5 + 2;
+        this.vx = (Math.random() - 0.5) * 10;
+        this.vy = (Math.random() - 0.5) * 10;
+        this.color = color;
+        this.life = 1.0;
+        this.decay = Math.random() * 0.05 + 0.02;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= this.decay;
+    }
+    draw() {
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.size, this.size);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+function createParticles(x, y, color, amount) {
+    for (let i = 0; i < amount; i++) {
+        particles.push(new Particle(x, y, color));
+    }
+}
+
+function checkCollision(r1, r2) {
+    return (r1.x < r2.x + r2.w &&
+            r1.x + r1.w > r2.x &&
+            r1.y < r2.y + r2.h &&
+            r1.y + r1.h > r2.y);
+}
+
+// Procedural Generation
+let nextPlatformX = 0;
+function manageWorld() {
+    // Generate platforms
+    while (nextPlatformX - cameraX < width + 200) {
+        let pWidth = Math.random() * 200 + 150;
+        let gap = Math.random() * 150 + 100;
+        let pY = height - (Math.random() * 200 + 100);
+        
+        // Ensure first platform is safe
+        if (platforms.length === 0) {
+            pWidth = width;
+            pY = height - 100;
+            gap = 0;
+        }
+
+        platforms.push(new Platform(nextPlatformX, pY, pWidth));
+        
+        // Spawn enemy occasionally on platform (not first one)
+        if (platforms.length > 1 && Math.random() > 0.5) {
+            enemies.push(new Enemy(nextPlatformX + pWidth/2, pY));
+        }
+
+        nextPlatformX += pWidth + gap;
+    }
+
+    // Cleanup offscreen entities
+    platforms = platforms.filter(p => p.x - cameraX + p.w > -100);
+    enemies = enemies.filter(e => e.x - cameraX + e.w > -100 && !e.markedForDeletion);
+    bullets = bullets.filter(b => !b.markedForDeletion);
+    particles = particles.filter(p => p.life > 0);
+}
+
+function resetGame() {
+    player = new Player();
+    platforms = [];
+    enemies = [];
+    bullets = [];
+    particles = [];
+    nextPlatformX = 0;
+    cameraX = 0;
+    score = 0;
+    gameSpeed = 6;
+    frames = 0;
+    manageWorld(); // Create initial world
+}
+
+function startGame() {
+    // Initialize Audio Context on user interaction
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    
+    startScreen.classList.add('hidden');
+    gameOverScreen.classList.add('hidden');
+    hud.classList.remove('hidden');
+    touchLeft.classList.remove('hidden');
+    touchRight.classList.remove('hidden');
+    
+    resetGame();
+    gameState = 'PLAYING';
+}
+
+function endGame() {
+    gameState = 'GAMEOVER';
+    Sound.play('die');
+    createParticles(player.x + player.w/2, player.y + player.h/2, player.color, 30);
+    
+    hud.classList.add('hidden');
+    touchLeft.classList.add('hidden');
+    touchRight.classList.add('hidden');
+    
+    setTimeout(() => {
+        gameOverScreen.classList.remove('hidden');
+        finalScore.innerText = score;
+    }, 500);
+}
+
+function drawBackground() {
+    // Parallax background elements (stars/buildings)
+    ctx.fillStyle = '#1e293b'; // gray-800
+    for(let i=0; i<10; i++) {
+        let bx = ((i * 200) - (cameraX * 0.2)) % (width + 200);
+        if (bx < -200) bx += width + 200;
+        ctx.fillRect(bx, height - 300 + (i%3)*50, 100, 300);
+    }
+}
+
+function gameLoop() {
+    requestAnimationFrame(gameLoop);
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+    
+    if (gameState === 'PLAYING') {
+        frames++;
+        
+        // Increase difficulty
+        if (frames % 600 === 0) gameSpeed += 0.5;
+
+        // Move camera
+        cameraX += gameSpeed;
+        
+        // Score based on distance
+        if (frames % 10 === 0) {
+            score++;
+            scoreVal.innerText = score;
+        }
+
+        manageWorld();
+
+        player.update();
+        bullets.forEach(b => b.update());
+        enemies.forEach(e => e.update());
+        particles.forEach(p => p.update());
+    } else if (gameState === 'GAMEOVER') {
+        particles.forEach(p => p.update()); // Continue particle anim
+    }
+
+    // Draw phase
+    drawBackground();
+    
+    platforms.forEach(p => p.draw());
+    enemies.forEach(e => e.draw());
+    bullets.forEach(b => b.draw());
+    
+    if (gameState === 'PLAYING') {
+        player.draw();
+    }
+    
+    particles.forEach(p => p.draw());
+}
+
+// Start loop
+gameLoop();
+
+</script>
+</body>
+</html>

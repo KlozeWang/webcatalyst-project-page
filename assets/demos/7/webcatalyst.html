@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deep Dig - Underground Mining Game</title>
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+}
+
+#gameContainer {
+    position: relative;
+    width: 800px;
+    height: 600px;
+    background: #0f0f1a;
+    border: 3px solid #444;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 0 30px rgba(0,0,0,0.5);
+}
+
+#gameCanvas {
+    display: block;
+    cursor: crosshair;
+}
+
+#ui {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.ui-panel {
+    background: rgba(0,0,0,0.7);
+    border: 2px solid #555;
+    border-radius: 6px;
+    padding: 8px 14px;
+    color: #fff;
+    font-size: 14px;
+    pointer-events: auto;
+}
+
+.ui-panel span {
+    color: #ffd700;
+    font-weight: bold;
+}
+
+#tools {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    z-index: 10;
+}
+
+.tool-btn {
+    width: 50px;
+    height: 50px;
+    background: rgba(0,0,0,0.8);
+    border: 2px solid #555;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    pointer-events: auto;
+}
+
+.tool-btn:hover {
+    border-color: #ffd700;
+    transform: scale(1.1);
+}
+
+.tool-btn.active {
+    border-color: #ffd700;
+    background: rgba(255,215,0,0.2);
+    box-shadow: 0 0 10px rgba(255,215,0,0.3);
+}
+
+.tool-btn .tool-key {
+    font-size: 9px;
+    color: #888;
+    margin-top: 2px;
+}
+
+#message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.9);
+    border: 2px solid #ffd700;
+    border-radius: 12px;
+    padding: 30px 40px;
+    color: #fff;
+    text-align: center;
+    z-index: 20;
+    display: none;
+}
+
+#message h2 {
+    color: #ffd700;
+    margin-bottom: 10px;
+    font-size: 24px;
+}
+
+#message p {
+    margin-bottom: 15px;
+    font-size: 14px;
+    color: #ccc;
+}
+
+#message button {
+    background: #ffd700;
+    color: #000;
+    border: none;
+    padding: 10px 30px;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+}
+
+#message button:hover {
+    background: #ffed4a;
+}
+
+#depthIndicator {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 300px;
+    background: rgba(0,0,0,0.5);
+    border: 1px solid #555;
+    border-radius: 4px;
+    z-index: 10;
+}
+
+#depthFill {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background: linear-gradient(to top, #8B4513, #654321);
+    border-radius: 4px;
+    transition: height 0.3s;
+}
+
+#depthLabel {
+    position: absolute;
+    right: 35px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #888;
+    font-size: 10px;
+    z-index: 10;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+}
+
+#instructions {
+    position: absolute;
+    top: 50px;
+    left: 10px;
+    background: rgba(0,0,0,0.6);
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #888;
+    font-size: 11px;
+    z-index: 10;
+    pointer-events: none;
+}
+
+#instructions kbd {
+    background: #333;
+    border: 1px solid #555;
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: #fff;
+    font-size: 10px;
+}
+</style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <div id="ui">
+        <div class="ui-panel">⛏️ Score: <span id="score">0</span></div>
+        <div class="ui-panel">💎 Gems: <span id="gems">0</span></div>
+        <div class="ui-panel">🪙 Gold: <span id="gold">0</span></div>
+        <div class="ui-panel">⚡ Depth: <span id="depth">0</span>m</div>
+    </div>
+
+    <div id="instructions">
+        <kbd>WASD</kbd> Move &nbsp; <kbd>Click</kbd> Dig &nbsp; <kbd>1-3</kbd> Tools
+    </div>
+
+    <div id="depthIndicator">
+        <div id="depthFill" style="height: 0%"></div>
+    </div>
+    <div id="depthLabel">DEPTH</div>
+
+    <div id="tools">
+        <div class="tool-btn active" data-tool="pickaxe" title="Pickaxe - Basic digging">
+            ⛏️
+            <span class="tool-key">1</span>
+        </div>
+        <div class="tool-btn" data-tool="drill" title="Drill - Fast digging">
+            🔩
+            <span class="tool-key">2</span>
+        </div>
+        <div class="tool-btn" data-tool="explosive" title="Explosive - Clear area">
+            🧨
+            <span class="tool-key">3</span>
+        </div>
+    </div>
+
+    <div id="message">
+        <h2 id="msgTitle">Deep Dig</h2>
+        <p id="msgText">Dig through the earth to find gems and gold!<br>Click on blocks adjacent to you to dig them.</p>
+        <button id="msgBtn" onclick="startGame()">Start Digging!</button>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const TILE_SIZE = 32;
+const GRID_W = 50;
+const GRID_H = 40;
+const VIEW_W = Math.ceil(canvas.width / TILE_SIZE);
+const VIEW_H = Math.ceil(canvas.height / TILE_SIZE);
+
+// Block types
+const BLOCKS = {
+    AIR: 0,
+    GRASS: 1,
+    DIRT: 2,
+    STONE: 3,
+    COAL: 4,
+    IRON: 5,
+    GOLD: 6,
+    DIAMOND: 7,
+    BEDROCK: 8
+};
+
+const BLOCK_COLORS = {
+    [BLOCKS.AIR]: null,
+    [BLOCKS.GRASS]: '#4a7c2e',
+    [BLOCKS.DIRT]: '#8B6914',
+    [BLOCKS.STONE]: '#666666',
+    [BLOCKS.COAL]: '#333333',
+    [BLOCKS.IRON]: '#b87333',
+    [BLOCKS.GOLD]: '#ffd700',
+    [BLOCKS.DIAMOND]: '#00bfff',
+    [BLOCKS.BEDROCK]: '#222222'
+};
+
+const BLOCK_HARDNESS = {
+    [BLOCKS.GRASS]: 1,
+    [BLOCKS.DIRT]: 2,
+    [BLOCKS.STONE]: 4,
+    [BLOCKS.COAL]: 3,
+    [BLOCKS.IRON]: 5,
+    [BLOCKS.GOLD]: 6,
+    [BLOCKS.DIAMOND]: 8,
+    [BLOCKS.BEDROCK]: 999
+};
+
+const BLOCK_REWARDS = {
+    [BLOCKS.COAL]: 5,
+    [BLOCKS.IRON]: 15,
+    [BLOCKS.GOLD]: 30,
+    [BLOCKS.DIAMOND]: 100
+};
+
+const BLOCK_GEMS = {
+    [BLOCKS.GOLD]: 'gold',
+    [BLOCKS.DIAMOND]: 'diamond'
+};
+
+let grid = [];
+let player = { x: 25, y: 2, hp: 100, maxHp: 100 };
+let score = 0;
+let gems = 0;
+let goldCount = 0;
+let currentTool = 'pickaxe';
+let gameRunning = false;
+let particles = [];
+let camera = { x: 0, y: 0 };
+let digProgress = {};
+let enemies = [];
+let powerUps = [];
+let gameTime = 0;
+let maxDepth = 0;
+
+// Generate terrain
+function generateTerrain() {
+    grid = [];
+    for (let y = 0; y < GRID_H; y++) {
+        grid[y] = [];
+        for (let x = 0; x < GRID_W; x++) {
+            if (y === 0) {
+                grid[y][x] = BLOCKS.GRASS;
+            } else if (y < 5) {
+                grid[y][x] = BLOCKS.DIRT;
+            } else if (y < GRID_H - 2) {
+                // Generate ore veins using simple noise
+                let noise = Math.sin(x * 0.3) * Math.cos(y * 0.2) + Math.random() * 0.5;
+                
+                if (y > 20 && noise > 1.2) {
+                    grid[y][x] = BLOCKS.DIAMOND;
+                } else if (y > 15 && noise > 0.8) {
+                    grid[y][x] = BLOCKS.GOLD;
+                } else if (y > 10 && noise > 0.4) {
+                    grid[y][x] = BLOCKS.IRON;
+                } else if (y > 5 && noise > 0.1) {
+                    grid[y][x] = BLOCKS.COAL;
+                } else if (y > 8 && Math.random() < 0.15) {
+                    grid[y][x] = BLOCKS.STONE;
+                } else {
+                    grid[y][x] = BLOCKS.DIRT;
+                }
+            } else {
+                grid[y][x] = BLOCKS.BEDROCK;
+            }
+        }
+    }
+    
+    // Create some caves
+    for (let i = 0; i < 30; i++) {
+        let cx = Math.floor(Math.random() * GRID_W);
+        let cy = Math.floor(Math.random() * (GRID_H - 10)) + 5;
+        let radius = Math.floor(Math.random() * 4) + 2;
+        
+        for (let dy = -radius; dy <= radius; dy++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+                if (dx*dx + dy*dy <= radius*radius) {
+                    let nx = cx + dx;
+                    let ny = cy + dy;
+                    if (nx >= 0 && nx < GRID_W && ny >= 0 && ny < GRID_H) {
+                        grid[ny][nx] = BLOCKS.AIR;
+                    }
+                }
+            }
+        }
+    }
+}
+
+function isAdjacentToPlayer(x, y) {
+    let dx = Math.abs(x - player.x);
+    let dy = Math.abs(y - player.y);
+    return dx <= 1 && dy <= 1 && !(dx === 0 && dy === 0);
+}
+
+function digBlock(x, y) {
+    if (x < 0 || x >= GRID_W || y < 0 || y >= GRID_H) return;
+    if (grid[y][x] === BLOCKS.AIR) return;
+    if (grid[y][x] === BLOCKS.BEDROCK) {
+        showFloatingText(x, y, "Can't dig bedrock!", "#ff0000");
+        return;
+    }
+    if (!isAdjacentToPlayer(x, y)) {
+        showFloatingText(x, y, "Too far!", "#ff8800");
+        return;
+    }
+
+    let blockType = grid[y][x];
+    let key = `${x},${y}`;
+    
+    if (!digProgress[key]) {
+        digProgress[key] = 0;
+    }
+
+    let toolPower = currentTool === 'pickaxe' ? 1 : currentTool === 'drill' ? 3 : 5;
+    digProgress[key] += toolPower;
+
+    let hardness = BLOCK_HARDNESS[blockType] || 1;
+    
+    if (digProgress[key] >= hardness) {
+        // Block destroyed
+        grid[y][x] = BLOCKS.AIR;
+        delete digProgress[key];
+        
+        // Rewards
+        if (BLOCK_REWARDS[blockType]) {
+            score += BLOCK_REWARDS[blockType];
+            showFloatingText(x, y, `+${BLOCK_REWARDS[blockType]}`, "#ffd700");
+        }
+        
+        if (BLOCK_GEMS[blockType]) {
+            if (BLOCK_GEMS[blockType] === 'gold') {
+                goldCount++;
+                showFloatingText(x, y, "+1 🪙", "#ffd700");
+            } else {
+                gems++;
+                showFloatingText(x, y, "+1 💎", "#00bfff");
+            }
+        }
+
+        // Spawn particles
+        let color = BLOCK_COLORS[blockType] || '#888';
+        for (let i = 0; i < 8; i++) {
+            particles.push({
+                x: x * TILE_SIZE + TILE_SIZE/2,
+                y: y * TILE_SIZE + TILE_SIZE/2,
+                vx: (Math.random() - 0.5) * 4,
+                vy: (Math.random() - 0.5) * 4 - 2,
+                life: 30,
+                maxLife: 30,
+                color: color,
+                size: Math.random() * 4 + 2
+            });
+        }
+
+        // Chance to spawn power-up
+        if (Math.random() < 0.05) {
+            powerUps.push({
+                x: x * TILE_SIZE + TILE_SIZE/2,
+                y: y * TILE_SIZE + TILE_SIZE/2,
+                type: Math.random() < 0.5 ? 'health' : 'speed',
+                life: 600
+            });
+        }
+
+        updateUI();
+    }
+}
+
+function showFloatingText(x, y, text, color) {
+    particles.push({
+        x: x * TILE_SIZE + TILE_SIZE/2,
+        y: y * TILE_SIZE,
+        vx: 0,
+        vy: -1,
+        life: 60,
+        maxLife: 60,
+        color: color,
+        text: text,
+        isText: true
+    });
+}
+
+function updateUI() {
+    document.getElementById('score').textContent = score;
+    document.getElementById('gems').textContent = gems;
+    document.getElementById('gold').textContent = goldCount;
+    document.getElementById('depth').textContent = maxDepth;
+    
+    let depthPercent = (maxDepth / (GRID_H - 5)) * 100;
+    document.getElementById('depthFill').style.height = Math.min(depthPercent, 100) + '%';
+}
+
+function updateCamera() {
+    camera.x = player.x * TILE_SIZE - canvas.width / 2 + TILE_SIZE / 2;
+    camera.y = player.y * TILE_SIZE - canvas.height / 2 + TILE_SIZE / 2;
+    
+    camera.x = Math.max(0, Math.min(camera.x, GRID_W * TILE_SIZE - canvas.width));
+    camera.y = Math.max(0, Math.min(camera.y, GRID_H * TILE_SIZE - canvas.height));
+}
+
+function drawBlock(x, y, screenX, screenY) {
+    let block = grid[y][x];
+    
+    if (block === BLOCKS.AIR) return;
+    
+    // Base color
+    ctx.fillStyle = BLOCK_COLORS[block] || '#888';
+    ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+    
+    // Block details
+    if (block === BLOCKS.GRASS) {
+        ctx.fillStyle = '#5a9c3e';
+        ctx.fillRect(screenX, screenY, TILE_SIZE, 6);
+        // Grass blades
+        ctx.fillStyle = '#6abf4e';
+        for (let i = 0; i < 3; i++) {
+            let gx = screenX + Math.random() * TILE_SIZE;
+            ctx.fillRect(gx, screenY - 2, 2, 4);
+        }
+    } else if (block === BLOCKS.DIRT) {
+        // Dirt texture
+        ctx.fillStyle = '#7a5a10';
+        for (let i = 0; i < 3; i++) {
+            let dx = screenX + Math.random() * (TILE_SIZE - 4);
+            let dy = screenY + Math.random() * (TILE_SIZE - 4);
+            ctx.fillRect(dx, dy, 3, 3);
+        }
+    } else if (block === BLOCKS.STONE) {
+        // Stone texture
+        ctx.fillStyle = '#555';
+        for (let i = 0; i < 4; i++) {
+            let dx = screenX + Math.random() * (TILE_SIZE - 6);
+            let dy = screenY + Math.random() * (TILE_SIZE - 6);
+            ctx.fillRect(dx, dy, 4, 4);
+        }
+        ctx.strokeStyle = '#777';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(screenX + 2, screenY + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+    } else if (block === BLOCKS.COAL) {
+        ctx.fillStyle = '#222';
+        for (let i = 0; i < 3; i++) {
+            let dx = screenX + Math.random() * (TILE_SIZE - 8);
+            let dy = screenY + Math.random() * (TILE_SIZE - 8);
+            ctx.fillRect(dx, dy, 6, 4);
+        }
+    } else if (block === BLOCKS.IRON) {
+        ctx.fillStyle = '#a06020';
+        for (let i = 0; i < 3; i++) {
+            let dx = screenX + Math.random() * (TILE_SIZE - 8);
+            let dy = screenY + Math.random() * (TILE_SIZE - 8);
+            ctx.fillRect(dx, dy, 5, 5);
+        }
+    } else if (block === BLOCKS.GOLD) {
+        // Gold sparkle
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(screenX + 4, screenY + 4, 8, 8);
+        ctx.fillStyle = '#ffed4a';
+        ctx.fillRect(screenX + 6, screenY + 6, 4, 4);
+        // Sparkle effect
+        let sparkle = Math.sin(gameTime * 0.1) * 0.5 + 0.5;
+        ctx.fillStyle = `rgba(255, 255, 255, ${sparkle * 0.5})`;
+        ctx.fillRect(screenX + 8, screenY + 8, 2, 2);
+    } else if (block === BLOCKS.DIAMOND) {
+        // Diamond sparkle
+        ctx.fillStyle = '#00bfff';
+        ctx.fillRect(screenX + 6, screenY + 6, 10, 10);
+        ctx.fillStyle = '#88eeff';
+        ctx.fillRect(screenX + 8, screenY + 8, 6, 6);
+        // Sparkle effect
+        let sparkle = Math.sin(gameTime * 0.15) * 0.5 + 0.5;
+        ctx.fillStyle = `rgba(255, 255, 255, ${sparkle})`;
+        ctx.fillRect(screenX + 10, screenY + 10, 3, 3);
+    } else if (block === BLOCKS.BEDROCK) {
+        ctx.fillStyle = '#111';
+        for (let i = 0; i < 5; i++) {
+            let dx = screenX + Math.random() * (TILE_SIZE - 6);
+            let dy = screenY + Math.random() * (TILE_SIZE - 6);
+            ctx.fillRect(dx, dy, 5, 5);
+        }
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+    }
+    
+    // Dig progress overlay
+    let key = `${x},${y}`;
+    if (digProgress[key]) {
+        let blockType = grid[y][x];
+        let hardness = BLOCK_HARDNESS[blockType] || 1;
+        let progress = digProgress[key] / hardness;
+        
+        ctx.fillStyle = `rgba(255, 0, 0, ${progress * 0.5})`;
+        ctx.fillRect(screenX, screenY, TILE_SIZE * progress, TILE_SIZE);
+        
+        // Crack lines
+        ctx.strokeStyle = `rgba(0, 0, 0, ${progress * 0.8})`;
+        ctx.lineWidth = 2;
+        let numCracks = Math.floor(progress * 5);
+        for (let i = 0; i < numCracks; i++) {
+            ctx.beginPath();
+            ctx.moveTo(screenX + TILE_SIZE/2, screenY + TILE_SIZE/2);
+            ctx.lineTo(
+                screenX + Math.random() * TILE_SIZE,
+                screenY + Math.random() * TILE_SIZE
+            );
+            ctx.stroke();
+        }
+    }
+    
+    // Block border
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+}
+
+function drawPlayer() {
+    let screenX = player.x * TILE_SIZE - camera.x;
+    let screenY = player.y * TILE_SIZE - camera.y;
+    
+    // Player body
+    ctx.fillStyle = '#ff6b35';
+    ctx.fillRect(screenX + 4, screenY + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+    
+    // Player head
+    ctx.fillStyle = '#ffcc99';
+    ctx.fillRect(screenX + 8, screenY + 2, TILE_SIZE - 16, TILE_SIZE - 16);
+    
+    // Helmet
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(screenX + 6, screenY, TILE_SIZE - 12, 8);
+    
+    // Helmet light
+    let lightIntensity = Math.sin(gameTime * 0.05) * 0.3 + 0.7;
+    ctx.fillStyle = `rgba(255, 255, 100, ${lightIntensity})`;
+    ctx.fillRect(screenX + 12, screenY + 2, 6, 4);
+    
+    // Eyes
+    ctx.fillStyle = '#000';
+    ctx.fillRect(screenX + 10, screenY + 8, 3, 3);
+    ctx.fillRect(screenX + 18, screenY + 8, 3, 3);
+    
+    // Tool in hand
+    if (currentTool === 'pickaxe') {
+        ctx.fillStyle = '#888';
+        ctx.fillRect(screenX + 24, screenY + 10, 8, 3);
+        ctx.fillStyle = '#666';
+        ctx.fillRect(screenX + 28, screenY + 6, 4, 8);
+    } else if (currentTool === 'drill') {
+        ctx.fillStyle = '#aaa';
+        ctx.fillRect(screenX + 22, screenY + 12, 10, 4);
+        ctx.fillStyle = '#888';
+        ctx.fillRect(screenX + 30, screenY + 10, 3, 8);
+    }
+    
+    // Highlight adjacent diggable blocks
+    for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+            let nx = player.x + dx;
+            let ny = player.y + dy;
+            if (nx >= 0 && nx < GRID_W && ny >= 0 && ny < GRID_H) {
+                if (grid[ny][nx] !== BLOCKS.AIR && grid[ny][nx] !== BLOCKS.BEDROCK) {
+                    let sx = nx * TILE_SIZE - camera.x;
+                    let sy = ny * TILE_SIZE - camera.y;
+                    ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(sx + 1, sy + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+                }
+            }
+        }
+    }
+}
+
+function drawParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        
+        if (!p.isText) {
+            p.vy += 0.1; // gravity
+        }
+        
+        p.life--;
+        
+        if (p.life <= 0) {
+            particles.splice(i, 1);
+            continue;
+        }
+        
+        let alpha = p.life / p.maxLife;
+        let screenX = p.x - camera.x;
+        let screenY = p.y - camera.y;
+        
+        if (p.isText) {
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = alpha;
+            ctx.font = 'bold 14px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText(p.text, screenX, screenY);
+            ctx.globalAlpha = 1;
+        } else {
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = alpha;
+            ctx.fillRect(screenX - p.size/2, screenY - p.size/2, p.size, p.size);
+            ctx.globalAlpha = 1;
+        }
+    }
+}
+
+function drawPowerUps() {
+    for (let i = powerUps.length - 1; i >= 0; i--) {
+        let pu = powerUps[i];
+        pu.life--;
+        
+        if (pu.life <= 0) {
+            powerUps.splice(i, 1);
+            continue;
+        }
+        
+        let screenX = pu.x - camera.x;
+        let screenY = pu.y - camera.y;
+        
+        // Check if on screen
+        if (screenX < -TILE_SIZE || screenX > canvas.width + TILE_SIZE ||
+            screenY < -TILE_SIZE || screenY > canvas.height + TILE_SIZE) continue;
+        
+        // Draw power-up
+        let pulse = Math.sin(gameTime * 0.1) * 3;
+        
+        if (pu.type === 'health') {
+            ctx.fillStyle = '#ff4444';
+            ctx.fillRect(screenX - 8 - pulse/2, screenY - 8 - pulse/2, 16 + pulse, 16 + pulse);
+            ctx.fillStyle = '#fff';
+            ctx.font = '12px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText('❤️', screenX, screenY + 4);
+        } else {
+            ctx.fillStyle = '#44ff44';
+            ctx.fillRect(screenX - 8 - pulse/2, screenY - 8 - pulse/2, 16 + pulse, 16 + pulse);
+            ctx.fillStyle = '#fff';
+            ctx.font = '12px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚡', screenX, screenY + 4);
+        }
+        
+        // Check collection
+        let dx = pu.x - (player.x * TILE_SIZE + TILE_SIZE/2);
+        let dy = pu.y - (player.y * TILE_SIZE + TILE_SIZE/2);
+        if (Math.sqrt(dx*dx + dy*dy) < TILE_SIZE) {
+            if (pu.type === 'health') {
+                player.hp = Math.min(player.hp + 20, player.maxHp);
+                showFloatingText(player.x, player.y, "+20 HP", "#ff4444");
+            } else {
+                score += 50;
+                showFloatingText(player.x, player.y, "+50 Score", "#44ff44");
+            }
+            powerUps.splice(i, 1);
+            updateUI();
+        }
+    }
+}
+
+function drawMinimap() {
+    let mmSize = 100;
+    let mmX = canvas.width - mmSize - 15;
+    let mmY = 50;
+    let mmTileW = mmSize / GRID_W;
+    let mmTileH = mmSize / GRID_H;
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(mmX - 2, mmY - 2, mmSize + 4, mmSize + 4);
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(mmX - 2, mmY - 2, mmSize + 4, mmSize + 4);
+    
+    for (let y = 0; y < GRID_H; y++) {
+        for (let x = 0; x < GRID_W; x++) {
+            if (grid[y][x] !== BLOCKS.AIR) {
+                ctx.fillStyle = BLOCK_COLORS[grid[y][x]] || '#333';
+                ctx.fillRect(mmX + x * mmTileW, mmY + y * mmTileH, mmTileW + 0.5, mmTileH + 0.5);
+            }
+        }
+    }
+    
+    // Player on minimap
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(mmX + player.x * mmTileW - 1, mmY + player.y * mmTileH - 1, 3, 3);
+}
+
+function drawLighting() {
+    // Create torch/light effect around player
+    let playerScreenX = player.x * TILE_SIZE - camera.x + TILE_SIZE/2;
+    let playerScreenY = player.y * TILE_SIZE - camera.y + TILE_SIZE/2;
+    
+    let gradient = ctx.createRadialGradient(
+        playerScreenX, playerScreenY, 20,
+        playerScreenX, playerScreenY, 200
+    );
+    gradient.addColorStop(0, 'rgba(0,0,0,0)');
+    gradient.addColorStop(0.5, 'rgba(0,0,0,0.3)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0.8)');
+    
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+function gameLoop() {
+    if (!gameRunning) return;
+    
+    gameTime++;
+    
+    // Clear canvas
+    ctx.fillStyle = '#0f0f1a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw sky/ground surface
+    if (player.y <= 2) {
+        ctx.fillStyle = '#87CEEB';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw grass surface
+        let surfaceY = 2 * TILE_SIZE - camera.y;
+        ctx.fillStyle = '#4a7c2e';
+        ctx.fillRect(0, surfaceY, canvas.width, TILE_SIZE * 3);
+        
+        // Grass detail
+        ctx.fillStyle = '#5a9c3e';
+        for (let x = 0; x < canvas.width; x += 8) {
+            let h = Math.sin(x * 0.1 + gameTime * 0.02) * 3 + 5;
+            ctx.fillRect(x, surfaceY - h, 4, h);
+        }
+    }
+    
+    updateCamera();
+    
+    // Draw visible blocks
+    let startX = Math.max(0, Math.floor(camera.x / TILE_SIZE));
+    let startY = Math.max(0, Math.floor(camera.y / TILE_SIZE));
+    let endX = Math.min(GRID_W, startX + VIEW_W + 2);
+    let endY = Math.min(GRID_H, startY + VIEW_H + 2);
+    
+    for (let y = startY; y < endY; y++) {
+        for (let x = startX; x < endX; x++) {
+            let screenX = x * TILE_SIZE - camera.x;
+            let screenY = y * TILE_SIZE - camera.y;
+            drawBlock(x, y, screenX, screenY);
+        }
+    }
+    
+    drawPowerUps();
+    drawPlayer();
+    drawParticles();
+    drawLighting();
+    drawMinimap();
+    
+    // Update max depth
+    let currentDepth = Math.max(0, player.y - 2);
+    if (currentDepth > maxDepth) {
+        maxDepth = currentDepth;
+        updateUI();
+    }
+    
+    requestAnimationFrame(gameLoop);
+}
+
+function startGame() {
+    document.getElementById('message').style.display = 'none';
+    generateTerrain();
+    player = { x: 25, y: 2, hp: 100, maxHp: 100 };
+    score = 0;
+    gems = 0;
+    goldCount = 0;
+    maxDepth = 0;
+    particles = [];
+    powerUps = [];
+    digProgress = {};
+    gameRunning = true;
+    updateUI();
+    gameLoop();
+}
+
+function showMessage(title, text, btnText) {
+    document.getElementById('msgTitle').textContent = title;
+    document.getElementById('msgText').innerHTML = text;
+    document.getElementById('msgBtn').textContent = btnText;
+    document.getElementById('message').style.display = 'block';
+}
+
+// Input handling
+let keys = {};
+
+document.addEventListener('keydown', (e) => {
+    keys[e.key.toLowerCase()] = true;
+    
+    if (!gameRunning) return;
+    
+    let newX = player.x;
+    let newY = player.y;
+    
+    switch(e.key.toLowerCase()) {
+        case 'w':
+        case 'arrowup':
+            newY--;
+            break;
+        case 's':
+        case 'arrowdown':
+            newY++;
+            break;
+        case 'a':
+        case 'arrowleft':
+            newX--;
+            break;
+        case 'd':
+        case 'arrowright':
+            newX++;
+            break;
+        case '1':
+            currentTool = 'pickaxe';
+            updateToolButtons();
+            break;
+        case '2':
+            currentTool = 'drill';
+            updateToolButtons();
+            break;
+        case '3':
+            currentTool = 'explosive';
+            updateToolButtons();
+            break;
+    }
+    
+    // Move player
+    if (newX >= 0 && newX < GRID_W && newY >= 0 && newY < GRID_H) {
+        if (grid[newY][newX] === BLOCKS.AIR || grid[newY][newX] === BLOCKS.GRASS) {
+            player.x = newX;
+            player.y = newY;
+        } else if (grid[newY][newX] === BLOCKS.DIRT || grid[newY][newX] === BLOCKS.STONE ||
+                   grid[newY][newX] === BLOCKS.COAL || grid[newY][newX] === BLOCKS.IRON ||
+                   grid[newY][newX] === BLOCKS.GOLD || grid[newY][newX] === BLOCKS.DIAMOND) {
+            // Auto-dig if walking into a block
+            digBlock(newX, newY);
+            player.x = newX;
+            player.y = newY;
+        }
+    }
+    
+    e.preventDefault();
+});
+
+document.addEventListener('keyup', (e) => {
+    keys[e.key.toLowerCase()] = false;
+});
+
+canvas.addEventListener('click', (e) => {
+    if (!gameRunning) return;
+    
+    let rect = canvas.getBoundingClientRect();
+    let mouseX = e.clientX - rect.left;
+    let mouseY = e.clientY - rect.top;
+    
+    let gridX = Math.floor((mouseX + camera.x) / TILE_SIZE);
+    let gridY = Math.floor((mouseY + camera.y) / TILE_SIZE);
+    
+    if (currentTool === 'explosive') {
+        // Clear 3x3 area
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+                let nx = gridX + dx;
+                let ny = gridY + dy;
+                if (nx >= 0 && nx < GRID_W && ny >= 0 && ny < GRID_H) {
+                    if (grid[ny][nx] !== BLOCKS.AIR && grid[ny][nx] !== BLOCKS.BEDROCK) {
+                        digBlock(nx, ny);
+                    }
+                }
+            }
+        }
+        // Explosion particles
+        for (let i = 0; i < 20; i++) {
+            particles.push({
+                x: gridX * TILE_SIZE + TILE_SIZE/2,
+                y: gridY * TILE_SIZE + TILE_SIZE/2,
+                vx: (Math.random() - 0.5) * 8,
+                vy: (Math.random() - 0.5) * 8,
+                life: 40,
+                maxLife: 40,
+                color: Math.random() < 0.5 ? '#ff4400' : '#ffaa00',
+                size: Math.random() * 6 + 2
+            });
+        }
+    } else {
+        digBlock(gridX, gridY);
+    }
+});
+
+function updateToolButtons() {
+    document.querySelectorAll('.tool-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.tool === currentTool) {
+            btn.classList.add('active');
+        }
+    });
+}
+
+document.querySelectorAll('.tool-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        currentTool = btn.dataset.tool;
+        updateToolButtons();
+    });
+});
+
+// Show initial message
+showMessage(
+    '⛏️ Deep Dig',
+    'Dig through the earth to find gems and gold!<br><br>' +
+    '<kbd>WASD</kbd> or <kbd>Arrow Keys</kbd> to move<br>' +
+    '<kbd>Click</kbd> to dig blocks<br>' +
+    '<kbd>1-3</kbd> to switch tools<br><br>' +
+    'Find diamonds for the highest score!',
+    'Start Digging!'
+);
+</script>
+
+</body>
+</html>

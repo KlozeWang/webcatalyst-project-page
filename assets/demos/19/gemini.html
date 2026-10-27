@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brainrot Getaway Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; background-color: #222; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
+        canvas { display: block; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .pointer-events-auto { pointer-events: auto; }
+        
+        /* Floating Text Animation */
+        .float-text {
+            position: absolute;
+            color: #fff;
+            font-weight: bold;
+            font-size: 20px;
+            text-shadow: 2px 2px 0 #000;
+            pointer-events: none;
+            animation: floatUp 1s ease-out forwards;
+        }
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-50px) scale(1.5); opacity: 0; }
+        }
+
+        /* Simulator Button Polish */
+        .sim-btn {
+            transition: all 0.1s;
+            box-shadow: 0 4px 0px rgba(0,0,0,0.5);
+        }
+        .sim-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 0px 0px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Game Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI Layer -->
+    <div id="ui-layer">
+        
+        <!-- Start Screen -->
+        <div id="start-screen" class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center pointer-events-auto z-50">
+            <h1 class="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600 mb-4 text-center" style="-webkit-text-stroke: 2px white;">BRAINROT GETAWAY<br>SIMULATOR</h1>
+            <p class="text-white text-xl mb-8 max-w-lg text-center">Click for Aura. Steal Brainrot from the Red Zone. Avoid Guards. Buy Cars & Pets. Build your Base!</p>
+            <button onclick="startGame()" class="sim-btn bg-green-500 hover:bg-green-400 text-white font-bold py-4 px-12 rounded-xl text-3xl border-4 border-green-700">PLAY</button>
+        </div>
+
+        <!-- HUD -->
+        <div id="hud" class="hidden w-full h-full relative">
+            <!-- Top Stats -->
+            <div class="absolute top-4 left-4 flex gap-4 pointer-events-auto">
+                <div class="bg-gray-800/90 border-2 border-yellow-500 rounded-lg p-2 px-4 shadow-lg flex items-center gap-2 text-white">
+                    <span class="text-2xl">💵</span>
+                    <div class="flex flex-col">
+                        <span class="text-xs text-gray-400 font-bold uppercase">Cash</span>
+                        <span id="cash-display" class="font-bold text-xl text-yellow-400">0</span>
+                    </div>
+                </div>
+                <div class="bg-gray-800/90 border-2 border-blue-500 rounded-lg p-2 px-4 shadow-lg flex items-center gap-2 text-white">
+                    <span class="text-2xl">✨</span>
+                    <div class="flex flex-col">
+                        <span class="text-xs text-gray-400 font-bold uppercase">Aura Multiplier</span>
+                        <span id="aura-display" class="font-bold text-xl text-blue-400">1x</span>
+                    </div>
+                </div>
+                <div class="bg-gray-800/90 border-2 border-purple-500 rounded-lg p-2 px-4 shadow-lg flex items-center gap-2 text-white">
+                    <span class="text-2xl">🧠</span>
+                    <div class="flex flex-col">
+                        <span class="text-xs text-gray-400 font-bold uppercase">Base Income</span>
+                        <span id="income-display" class="font-bold text-xl text-purple-400">$0/s</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Messages -->
+            <div id="message-display" class="absolute top-20 left-1/2 transform -translate-x-1/2 text-white font-bold text-2xl text-shadow bg-black/50 px-4 py-2 rounded hidden">
+                Message
+            </div>
+
+            <!-- Controls Info -->
+            <div class="absolute bottom-4 left-4 bg-black/60 text-white p-2 rounded text-sm pointer-events-auto">
+                WASD: Move | F: Enter/Exit Car
+            </div>
+
+            <!-- Clicker Button -->
+            <div class="absolute bottom-10 left-1/2 transform -translate-x-1/2 pointer-events-auto">
+                <button id="clicker-btn" class="sim-btn bg-blue-600 hover:bg-blue-500 text-white font-black py-6 px-12 rounded-full text-4xl border-4 border-blue-800 shadow-[0_0_20px_rgba(37,99,235,0.5)]">
+                    + CLICK AURA +
+                </button>
+            </div>
+
+            <!-- Shops Right Side -->
+            <div class="absolute top-4 right-4 flex flex-col gap-2 pointer-events-auto w-64">
+                
+                <!-- Base Upgrade -->
+                <div class="bg-gray-800/90 border-2 border-purple-600 rounded-lg p-3 text-white">
+                    <h3 class="font-bold text-purple-400 mb-1">Base Defense</h3>
+                    <p class="text-xs text-gray-300 mb-2">Increases Brainrot capacity.</p>
+                    <button onclick="buyBaseUpgrade()" id="btn-base" class="w-full sim-btn bg-purple-600 hover:bg-purple-500 font-bold py-1 rounded text-sm">
+                        Upgrade ($<span id="cost-base">50</span>)
+                    </button>
+                </div>
+
+                <!-- Vehicles -->
+                <div class="bg-gray-800/90 border-2 border-red-600 rounded-lg p-3 text-white">
+                    <h3 class="font-bold text-red-400 mb-1">Getaway Car</h3>
+                    <p class="text-xs text-gray-300 mb-2">Drive fast. Can't carry items.</p>
+                    <button onclick="buyCar()" id="btn-car" class="w-full sim-btn bg-red-600 hover:bg-red-500 font-bold py-1 rounded text-sm">
+                        Buy Basic Car ($<span id="cost-car">200</span>)
+                    </button>
+                </div>
+
+                <!-- Pets -->
+                <div class="bg-gray-800/90 border-2 border-pink-600 rounded-lg p-3 text-white">
+                    <h3 class="font-bold text-pink-400 mb-1">Hatch Pet</h3>
+                    <p class="text-xs text-gray-300 mb-2">+Speed & +Income Buffs</p>
+                    <button onclick="hatchPet()" id="btn-pet" class="w-full sim-btn bg-pink-600 hover:bg-pink-500 font-bold py-1 rounded text-sm">
+                        Hatch Egg ($<span id="cost-pet">100</span>)
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Resize
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Game State
+    let gameState = 'start'; // start, play
+    let lastTime = 0;
+    
+    // Audio Context (Simple synth sounds)
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContext();
+
+    function playSound(type) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (type === 'click') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        } else if (type === 'buy') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+            osc.frequency.setValueAtTime(600, audioCtx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.2);
+        } else if (type === 'pickup') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.2);
+        } else if (type === 'deposit') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(500, audioCtx.currentTime);
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime + 0.1);
+            osc.frequency.setValueAtTime(1200, audioCtx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.4);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.4);
+        }
+    }
+
+    // Player Data
+    const player = {
+        x: 0, y: 0, size: 30, color: '#4facf7',
+        baseSpeed: 4, speed: 4,
+        carrying: false,
+        inCar: false
+    };
+
+    // Economy
+    let cash = 0;
+    let aura = 1;
+    let brainrotCount = 0; // in base
+    
+    // Costs
+    let costs = {
+        base: 50,
+        car: 200,
+        pet: 100
+    };
+
+    // Progression Stats
+    let baseLevel = 1;
+    let baseCapacity = 3;
+    let hasCar = false;
+    let petMultipliers = { speed: 1, income: 1 };
+    
+    // Map Entities
+    const baseZone = { x: 50, y: 0, width: 200, height: 200, color: 'rgba(168, 85, 247, 0.3)' }; // relative to center y later
+    const stealZone = { x: 0, y: 0, radius: 250, color: 'rgba(239, 68, 68, 0.2)' }; // Center right
+    let brainrots = []; // items on ground
+    let guards = []; // enemies
+    let pets = [];
+    let car = { x: -1000, y: -1000, width: 60, height: 40, active: false };
+
+    // Input
+    const keys = { w: false, a: false, s: false, d: false };
+
+    window.addEventListener('keydown', e => {
+        const k = e.key.toLowerCase();
+        if(keys.hasOwnProperty(k)) keys[k] = true;
+        if(k === 'f') toggleCar();
+    });
+    window.addEventListener('keyup', e => {
+        const k = e.key.toLowerCase();
+        if(keys.hasOwnProperty(k)) keys[k] = false;
+    });
+
+    // Clicker logic
+    document.getElementById('clicker-btn').addEventListener('click', (e) => {
+        if(gameState !== 'play') return;
+        aura += 1;
+        updateUI();
+        playSound('click');
+        createFloatingText(e.clientX, e.clientY, "+1 AURA", "#60a5fa");
+    });
+
+    function createFloatingText(x, y, text, color) {
+        const el = document.createElement('div');
+        el.className = 'float-text';
+        el.innerText = text;
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+        el.style.color = color;
+        document.getElementById('ui-layer').appendChild(el);
+        setTimeout(() => el.remove(), 1000);
+    }
+
+    function showMessage(msg) {
+        const el = document.getElementById('message-display');
+        el.innerText = msg;
+        el.classList.remove('hidden');
+        setTimeout(() => el.classList.add('hidden'), 2000);
+    }
+
+    // Shops
+    function buyBaseUpgrade() {
+        if(cash >= costs.base) {
+            cash -= costs.base;
+            baseLevel++;
+            baseCapacity += 2;
+            costs.base = Math.floor(costs.base * 1.5);
+            playSound('buy');
+            showMessage("Base Upgraded!");
+            updateUI();
+        }
+    }
+
+    function buyCar() {
+        if(!hasCar && cash >= costs.car) {
+            cash -= costs.car;
+            hasCar = true;
+            car.active = true;
+            car.x = baseZone.x + baseZone.width + 50;
+            car.y = baseZone.y + baseZone.height / 2;
+            document.getElementById('btn-car').innerText = "Owned";
+            document.getElementById('btn-car').disabled = true;
+            document.getElementById('btn-car').classList.add('opacity-50');
+            playSound('buy');
+            showMessage("Car Purchased! Press F near it.");
+            updateUI();
+        }
+    }
+
+    function hatchPet() {
+        if(cash >= costs.pet) {
+            cash -= costs.pet;
+            costs.pet = Math.floor(costs.pet * 1.3);
+            
+            const types = [
+                { name: "Doggo", color: "#fbbf24", mSpeed: 1.1, mInc: 1.2 },
+                { name: "Cat", color: "#9ca3af", mSpeed: 1.2, mInc: 1.1 },
+                { name: "Dragon", color: "#ef4444", mSpeed: 1.3, mInc: 1.5 }
+            ];
+            const p = types[Math.floor(Math.random() * types.length)];
+            
+            pets.push({
+                x: player.x, y: player.y, size: 15, color: p.color,
+                offsetX: (Math.random() - 0.5) * 50, offsetY: (Math.random() - 0.5) * 50
+            });
+            
+            petMultipliers.speed *= p.mSpeed;
+            petMultipliers.income *= p.mInc;
+            
+            playSound('buy');
+            showMessage(`Hatched ${p.name}!`);
+            updateUI();
+        }
+    }
+
+    function toggleCar() {
+        if(!hasCar) return;
+        
+        if(player.inCar) {
+            // Exit car
+            player.inCar = false;
+            car.x = player.x;
+            car.y = player.y;
+            player.x -= 40; // step out
+        } else {
+            // Enter car
+            if(player.carrying) {
+                showMessage("Can't drive while carrying Brainrot!");
+                return;
+            }
+            const dist = Math.hypot(player.x - car.x, player.y - car.y);
+            if(dist < 60) {
+                player.inCar = true;
+            }
+        }
+    }
+
+    // Passive Income Loop
+    setInterval(() => {
+        if(gameState === 'play' && brainrotCount > 0) {
+            let inc = (brainrotCount * 2) * (1 + aura * 0.1) * petMultipliers.income;
+            cash += inc;
+            updateUI();
+            
+            // Visual feedback on base
+            const screenX = baseZone.x + baseZone.width/2;
+            const screenY = baseZone.y + baseZone.height/2;
+            createFloatingText(screenX, screenY, "+$" + inc.toFixed(1), "#facc15");
+        }
+    }, 1000);
+
+    // Spawners
+    function spawnBrainrot() {
+        if(brainrots.length < 5) {
+            const r = stealZone.radius * Math.sqrt(Math.random());
+            const theta = Math.random() * 2 * Math.PI;
+            brainrots.push({
+                x: stealZone.x + r * Math.cos(theta),
+                y: stealZone.y + r * Math.sin(theta),
+                active: true
+            });
+        }
+    }
+
+    function spawnGuard() {
+        if(guards.length < 3) {
+            guards.push({
+                x: stealZone.x + (Math.random()-0.5)*100,
+                y: stealZone.y + (Math.random()-0.5)*100,
+                speed: 2.5,
+                angle: Math.random() * Math.PI * 2
+            });
+        }
+    }
+
+    function startGame() {
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('hud').classList.remove('hidden');
+        
+        // Setup Map Positions
+        baseZone.y = canvas.height / 2 - baseZone.height / 2;
+        stealZone.x = canvas.width - 300;
+        stealZone.y = canvas.height / 2;
+        
+        player.x = baseZone.x + baseZone.width / 2;
+        player.y = baseZone.y + baseZone.height / 2;
+
+        gameState = 'play';
+        updateUI();
+        
+        setInterval(spawnBrainrot, 2000);
+        setInterval(spawnGuard, 5000);
+        
+        requestAnimationFrame(gameLoop);
+    }
+
+    function updateUI() {
+        document.getElementById('cash-display').innerText = Math.floor(cash);
+        document.getElementById('aura-display').innerText = aura + "x";
+        
+        let inc = (brainrotCount * 2) * (1 + aura * 0.1) * petMultipliers.income;
+        document.getElementById('income-display').innerText = "$" + inc.toFixed(1) + "/s (" + brainrotCount + "/" + baseCapacity + ")";
+        
+        document.getElementById('cost-base').innerText = costs.base;
+        document.getElementById('cost-pet').innerText = costs.pet;
+    }
+
+    function checkCollisions() {
+        // Pick up brainrot
+        if(!player.carrying && !player.inCar) {
+            for(let i=0; i<brainrots.length; i++) {
+                let b = brainrots[i];
+                if(b.active && Math.hypot(player.x - b.x, player.y - b.y) < player.size + 15) {
+                    if(brainrotCount >= baseCapacity) {
+                        showMessage("Base full! Upgrade defense.");
+                        return;
+                    }
+                    b.active = false;
+                    player.carrying = true;
+                    playSound('pickup');
+                    brainrots.splice(i, 1);
+                    break;
+                }
+            }
+        }
+
+        // Deposit brainrot
+        if(player.carrying) {
+            if(player.x > baseZone.x && player.x < baseZone.x + baseZone.width &&
+               player.y > baseZone.y && player.y < baseZone.y + baseZone.height) {
+                player.carrying = false;
+                brainrotCount++;
+                playSound('deposit');
+                updateUI();
+                showMessage("Deposited Brainrot!");
+            }
+        }
+
+        // Guard Collision
+        if(!player.inCar) {
+            for(let g of guards) {
+                if(Math.hypot(player.x - g.x, player.y - g.y) < player.size + 15) {
+                    if(player.carrying) {
+                        player.carrying = false;
+                        showMessage("Guard caught you! Lost Brainrot.");
+                        // Respawn it
+                        brainrots.push({x: player.x, y: player.y, active: true});
+                        // Bounce player
+                        player.x -= 50;
+                    }
+                }
+            }
+        }
+    }
+
+    function update(dt) {
+        // Player Speed calc
+        let targetSpeed = player.baseSpeed * petMultipliers.speed;
+        if(player.inCar) targetSpeed = 12; // Fast car
+        else if(player.carrying) targetSpeed *= 0.5; // Slow when carrying
+
+        player.speed = targetSpeed;
+
+        // Movement
+        let dx = 0, dy = 0;
+        if(keys.w) dy -= 1;
+        if(keys.s) dy += 1;
+        if(keys.a) dx -= 1;
+        if(keys.d) dx += 1;
+
+        if(dx !== 0 || dy !== 0) {
+            const len = Math.hypot(dx, dy);
+            player.x += (dx / len) * player.speed;
+            player.y += (dy / len) * player.speed;
+        }
+
+        // Clamp to map
+        player.x = Math.max(player.size, Math.min(canvas.width - player.size, player.x));
+        player.y = Math.max(player.size, Math.min(canvas.height - player.size, player.y));
+
+        if(player.inCar) {
+            car.x = player.x;
+            car.y = player.y;
+        }
+
+        // Update Pets
+        pets.forEach((p, i) => {
+            let targetX = player.x + p.offsetX;
+            let targetY = player.y + p.offsetY;
+            p.x += (targetX - p.x) * 0.1;
+            p.y += (targetY - p.y) * 0.1;
+        });
+
+        // Update Guards (Patrol steal zone)
+        guards.forEach(g => {
+            g.x += Math.cos(g.angle) * g.speed;
+            g.y += Math.sin(g.angle) * g.speed;
+            
+            // Keep in steal zone roughly
+            const distToCenter = Math.hypot(g.x - stealZone.x, g.y - stealZone.y);
+            if(distToCenter > stealZone.radius) {
+                g.angle += Math.PI; // turn around
+            } else if (Math.random() < 0.02) {
+                g.angle += (Math.random() - 0.5); // wander
+            }
+
+            // Chase player if carrying
+            if(player.carrying && Math.hypot(player.x - g.x, player.y - g.y) < 200) {
+                g.angle = Math.atan2(player.y - g.y, player.x - g.x);
+                g.speed = 4; // run
+            } else {
+                g.speed = 2.5; // walk
+            }
+        });
+
+        checkCollisions();
+    }
+
+    function draw() {
+        // Clear
+        ctx.fillStyle = '#222';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Map Grid (Simulate open world)
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        for(let i=0; i<canvas.width; i+=100) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke(); }
+        for(let i=0; i<canvas.height; i+=100) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width,i); ctx.stroke(); }
+
+        // Draw Base
+        ctx.fillStyle = baseZone.color;
+        ctx.fillRect(baseZone.x, baseZone.y, baseZone.width, baseZone.height);
+        ctx.strokeStyle = '#a855f7';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(baseZone.x, baseZone.y, baseZone.width, baseZone.height);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '20px Arial';
+        ctx.fillText("SAFE ZONE", baseZone.x + 40, baseZone.y + 30);
+
+        // Draw Steal Zone
+        ctx.beginPath();
+        ctx.arc(stealZone.x, stealZone.y, stealZone.radius, 0, Math.PI * 2);
+        ctx.fillStyle = stealZone.color;
+        ctx.fill();
+        ctx.strokeStyle = '#ef4444';
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillText("DANGER ZONE", stealZone.x - 70, stealZone.y - stealZone.radius + 30);
+
+        // Draw Brainrots (Items)
+        brainrots.forEach(b => {
+            ctx.font = '24px Arial';
+            ctx.fillText("🧠", b.x - 12, b.y + 8);
+        });
+
+        // Draw Base Stash (Visual representation)
+        for(let i=0; i<brainrotCount; i++) {
+            ctx.fillText("🧠", baseZone.x + 10 + (i%5)*30, baseZone.y + 60 + Math.floor(i/5)*30);
+        }
+
+        // Draw Car (if not driven)
+        if(hasCar && !player.inCar) {
+            ctx.fillStyle = '#dc2626';
+            ctx.fillRect(car.x - car.width/2, car.y - car.height/2, car.width, car.height);
+            ctx.fillStyle = '#000'; // windshield
+            ctx.fillRect(car.x - car.width/2 + 10, car.y - car.height/2 + 5, 15, car.height - 10);
+        }
+
+        // Draw Guards
+        guards.forEach(g => {
+            ctx.fillStyle = '#111';
+            ctx.beginPath(); ctx.arc(g.x, g.y, 15, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#ef4444'; ctx.lineWidth=3; ctx.stroke();
+            // line of sight
+            ctx.beginPath(); ctx.moveTo(g.x, g.y); ctx.lineTo(g.x + Math.cos(g.angle)*20, g.y + Math.sin(g.angle)*20); ctx.stroke();
+        });
+
+        // Draw Pets
+        pets.forEach(p => {
+            ctx.fillStyle = p.color;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#fff'; ctx.lineWidth=2; ctx.stroke();
+        });
+
+        // Draw Player
+        if(player.inCar) {
+            // Draw driving car
+            ctx.translate(player.x, player.y);
+            let angle = Math.atan2(keys.s - keys.w, keys.d - keys.a);
+            if(keys.w||keys.s||keys.a||keys.d) ctx.rotate(angle);
+            
+            ctx.fillStyle = '#dc2626';
+            ctx.fillRect(-car.width/2, -car.height/2, car.width, car.height);
+            ctx.fillStyle = '#000'; // windshield pointing right natively
+            ctx.fillRect(-car.width/2 + 35, -car.height/2 + 5, 15, car.height - 10);
+            
+            ctx.resetTransform();
+        } else {
+            ctx.fillStyle = player.color;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.size/2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Carrying visual
+            if(player.carrying) {
+                ctx.font = '24px Arial';
+                ctx.fillText("🧠", player.x - 12, player.y - 20);
+            }
+        }
+    }
+
+    function gameLoop(timestamp) {
+        if(gameState !== 'play') return;
+        
+        let dt = timestamp - lastTime;
+        lastTime = timestamp;
+
+        update(dt);
+        draw();
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Initial Draw (Start Screen bg)
+    ctx.fillStyle = '#222';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+</script>
+</body>
+</html>

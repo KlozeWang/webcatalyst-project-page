@@ -1,0 +1,1577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Senpai Royal</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; }
+canvas { display: block; cursor: crosshair; }
+#startScreen {
+position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+background: linear-gradient(135deg, #1a0a2e 0%, #16213e 50%, #0f3460 100%);
+display: flex; flex-direction: column; align-items: center; justify-content: center;
+z-index: 100;
+}
+#startScreen h1 {
+font-size: 72px; color: #ff6b9d; text-shadow: 0 0 30px #ff6b9d, 0 0 60px #c44569;
+margin-bottom: 10px; letter-spacing: 4px;
+}
+#startScreen h2 {
+font-size: 24px; color: #f8a5c2; margin-bottom: 40px; letter-spacing: 8px;
+}
+#startScreen .subtitle {
+font-size: 16px; color: #a8a8d8; margin-bottom: 30px;
+}
+#startBtn {
+padding: 15px 60px; font-size: 24px; background: linear-gradient(45deg, #ff6b9d, #c44569);
+color: white; border: none; border-radius: 50px; cursor: pointer;
+text-transform: uppercase; letter-spacing: 3px; font-weight: bold;
+transition: all 0.3s; box-shadow: 0 0 30px rgba(255,107,157,0.5);
+}
+#startBtn:hover {
+transform: scale(1.1); box-shadow: 0 0 50px rgba(255,107,157,0.8);
+}
+.controls-info {
+margin-top: 30px; color: #8888aa; font-size: 14px; text-align: center; line-height: 2;
+}
+.controls-info span { color: #ff6b9d; font-weight: bold; }
+#gameOverScreen {
+position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+background: rgba(0,0,0,0.85); display: none; flex-direction: column;
+align-items: center; justify-content: center; z-index: 100;
+}
+#gameOverScreen h1 { font-size: 60px; margin-bottom: 20px; }
+#gameOverScreen .stats { color: #ccc; font-size: 20px; margin-bottom: 30px; }
+#restartBtn {
+padding: 12px 50px; font-size: 20px; background: linear-gradient(45deg, #ff6b9d, #c44569);
+color: white; border: none; border-radius: 50px; cursor: pointer;
+text-transform: uppercase; letter-spacing: 2px; font-weight: bold;
+}
+.victory h1 { color: #ffd700; text-shadow: 0 0 30px #ffd700; }
+.defeat h1 { color: #ff4444; text-shadow: 0 0 30px #ff4444; }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="startScreen">
+<h1>🌸 SENPAI ROYAL 🌸</h1>
+<h2>BATTLE ROYALE</h2>
+<div class="subtitle">Last one standing wins!</div>
+<button id="startBtn">PLAY NOW</button>
+<div class="controls-info">
+<span>WASD</span> - Move &nbsp;|&nbsp; <span>Mouse</span> - Aim &nbsp;|&nbsp; <span>Click</span> - Shoot<br>
+<span>R</span> - Reload &nbsp;|&nbsp; <span>E</span> - Pick up items &nbsp;|&nbsp; <span>1-4</span> - Switch weapons<br>
+<span>Shift</span> - Sprint &nbsp;|&nbsp; <span>Space</span> - Dodge roll
+</div>
+</div>
+<div id="gameOverScreen">
+<h1 id="goTitle"></h1>
+<div class="stats" id="goStats"></div>
+<button id="restartBtn">PLAY AGAIN</button>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+window.addEventListener('resize', () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+});
+
+// Game constants
+const MAP_SIZE = 5000;
+const TILE_SIZE = 100;
+const PLAYER_RADIUS = 18;
+const BOT_COUNT = 39;
+const SAFE_ZONE_SHRINK_TIME = 45000;
+const SAFE_ZONE_SHRINK_AMOUNT = 200;
+const MIN_SAFE_ZONES = 6;
+
+// Weapon definitions
+const WEAPONS = {
+    fist: { name: 'Fists', damage: 8, fireRate: 400, range: 40, spread: 0, speed: 0, ammo: Infinity, maxAmmo: Infinity, reloadTime: 0, color: '#fff', bulletSize: 0, type: 'melee' },
+    pistol: { name: 'Pistol', damage: 15, fireRate: 300, range: 600, spread: 0.05, speed: 18, ammo: 15, maxAmmo: 15, reloadTime: 1500, color: '#ffdd44', bulletSize: 3, type: 'bullet' },
+    smg: { name: 'SMG', damage: 12, fireRate: 80, range: 450, spread: 0.12, speed: 20, ammo: 30, maxAmmo: 30, reloadTime: 2000, color: '#44ddff', bulletSize: 2, type: 'bullet' },
+    shotgun: { name: 'Shotgun', damage: 10, fireRate: 800, range: 300, spread: 0.2, speed: 16, ammo: 6, maxAmmo: 6, reloadTime: 2500, color: '#ff8844', bulletSize: 4, type: 'shotgun', pellets: 6 },
+    rifle: { name: 'Rifle', damage: 28, fireRate: 150, range: 900, spread: 0.03, speed: 25, ammo: 20, maxAmmo: 20, reloadTime: 2200, color: '#44ff88', bulletSize: 3, type: 'bullet' },
+    sniper: { name: 'Sniper', damage: 80, fireRate: 1500, range: 1500, spread: 0.01, speed: 35, ammo: 5, maxAmmo: 5, reloadTime: 3000, color: '#ff44ff', bulletSize: 4, type: 'bullet' },
+    rocket: { name: 'Rocket', damage: 100, fireRate: 2000, range: 1000, spread: 0.02, speed: 12, ammo: 3, maxAmmo: 3, reloadTime: 3500, color: '#ff4444', bulletSize: 6, type: 'rocket', explosive: true }
+};
+
+const LOOT_COLORS = {
+    pistol: '#ffdd44', smg: '#44ddff', shotgun: '#ff8844', rifle: '#44ff88', sniper: '#ff44ff', rocket: '#ff4444'
+};
+
+// Game state
+let game = null;
+let keys = {};
+let mouse = { x: 0, y: 0, down: false };
+let gameRunning = false;
+
+class Game {
+    constructor() {
+        this.player = null;
+        this.bots = [];
+        this.bullets = [];
+        this.particles = [];
+        this.items = [];
+        this.buildings = [];
+        this.trees = [];
+        this.rocks = [];
+        this.kills = 0;
+        this.alive = 0;
+        this.safeZone = { x: MAP_SIZE / 2, y: MAP_SIZE / 2, radius: MAP_SIZE * 0.7 };
+        this.nextSafeZone = { x: MAP_SIZE / 2, y: MAP_SIZE / 2, radius: MAP_SIZE * 0.7 };
+        this.zoneTimer = 0;
+        this.zoneShrinking = false;
+        this.zoneShrinkTimer = 0;
+        this.zoneIndex = 0;
+        this.camera = { x: 0, y: 0 };
+        this.time = 0;
+        this.killFeed = [];
+        this.damageNumbers = [];
+        this.explosions = [];
+        this.gameOver = false;
+        this.winner = null;
+        this.ghostMode = false;
+        this.ghostTarget = null;
+        this.shake = 0;
+        this.generateMap();
+        this.spawnItems();
+        this.spawnEntities();
+    }
+
+    generateMap() {
+        // Buildings
+        for (let i = 0; i < 60; i++) {
+            let w = 80 + Math.random() * 120;
+            let h = 80 + Math.random() * 120;
+            let x = 200 + Math.random() * (MAP_SIZE - 400);
+            let y = 200 + Math.random() * (MAP_SIZE - 400);
+            this.buildings.push({
+                x, y, w, h,
+                color: `hsl(${Math.random() * 30 + 200}, 20%, ${15 + Math.random() * 15}%)`,
+                roofColor: `hsl(${Math.random() * 30 + 200}, 25%, ${20 + Math.random() * 10}%)`
+            });
+        }
+
+        // Trees
+        for (let i = 0; i < 200; i++) {
+            this.trees.push({
+                x: Math.random() * MAP_SIZE,
+                y: Math.random() * MAP_SIZE,
+                radius: 15 + Math.random() * 20,
+                color: `hsl(${100 + Math.random() * 40}, ${50 + Math.random() * 30}%, ${25 + Math.random() * 20}%)`
+            });
+        }
+
+        // Rocks
+        for (let i = 0; i < 100; i++) {
+            this.rocks.push({
+                x: Math.random() * MAP_SIZE,
+                y: Math.random() * MAP_SIZE,
+                radius: 10 + Math.random() * 25,
+                color: `hsl(0, 0%, ${30 + Math.random() * 20}%)`
+            });
+        }
+    }
+
+    spawnItems() {
+        const weaponKeys = Object.keys(WEAPONS).filter(k => k !== 'fist');
+        for (let i = 0; i < 150; i++) {
+            let wx = 100 + Math.random() * (MAP_SIZE - 200);
+            let wy = 100 + Math.random() * (MAP_SIZE - 200);
+            let type = weaponKeys[Math.floor(Math.random() * weaponKeys.length)];
+            let chance = Math.random();
+            if (chance < 0.4) {
+                this.items.push({ x: wx, y: wy, type: 'weapon', weapon: type, ...WEAPONS[type] });
+            } else if (chance < 0.7) {
+                this.items.push({ x: wx, y: wy, type: 'health', value: 30 + Math.floor(Math.random() * 30), color: '#44ff44', radius: 10 });
+            } else if (chance < 0.85) {
+                this.items.push({ x: wx, y: wy, type: 'armor', value: 30 + Math.floor(Math.random() * 40), color: '#4488ff', radius: 10 });
+            } else {
+                this.items.push({ x: wx, y: wy, type: 'ammo', value: 30, color: '#ffaa44', radius: 8 });
+            }
+        }
+    }
+
+    spawnEntities() {
+        // Player
+        this.player = {
+            x: 500 + Math.random() * (MAP_SIZE - 1000),
+            y: 500 + Math.random() * (MAP_SIZE - 1000),
+            vx: 0, vy: 0,
+            angle: 0,
+            health: 100,
+            maxHealth: 100,
+            armor: 0,
+            maxArmor: 100,
+            speed: 3.5,
+            weapons: [{ ...WEAPONS.fist, ammo: Infinity }],
+            currentWeapon: 0,
+            lastShot: 0,
+            reloading: false,
+            reloadStart: 0,
+            sprinting: false,
+            dodging: false,
+            dodgeTimer: 0,
+            dodgeDir: { x: 0, y: 0 },
+            alive: true,
+            name: 'You',
+            kills: 0,
+            color: '#ff6b9d',
+            headColor: '#ff9dc4',
+            hairColor: '#ff6b9d',
+            eyeColor: '#fff',
+            skinColor: '#ffdbac',
+            bobTimer: 0
+        };
+
+        // Bots
+        const botNames = ['Sakura', 'Hinata', 'Miku', 'Asuka', 'Rei', 'Nami', 'Zero', 'Akira', 'Yuki', 'Rin',
+            'Kaito', 'Ren', 'Haruto', 'Sora', 'Hiro', 'Kenji', 'Mika', 'Aoi', 'Riku', 'Mei',
+            'Taro', 'Yui', 'Daiki', 'Hana', 'Ryota', 'Saki', 'Kenta', 'Nana', 'Shin', 'Momo',
+            'Ryu', 'Ayame', 'Takumi', 'Koharu', 'Haruki', 'Sumire', 'Akito', 'Himari', 'Shota', 'Aya'];
+        const hairColors = ['#ff6b9d', '#44ddff', '#ffdd44', '#44ff88', '#ff44ff', '#ff8844', '#8844ff', '#44ffaa', '#ff4444', '#4488ff', '#ffaa44', '#aaffaa'];
+        const skinColors = ['#ffdbac', '#f5c5a3', '#e0ac69', '#c68642', '#8d5524', '#ffdbac'];
+
+        for (let i = 0; i < BOT_COUNT; i++) {
+            let bx = 200 + Math.random() * (MAP_SIZE - 400);
+            let by = 200 + Math.random() * (MAP_SIZE - 400);
+            let wKey = weaponKeys[Math.floor(Math.random() * weaponKeys.length)];
+            let bot = {
+                x: bx, y: by,
+                vx: 0, vy: 0,
+                angle: Math.random() * Math.PI * 2,
+                health: 100,
+                maxHealth: 100,
+                armor: Math.random() < 0.3 ? 30 + Math.random() * 40 : 0,
+                maxArmor: 100,
+                speed: 2.5 + Math.random() * 1.5,
+                weapons: [{ ...WEAPONS[wKey], ammo: WEAPONS[wKey].maxAmmo }],
+                currentWeapon: 0,
+                lastShot: 0,
+                reloading: false,
+                reloadStart: 0,
+                alive: true,
+                name: botNames[i % botNames.length],
+                kills: 0,
+                color: hairColors[Math.floor(Math.random() * hairColors.length)],
+                headColor: '#ff9dc4',
+                hairColor: hairColors[Math.floor(Math.random() * hairColors.length)],
+                eyeColor: '#fff',
+                skinColor: skinColors[Math.floor(Math.random() * skinColors.length)],
+                bobTimer: Math.random() * Math.PI * 2,
+                // AI state
+                state: 'wander',
+                targetX: bx, targetY: by,
+                stateTimer: 0,
+                lastPlayerPos: null,
+                aggroRange: 300 + Math.random() * 200,
+                fearRange: 150,
+                moveTimer: 0,
+                strafeDir: Math.random() < 0.5 ? 1 : -1,
+                strafeTimer: 0,
+                accuracy: 0.5 + Math.random() * 0.4,
+                aggression: 0.3 + Math.random() * 0.5
+            };
+            this.bots.push(bot);
+        }
+        const weaponKeys2 = Object.keys(WEAPONS).filter(k => k !== 'fist');
+    }
+
+    getClosestEnemy(entity) {
+        let closest = null;
+        let closestDist = Infinity;
+        let enemies = entity === this.player ? this.bots : [this.player, ...this.bots.filter(b => b !== entity)];
+
+        for (let e of enemies) {
+            if (!e.alive) continue;
+            let dx = e.x - entity.x;
+            let dy = e.y - entity.y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < closestDist) {
+                closestDist = dist;
+                closest = e;
+            }
+        }
+        return { entity: closest, dist: closestDist };
+    }
+
+    update(dt) {
+        if (this.gameOver) return;
+        this.time += dt;
+
+        // Safe zone logic
+        this.zoneTimer += dt;
+        if (this.zoneIndex < MIN_SAFE_ZONES && this.zoneTimer > SAFE_ZONE_SHRINK_TIME) {
+            this.zoneShrinking = true;
+            this.zoneShrinkTimer = 5000;
+        }
+
+        if (this.zoneShrinking) {
+            this.zoneShrinkTimer -= dt;
+            if (this.zoneShrinkTimer <= 0) {
+                this.safeZone = { ...this.nextSafeZone };
+                this.zoneShrinking = false;
+                this.zoneIndex++;
+                this.zoneTimer = 0;
+                // Generate next zone
+                let shrinkFactor = 0.7;
+                let margin = this.safeZone.radius * (1 - shrinkFactor) * 0.5;
+                this.nextSafeZone = {
+                    x: this.safeZone.x + (Math.random() - 0.5) * this.safeZone.radius * 0.4,
+                    y: this.safeZone.y + (Math.random() - 0.5) * this.safeZone.radius * 0.4,
+                    radius: this.safeZone.radius * shrinkFactor
+                };
+                this.nextSafeZone.x = Math.max(this.nextSafeZone.radius, Math.min(MAP_SIZE - this.nextSafeZone.radius, this.nextSafeZone.x));
+                this.nextSafeZone.y = Math.max(this.nextSafeZone.radius, Math.min(MAP_SIZE - this.nextSafeZone.radius, this.nextSafeZone.y));
+            }
+        } else if (this.zoneIndex < MIN_SAFE_ZONES) {
+            let progress = this.zoneTimer / SAFE_ZONE_SHRINK_TIME;
+            let shrinkFactor = 0.7;
+            let margin = this.safeZone.radius * (1 - shrinkFactor) * progress * 0.5;
+            let angle = Math.random() * Math.PI * 2;
+            this.nextSafeZone = {
+                x: this.safeZone.x + Math.cos(angle) * margin,
+                y: this.safeZone.y + Math.sin(angle) * margin,
+                radius: this.safeZone.radius * (1 - (1 - shrinkFactor) * progress)
+            };
+        }
+
+        // Update player
+        if (this.player.alive) {
+            this.updatePlayer(dt);
+        }
+
+        // Update bots
+        for (let bot of this.bots) {
+            if (bot.alive) this.updateBot(bot, dt);
+        }
+
+        // Update bullets
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            let b = this.bullets[i];
+            b.x += b.vx * dt * 60;
+            b.y += b.vy * dt * 60;
+            b.life -= dt;
+
+            // Check building collision
+            let hitBuilding = false;
+            for (let bl of this.buildings) {
+                if (b.x > bl.x && b.x < bl.x + bl.w && b.y > bl.y && b.y < bl.y + bl.h) {
+                    hitBuilding = true;
+                    this.spawnParticles(b.x, b.y, '#888', 5);
+                    break;
+                }
+            }
+
+            // Check rock collision
+            for (let r of this.rocks) {
+                let dx = b.x - r.x, dy = b.y - r.y;
+                if (Math.sqrt(dx * dx + dy * dy) < r.radius) {
+                    hitBuilding = true;
+                    this.spawnParticles(b.x, b.y, '#666', 5);
+                    break;
+                }
+            }
+
+            if (hitBuilding || b.life <= 0 || b.x < 0 || b.x > MAP_SIZE || b.y < 0 || b.y > MAP_SIZE) {
+                this.bullets.splice(i, 1);
+                continue;
+            }
+
+            // Check hits
+            let targets = [this.player, ...this.bots];
+            for (let t of targets) {
+                if (!t.alive || t === b.shooter) continue;
+                let dx = b.x - t.x, dy = b.y - t.y;
+                if (Math.sqrt(dx * dx + dy * dy) < PLAYER_RADIUS + 5) {
+                    let dmg = b.damage;
+                    if (t.armor > 0) {
+                        let armorAbsorb = Math.min(t.armor, dmg * 0.6);
+                        t.armor -= armorAbsorb;
+                        dmg -= armorAbsorb;
+                    }
+                    t.health -= dmg;
+                    this.damageNumbers.push({ x: t.x, y: t.y - 20, value: Math.round(dmg), life: 1, color: '#ff4444' });
+
+                    if (b.explosive) {
+                        this.explosions.push({ x: b.x, y: b.y, radius: 0, maxRadius: 80, life: 0.5 });
+                        this.shake = 10;
+                        // Splash damage
+                        for (let t2 of targets) {
+                            if (!t2.alive || t2 === b.shooter) continue;
+                            let dx2 = t2.x - b.x, dy2 = t2.y - b.y;
+                            let dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+                            if (dist2 < 80 && dist2 > 0) {
+                                let splashDmg = dmg * (1 - dist2 / 80) * 0.5;
+                                t2.health -= splashDmg;
+                                this.damageNumbers.push({ x: t2.x, y: t2.y - 20, value: Math.round(splashDmg), life: 1, color: '#ff8844' });
+                            }
+                        }
+                    }
+
+                    this.spawnParticles(b.x, b.y, '#ff4444', 8);
+
+                    if (t.health <= 0) {
+                        t.alive = false;
+                        this.alive--;
+                        b.shooter.kills++;
+                        if (b.shooter === this.player) this.kills++;
+                        this.killFeed.push({ killer: b.shooter.name, victim: t.name, time: this.time });
+                        if (this.killFeed.length > 5) this.killFeed.shift();
+                        // Drop loot
+                        for (let w of t.weapons) {
+                            if (w.type !== 'melee') {
+                                this.items.push({ x: t.x + (Math.random() - 0.5) * 30, y: t.y + (Math.random() - 0.5) * 30, type: 'weapon', ...w });
+                            }
+                        }
+                        if (t.armor > 0) {
+                            this.items.push({ x: t.x + (Math.random() - 0.5) * 20, y: t.y + (Math.random() - 0.5) * 20, type: 'armor', value: Math.round(t.armor), color: '#4488ff', radius: 10 });
+                        }
+                        this.spawnParticles(t.x, t.y, t.color, 20);
+                    }
+
+                    if (b.explosive) {
+                        this.bullets.splice(i, 1);
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Update explosions
+        for (let i = this.explosions.length - 1; i >= 0; i--) {
+            let e = this.explosions[i];
+            e.life -= dt;
+            e.radius = e.maxRadius * (1 - e.life / 0.5);
+            if (e.life <= 0) this.explosions.splice(i, 1);
+        }
+
+        // Update particles
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            let p = this.particles[i];
+            p.x += p.vx * dt * 60;
+            p.y += p.vy * dt * 60;
+            p.life -= dt;
+            p.vx *= 0.95;
+            p.vy *= 0.95;
+            if (p.life <= 0) this.particles.splice(i, 1);
+        }
+
+        // Update damage numbers
+        for (let i = this.damageNumbers.length - 1; i >= 0; i--) {
+            let d = this.damageNumbers[i];
+            d.y -= 30 * dt;
+            d.life -= dt;
+            if (d.life <= 0) this.damageNumbers.splice(i, 1);
+        }
+
+        // Check safe zone damage
+        let allEntities = [this.player, ...this.bots];
+        for (let e of allEntities) {
+            if (!e.alive) continue;
+            let dx = e.x - this.safeZone.x;
+            let dy = e.y - this.safeZone.y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > this.safeZone.radius) {
+                e.health -= 5 * dt;
+                if (e.health <= 0) {
+                    e.alive = false;
+                    this.alive--;
+                    if (e === this.player) {
+                        this.gameOver = true;
+                        this.winner = null;
+                    } else {
+                        let killer = this.bots.find(b => b !== e) || this.player;
+                        this.killFeed.push({ killer: killer.name, victim: e.name, time: this.time });
+                        if (killer === this.player) this.kills++;
+                    }
+                }
+            }
+        }
+
+        // Check game over
+        if (this.player.alive && this.alive <= 1) {
+            let aliveBots = this.bots.filter(b => b.alive);
+            if (aliveBots.length === 0) {
+                this.gameOver = true;
+                this.winner = 'player';
+            }
+        }
+
+        // Camera
+        let targetX = this.player.x - canvas.width / 2;
+        let targetY = this.player.y - canvas.height / 2;
+        this.camera.x += (targetX - this.camera.x) * 0.1;
+        this.camera.y += (targetY - this.camera.y) * 0.1;
+        this.camera.x = Math.max(0, Math.min(MAP_SIZE - canvas.width, this.camera.x));
+        this.camera.y = Math.max(0, Math.min(MAP_SIZE - canvas.height, this.camera.y));
+
+        // Screen shake
+        if (this.shake > 0) {
+            this.camera.x += (Math.random() - 0.5) * this.shake;
+            this.camera.y += (Math.random() - 0.5) * this.shake;
+            this.shake *= 0.9;
+            if (this.shake < 0.5) this.shake = 0;
+        }
+
+        // Kill feed cleanup
+        for (let i = this.killFeed.length - 1; i >= 0; i--) {
+            if (this.time - this.killFeed[i].time > 5) this.killFeed.splice(i, 1);
+        }
+    }
+
+    updatePlayer(dt) {
+        let p = this.player;
+        if (!p.alive) return;
+
+        // Movement
+        let mx = 0, my = 0;
+        if (keys['w'] || keys['arrowup']) my -= 1;
+        if (keys['s'] || keys['arrowdown']) my += 1;
+        if (keys['a'] || keys['arrowleft']) mx -= 1;
+        if (keys['d'] || keys['arrowright']) mx += 1;
+
+        if (mx !== 0 || my !== 0) {
+            let len = Math.sqrt(mx * mx + my * my);
+            mx /= len; my /= len;
+        }
+
+        let speed = p.speed;
+        p.sprinting = keys['shift'] && (mx !== 0 || my !== 0);
+        if (p.sprinting) speed *= 1.5;
+
+        if (p.dodging) {
+            p.dodgeTimer -= dt;
+            p.x += p.dodgeDir.x * 10 * dt * 60;
+            p.y += p.dodgeDir.y * 10 * dt * 60;
+            if (p.dodgeTimer <= 0) p.dodging = false;
+        } else {
+            p.x += mx * speed * dt * 60;
+            p.y += my * speed * dt * 60;
+        }
+
+        // Clamp to map
+        p.x = Math.max(PLAYER_RADIUS, Math.min(MAP_SIZE - PLAYER_RADIUS, p.x));
+        p.y = Math.max(PLAYER_RADIUS, Math.min(MAP_SIZE - PLAYER_RADIUS, p.y));
+
+        // Building collision
+        for (let b of this.buildings) {
+            this.resolveRectCollision(p, b.x, b.y, b.w, b.h, PLAYER_RADIUS);
+        }
+
+        // Tree collision
+        for (let t of this.trees) {
+            let dx = p.x - t.x, dy = p.y - t.y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < t.radius + PLAYER_RADIUS && dist > 0) {
+                p.x = t.x + (dx / dist) * (t.radius + PLAYER_RADIUS);
+                p.y = t.y + (dy / dist) * (t.radius + PLAYER_RADIUS);
+            }
+        }
+
+        // Rock collision
+        for (let r of this.rocks) {
+            let dx = p.x - r.x, dy = p.y - r.y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < r.radius + PLAYER_RADIUS && dist > 0) {
+                p.x = r.x + (dx / dist) * (r.radius + PLAYER_RADIUS);
+                p.y = r.y + (dy / dist) * (r.radius + PLAYER_RADIUS);
+            }
+        }
+
+        // Aim
+        let worldMouseX = mouse.x + this.camera.x;
+        let worldMouseY = mouse.y + this.camera.y;
+        p.angle = Math.atan2(worldMouseY - p.y, worldMouseX - p.x);
+
+        // Shooting
+        let weapon = p.weapons[p.currentWeapon];
+        if (weapon && mouse.down && !p.reloading && !p.dodging) {
+            let now = performance.now();
+            if (now - p.lastShot > weapon.fireRate) {
+                if (weapon.type === 'melee') {
+                    // Melee attack
+                    let hit = false;
+                    let targets = [this.player, ...this.bots];
+                    for (let t of targets) {
+                        if (!t.alive || t === p) continue;
+                        let dx = t.x - p.x, dy = t.y - p.y;
+                        let dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < weapon.range + PLAYER_RADIUS) {
+                            let angleToTarget = Math.atan2(dy, dx);
+                            let angleDiff = Math.abs(angleToTarget - p.angle);
+                            if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
+                            if (angleDiff < Math.PI / 2) {
+                                t.health -= weapon.damage;
+                                this.damageNumbers.push({ x: t.x, y: t.y - 20, value: weapon.damage, life: 1, color: '#ff4444' });
+                                this.spawnParticles(t.x, t.y, '#ff4444', 5);
+                                if (t.health <= 0) {
+                                    t.alive = false;
+                                    this.alive--;
+                                    p.kills++;
+                                    this.kills++;
+                                    this.killFeed.push({ killer: p.name, victim: t.name, time: this.time });
+                                    for (let w of t.weapons) {
+                                        if (w.type !== 'melee') this.items.push({ x: t.x, y: t.y, type: 'weapon', ...w });
+                                    }
+                                    this.spawnParticles(t.x, t.y, t.color, 20);
+                                }
+                                hit = true;
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    p.lastShot = now;
+                    if (weapon.ammo <= 0) {
+                        this.reloadWeapon(p);
+                    } else {
+                        weapon.ammo--;
+                        let pellets = weapon.pellets || 1;
+                        for (let pi = 0; pi < pellets; pi++) {
+                            let spread = (Math.random() - 0.5) * weapon.spread * 2;
+                            let angle = p.angle + spread;
+                            this.bullets.push({
+                                x: p.x + Math.cos(p.angle) * 25,
+                                y: p.y + Math.sin(p.angle) * 25,
+                                vx: Math.cos(angle) * weapon.speed,
+                                vy: Math.sin(angle) * weapon.speed,
+                                damage: weapon.damage,
+                                life: weapon.range / weapon.speed,
+                                color: weapon.color,
+                                bulletSize: weapon.bulletSize,
+                                shooter: p,
+                                explosive: weapon.explosive || false
+                            });
+                        }
+                        // Muzzle flash
+                        this.spawnParticles(
+                            p.x + Math.cos(p.angle) * 25,
+                            p.y + Math.sin(p.angle) * 25,
+                            weapon.color, 3
+                        );
+                        this.shake = Math.max(this.shake, weapon.explosive ? 8 : 2);
+                    }
+                }
+            }
+        }
+
+        // Reload
+        if (p.reloading) {
+            let weapon = p.weapons[p.currentWeapon];
+            if (performance.now() - p.reloadStart > weapon.reloadTime) {
+                weapon.ammo = weapon.maxAmmo;
+                p.reloading = false;
+            }
+        }
+
+        // Bob animation
+        if (mx !== 0 || my !== 0) {
+            p.bobTimer += dt * 8;
+        }
+
+        // Auto pick up nearby items
+        for (let i = this.items.length - 1; i >= 0; i--) {
+            let item = this.items[i];
+            let dx = item.x - p.x, dy = item.y - p.y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < PLAYER_RADIUS + item.radius + 10) {
+                if (item.type === 'weapon') {
+                    if (p.weapons.length < 4) {
+                        p.weapons.push({ ...item });
+                        p.currentWeapon = p.weapons.length - 1;
+                    } else {
+                        // Replace current weapon
+                        p.weapons[p.currentWeapon] = { ...item };
+                    }
+                    this.items.splice(i, 1);
+                } else if (item.type === 'health' && p.health < p.maxHealth) {
+                    p.health = Math.min(p.maxHealth, p.health + item.value);
+                    this.items.splice(i, 1);
+                } else if (item.type === 'armor' && p.armor < p.maxArmor) {
+                    p.armor = Math.min(p.maxArmor, p.armor + item.value);
+                    this.items.splice(i, 1);
+                } else if (item.type === 'ammo') {
+                    let w = p.weapons[p.currentWeapon];
+                    if (w.type !== 'melee' && w.ammo < w.maxAmmo) {
+                        w.ammo = Math.min(w.maxAmmo, w.ammo + item.value);
+                        this.items.splice(i, 1);
+                    }
+                }
+            }
+        }
+    }
+
+    updateBot(bot, dt) {
+        if (!bot.alive) return;
+
+        let { entity: target, dist: targetDist } = this.getClosestEnemy(bot);
+        bot.stateTimer -= dt;
+
+        // Check if in safe zone
+        let dx = bot.x - this.safeZone.x;
+        let dy = bot.y - this.safeZone.y;
+        let distToZone = Math.sqrt(dx * dx + dy * dy);
+
+        if (distToZone > this.safeZone.radius * 0.8) {
+            bot.state = 'moveToZone';
+            bot.targetX = this.safeZone.x + (Math.random() - 0.5) * this.safeZone.radius * 0.5;
+            bot.targetY = this.safeZone.y + (Math.random() - 0.5) * this.safeZone.radius * 0.5;
+        }
+
+        if (target && target.alive && targetDist < bot.aggroRange && bot.state !== 'moveToZone') {
+            bot.state = 'combat';
+            bot.lastPlayerPos = { x: target.x, y: target.y };
+
+            if (targetDist > 200) {
+                bot.angle = Math.atan2(target.y - bot.y, target.x - bot.x);
+                bot.x += Math.cos(bot.angle) * bot.speed * dt * 60;
+                bot.y += Math.sin(bot.angle) * bot.speed * dt * 60;
+            } else if (targetDist < 100) {
+                bot.angle = Math.atan2(bot.y - target.y, bot.x - target.x);
+                bot.x += Math.cos(bot.angle) * bot.speed * 0.7 * dt * 60;
+                bot.y += Math.sin(bot.angle) * bot.speed * 0.7 * dt * 60;
+            } else {
+                // Strafe
+                bot.strafeTimer -= dt;
+                if (bot.strafeTimer <= 0) {
+                    bot.strafeDir *= -1;
+                    bot.strafeTimer = 0.5 + Math.random();
+                }
+                let strafeAngle = Math.atan2(target.y - bot.y, target.x - bot.x) + Math.PI / 2 * bot.strafeDir;
+                bot.x += Math.cos(strafeAngle) * bot.speed * 0.6 * dt * 60;
+                bot.y += Math.sin(strafeAngle) * bot.speed * 0.6 * dt * 60;
+                bot.angle = Math.atan2(target.y - bot.y, target.x - bot.x);
+            }
+
+            // Shoot
+            let weapon = bot.weapons[bot.currentWeapon];
+            if (weapon && targetDist < weapon.range * bot.accuracy) {
+                let now = performance.now();
+                if (now - bot.lastShot > weapon.fireRate / bot.aggression) {
+                    if (weapon.ammo <= 0) {
+                        bot.reloading = true;
+                        bot.reloadStart = now;
+                    } else {
+                        bot.lastShot = now;
+                        weapon.ammo--;
+                        let pellets = weapon.pellets || 1;
+                        for (let pi = 0; pi < pellets; pi++) {
+                            let spread = (Math.random() - 0.5) * weapon.spread * 2 * (1.5 - bot.accuracy);
+                            let angle = bot.angle + spread;
+                            this.bullets.push({
+                                x: bot.x + Math.cos(bot.angle) * 25,
+                                y: bot.y + Math.sin(bot.angle) * 25,
+                                vx: Math.cos(angle) * weapon.speed,
+                                vy: Math.sin(angle) * weapon.speed,
+                                damage: weapon.damage,
+                                life: weapon.range / weapon.speed,
+                                color: weapon.color,
+                                bulletSize: weapon.bulletSize,
+                                shooter: bot,
+                                explosive: weapon.explosive || false
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Switch weapons based on distance
+            if (targetDist < 150) {
+                let shotgunIdx = bot.weapons.findIndex(w => w.type === 'shotgun');
+                if (shotgunIdx >= 0) bot.currentWeapon = shotgunIdx;
+            } else if (targetDist > 500) {
+                let sniperIdx = bot.weapons.findIndex(w => w.type === 'sniper');
+                if (sniperIdx >= 0) bot.currentWeapon = sniperIdx;
+            }
+        } else if (bot.state === 'combat') {
+            bot.state = 'wander';
+            bot.stateTimer = 2 + Math.random() * 3;
+        }
+
+        if (bot.state === 'wander' || bot.state === 'moveToZone') {
+            bot.moveTimer -= dt;
+            if (bot.moveTimer <= 0) {
+                bot.targetX = bot.x + (Math.random() - 0.5) * 600;
+                bot.targetY = bot.y + (Math.random() - 0.5) * 600;
+                bot.targetX = Math.max(100, Math.min(MAP_SIZE - 100, bot.targetX));
+                bot.targetY = Math.max(100, Math.min(MAP_SIZE - 100, bot.targetY));
+                bot.moveTimer = 3 + Math.random() * 5;
+            }
+
+            let tdx = bot.targetX - bot.x;
+            let tdy = bot.targetY - bot.y;
+            let tdist = Math.sqrt(tdx * tdx + tdy * tdy);
+            if (tdist > 10) {
+                bot.angle = Math.atan2(tdy, tdx);
+                bot.x += Math.cos(bot.angle) * bot.speed * 0.6 * dt * 60;
+                bot.y += Math.sin(bot.angle) * bot.speed * 0.6 * dt * 60;
+            }
+        }
+
+        // Reload
+        if (bot.reloading) {
+            let weapon = bot.weapons[bot.currentWeapon];
+            if (performance.now() - bot.reloadStart > weapon.reloadTime) {
+                weapon.ammo = weapon.maxAmmo;
+                bot.reloading = false;
+            }
+        }
+
+        // Pick up items
+        for (let i = this.items.length - 1; i >= 0; i--) {
+            let item = this.items[i];
+            let dx = item.x - bot.x, dy = item.y - bot.y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < PLAYER_RADIUS + item.radius + 5) {
+                if (item.type === 'weapon') {
+                    if (bot.weapons.length < 3) {
+                        bot.weapons.push({ ...item });
+                        bot.currentWeapon = bot.weapons.length - 1;
+                    }
+                    this.items.splice(i, 1);
+                } else if (item.type === 'health' && bot.health < 80) {
+                    bot.health = Math.min(bot.maxHealth, bot.health + item.value);
+                    this.items.splice(i, 1);
+                } else if (item.type === 'armor' && bot.armor < 50) {
+                    bot.armor = Math.min(bot.maxArmor, bot.armor + item.value);
+                    this.items.splice(i, 1);
+                }
+            }
+        }
+
+        // Clamp to map
+        bot.x = Math.max(PLAYER_RADIUS, Math.min(MAP_SIZE - PLAYER_RADIUS, bot.x));
+        bot.y = Math.max(PLAYER_RADIUS, Math.min(MAP_SIZE - PLAYER_RADIUS, bot.y));
+
+        // Building collision
+        for (let b of this.buildings) {
+            this.resolveRectCollision(bot, b.x, b.y, b.w, b.h, PLAYER_RADIUS);
+        }
+
+        // Tree collision
+        for (let t of this.trees) {
+            let dx = bot.x - t.x, dy = bot.y - t.y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < t.radius + PLAYER_RADIUS && dist > 0) {
+                bot.x = t.x + (dx / dist) * (t.radius + PLAYER_RADIUS);
+                bot.y = t.y + (dy / dist) * (t.radius + PLAYER_RADIUS);
+            }
+        }
+
+        bot.bobTimer += dt * 6;
+    }
+
+    resolveRectCollision(entity, rx, ry, rw, rh, radius) {
+        let closestX = Math.max(rx, Math.min(entity.x, rx + rw));
+        let closestY = Math.max(ry, Math.min(entity.y, ry + rh));
+        let dx = entity.x - closestX;
+        let dy = entity.y - closestY;
+        let dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < radius && dist > 0) {
+            entity.x = closestX + (dx / dist) * radius;
+            entity.y = closestY + (dy / dist) * radius;
+        }
+    }
+
+    reloadWeapon(p) {
+        let weapon = p.weapons[p.currentWeapon];
+        if (weapon.type === 'melee' || weapon.ammo >= weapon.maxAmmo) return;
+        p.reloading = true;
+        p.reloadStart = performance.now();
+    }
+
+    spawnParticles(x, y, color, count) {
+        for (let i = 0; i < count; i++) {
+            let angle = Math.random() * Math.PI * 2;
+            let speed = 1 + Math.random() * 4;
+            this.particles.push({
+                x, y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                color,
+                life: 0.3 + Math.random() * 0.5,
+                maxLife: 0.3 + Math.random() * 0.5,
+                size: 2 + Math.random() * 3
+            });
+        }
+    }
+
+    draw() {
+        ctx.fillStyle = '#2d5a27';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.save();
+        ctx.translate(-this.camera.x, -this.camera.y);
+
+        // Draw grid
+        ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+        ctx.lineWidth = 1;
+        let startX = Math.floor(this.camera.x / TILE_SIZE) * TILE_SIZE;
+        let startY = Math.floor(this.camera.y / TILE_SIZE) * TILE_SIZE;
+        for (let x = startX; x < this.camera.x + canvas.width + TILE_SIZE; x += TILE_SIZE) {
+            ctx.beginPath();
+            ctx.moveTo(x, this.camera.y);
+            ctx.lineTo(x, this.camera.y + canvas.height);
+            ctx.stroke();
+        }
+        for (let y = startY; y < this.camera.y + canvas.height + TILE_SIZE; y += TILE_SIZE) {
+            ctx.beginPath();
+            ctx.moveTo(this.camera.x, y);
+            ctx.lineTo(this.camera.x + canvas.width, y);
+            ctx.stroke();
+        }
+
+        // Draw map border
+        ctx.strokeStyle = '#ff4444';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(0, 0, MAP_SIZE, MAP_SIZE);
+
+        // Draw safe zone
+        let drawZone = this.zoneShrinking ? this.safeZone : this.safeZone;
+        ctx.beginPath();
+        ctx.arc(drawZone.x, drawZone.y, drawZone.radius, 0, Math.PI * 2);
+        ctx.strokeStyle = '#4488ff';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+
+        // Draw danger zone (outside safe zone)
+        ctx.beginPath();
+        ctx.rect(this.camera.x - 10, this.camera.y - 10, canvas.width + 20, canvas.height + 20);
+        ctx.arc(drawZone.x, drawZone.y, drawZone.radius, 0, Math.PI * 2, true);
+        ctx.fillStyle = 'rgba(255, 50, 50, 0.15)';
+        ctx.fill();
+
+        // Draw next safe zone indicator
+        if (this.zoneIndex < MIN_SAFE_ZONES) {
+            ctx.beginPath();
+            ctx.arc(this.nextSafeZone.x, this.nextSafeZone.y, this.nextSafeZone.radius, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(68, 136, 255, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([10, 10]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // Draw items
+        for (let item of this.items) {
+            if (!this.isOnScreen(item.x, item.y, 30)) continue;
+            ctx.save();
+            ctx.translate(item.x, item.y);
+
+            if (item.type === 'weapon') {
+                // Glow
+                ctx.shadowColor = item.color;
+                ctx.shadowBlur = 10;
+                ctx.fillStyle = item.color;
+                ctx.fillRect(-8, -4, 16, 8);
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#fff';
+                ctx.font = '8px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(item.name, 0, -10);
+            } else if (item.type === 'health') {
+                ctx.fillStyle = '#44ff44';
+                ctx.shadowColor = '#44ff44';
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                ctx.arc(0, 0, item.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('+', 0, 4);
+            } else if (item.type === 'armor') {
+                ctx.fillStyle = '#4488ff';
+                ctx.shadowColor = '#4488ff';
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                ctx.arc(0, 0, item.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 8px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('A', 0, 4);
+            } else if (item.type === 'ammo') {
+                ctx.fillStyle = '#ffaa44';
+                ctx.shadowColor = '#ffaa44';
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                ctx.arc(0, 0, item.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 8px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('•', 0, 4);
+            }
+            ctx.restore();
+        }
+
+        // Draw rocks
+        for (let r of this.rocks) {
+            if (!this.isOnScreen(r.x, r.y, r.radius + 10)) continue;
+            ctx.fillStyle = r.color;
+            ctx.beginPath();
+            ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        // Draw buildings
+        for (let b of this.buildings) {
+            if (!this.isOnScreen(b.x + b.w / 2, b.y + b.h / 2, Math.max(b.w, b.h))) continue;
+            ctx.fillStyle = b.color;
+            ctx.fillRect(b.x, b.y, b.w, b.h);
+            ctx.fillStyle = b.roofColor;
+            ctx.fillRect(b.x + 5, b.y + 5, b.w - 10, b.h - 10);
+            ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(b.x, b.y, b.w, b.h);
+            // Windows
+            ctx.fillStyle = 'rgba(255,255,150,0.3)';
+            for (let wx = b.x + 15; wx < b.x + b.w - 15; wx += 25) {
+                for (let wy = b.y + 15; wy < b.y + b.h - 15; wy += 25) {
+                    ctx.fillRect(wx, wy, 10, 10);
+                }
+            }
+        }
+
+        // Draw trees
+        for (let t of this.trees) {
+            if (!this.isOnScreen(t.x, t.y, t.radius + 15)) continue;
+            // Shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath();
+            ctx.ellipse(t.x + 5, t.y + 5, t.radius, t.radius * 0.7, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Tree
+            ctx.fillStyle = t.color;
+            ctx.beginPath();
+            ctx.arc(t.x, t.y, t.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            // Highlight
+            ctx.fillStyle = 'rgba(255,255,255,0.1)';
+            ctx.beginPath();
+            ctx.arc(t.x - t.radius * 0.3, t.y - t.radius * 0.3, t.radius * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Draw explosions
+        for (let e of this.explosions) {
+            let alpha = e.life / 0.5;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 100, 0, ${alpha * 0.5})`;
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, e.radius * 0.5, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 255, 100, ${alpha * 0.7})`;
+            ctx.fill();
+        }
+
+        // Draw bullets
+        for (let b of this.bullets) {
+            ctx.fillStyle = b.color;
+            ctx.shadowColor = b.color;
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.bulletSize, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            // Trail
+            ctx.strokeStyle = b.color + '66';
+            ctx.lineWidth = b.bulletSize * 0.8;
+            ctx.beginPath();
+            ctx.moveTo(b.x, b.y);
+            ctx.lineTo(b.x - b.vx * 3, b.y - b.vy * 3);
+            ctx.stroke();
+        }
+
+        // Draw entities (bots and player)
+        let allEntities = [...this.bots, this.player].filter(e => e.alive);
+        allEntities.sort((a, b) => a.y - b.y);
+
+        for (let e of allEntities) {
+            if (!this.isOnScreen(e.x, e.y, PLAYER_RADIUS + 30)) continue;
+            this.drawEntity(e);
+        }
+
+        // Draw particles
+        for (let p of this.particles) {
+            let alpha = p.life / p.maxLife;
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
+        // Draw damage numbers
+        for (let d of this.damageNumbers) {
+            let alpha = d.life;
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = d.color;
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(d.value, d.x, d.y);
+        }
+        ctx.globalAlpha = 1;
+
+        ctx.restore();
+
+        // Draw HUD
+        this.drawHUD();
+
+        // Draw minimap
+        this.drawMinimap();
+    }
+
+    drawEntity(e) {
+        ctx.save();
+        ctx.translate(e.x, e.y);
+
+        let bob = Math.sin(e.bobTimer) * 2;
+
+        // Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath();
+        ctx.ellipse(2, 4, PLAYER_RADIUS, PLAYER_RADIUS * 0.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Body
+        ctx.fillStyle = e.color;
+        ctx.beginPath();
+        ctx.arc(0, bob, PLAYER_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Face
+        let faceAngle = e.angle;
+        let faceX = Math.cos(faceAngle) * 5;
+        let faceY = Math.sin(faceAngle) * 5 + bob;
+
+        // Eyes
+        let eyeOffset = 4;
+        let perpX = Math.cos(faceAngle + Math.PI / 2) * eyeOffset;
+        let perpY = Math.sin(faceAngle + Math.PI / 2) * eyeOffset;
+
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(faceX + perpX, faceY + perpY, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(faceX - perpX, faceY - perpY, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Pupils
+        ctx.fillStyle = '#222';
+        ctx.beginPath();
+        ctx.arc(faceX + perpX + Math.cos(faceAngle) * 1.5, faceY + perpY + Math.sin(faceAngle) * 1.5, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(faceX - perpX + Math.cos(faceAngle) * 1.5, faceY - perpY + Math.sin(faceAngle) * 1.5, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Hair
+        ctx.fillStyle = e.hairColor;
+        ctx.beginPath();
+        ctx.arc(0, bob - 4, PLAYER_RADIUS * 0.8, Math.PI, Math.PI * 2);
+        ctx.fill();
+
+        // Weapon
+        let weapon = e.weapons[e.currentWeapon];
+        if (weapon && weapon.type !== 'melee') {
+            ctx.save();
+            ctx.rotate(e.angle);
+            ctx.fillStyle = '#555';
+            ctx.fillRect(10, -3, 20, 6);
+            ctx.fillStyle = weapon.color;
+            ctx.fillRect(25, -2, 8, 4);
+            ctx.restore();
+        }
+
+        // Health bar
+        let barWidth = 40;
+        let barHeight = 5;
+        let barY = -PLAYER_RADIUS - 15 + bob;
+
+        // Background
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(-barWidth / 2, barY, barWidth, barHeight);
+
+        // Health
+        let healthPct = e.health / e.maxHealth;
+        let healthColor = healthPct > 0.5 ? '#44ff44' : healthPct > 0.25 ? '#ffaa44' : '#ff4444';
+        ctx.fillStyle = healthColor;
+        ctx.fillRect(-barWidth / 2, barY, barWidth * healthPct, barHeight);
+
+        // Armor
+        if (e.armor > 0) {
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.fillRect(-barWidth / 2, barY + barHeight + 2, barWidth, 3);
+            ctx.fillStyle = '#4488ff';
+            ctx.fillRect(-barWidth / 2, barY + barHeight + 2, barWidth * (e.armor / e.maxArmor), 3);
+        }
+
+        // Name
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 11px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(e.name, 0, barY - 4);
+
+        // Reload indicator
+        if (e.reloading) {
+            let weapon = e.weapons[e.currentWeapon];
+            let progress = (performance.now() - e.reloadStart) / weapon.reloadTime;
+            ctx.strokeStyle = '#ffdd44';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, bob, PLAYER_RADIUS + 5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+
+    drawHUD() {
+        let p = this.player;
+
+        // Health bar (bottom left)
+        let hudX = 20;
+        let hudY = canvas.height - 80;
+        let hudW = 250;
+        let hudH = 25;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.roundRect(hudX - 5, hudY - 5, hudW + 10, hudH + 10, 10);
+        ctx.fill();
+
+        // Health
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(hudX, hudY, hudW, hudH);
+        let hpPct = Math.max(0, p.health / p.maxHealth);
+        let hpColor = hpPct > 0.5 ? '#44ff44' : hpPct > 0.25 ? '#ffaa44' : '#ff4444';
+        ctx.fillStyle = hpColor;
+        ctx.fillRect(hudX, hudY, hudW * hpPct, hudH);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`HP: ${Math.ceil(p.health)}`, hudX + hudW / 2, hudY + 17);
+
+        // Armor
+        if (p.armor > 0) {
+            let ay = hudY + hudH + 8;
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(hudX, ay, hudW, 15);
+            ctx.fillStyle = '#4488ff';
+            ctx.fillRect(hudX, ay, hudW * (p.armor / p.maxArmor), 15);
+            ctx.fillStyle = '#fff';
+            ctx.font = '11px Arial';
+            ctx.fillText(`ARMOR: ${Math.ceil(p.armor)}`, hudX + hudW / 2, ay + 12);
+        }
+
+        // Weapon info (bottom center)
+        let weapon = p.weapons[p.currentWeapon];
+        let wName = weapon ? weapon.name : 'Fists';
+        let wAmmo = weapon ? `${weapon.ammo}${weapon.maxAmmo !== Infinity ? '/' + weapon.maxAmmo : ''}` : '';
+
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.roundRect(canvas.width / 2 - 100, canvas.height - 65, 200, 50, 10);
+        ctx.fill();
+
+        ctx.fillStyle = weapon ? weapon.color : '#fff';
+        ctx.font = 'bold 18px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(wName, canvas.width / 2, canvas.height - 42);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px Arial';
+        if (p.reloading) {
+            ctx.fillText('RELOADING...', canvas.width / 2, canvas.height - 22);
+        } else {
+            ctx.fillText(wAmmo, canvas.width / 2, canvas.height - 22);
+        }
+
+        // Weapon slots
+        for (let i = 0; i < p.weapons.length; i++) {
+            let sx = canvas.width / 2 - (p.weapons.length * 30) / 2 + i * 35;
+            let sy = canvas.height - 15;
+            ctx.fillStyle = i === p.currentWeapon ? 'rgba(255,107,157,0.5)' : 'rgba(0,0,0,0.3)';
+            ctx.roundRect(sx - 12, sy - 12, 24, 24, 5);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(i + 1, sx, sy + 4);
+        }
+
+        // Alive count (top right)
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.roundRect(canvas.width - 160, 15, 145, 40, 10);
+        ctx.fill();
+        ctx.fillStyle = '#ff6b9d';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(`👥 ${this.alive} ALIVE`, canvas.width - 30, 42);
+
+        // Kills (top left)
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.roundRect(15, 15, 120, 40, 10);
+        ctx.fill();
+        ctx.fillStyle = '#ffdd44';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(`☠ ${this.kills} KILLS`, 30, 42);
+
+        // Kill feed
+        let feedY = 70;
+        for (let i = 0; i < this.killFeed.length; i++) {
+            let kf = this.killFeed[i];
+            let alpha = Math.min(1, (this.time - kf.time) < 1 ? (this.time - kf.time) : (this.time - kf.time) > 4 ? 5 - (this.time - kf.time) : 1);
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.font = '13px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${kf.killer} eliminated ${kf.victim}`, 20, feedY + i * 22);
+        }
+        ctx.globalAlpha = 1;
+
+        // Zone timer
+        if (this.zoneIndex < MIN_SAFE_ZONES) {
+            let timeLeft = Math.max(0, SAFE_ZONE_SHRINK_TIME - this.zoneTimer);
+            let mins = Math.floor(timeLeft / 60000);
+            let secs = Math.floor((timeLeft % 60000) / 1000);
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.roundRect(canvas.width / 2 - 60, 15, 120, 30, 8);
+            ctx.fill();
+            ctx.fillStyle = this.zoneShrinking ? '#ff4444' : '#4488ff';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`ZONE: ${mins}:${secs.toString().padStart(2, '0')}`, canvas.width / 2, 35);
+        }
+
+        // Outside zone warning
+        let dx = p.x - this.safeZone.x;
+        let dy = p.y - this.safeZone.y;
+        let dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > this.safeZone.radius) {
+            ctx.fillStyle = `rgba(255, 0, 0, ${0.3 + Math.sin(this.time * 5) * 0.2})`;
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚠ OUTSIDE SAFE ZONE ⚠', canvas.width / 2, 100);
+        }
+
+        // Dodge cooldown indicator
+        if (p.dodging) {
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, canvas.height - 100, 15, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    drawMinimap() {
+        let mmSize = 160;
+        let mmX = canvas.width - mmSize - 15;
+        let mmY = canvas.height - mmSize - 15;
+        let scale = mmSize / MAP_SIZE;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.roundRect(mmX - 5, mmY - 5, mmSize + 10, mmSize + 10, 10);
+        ctx.fill();
+
+        // Background
+        ctx.fillStyle = '#1a3a1a';
+        ctx.fillRect(mmX, mmY, mmSize, mmSize);
+
+        // Buildings
+        ctx.fillStyle = 'rgba(100,100,120,0.6)';
+        for (let b of this.buildings) {
+            ctx.fillRect(mmX + b.x * scale, mmY + b.y * scale, Math.max(2, b.w * scale), Math.max(2, b.h * scale));
+        }
+
+        // Safe zone
+        ctx.strokeStyle = '#4488ff';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(mmX + this.safeZone.x * scale, mmY + this.safeZone.y * scale, this.safeZone.radius * scale, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Next safe zone
+        if (this.zoneIndex < MIN_SAFE_ZONES) {
+            ctx.strokeStyle = 'rgba(68,136,255,0.4)';
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.arc(mmX + this.nextSafeZone.x * scale, mmY + this.nextSafeZone.y * scale, this.nextSafeZone.radius * scale, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // Bots
+        for (let bot of this.bots) {
+            if (!bot.alive) continue;
+            ctx.fillStyle = '#ff4444';
+            ctx.fillRect(mmX + bot.x * scale - 1, mmY + bot.y * scale - 1, 2, 2);
+        }
+
+        // Player
+        if (this.player.alive) {
+            ctx.fillStyle = '#ff6b9d';
+            ctx.beginPath();
+            ctx.arc(mmX + this.player.x * scale, mmY + this.player.y * scale, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        // Camera view
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(
+            mmX + this.camera.x * scale,
+            mmY + this.camera.y * scale,
+            canvas.width * scale,
+            canvas.height * scale
+        );
+
+        // Border
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(mmX, mmY, mmSize, mmSize);
+    }
+
+    isOnScreen(x, y, margin) {
+        return x > this.camera.x - margin && x < this.camera.x + canvas.width + margin &&
+               y > this.camera.y - margin && y < this.camera.y + canvas.height + margin;
+    }
+}
+
+// Input handling
+document.addEventListener('keydown', (e) => {
+    keys[e.key.toLowerCase()] = true;
+
+    if (!game || game.gameOver) return;
+    if (e.key === 'r' || e.key === 'R') {
+        game.reloadWeapon(game.player);
+    }
+    if (e.key === '1') game.player.currentWeapon = 0;
+    if (e.key === '2' && game.player.weapons.length > 1) game.player.currentWeapon = 1;
+    if (e.key === '3' && game.player.weapons.length > 2) game.player.currentWeapon = 2;
+    if (e.key === '4' && game.player.weapons.length > 3) game.player.currentWeapon = 3;
+    if (e.key === ' ' && !game.player.dodging) {
+        let mx = 0, my = 0;
+        if (keys['w'] || keys['arrowup']) my -= 1;
+        if (keys['s'] || keys['arrowdown']) my += 1;
+        if (keys['a'] || keys['arrowleft']) mx -= 1;
+        if (keys['d'] || keys['arrowright']) mx += 1;
+        if (mx === 0 && my === 0) { mx = 1; my = 0; }
+        let len = Math.sqrt(mx * mx + my * my);
+        game.player.dodgeDir = { x: mx / len, y: my / len };
+        game.player.dodging = true;
+        game.player.dodgeTimer = 0.2;
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    keys[e.key.toLowerCase()] = false;
+});
+
+canvas.addEventListener('mousemove', (e) => {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+});
+
+canvas.addEventListener('mousedown', (e) => {
+    mouse.down = true;
+});
+
+canvas.addEventListener('mouseup', (e) => {
+    mouse.down = false;
+});
+
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// Game loop
+let lastTime = 0;
+function gameLoop(timestamp) {
+    let dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+
+    if (game && gameRunning) {
+        game.update(dt);
+        game.draw();
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+function startGame() {
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('gameOverScreen').style.display = 'none';
+    game = new Game();
+    gameRunning = true;
+}
+
+function endGame(won) {
+    game.gameOver = true;
+    let screen = document.getElementById('gameOverScreen');
+    screen.style.display = 'flex';
+    let title = document.getElementById('goTitle');
+    let stats = document.getElementById('goStats');
+
+    if (won) {
+        screen.className = 'victory';
+        title.textContent = '🌸 SENPAI WINS! 🌸';
+    } else {
+        screen.className = 'defeat';
+        title.textContent = '💀 ELIMINATED 💀';
+    }
+    stats.innerHTML = `Kills: ${game.kills}<br>Alive: ${game.alive} player(s)<br>Weapons collected: ${game.player.weapons.length}`;
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+
+// Polyfill roundRect
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+        if (typeof r === 'number') r = [r, r, r, r];
+        this.beginPath();
+        this.moveTo(x + r[0], y);
+        this.lineTo(x + w - r[1], y);
+        this.quadraticCurveTo(x + w, y, x + w, y + r[1]);
+        this.lineTo(x + w, y + h - r[2]);
+        this.quadraticCurveTo(x + w, y + h, x + w - r[2], y + h);
+        this.lineTo(x + r[3], y + h);
+        this.quadraticCurveTo(x, y + h, x, y + h - r[3]);
+        this.lineTo(x, y + r[0]);
+        this.quadraticCurveTo(x, y, x + r[0], y);
+        this.closePath();
+        return this;
+    };
+}
+
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

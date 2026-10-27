@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FitFlux</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+body {
+  background: #0a0a0f;
+  color: #e8e8f0;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #0a0a0f 0%, #11111a 100%);
+  position: relative;
+  padding-bottom: 70px;
+}
+.page { display: none; padding: 20px; animation: fadeIn .4s ease; }
+.page.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+h1 {
+  font-size: 22px;
+  font-weight: 700;
+  background: linear-gradient(90deg, #00d4ff, #ff3366);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 4px;
+}
+h2 { font-size: 14px; color: #888; font-weight: 400; margin-bottom: 16px; }
+
+/* Avatar */
+.avatar-wrap {
+  display: flex; justify-content: center; margin: 10px 0 20px;
+}
+.avatar {
+  width: 90px; height: 90px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #00d4ff, #003355 70%, #000);
+  position: relative;
+  box-shadow: 0 0 25px #00d4ff80, inset 0 0 20px #ff336640;
+  animation: pulse 2.5s infinite;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 42px;
+}
+@keyframes pulse {
+  0%,100% { box-shadow: 0 0 25px #00d4ff80, inset 0 0 20px #ff336640; }
+  50% { box-shadow: 0 0 40px #ff3366aa, inset 0 0 25px #00d4ff60; }
+}
+.avatar.speaking { animation: pulse 0.5s infinite; }
+
+/* Tip card */
+.tip {
+  background: linear-gradient(135deg, #1a1a2e, #161622);
+  border: 1px solid #00d4ff30;
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 16px;
+  box-shadow: 0 0 15px #00d4ff15;
+}
+.tip-title { font-size: 12px; color: #00d4ff; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.tip-text { font-size: 14px; line-height: 1.4; color: #ddd; font-style: italic; }
+
+/* Chat */
+.chat {
+  background: #11111a;
+  border-radius: 14px;
+  border: 1px solid #222;
+  padding: 12px;
+  height: 320px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+.msg { margin-bottom: 10px; display: flex; }
+.msg.user { justify-content: flex-end; }
+.bubble {
+  max-width: 75%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.msg.user .bubble {
+  background: linear-gradient(135deg, #ff3366, #cc1144);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+  box-shadow: 0 0 12px #ff336650;
+}
+.msg.bot .bubble {
+  background: linear-gradient(135deg, #00d4ff, #0088cc);
+  color: #fff;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 0 12px #00d4ff50;
+}
+.input-row {
+  display: flex; gap: 8px;
+}
+input[type="text"], input[type="number"] {
+  flex: 1;
+  background: #1a1a26;
+  border: 1px solid #333;
+  color: #fff;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+}
+input:focus { border-color: #00d4ff; box-shadow: 0 0 10px #00d4ff40; }
+
+button.btn {
+  background: linear-gradient(135deg, #00d4ff, #0066aa);
+  color: #fff;
+  border: none;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 0 15px #00d4ff60;
+  transition: transform .15s, box-shadow .2s;
+}
+button.btn:hover { transform: translateY(-2px); box-shadow: 0 0 25px #00d4ffaa; }
+button.btn.red {
+  background: linear-gradient(135deg, #ff3366, #aa1144);
+  box-shadow: 0 0 15px #ff336660;
+}
+button.btn.red:hover { box-shadow: 0 0 25px #ff3366aa; }
+button.btn.full { width: 100%; margin-top: 10px; }
+
+/* Nav */
+.nav {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 480px;
+  background: #0a0a0fee;
+  backdrop-filter: blur(10px);
+  border-top: 1px solid #222;
+  display: flex; justify-content: space-around;
+  padding: 10px 0;
+  z-index: 100;
+}
+.nav button {
+  background: none; border: none; color: #666;
+  font-size: 12px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 6px 12px; border-radius: 10px;
+  transition: all .2s;
+}
+.nav button .ico { font-size: 22px; }
+.nav button.active { color: #00d4ff; text-shadow: 0 0 8px #00d4ff; }
+
+/* Calorie */
+.upload-area {
+  border: 2px dashed #00d4ff60;
+  border-radius: 14px;
+  padding: 30px;
+  text-align: center;
+  cursor: pointer;
+  background: #11111a;
+  transition: all .2s;
+  margin-bottom: 14px;
+}
+.upload-area:hover { border-color: #00d4ff; background: #15152a; }
+.upload-area img { max-width: 100%; max-height: 200px; border-radius: 10px; margin-top: 10px; }
+.food-list { list-style: none; }
+.food-item {
+  background: #1a1a26;
+  padding: 12px;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  display: flex; justify-content: space-between; align-items: center;
+  border-left: 3px solid #ff3366;
+}
+.total {
+  background: linear-gradient(135deg, #ff336620, #00d4ff20);
+  padding: 14px;
+  border-radius: 12px;
+  text-align: center;
+  margin-top: 12px;
+  border: 1px solid #00d4ff40;
+}
+.total b { font-size: 26px; color: #00d4ff; text-shadow: 0 0 10px #00d4ff80; }
+
+/* Wellness */
+.card {
+  background: #11111a;
+  border: 1px solid #222;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.card h3 { color: #ff3366; font-size: 15px; margin-bottom: 10px; text-shadow: 0 0 8px #ff336660; }
+.bmi-result {
+  font-size: 30px; font-weight: 700; text-align: center; margin: 10px 0;
+  background: linear-gradient(90deg, #00d4ff, #ff3366);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.bmi-cat { text-align: center; font-size: 14px; color: #aaa; }
+.row { display: flex; gap: 8px; }
+.row > * { flex: 1; }
+.quote {
+  font-style: italic; color: #ccc; line-height: 1.5; text-align: center;
+  padding: 10px;
+}
+.typing { color: #666; font-size: 13px; font-style: italic; padding: 6px 14px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HOME -->
+  <div class="page active" id="home">
+    <h1>🔥 Rock — Your AI Fitness Coach</h1>
+    <h2>Train smarter. Feel stronger.</h2>
+    <div class="avatar-wrap"><div class="avatar" id="avatar">🤖</div></div>
+    <div class="tip">
+      <div class="tip-title">💡 Today's Tip</div>
+      <div class="tip-text" id="tipText">Loading...</div>
+    </div>
+    <div class="chat" id="chat">
+      <div class="msg bot"><div class="bubble">Yo! I'm Rock 💪 Ask me anything about workouts, nutrition, or health!</div></div>
+    </div>
+    <div class="input-row">
+      <input type="text" id="chatInput" placeholder="Ask Rock anything..." />
+      <button class="btn" onclick="sendMsg()">Send</button>
+    </div>
+    <button class="btn red full" onclick="showPage('calorie')">🍎 Go to Calorie Tracker</button>
+  </div>
+
+  <!-- CALORIE -->
+  <div class="page" id="calorie">
+    <h1>📸 Smart Calorie Tracker</h1>
+    <h2>Snap your food. Track your fuel.</h2>
+    <label class="upload-area" for="foodPic">
+      <div style="font-size:42px;">📷</div>
+      <div style="margin-top:8px;color:#888;">Tap to upload food photo</div>
+      <img id="preview" style="display:none;" />
+    </label>
+    <input type="file" id="foodPic" accept="image/*" style="display:none;" onchange="handleFood(event)" />
+    <div class="input-row">
+      <input type="text" id="foodName" placeholder="Or type food name..." />
+      <button class="btn" onclick="addFoodByName()">Add</button>
+    </div>
+    <ul class="food-list" id="foodList" style="margin-top:14px;"></ul>
+    <div class="total">Total Today: <b id="totalCal">0</b> kcal</div>
+    <button class="btn full" onclick="document.getElementById('foodList').innerHTML='';updateTotal();">🔄 Reset</button>
+  </div>
+
+  <!-- WELLNESS -->
+  <div class="page" id="wellness">
+    <h1>🧘 Wellness Tools</h1>
+    <h2>Mind. Body. Balance.</h2>
+    <div class="card">
+      <h3>📏 BMI Calculator</h3>
+      <div class="row">
+        <input type="number" id="height" placeholder="Height (cm)" />
+        <input type="number" id="weight" placeholder="Weight (kg)" />
+      </div>
+      <button class="btn full" onclick="calcBMI()">Calculate</button>
+      <div class="bmi-result" id="bmiResult">--</div>
+      <div class="bmi-cat" id="bmiCat"></div>
+    </div>
+    <div class="card">
+      <h3>💧 Water Tracker</h3>
+      <div style="text-align:center;font-size:28px;margin:8px 0;" id="waterCount">0 / 8 glasses</div>
+      <div class="row">
+        <button class="btn" onclick="changeWater(1)">+ Glass</button>
+        <button class="btn red" onclick="changeWater(-1)">- Glass</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>✨ Motivation</h3>
+      <div class="quote" id="quote">Push yourself, because no one else is going to do it for you.</div>
+      <button class="btn full" onclick="newQuote()">New Quote</button>
+    </div>
+  </div>
+
+  <!-- NAV -->
+  <div class="nav">
+    <button class="active" data-page="home" onclick="showPage('home')"><span class="ico">🏋️</span>Rock</button>
+    <button data-page="calorie" onclick="showPage('calorie')"><span class="ico">🍎</span>Calories</button>
+    <button data-page="wellness" onclick="showPage('wellness')"><span class="ico">🧘</span>Wellness</button>
+  </div>
+</div>
+
+<script>
+// ========= Navigation =========
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('active', b.dataset.page === id));
+}
+
+// ========= Daily Tip =========
+const tips = [
+  "Drink water before each meal — it boosts metabolism by up to 30%.",
+  "Sleep 7-9 hours. Muscles grow during rest, not in the gym.",
+  "Protein at every meal keeps you full and builds lean muscle.",
+  "10-minute walks after meals lower blood sugar significantly.",
+  "Stretch daily — flexibility prevents 80% of common injuries.",
+  "Replace one sugary drink with water — save 150+ kcal instantly.",
+  "Strength training 3x/week beats cardio for long-term fat loss."
+];
+document.getElementById('tipText').textContent = tips[new Date().getDate() % tips.length];
+
+// ========= Rock AI Chat =========
+const knowledge = [
+  { k:['workout','exercise','train','routine'], a:"For a balanced routine: push/pull/legs split 3-5x/week, 8-12 reps, progressive overload. Rest 48hrs between same muscle groups. 💪" },
+  { k:['protein','muscle','build','gain'], a:"Aim for 1.6-2.2g protein per kg bodyweight. Eggs, chicken, fish, tofu, and whey are top picks. Eat every 3-4 hours!" },
+  { k:['lose weight','fat loss','cut','diet'], a:"Create a 300-500 kcal daily deficit. Combine strength training + 8k steps/day. Slow loss = sustainable loss. 🔥" },
+  { k:['cardio','run','running'], a:"Mix HIIT (2x/week, 20min) with steady cardio (2x/week, 30min). Burns fat without losing muscle." },
+  { k:['abs','core','six pack'], a:"Abs are made in the kitchen. Drop body fat below 15% (men) or 22% (women). Train core 3x/week — planks, leg raises, hanging knee-ups." },
+  { k:['water','hydration','drink'], a:"Drink 30-40ml per kg of bodyweight daily. Add 500ml per hour of training. Hydration = performance." },
+  { k:['sleep','rest','recovery'], a:"Sleep is the #1 anabolic. Aim for 7-9 hours, cool dark room, no screens 1hr before bed." },
+  { k:['stretch','flexibility','mobility'], a:"Dynamic stretching pre-workout, static post-workout. 10 minutes daily mobility prevents injuries." },
+  { k:['breakfast','meal','eat'], a:"Power breakfast: oats + Greek yogurt + berries + nuts. Complex carbs + protein + healthy fats = sustained energy." },
+  { k:['stress','anxiety','calm'], a:"Try 4-7-8 breathing: inhale 4s, hold 7s, exhale 8s. Repeat 4x. Plus 20min walks reduce cortisol naturally." }
+];
+
+function rockReply(q) {
+  const lower = q.toLowerCase();
+  for (const item of knowledge) {
+    if (item.k.some(kw => lower.includes(kw))) return item.a;
+  }
+  const generic = [
+    "Great question! Stay consistent — consistency beats intensity every time. 🔥",
+    "Train hard, eat clean, sleep deep. That's the formula champions live by!",
+    "Remember: progress over perfection. Small daily wins compound into massive results 💪",
+    "Focus on the basics: lift heavy, eat protein, walk daily, sleep 8hrs. Master these first!"
+  ];
+  return generic[Math.floor(Math.random()*generic.length)];
+}
+
+function addMsg(text, who) {
+  const chat = document.getElementById('chat');
+  const div = document.createElement('div');
+  div.className = 'msg ' + who;
+  div.innerHTML = `<div class="bubble">${text}</div>`;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function speak(text) {
+  if (!window.speechSynthesis) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = 1; u.pitch = 0.9;
+  const av = document.getElementById('avatar');
+  av.classList.add('speaking');
+  u.onend = () => av.classList.remove('speaking');
+  speechSynthesis.speak(u);
+}
+
+function sendMsg() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  addMsg(text, 'user');
+  input.value = '';
+  const chat = document.getElementById('chat');
+  const typing = document.createElement('div');
+  typing.className = 'typing';
+  typing.textContent = 'Rock is typing...';
+  typing.id = 'typing';
+  chat.appendChild(typing); chat.scrollTop = chat.scrollHeight;
+  setTimeout(() => {
+    document.getElementById('typing')?.remove();
+    const reply = rockReply(text);
+    addMsg(reply, 'bot');
+    speak(reply);
+  }, 700 + Math.random()*600);
+}
+document.getElementById('chatInput').addEventListener('keypress', e => { if (e.key==='Enter') sendMsg(); });
+
+// ========= Calorie Tracker =========
+const foodDB = {
+  apple:{cal:95}, banana:{cal:105}, pizza:{cal:285}, burger:{cal:354}, salad:{cal:150},
+  rice:{cal:206}, chicken:{cal:239}, egg:{cal:78}, bread:{cal:79}, pasta:{cal:221},
+  milk:{cal:103}, cheese:{cal:113}, fish:{cal:206}, yogurt:{cal:154}, oats:{cal:154},
+  coffee:{cal:5}, tea:{cal:2}, chocolate:{cal:235}, fries:{cal:365}, sandwich:{cal:300},
+  steak:{cal:679}, soup:{cal:170}, donut:{cal:253}, cake:{cal:340}, icecream:{cal:273}
+};
+
+function handleFood(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = document.getElementById('preview');
+    img.src = ev.target.result; img.style.display = 'block';
+    // simulate AI detection
+    const names = Object.keys(foodDB);
+    const detected = names[Math.floor(Math.random()*names.length)];
+    setTimeout(() => addFood(detected, foodDB[detected].cal), 600);
+  };
+  reader.readAsDataURL(file);
+}
+
+function addFoodByName() {
+  const name = document.getElementById('foodName').value.trim().toLowerCase();
+  if (!name) return;
+  const cal = foodDB[name]?.cal || Math.floor(150 + Math.random()*200);
+  addFood(name, cal);
+  document.getElementById('foodName').value = '';
+}
+
+function addFood(name, cal) {
+  const li = document.createElement('li');
+  li.className = 'food-item';
+  li.innerHTML = `<span>🍽️ ${name.charAt(0).toUpperCase()+name.slice(1)}</span><span><b style="color:#00d4ff">${cal}</b> kcal <span style="cursor:pointer;margin-left:8px;color:#ff3366" onclick="this.closest('li').remove();updateTotal();">✕</span></span>`;
+  li.dataset.cal = cal;
+  document.getElementById('foodList').appendChild(li);
+  updateTotal();
+}
+
+function updateTotal() {
+  let t = 0;
+  document.querySelectorAll('#foodList .food-item').forEach(li => t += parseInt(li.dataset.cal));
+  document.getElementById('totalCal').textContent = t;
+}
+
+// ========= Wellness =========
+function calcBMI() {
+  const h = parseFloat(document.getElementById('height').value) / 100;
+  const w = parseFloat(document.getElementById('weight').value);
+  if (!h || !w) return;
+  const bmi = (w / (h*h)).toFixed(1);
+  document.getElementById('bmiResult').textContent = bmi;
+  let cat = '';
+  if (bmi < 18.5) cat = 'Underweight — eat more protein & calories';
+  else if (bmi < 25) cat = 'Healthy weight — keep it up! 💪';
+  else if (bmi < 30) cat = 'Overweight — focus on cardio & diet';
+  else cat = 'Obese — consult a professional';
+  document.getElementById('bmiCat').textContent = cat;
+}
+
+let water = 0;
+function changeWater(d) {
+  water = Math.max(0, Math.min(15, water + d));
+  document.getElementById('waterCount').textContent = `${water} / 8 glasses ${water>=8?'✅':''}`;
+}
+
+const quotes = [
+  "Push yourself, because no one else is going to do it for you.",
+  "The body achieves what the mind believes.",
+  "Strength doesn't come from what you can do. It comes from overcoming what you couldn't.",
+  "Don't wish for it. Work for it. 🔥",
+  "Sweat is just fat crying.",
+  "Your only limit is you.",
+  "Discipline > Motivation."
+];
+function newQuote() { document.getElementById('quote').textContent = quotes[Math.floor(Math.random()*quotes.length)]; }
+</script>
+</body>
+</html>

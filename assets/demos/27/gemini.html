@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A* Pathfinding Chase</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a202c; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        #game-container { position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.5); border-radius: 8px; overflow: hidden; }
+        canvas { display: block; image-rendering: pixelated; }
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(2px); z-index: 10; }
+        .hidden { display: none !important; }
+        .btn { padding: 10px 20px; font-size: 1.2rem; font-weight: bold; cursor: pointer; border: none; border-radius: 5px; background: #3b82f6; color: white; transition: background 0.2s; }
+        .btn:hover { background: #2563eb; }
+        #hud { position: absolute; top: 10px; left: 10px; z-index: 5; pointer-events: none; text-shadow: 1px 1px 2px black; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="hud" class="hidden text-xl text-yellow-400">Time Survived: <span id="time-display">0</span>s</div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <div id="start-screen" class="ui-layer">
+        <h1 class="text-4xl font-bold mb-4 text-white">Stealth & Chase</h1>
+        <p class="mb-6 text-gray-300 max-w-md text-center">Use WASD or Arrow Keys to move. Avoid the red guard! The guard patrols, but will chase you if you get too close. The green line shows its calculated path.</p>
+        <button class="btn" onclick="startGame()">Start Game</button>
+    </div>
+
+    <div id="game-over-screen" class="ui-layer hidden">
+        <h1 class="text-5xl font-bold mb-2 text-red-500">CAUGHT!</h1>
+        <p class="mb-6 text-xl text-white">You survived for <span id="final-time" class="text-yellow-400"></span> seconds.</p>
+        <button class="btn" onclick="resetGame()">Play Again</button>
+    </div>
+</div>
+
+<script>
+    /**
+     * GAME ENGINE & LOGIC
+     * Note: Per instructions, this is implemented in JS/HTML5 Canvas,
+     * fulfilling the requested mechanics (2D, Grid, A*, Patrol/Chase, Collision)
+     * within a browser environment.
+     */
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // UI Elements
+    const startScreen = document.getElementById('start-screen');
+    const gameOverScreen = document.getElementById('game-over-screen');
+    const hud = document.getElementById('hud');
+    const timeDisplay = document.getElementById('time-display');
+    const finalTimeDisplay = document.getElementById('final-time');
+
+    // Game Constants
+    const TILE_SIZE = 40;
+    const COLS = canvas.width / TILE_SIZE; // 20
+    const ROWS = canvas.height / TILE_SIZE; // 15
+    
+    // Game State
+    let gameState = 'START'; // START, PLAYING, GAMEOVER
+    let lastTime = 0;
+    let surviveTime = 0;
+    let keys = {};
+
+    // Map definition (1 = Wall, 0 = Floor)
+    const map = [
+        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+        [1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1],
+        [1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,1,1,1,0,1],
+        [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
+        [1,0,1,0,1,1,1,1,1,0,1,1,1,1,1,1,0,1,0,1],
+        [1,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,1],
+        [1,1,1,1,0,1,1,0,1,0,1,0,1,1,0,1,1,1,1,1],
+        [1,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,1],
+        [1,0,1,1,0,1,0,1,1,1,1,1,0,1,0,1,1,1,0,1],
+        [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+        [1,1,0,1,1,1,1,0,1,1,1,0,1,1,1,1,0,1,1,1],
+        [1,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,1],
+        [1,0,1,1,1,1,1,0,1,0,1,0,1,1,1,1,1,1,0,1],
+        [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    ];
+
+    // Input Handling
+    window.addEventListener('keydown', (e) => keys[e.code] = true);
+    window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+    // --- A* Pathfinding Implementation ---
+    class Node {
+        constructor(x, y, parent = null) {
+            this.x = x;
+            this.y = y;
+            this.parent = parent;
+            this.g = 0; // Cost from start
+            this.h = 0; // Heuristic (distance to end)
+            this.f = 0; // Total cost (g + h)
+        }
+    }
+
+    function aStar(startX, startY, endX, endY) {
+        let openList = [];
+        let closedList = [];
+        let startNode = new Node(startX, startY);
+        let endNode = new Node(endX, endY);
+
+        openList.push(startNode);
+
+        // Limit iterations to prevent freezing if path is impossible
+        let iterations = 0;
+        const maxIterations = 500;
+
+        while (openList.length > 0 && iterations < maxIterations) {
+            iterations++;
+            
+            // Get node with lowest f score
+            let currentIndex = 0;
+            for (let i = 1; i < openList.length; i++) {
+                if (openList[i].f < openList[currentIndex].f) {
+                    currentIndex = i;
+                }
+            }
+
+            let currentNode = openList[currentIndex];
+
+            // Reached the end
+            if (currentNode.x === endNode.x && currentNode.y === endNode.y) {
+                let path = [];
+                let current = currentNode;
+                while (current != null) {
+                    path.push({ x: current.x, y: current.y });
+                    current = current.parent;
+                }
+                return path.reverse();
+            }
+
+            openList.splice(currentIndex, 1);
+            closedList.push(currentNode);
+
+            // Generate neighbors (Up, Down, Left, Right)
+            const moves = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+            
+            for (let move of moves) {
+                let neighborX = currentNode.x + move[0];
+                let neighborY = currentNode.y + move[1];
+
+                // Check bounds and walls
+                if (neighborX < 0 || neighborX >= COLS || neighborY < 0 || neighborY >= ROWS) continue;
+                if (map[neighborY][neighborX] === 1) continue;
+
+                // Check if in closed list
+                if (closedList.some(node => node.x === neighborX && node.y === neighborY)) continue;
+
+                let neighborNode = new Node(neighborX, neighborY, currentNode);
+                neighborNode.g = currentNode.g + 1;
+                // Manhattan distance heuristic
+                neighborNode.h = Math.abs(neighborX - endNode.x) + Math.abs(neighborY - endNode.y);
+                neighborNode.f = neighborNode.g + neighborNode.h;
+
+                // Check if in open list with a lower g score
+                let openNode = openList.find(node => node.x === neighborX && node.y === neighborY);
+                if (openNode && neighborNode.g >= openNode.g) continue;
+
+                if (!openNode) {
+                    openList.push(neighborNode);
+                } else {
+                    openNode.g = neighborNode.g;
+                    openNode.f = neighborNode.f;
+                    openNode.parent = neighborNode.parent;
+                }
+            }
+        }
+        return []; // No path found
+    }
+
+    // --- Entities ---
+
+    class Player {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.size = 24;
+            this.speed = 180; // pixels per second
+            this.color = '#3b82f6';
+        }
+
+        update(dt) {
+            let dx = 0;
+            let dy = 0;
+
+            if (keys['ArrowUp'] || keys['KeyW']) dy -= 1;
+            if (keys['ArrowDown'] || keys['KeyS']) dy += 1;
+            if (keys['ArrowLeft'] || keys['KeyA']) dx -= 1;
+            if (keys['ArrowRight'] || keys['KeyD']) dx += 1;
+
+            // Normalize diagonal movement
+            if (dx !== 0 && dy !== 0) {
+                const len = Math.sqrt(dx*dx + dy*dy);
+                dx /= len;
+                dy /= len;
+            }
+
+            let nextX = this.x + dx * this.speed * dt;
+            let nextY = this.y + dy * this.speed * dt;
+
+            // Collision Detection with Walls (Sliding collision)
+            // Check X axis
+            if (!this.checkCollision(nextX, this.y)) {
+                this.x = nextX;
+            }
+            // Check Y axis
+            if (!this.checkCollision(this.x, nextY)) {
+                this.y = nextY;
+            }
+        }
+
+        checkCollision(newX, newY) {
+            // Check the 4 corners of the player bounding box against the grid
+            const left = Math.floor((newX - this.size/2 + 2) / TILE_SIZE);
+            const right = Math.floor((newX + this.size/2 - 2) / TILE_SIZE);
+            const top = Math.floor((newY - this.size/2 + 2) / TILE_SIZE);
+            const bottom = Math.floor((newY + this.size/2 - 2) / TILE_SIZE);
+
+            if (left < 0 || right >= COLS || top < 0 || bottom >= ROWS) return true;
+
+            return map[top][left] === 1 || map[top][right] === 1 || 
+                   map[bottom][left] === 1 || map[bottom][right] === 1;
+        }
+
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size/2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw an eye to show direction (simplistic)
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(this.x + 4, this.y - 4, 3, 0, Math.PI*2);
+            ctx.fill();
+        }
+    }
+
+    class Enemy {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.size = 28;
+            this.patrolSpeed = 100;
+            this.chaseSpeed = 160;
+            this.color = '#ef4444';
+            
+            this.state = 'PATROL'; // PATROL, CHASE
+            this.patrolPoints = [
+                {x: 1, y: 1}, {x: 18, y: 1}, 
+                {x: 18, y: 13}, {x: 1, y: 13}
+            ];
+            this.currentPatrolIndex = 0;
+            
+            this.path = [];
+            this.pathRecalcTimer = 0;
+            this.aggroRadius = 250;
+        }
+
+        update(dt, player) {
+            // Distance to player
+            const distToPlayer = Math.hypot(player.x - this.x, player.y - this.y);
+
+            // State switching logic
+            if (distToPlayer < this.aggroRadius) {
+                this.state = 'CHASE';
+            } else {
+                this.state = 'PATROL';
+            }
+
+            // Path calculation timer (don't calc every frame)
+            this.pathRecalcTimer -= dt;
+
+            let targetGridX, targetGridY;
+            let currentSpeed = this.state === 'CHASE' ? this.chaseSpeed : this.patrolSpeed;
+
+            if (this.state === 'CHASE') {
+                targetGridX = Math.floor(player.x / TILE_SIZE);
+                targetGridY = Math.floor(player.y / TILE_SIZE);
+            } else {
+                targetGridX = this.patrolPoints[this.currentPatrolIndex].x;
+                targetGridY = this.patrolPoints[this.currentPatrolIndex].y;
+            }
+
+            let currentGridX = Math.floor(this.x / TILE_SIZE);
+            let currentGridY = Math.floor(this.y / TILE_SIZE);
+
+            // Recalculate path
+            if (this.pathRecalcTimer <= 0 || this.path.length === 0) {
+                this.path = aStar(currentGridX, currentGridY, targetGridX, targetGridY);
+                this.pathRecalcTimer = 0.2; // Recalc every 0.2s
+                
+                // If path found, remove the current node if we are already there
+                if (this.path.length > 0 && this.path[0].x === currentGridX && this.path[0].y === currentGridY) {
+                    this.path.shift();
+                }
+            }
+
+            // Movement along path
+            if (this.path.length > 0) {
+                let targetNode = this.path[0];
+                let targetPxX = targetNode.x * TILE_SIZE + TILE_SIZE / 2;
+                let targetPxY = targetNode.y * TILE_SIZE + TILE_SIZE / 2;
+
+                let dx = targetPxX - this.x;
+                let dy = targetPxY - this.y;
+                let dist = Math.hypot(dx, dy);
+
+                if (dist < 5) {
+                    // Reached node
+                    this.x = targetPxX;
+                    this.y = targetPxY;
+                    this.path.shift();
+                    
+                    // If patrolling and reached end of path, go to next patrol point
+                    if (this.state === 'PATROL' && this.path.length === 0) {
+                        this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length;
+                    }
+                } else {
+                    // Move towards node
+                    this.x += (dx / dist) * currentSpeed * dt;
+                    this.y += (dy / dist) * currentSpeed * dt;
+                }
+            }
+
+            // Check collision with player (Game Over)
+            if (distToPlayer < (this.size/2 + player.size/2 - 4)) {
+                gameOver();
+            }
+        }
+
+        drawPath() {
+            if (this.path.length > 0) {
+                ctx.strokeStyle = 'rgba(34, 197, 94, 0.5)'; // Green line
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                for (let node of this.path) {
+                    ctx.lineTo(node.x * TILE_SIZE + TILE_SIZE/2, node.y * TILE_SIZE + TILE_SIZE/2);
+                }
+                ctx.stroke();
+            }
+        }
+
+        draw() {
+            // Draw aggro radius (faint)
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.05)';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.aggroRadius, 0, Math.PI*2);
+            ctx.fill();
+
+            // Draw enemy
+            ctx.fillStyle = this.color;
+            // Draw a square that rotates slightly based on movement? Keep it simple: Square
+            ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+            
+            // Draw "eyes" indicating anger if chasing
+            ctx.fillStyle = this.state === 'CHASE' ? 'yellow' : 'white';
+            ctx.fillRect(this.x - 8, this.y - 8, 4, 4);
+            ctx.fillRect(this.x + 4, this.y - 8, 4, 4);
+        }
+    }
+
+    // Instantiation
+    let player;
+    let enemy;
+
+    function initEntities() {
+        player = new Player(TILE_SIZE * 1.5, TILE_SIZE * 1.5);
+        enemy = new Enemy(TILE_SIZE * 18.5, TILE_SIZE * 13.5);
+    }
+
+    // --- Main Game Functions ---
+
+    function drawMap() {
+        for (let row = 0; row < ROWS; row++) {
+            for (let col = 0; col < COLS; col++) {
+                if (map[row][col] === 1) {
+                    ctx.fillStyle = '#475569'; // Slate 600 - Wall
+                    ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    // Add some bevel for pseudo 3D
+                    ctx.fillStyle = '#64748b'; // Slate 500
+                    ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, 4);
+                    ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, 4, TILE_SIZE);
+                } else {
+                    ctx.fillStyle = '#1e293b'; // Slate 800 - Floor
+                    ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    // Grid lines
+                    ctx.strokeStyle = '#0f172a'; // Slate 900
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                }
+            }
+        }
+    }
+
+    function startGame() {
+        startScreen.classList.add('hidden');
+        hud.classList.remove('hidden');
+        initEntities();
+        surviveTime = 0;
+        gameState = 'PLAYING';
+        lastTime = performance.now();
+        requestAnimationFrame(gameLoop);
+    }
+
+    function resetGame() {
+        gameOverScreen.classList.add('hidden');
+        startGame();
+    }
+
+    function gameOver() {
+        gameState = 'GAMEOVER';
+        hud.classList.add('hidden');
+        finalTimeDisplay.innerText = surviveTime.toFixed(1);
+        gameOverScreen.classList.remove('hidden');
+    }
+
+    function gameLoop(timestamp) {
+        if (gameState !== 'PLAYING') return;
+
+        let dt = (timestamp - lastTime) / 1000;
+        lastTime = timestamp;
+
+        // Cap dt to prevent huge jumps if tab is backgrounded
+        if (dt > 0.1) dt = 0.1;
+
+        // Logic
+        surviveTime += dt;
+        timeDisplay.innerText = Math.floor(surviveTime);
+        
+        player.update(dt);
+        enemy.update(dt, player);
+
+        // Rendering
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        drawMap();
+        enemy.drawPath(); // Visualizing the A* path
+        enemy.draw();
+        player.draw();
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Initial Render behind start screen
+    initEntities();
+    drawMap();
+    player.draw();
+    enemy.draw();
+
+</script>
+
+</body>
+</html>

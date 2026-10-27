@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Save System Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #1e1e24;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+        .btn {
+            transition: all 0.1s ease-in-out;
+        }
+        .btn:active {
+            transform: scale(0.95);
+        }
+        #notification {
+            transition: opacity 0.3s ease;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .show-toast {
+            opacity: 1 !important;
+        }
+        .variable-card {
+            background: #2b2b36;
+            border-left: 4px solid #4a4a6a;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col items-center p-4 overflow-hidden">
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="absolute inset-0 bg-[#1e1e24] flex flex-col items-center justify-center z-50">
+        <h1 class="text-5xl font-bold mb-4 text-blue-400">Variable Manager Pro</h1>
+        <p class="mb-8 text-gray-400 max-w-md text-center">Demonstrating a robust, serialized JSON save system handling multiple data types (Integers, Floats, Strings, Booleans, Objects) without relying on basic key-value prefs.</p>
+        <button onclick="startGame()" class="btn bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-lg shadow-lg text-xl">
+            Initialize System
+        </button>
+    </div>
+
+    <!-- Game UI -->
+    <div id="game-ui" class="w-full max-w-4xl hidden flex-col h-full">
+        
+        <!-- Header & Resources -->
+        <div class="flex justify-between items-center mb-6 bg-[#2b2b36] p-4 rounded-xl shadow-md">
+            <div>
+                <h2 class="text-2xl font-bold text-blue-400">Data Center</h2>
+                <p class="text-sm text-gray-400">State Serializable</p>
+            </div>
+            <div class="text-right">
+                <div class="text-3xl font-mono font-bold text-green-400" id="data-points">0</div>
+                <div class="text-sm text-gray-400">Data Points (DP)</div>
+            </div>
+        </div>
+
+        <!-- Main Action Area -->
+        <div class="flex gap-4 mb-6 h-48">
+            <button id="mine-btn" class="btn flex-1 bg-gray-800 border-2 border-gray-600 rounded-xl flex flex-col items-center justify-center hover:border-blue-400 hover:bg-gray-750 group">
+                <span class="text-5xl mb-2 group-hover:scale-110 transition-transform">⛏️</span>
+                <span class="text-xl font-bold text-gray-200">Generate Data</span>
+            </button>
+            
+            <div class="w-64 bg-[#2b2b36] rounded-xl p-4 flex flex-col justify-between shadow-inner">
+                <h3 class="text-lg font-bold text-gray-300 border-b border-gray-600 pb-2 mb-2">Save System (Pro)</h3>
+                <div class="flex flex-col gap-2">
+                    <button onclick="SaveManager.save()" class="btn bg-blue-600/20 text-blue-400 border border-blue-600/50 hover:bg-blue-600/40 py-2 rounded">Force Save</button>
+                    <button onclick="SaveManager.load()" class="btn bg-yellow-600/20 text-yellow-400 border border-yellow-600/50 hover:bg-yellow-600/40 py-2 rounded">Force Load</button>
+                    <button onclick="SaveManager.reset()" class="btn bg-red-600/20 text-red-400 border border-red-600/50 hover:bg-red-600/40 py-2 rounded">Wipe Data</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Variables Grid -->
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 flex-1 overflow-y-auto pb-4">
+            
+            <!-- Integer -->
+            <div class="variable-card p-4 rounded-lg flex flex-col justify-between" style="border-left-color: #3b82f6;">
+                <div>
+                    <div class="text-xs text-blue-400 font-mono mb-1">public int</div>
+                    <div class="font-bold text-lg">playerLevel</div>
+                    <div class="text-2xl font-mono mt-2" id="val-int">1</div>
+                </div>
+                <button onclick="upgrade('int')" class="btn mt-4 w-full bg-gray-700 hover:bg-gray-600 py-1 rounded text-sm">Level Up (10 DP)</button>
+            </div>
+
+            <!-- Float -->
+            <div class="variable-card p-4 rounded-lg flex flex-col justify-between" style="border-left-color: #10b981;">
+                <div>
+                    <div class="text-xs text-green-400 font-mono mb-1">public float</div>
+                    <div class="font-bold text-lg">movementSpeed</div>
+                    <div class="text-2xl font-mono mt-2" id="val-float">5.00f</div>
+                </div>
+                <button onclick="upgrade('float')" class="btn mt-4 w-full bg-gray-700 hover:bg-gray-600 py-1 rounded text-sm">Upgrade (25 DP)</button>
+            </div>
+
+            <!-- String -->
+            <div class="variable-card p-4 rounded-lg flex flex-col justify-between" style="border-left-color: #f59e0b;">
+                <div>
+                    <div class="text-xs text-yellow-400 font-mono mb-1">public string</div>
+                    <div class="font-bold text-lg">playerName</div>
+                    <div class="text-xl font-mono mt-2 truncate text-gray-300" id="val-string">"Player"</div>
+                </div>
+                <button onclick="upgrade('string')" class="btn mt-4 w-full bg-gray-700 hover:bg-gray-600 py-1 rounded text-sm">Change (50 DP)</button>
+            </div>
+
+            <!-- Boolean -->
+            <div class="variable-card p-4 rounded-lg flex flex-col justify-between" style="border-left-color: #ef4444;">
+                <div>
+                    <div class="text-xs text-red-400 font-mono mb-1">public bool</div>
+                    <div class="font-bold text-lg">isGodMode</div>
+                    <div class="text-2xl font-mono mt-2" id="val-bool">False</div>
+                </div>
+                <button onclick="upgrade('bool')" class="btn mt-4 w-full bg-gray-700 hover:bg-gray-600 py-1 rounded text-sm">Toggle (100 DP)</button>
+            </div>
+
+            <!-- Vector3 (Object simulation) -->
+            <div class="variable-card p-4 rounded-lg flex flex-col justify-between md:col-span-2" style="border-left-color: #8b5cf6;">
+                <div>
+                    <div class="text-xs text-purple-400 font-mono mb-1">public Vector3 (Object)</div>
+                    <div class="font-bold text-lg">spawnPosition</div>
+                    <div class="text-xl font-mono mt-2 flex gap-4 text-gray-300" id="val-vec">
+                        <span>X: <span id="vec-x">0</span></span>
+                        <span>Y: <span id="vec-y">0</span></span>
+                        <span>Z: <span id="vec-z">0</span></span>
+                    </div>
+                </div>
+                <button onclick="upgrade('vec')" class="btn mt-4 w-full bg-gray-700 hover:bg-gray-600 py-1 rounded text-sm">Randomize (15 DP)</button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="notification" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-800 border border-gray-600 text-white px-6 py-3 rounded-full shadow-lg font-bold z-50">
+        System Message
+    </div>
+
+    <script>
+        // --- DATA STRUCTURE (Equivalent to C# Class to be serialized) ---
+        class GameState {
+            constructor() {
+                // The variables we want to save
+                this.dataPoints = 0;
+                
+                // Simulating typical game variables
+                this.playerLevel = 1;          // int
+                this.movementSpeed = 5.0;      // float
+                this.playerName = "Player";    // string
+                this.isGodMode = false;        // bool
+                
+                // Simulating a custom class/struct (like Vector3)
+                this.spawnPosition = { x: 0, y: 0, z: 0 }; 
+                
+                // Meta data
+                this.lastSaveTime = Date.now();
+            }
+        }
+
+        // Global game state instance
+        let gameState = new GameState();
+        let autoSaveInterval;
+
+        // --- SAVE SYSTEM MODULE ---
+        // Compact, uses JSON serialization, encrypts base64 to look less obvious than raw JSON in storage
+        const SaveManager = {
+            SAVE_KEY: "ProSys_SaveData_v1",
+
+            save: function(silent = false) {
+                try {
+                    gameState.lastSaveTime = Date.now();
+                    // 1. Serialize class to JSON string
+                    const jsonString = JSON.stringify(gameState);
+                    // 2. Encode to Base64 (Basic obfuscation, real prod might use AES)
+                    const encodedData = btoa(jsonString);
+                    // 3. Save to storage
+                    localStorage.setItem(this.SAVE_KEY, encodedData);
+                    
+                    if(!silent) showToast("Game Saved Successfully!");
+                } catch (error) {
+                    console.error("Save failed:", error);
+                    showToast("Save Error!");
+                }
+            },
+
+            load: function() {
+                try {
+                    const encodedData = localStorage.getItem(this.SAVE_KEY);
+                    if (encodedData) {
+                        // 1. Decode Base64
+                        const jsonString = atob(encodedData);
+                        // 2. Parse JSON
+                        const parsedData = JSON.parse(jsonString);
+                        
+                        // 3. Merge parsed data into a NEW GameState to ensure all defaults exist
+                        // if older save files are missing new variables.
+                        gameState = Object.assign(new GameState(), parsedData);
+                        
+                        updateUI();
+                        showToast("Game Loaded!");
+                        return true;
+                    }
+                } catch (error) {
+                    console.error("Load failed, data corrupted:", error);
+                    showToast("Save File Corrupted. Starting fresh.");
+                }
+                return false;
+            },
+
+            reset: function() {
+                localStorage.removeItem(this.SAVE_KEY);
+                gameState = new GameState();
+                updateUI();
+                showToast("Save Data Wiped!");
+            }
+        };
+
+
+        // --- GAME LOGIC & UI ---
+        
+        function startGame() {
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('game-ui').style.display = 'flex';
+            
+            // Attempt load on start
+            SaveManager.load();
+            updateUI();
+            
+            // Autosave every 30 seconds
+            autoSaveInterval = setInterval(() => SaveManager.save(true), 30000);
+        }
+
+        // Main interaction
+        document.getElementById('mine-btn').addEventListener('click', () => {
+            // Audio context for click sound
+            playClickSound();
+            
+            let amount = 1 * gameState.playerLevel;
+            if(gameState.isGodMode) amount *= 10;
+            
+            gameState.dataPoints += amount;
+            updateUI();
+        });
+
+        // Upgrade Logic
+        const costs = {
+            'int': 10,
+            'float': 25,
+            'string': 50,
+            'bool': 100,
+            'vec': 15
+        };
+
+        const names = ["Hero", "Champion", "Legend", "Dev", "Admin", "NoobMaster"];
+
+        function upgrade(type) {
+            if (gameState.dataPoints >= costs[type]) {
+                gameState.dataPoints -= costs[type];
+                
+                switch(type) {
+                    case 'int':
+                        gameState.playerLevel += 1;
+                        costs['int'] = Math.floor(costs['int'] * 1.5);
+                        break;
+                    case 'float':
+                        gameState.movementSpeed += 0.25;
+                        break;
+                    case 'string':
+                        gameState.playerName = names[Math.floor(Math.random() * names.length)] + Math.floor(Math.random()*99);
+                        break;
+                    case 'bool':
+                        gameState.isGodMode = !gameState.isGodMode;
+                        break;
+                    case 'vec':
+                        gameState.spawnPosition = {
+                            x: (Math.random() * 100).toFixed(1),
+                            y: (Math.random() * 100).toFixed(1),
+                            z: (Math.random() * 100).toFixed(1)
+                        };
+                        break;
+                }
+                updateUI();
+            } else {
+                showToast("Not enough Data Points!");
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('data-points').innerText = Math.floor(gameState.dataPoints);
+            
+            document.getElementById('val-int').innerText = gameState.playerLevel;
+            document.getElementById('val-float').innerText = gameState.movementSpeed.toFixed(2) + 'f';
+            
+            // Add quotes for string visual representation
+            document.getElementById('val-string').innerText = `"${gameState.playerName}"`;
+            
+            const boolEl = document.getElementById('val-bool');
+            boolEl.innerText = gameState.isGodMode ? 'True' : 'False';
+            boolEl.style.color = gameState.isGodMode ? '#10b981' : '#ef4444';
+
+            document.getElementById('vec-x').innerText = gameState.spawnPosition.x;
+            document.getElementById('vec-y').innerText = gameState.spawnPosition.y;
+            document.getElementById('vec-z').innerText = gameState.spawnPosition.z;
+        }
+
+        // Utilities
+        let toastTimeout;
+        function showToast(msg) {
+            const el = document.getElementById('notification');
+            el.innerText = msg;
+            el.classList.add('show-toast');
+            
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                el.classList.remove('show-toast');
+            }, 2000);
+        }
+
+        // Simple Audio
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playClickSound() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(800 + (Math.random()*200), audioCtx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
+            
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.1);
+        }
+
+    </script>
+</body>
+</html>

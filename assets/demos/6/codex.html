@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neon 80s Tic-Tac-Toe</title>
+  <style>
+    :root{
+      --bg:#050508;
+      --grid:#00e5ff;
+      --x:#ff2bd6;
+      --o:#ffe600;
+      --accent1:#8a2bff;
+      --accent2:#00ff9c;
+      --text:#d8f7ff;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: "Orbitron", "Segoe UI", Tahoma, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      overflow: hidden;
+    }
+
+    body::before{
+      content:"";
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(circle at 20% 10%, rgba(138,43,255,0.18), transparent 30%),
+        radial-gradient(circle at 80% 90%, rgba(0,229,255,0.15), transparent 35%),
+        linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: auto, auto, 30px 30px, 30px 30px;
+      z-index: -3;
+    }
+
+    body::after{
+      content:"";
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0.0),
+        rgba(0,0,0,0.0) 2px,
+        rgba(0,0,0,0.15) 3px,
+        rgba(0,0,0,0.15) 4px
+      );
+      z-index: -2;
+      pointer-events: none;
+      animation: flicker 0.15s infinite alternate;
+    }
+
+    @keyframes flicker {
+      from { opacity: 0.95; }
+      to   { opacity: 1; }
+    }
+
+    .wrap {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .arcade {
+      width: min(92vw, 580px);
+      padding: 22px 20px 24px;
+      border: 3px solid var(--grid);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(15,15,30,0.92), rgba(7,7,14,0.92));
+      box-shadow:
+        0 0 8px var(--grid),
+        0 0 22px rgba(0,229,255,0.45),
+        inset 0 0 18px rgba(0,229,255,0.18);
+      position: relative;
+    }
+
+    .arcade::before,
+    .arcade::after{
+      content:"";
+      position:absolute;
+      height:4px;
+      left:16px;
+      right:16px;
+      border-radius:999px;
+      filter: blur(0.2px);
+    }
+
+    .arcade::before{
+      top:10px;
+      background: linear-gradient(90deg, var(--accent1), var(--x), var(--o), var(--accent2));
+      box-shadow: 0 0 10px var(--x), 0 0 16px var(--o);
+    }
+    .arcade::after{
+      bottom:10px;
+      background: linear-gradient(90deg, var(--accent2), var(--grid), var(--accent1));
+      box-shadow: 0 0 10px var(--grid);
+    }
+
+    h1{
+      margin: 2px 0 16px;
+      text-align: center;
+      font-size: clamp(1rem, 2.7vw, 1.45rem);
+      letter-spacing: 2px;
+      color: #f7fcff;
+      text-shadow:
+        0 0 4px #fff,
+        0 0 8px #00e5ff,
+        0 0 18px #8a2bff;
+    }
+
+    .status{
+      text-align:center;
+      margin-bottom: 14px;
+      font-size: clamp(0.85rem, 2.2vw, 1rem);
+      letter-spacing: 1px;
+      min-height: 1.5em;
+      text-shadow: 0 0 8px rgba(216,247,255,0.8);
+    }
+
+    .status .xTurn{ color: var(--x); text-shadow: 0 0 8px var(--x), 0 0 16px var(--x); }
+    .status .oTurn{ color: var(--o); text-shadow: 0 0 8px var(--o), 0 0 16px var(--o); }
+
+    .board{
+      width: min(84vw, 420px);
+      margin: 0 auto;
+      aspect-ratio: 1 / 1;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      border: 4px solid var(--grid);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow:
+        0 0 10px var(--grid),
+        inset 0 0 14px rgba(0,229,255,0.35);
+      background: rgba(0,0,0,0.45);
+    }
+
+    .cell{
+      border: 2px solid rgba(0,229,255,0.85);
+      display: grid;
+      place-items: center;
+      font-size: clamp(2.2rem, 11vw, 4.2rem);
+      font-weight: 800;
+      cursor: pointer;
+      user-select: none;
+      transition: background .16s ease, transform .1s ease;
+      position: relative;
+    }
+
+    .cell:hover{
+      background: rgba(0,229,255,0.08);
+      transform: scale(0.98);
+    }
+
+    .cell.x{
+      color: var(--x);
+      text-shadow: 0 0 6px var(--x), 0 0 16px var(--x), 0 0 28px rgba(255,43,214,0.9);
+    }
+
+    .cell.o{
+      color: var(--o);
+      text-shadow: 0 0 6px var(--o), 0 0 16px var(--o), 0 0 28px rgba(255,230,0,0.9);
+    }
+
+    .cell.win{
+      background: rgba(0,255,156,0.14);
+      animation: pulse 0.9s infinite alternate;
+    }
+
+    @keyframes pulse {
+      from { box-shadow: inset 0 0 6px rgba(0,255,156,0.4); }
+      to   { box-shadow: inset 0 0 20px rgba(0,255,156,0.95); }
+    }
+
+    .controls{
+      margin-top: 16px;
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn{
+      border: 2px solid var(--accent1);
+      background: rgba(138,43,255,0.12);
+      color: #f1e7ff;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      letter-spacing: 1px;
+      cursor: pointer;
+      text-transform: uppercase;
+      box-shadow: 0 0 8px rgba(138,43,255,0.55), inset 0 0 10px rgba(138,43,255,0.25);
+      transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+      font-family: inherit;
+    }
+
+    .btn:hover{
+      transform: translateY(-1px);
+      border-color: #ff2bd6;
+      box-shadow: 0 0 12px rgba(255,43,214,0.8), inset 0 0 10px rgba(255,43,214,0.2);
+    }
+
+    .score{
+      margin-top: 12px;
+      text-align: center;
+      font-size: 0.82rem;
+      letter-spacing: 1px;
+      opacity: 0.95;
+    }
+
+    .score .sx{ color: var(--x); text-shadow: 0 0 8px var(--x); }
+    .score .so{ color: var(--o); text-shadow: 0 0 8px var(--o); }
+    .score .st{ color: #a9ffef; text-shadow: 0 0 8px #6bffe3; }
+
+    @media (max-width: 420px){
+      .arcade{ padding: 16px 12px 18px; }
+      .cell{ border-width: 1.5px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="arcade" aria-label="80s Neon Tic-Tac-Toe">
+      <h1>NEON ARCADE TIC-TAC-TOE</h1>
+      <div id="status" class="status"></div>
+
+      <div id="board" class="board" role="grid" aria-label="Tic Tac Toe board">
+        <div class="cell" data-index="0" role="gridcell" aria-label="Cell 1"></div>
+        <div class="cell" data-index="1" role="gridcell" aria-label="Cell 2"></div>
+        <div class="cell" data-index="2" role="gridcell" aria-label="Cell 3"></div>
+        <div class="cell" data-index="3" role="gridcell" aria-label="Cell 4"></div>
+        <div class="cell" data-index="4" role="gridcell" aria-label="Cell 5"></div>
+        <div class="cell" data-index="5" role="gridcell" aria-label="Cell 6"></div>
+        <div class="cell" data-index="6" role="gridcell" aria-label="Cell 7"></div>
+        <div class="cell" data-index="7" role="gridcell" aria-label="Cell 8"></div>
+        <div class="cell" data-index="8" role="gridcell" aria-label="Cell 9"></div>
+      </div>
+
+      <div class="controls">
+        <button class="btn" id="restartBtn">New Round</button>
+        <button class="btn" id="resetScoreBtn">Reset Score</button>
+      </div>
+
+      <div class="score">
+        <span class="sx">X: <span id="xScore">0</span></span>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        <span class="so">O: <span id="oScore">0</span></span>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        <span class="st">Ties: <span id="tieScore">0</span></span>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const cells = Array.from(document.querySelectorAll('.cell'));
+    const statusEl = document.getElementById('status');
+    const restartBtn = document.getElementById('restartBtn');
+    const resetScoreBtn = document.getElementById('resetScoreBtn');
+    const xScoreEl = document.getElementById('xScore');
+    const oScoreEl = document.getElementById('oScore');
+    const tieScoreEl = document.getElementById('tieScore');
+
+    let board = Array(9).fill('');
+    let current = 'X';
+    let gameActive = true;
+    let scores = { X: 0, O: 0, T: 0 };
+
+    const winLines = [
+      [0,1,2],[3,4,5],[6,7,8],
+      [0,3,6],[1,4,7],[2,5,8],
+      [0,4,8],[2,4,6]
+    ];
+
+    function updateStatus(message) {
+      if (message) {
+        statusEl.innerHTML = message;
+        return;
+      }
+      statusEl.innerHTML = current === 'X'
+        ? `Player <span class="xTurn">X</span> turn`
+        : `Player <span class="oTurn">O</span> turn`;
+    }
+
+    function checkWinner() {
+      for (const line of winLines) {
+        const [a,b,c] = line;
+        if (board[a] && board[a] === board[b] && board[a] === board[c]) return line;
+      }
+      return null;
+    }
+
+    function renderCell(index) {
+      const val = board[index];
+      const cell = cells[index];
+      cell.textContent = val;
+      cell.classList.remove('x', 'o');
+      if (val === 'X') cell.classList.add('x');
+      if (val === 'O') cell.classList.add('o');
+    }
+
+    function handleMove(e) {
+      const cell = e.currentTarget;
+      const index = Number(cell.dataset.index);
+
+      if (!gameActive || board[index]) return;
+
+      board[index] = current;
+      renderCell(index);
+
+      const winnerLine = checkWinner();
+      if (winnerLine) {
+        gameActive = false;
+        winnerLine.forEach(i => cells[i].classList.add('win'));
+        scores[current]++;
+        syncScores();
+        updateStatus(
+          current === 'X'
+            ? `Player <span class="xTurn">X</span> wins!`
+            : `Player <span class="oTurn">O</span> wins!`
+        );
+        return;
+      }
+
+      if (board.every(v => v)) {
+        gameActive = false;
+        scores.T++;
+        syncScores();
+        updateStatus(`It's a tie! <span class="st">Rad match.</span>`);
+        return;
+      }
+
+      current = current === 'X' ? 'O' : 'X';
+      updateStatus();
+    }
+
+    function newRound() {
+      board = Array(9).fill('');
+      current = 'X';
+      gameActive = true;
+      cells.forEach((cell) => {
+        cell.textContent = '';
+        cell.classList.remove('x', 'o', 'win');
+      });
+      updateStatus();
+    }
+
+    function syncScores() {
+      xScoreEl.textContent = scores.X;
+      oScoreEl.textContent = scores.O;
+      tieScoreEl.textContent = scores.T;
+    }
+
+    function resetScores() {
+      scores = { X: 0, O: 0, T: 0 };
+      syncScores();
+      newRound();
+    }
+
+    cells.forEach(cell => cell.addEventListener('click', handleMove));
+    restartBtn.addEventListener('click', newRound);
+    resetScoreBtn.addEventListener('click', resetScores);
+
+    updateStatus();
+    syncScores();
+  </script>
+</body>
+</html>

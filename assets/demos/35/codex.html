@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Frontier Showdown</title>
+<style>
+  :root{
+    --ui:#f4d7a1;
+    --ui-dark:#2b1b10;
+    --accent:#d35400;
+    --danger:#b22222;
+    --ok:#2e8b57;
+  }
+  html,body{
+    margin:0;
+    padding:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:#1b0f08;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    touch-action:none;
+  }
+  #gameWrap{
+    position:fixed;
+    inset:0;
+  }
+  canvas{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    display:block;
+  }
+  .overlay{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:linear-gradient(rgba(20,10,6,.65),rgba(20,10,6,.7));
+    color:#fff1d6;
+    z-index:5;
+  }
+  .card{
+    width:min(92vw,520px);
+    border:2px solid #d7a65b;
+    border-radius:14px;
+    background:rgba(35,18,10,.9);
+    box-shadow:0 10px 30px rgba(0,0,0,.35);
+    padding:18px 18px 16px;
+    text-align:center;
+  }
+  .title{
+    font-weight:900;
+    letter-spacing:1px;
+    font-size:clamp(26px,5vw,40px);
+    margin:8px 0 10px;
+    color:#ffd897;
+    text-transform:uppercase;
+  }
+  .desc{
+    font-size:14px;
+    line-height:1.45;
+    opacity:.95;
+    margin:10px 0 14px;
+  }
+  .btn{
+    appearance:none;
+    border:none;
+    border-radius:12px;
+    padding:14px 18px;
+    font-size:18px;
+    font-weight:800;
+    color:#2b1b10;
+    background:linear-gradient(#ffd28d,#e4a953);
+    min-width:170px;
+  }
+  .btn:active{ transform:translateY(1px) scale(.995); }
+
+  #hud{
+    position:absolute;
+    top:max(8px,env(safe-area-inset-top));
+    left:10px;
+    right:10px;
+    z-index:4;
+    color:#ffe6bc;
+    font-weight:700;
+    text-shadow:0 2px 0 rgba(0,0,0,.5);
+    pointer-events:none;
+    font-size:15px;
+    display:flex;
+    justify-content:space-between;
+    gap:8px;
+  }
+  #hud .box{
+    background:rgba(30,15,9,.45);
+    border:1px solid rgba(255,220,160,.45);
+    border-radius:10px;
+    padding:6px 10px;
+    backdrop-filter: blur(2px);
+  }
+  #meter{
+    width:100px;
+    height:10px;
+    border-radius:10px;
+    border:1px solid rgba(255,220,160,.65);
+    overflow:hidden;
+    display:inline-block;
+    vertical-align:middle;
+    margin-left:6px;
+    background:rgba(0,0,0,.25);
+  }
+  #meterFill{
+    height:100%;
+    width:0%;
+    background:linear-gradient(90deg,#66e0ff,#9cffe1);
+  }
+
+  #controls{
+    position:absolute;
+    inset:auto 0 max(8px,env(safe-area-inset-bottom)) 0;
+    z-index:4;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    pointer-events:none;
+    padding:0 12px;
+    box-sizing:border-box;
+  }
+  .cluster{
+    display:flex;
+    gap:10px;
+    pointer-events:auto;
+  }
+  .controlBtn{
+    width:66px;
+    height:66px;
+    border-radius:16px;
+    border:2px solid rgba(255,228,180,.45);
+    background:rgba(34,16,8,.45);
+    color:#ffe0b0;
+    font-size:28px;
+    font-weight:800;
+    display:grid;
+    place-items:center;
+    user-select:none;
+    -webkit-user-select:none;
+    touch-action:none;
+  }
+  .controlBtn.small{ width:60px; height:60px; font-size:20px; }
+  .controlBtn:active,
+  .controlBtn.active{
+    background:rgba(211,84,0,.7);
+    transform:scale(.98);
+  }
+  #btnShoot{
+    width:82px;height:82px;border-radius:50%;font-size:18px;line-height:1.1;text-align:center;padding:0 8px;
+    background:rgba(178,34,34,.55);
+  }
+  #btnDead{
+    width:74px;height:74px;border-radius:50%;font-size:12px;font-weight:900;letter-spacing:.5px;
+    background:rgba(46,139,87,.52);
+  }
+  #gameoverScore{
+    font-size:24px;
+    font-weight:900;
+    color:#ffd18a;
+    margin:8px 0 14px;
+  }
+</style>
+</head>
+<body>
+<div id="gameWrap">
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <div class="box" id="leftHud">HP: 100</div>
+    <div class="box" id="rightHud">Score: 0 &nbsp;|&nbsp; Dead Eye <span id="meter"><span id="meterFill"></span></span></div>
+  </div>
+
+  <div id="controls">
+    <div class="cluster">
+      <div class="controlBtn" id="btnLeft">◀</div>
+      <div class="controlBtn" id="btnRight">▶</div>
+      <div class="controlBtn small" id="btnJump">⤒</div>
+    </div>
+    <div class="cluster">
+      <div class="controlBtn" id="btnDead">DEAD<br>EYE</div>
+      <div class="controlBtn" id="btnShoot">FIRE</div>
+    </div>
+  </div>
+
+  <div class="overlay" id="menu">
+    <div class="card">
+      <div class="title">Frontier Showdown</div>
+      <div class="desc">
+        A mobile western shooter inspired by outlaw action games.<br>
+        Move, jump, and blast bandits while riding through the desert.<br>
+        Fill the <b>Dead Eye</b> meter from kills, then activate for slow-motion aim.
+      </div>
+      <button class="btn" id="startBtn">Ride Out</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="gameover" style="display:none;">
+    <div class="card">
+      <div class="title">You Were Outgunned</div>
+      <div id="gameoverScore">Score: 0</div>
+      <button class="btn" id="restartBtn">Try Again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+
+  const menu = document.getElementById('menu');
+  const gameover = document.getElementById('gameover');
+  const gameoverScore = document.getElementById('gameoverScore');
+  const startBtn = document.getElementById('startBtn');
+  const restartBtn = document.getElementById('restartBtn');
+
+  const leftHud = document.getElementById('leftHud');
+  const meterFill = document.getElementById('meterFill');
+  const rightHud = document.getElementById('rightHud');
+  const btnDead = document.getElementById('btnDead');
+
+  let W = 0, H = 0, DPR = 1, groundY = 0;
+  let state = 'menu';
+  let last = 0;
+  let time = 0;
+
+  const gravity = 1900;
+
+  const controls = {
+    left:false, right:false, jump:false, shoot:false
+  };
+
+  const world = {
+    score:0,
+    distance:0,
+    enemyTimer:0,
+    enemyEvery:1.3,
+    dust:[],
+    deadEye:0,
+    deadEyeActive:false,
+    deadEyeTimer:0
+  };
+
+  const player = {
+    x:90, y:0, w:44, h:72,
+    vx:0, vy:0,
+    speed:330,
+    jump:-730,
+    onGround:false,
+    hp:100,
+    fireCd:0
+  };
+
+  let enemies = [];
+  let pBullets = [];
+  let eBullets = [];
+  let effects = [];
+
+  function resize(){
+    DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    groundY = H * 0.78;
+    if (player.y === 0) player.y = groundY - player.h;
+  }
+
+  function resetGame(){
+    world.score = 0;
+    world.distance = 0;
+    world.enemyTimer = 0;
+    world.enemyEvery = 1.2;
+    world.dust = [];
+    world.deadEye = 0;
+    world.deadEyeActive = false;
+    world.deadEyeTimer = 0;
+
+    enemies = [];
+    pBullets = [];
+    eBullets = [];
+    effects = [];
+
+    player.x = 90;
+    player.y = groundY - player.h;
+    player.vx = 0;
+    player.vy = 0;
+    player.hp = 100;
+    player.fireCd = 0;
+  }
+
+  function clamp(v,a,b){ return v<a?a:v>b?b:v; }
+  function rand(a,b){ return Math.random()*(b-a)+a; }
+
+  function spawnEnemy(){
+    const tough = Math.random() < Math.min(0.35, world.score / 9000);
+    const h = tough ? 86 : rand(58,76);
+    const w = tough ? 46 : 38;
+    const speed = tough ? rand(170,220) : rand(180,270);
+    enemies.push({
+      x: W + w + 10,
+      y: groundY - h,
+      w, h, speed,
+      hp: tough ? 3 : 1,
+      shootCd: rand(0.6,1.8),
+      tough
+    });
+  }
+
+  function shootPlayerBullet(){
+    if (player.fireCd > 0) return;
+    player.fireCd = world.deadEyeActive ? 0.07 : 0.18;
+
+    let vx = 920, vy = 0;
+    if (world.deadEyeActive && enemies.length){
+      let target = null;
+      let best = 1e9;
+      const px = player.x + player.w;
+      const py = player.y + player.h*0.42;
+      for (const e of enemies){
+        const ex = e.x + e.w*0.5;
+        const ey = e.y + e.h*0.4;
+        const d = (ex-px)*(ex-px)+(ey-py)*(ey-py);
+        if (d < best){ best = d; target = e; }
+      }
+      if (target){
+        const tx = (target.x + target.w*0.5) - px;
+        const ty = (target.y + target.h*0.4) - py;
+        const len = Math.hypot(tx,ty)||1;
+        vx = (tx/len)*1000;
+        vy = (ty/len)*1000;
+      }
+    }
+    pBullets.push({
+      x: player.x + player.w - 3,
+      y: player.y + player.h*0.38,
+      vx, vy, r:4, dmg:1
+    });
+    for(let i=0;i<3;i++){
+      effects.push({x:player.x+player.w,y:player.y+player.h*0.38,vx:rand(40,160),vy:rand(-90,80),life:0.14,t:0});
+    }
+  }
+
+  function shootEnemyBullet(e){
+    const px = player.x + player.w*0.4;
+    const py = player.y + player.h*0.45;
+    const ex = e.x;
+    const ey = e.y + e.h*0.35;
+    const dx = px - ex;
+    const dy = py - ey;
+    const l = Math.hypot(dx,dy)||1;
+    const sp = 420;
+    eBullets.push({x:ex, y:ey, vx:dx/l*sp, vy:dy/l*sp, r:4});
+  }
+
+  function hit(a,b){
+    return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+  }
+
+  function killEnemy(ei){
+    const e = enemies[ei];
+    world.score += e.tough ? 180 : 100;
+    world.deadEye = clamp(world.deadEye + (e.tough ? 0.22 : 0.12), 0, 1);
+    for(let i=0;i<12;i++){
+      effects.push({
+        x:e.x+e.w*0.5, y:e.y+e.h*0.45,
+        vx:rand(-220,220), vy:rand(-260,120),
+        life:0.45, t:0, red:true
+      });
+    }
+    enemies.splice(ei,1);
+  }
+
+  function activateDeadEye(){
+    if (world.deadEye < 1 || world.deadEyeActive || state!=='playing') return;
+    world.deadEyeActive = true;
+    world.deadEyeTimer = 4;
+    world.deadEye = 0;
+  }
+
+  function update(dtRaw){
+    if (state !== 'playing') return;
+    const ts = world.deadEyeActive ? 0.45 : 1;
+    const dt = dtRaw * ts;
+    time += dt;
+    world.distance += 180 * dt;
+    world.score += Math.floor(12 * dt);
+
+    if (world.deadEyeActive){
+      world.deadEyeTimer -= dtRaw;
+      if (world.deadEyeTimer <= 0){
+        world.deadEyeActive = false;
+      }
+    }
+
+    const accel = 1800;
+    const drag = 0.84;
+    if (controls.left) player.vx -= accel * dt;
+    if (controls.right) player.vx += accel * dt;
+    if (!controls.left && !controls.right) player.vx *= Math.pow(drag, dt * 60);
+
+    player.vx = clamp(player.vx, -player.speed, player.speed);
+
+    if (controls.jump && player.onGround){
+      player.vy = player.jump;
+      player.onGround = false;
+    }
+
+    player.vy += gravity * dt;
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
+
+    player.x = clamp(player.x, 18, W*0.6);
+    if (player.y + player.h >= groundY){
+      player.y = groundY - player.h;
+      player.vy = 0;
+      player.onGround = true;
+    }
+
+    player.fireCd -= dtRaw;
+    if (controls.shoot) shootPlayerBullet();
+
+    world.enemyEvery = clamp(1.25 - world.score/8000, 0.45, 1.25);
+    world.enemyTimer -= dtRaw;
+    if (world.enemyTimer <= 0){
+      world.enemyTimer = rand(world.enemyEvery*0.8, world.enemyEvery*1.2);
+      spawnEnemy();
+    }
+
+    for (let i=enemies.length-1;i>=0;i--){
+      const e = enemies[i];
+      e.x -= (e.speed + world.score*0.004) * dt;
+      e.shootCd -= dtRaw;
+      if (e.shootCd <= 0 && e.x < W*0.95 && e.x > player.x + 70){
+        shootEnemyBullet(e);
+        e.shootCd = rand(1.1, 2.0);
+      }
+      if (e.x + e.w < -30){
+        enemies.splice(i,1);
+        player.hp -= 8;
+      } else {
+        const pBox = {x:player.x+8,y:player.y+10,w:player.w-16,h:player.h-10};
+        if (hit(pBox,e)){
+          player.hp -= 20;
+          enemies.splice(i,1);
+          for(let j=0;j<10;j++){
+            effects.push({x:player.x+player.w*.55,y:player.y+player.h*.6,vx:rand(-220,220),vy:rand(-260,120),life:0.35,t:0,red:true});
+          }
+        }
+      }
+    }
+
+    for (let i=pBullets.length-1;i>=0;i--){
+      const b = pBullets[i];
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      let removed = false;
+      for (let j=enemies.length-1;j>=0;j--){
+        const e = enemies[j];
+        if (b.x > e.x && b.x < e.x+e.w && b.y > e.y && b.y < e.y+e.h){
+          e.hp -= b.dmg;
+          pBullets.splice(i,1);
+          removed = true;
+          effects.push({x:b.x,y:b.y,vx:rand(-70,70),vy:rand(-70,70),life:0.14,t:0});
+          if (e.hp <= 0) killEnemy(j);
+          break;
+        }
+      }
+      if (!removed && (b.x > W+40 || b.y < -40 || b.y > H+40)) pBullets.splice(i,1);
+    }
+
+    for (let i=eBullets.length-1;i>=0;i--){
+      const b = eBullets[i];
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      if (b.x > player.x+8 && b.x < player.x+player.w-8 && b.y > player.y+8 && b.y < player.y+player.h-8){
+        player.hp -= 10;
+        eBullets.splice(i,1);
+        for(let n=0;n<6;n++) effects.push({x:b.x,y:b.y,vx:rand(-130,130),vy:rand(-160,60),life:0.2,t:0,red:true});
+      } else if (b.x < -30 || b.x > W+30 || b.y < -20 || b.y > H+20){
+        eBullets.splice(i,1);
+      }
+    }
+
+    for (let i=effects.length-1;i>=0;i--){
+      const p = effects[i];
+      p.t += dtRaw;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 500 * dt;
+      p.vx *= 0.98;
+      if (p.t >= p.life) effects.splice(i,1);
+    }
+
+    if (Math.random() < 8*dt){
+      world.dust.push({
+        x: W + 10,
+        y: groundY + rand(-4,14),
+        vx: rand(120,220),
+        r: rand(2,6),
+        t:0,
+        life: rand(1,2)
+      });
+    }
+
+    for(let i=world.dust.length-1;i>=0;i--){
+      const d = world.dust[i];
+      d.t += dt;
+      d.x -= d.vx * dt;
+      if (d.t>d.life || d.x<-20) world.dust.splice(i,1);
+    }
+
+    player.hp = clamp(player.hp, 0, 100);
+    if (player.hp <= 0){
+      state = 'gameover';
+      gameoverScore.textContent = 'Score: ' + Math.floor(world.score);
+      gameover.style.display = 'flex';
+    }
+
+    leftHud.textContent = 'HP: ' + Math.floor(player.hp);
+    meterFill.style.width = Math.floor(world.deadEye*100) + '%';
+    rightHud.innerHTML = 'Score: ' + Math.floor(world.score) + ' &nbsp;|&nbsp; Dead Eye <span id="meter"><span id="meterFill" style="width:'+Math.floor(world.deadEye*100)+'%"></span></span>';
+    btnDead.style.opacity = (world.deadEye>=1||world.deadEyeActive)?'1':'0.6';
+    btnDead.classList.toggle('active', world.deadEyeActive);
+  }
+
+  function drawBackground(){
+    const sky = ctx.createLinearGradient(0,0,0,H);
+    sky.addColorStop(0,'#f5b26b');
+    sky.addColorStop(0.5,'#d97f3f');
+    sky.addColorStop(1,'#6a2f1f');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0,0,W,H);
+
+    const sunX = W*0.76, sunY = H*0.2;
+    const rad = H*0.08;
+    const sg = ctx.createRadialGradient(sunX,sunY,5,sunX,sunY,rad*2);
+    sg.addColorStop(0,'rgba(255,240,175,0.95)');
+    sg.addColorStop(1,'rgba(255,200,100,0)');
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.arc(sunX,sunY,rad*2,0,Math.PI*2); ctx.fill();
+
+    const off = (world.distance*0.08)%W;
+    ctx.fillStyle = '#82462d';
+    for(let i=-1;i<3;i++){
+      const x = i*W - off;
+      ctx.beginPath();
+      ctx.moveTo(x,H*0.7);
+      ctx.lineTo(x+W*0.2,H*0.56);
+      ctx.lineTo(x+W*0.44,H*0.72);
+      ctx.lineTo(x+W*0.64,H*0.53);
+      ctx.lineTo(x+W*0.9,H*0.71);
+      ctx.lineTo(x+W,H*0.7);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.fillStyle = '#5e2f1d';
+    const off2 = (world.distance*0.2)%220;
+    for(let x=-off2; x<W+220; x+=220){
+      const h = 26 + (Math.sin((x+time*40)*0.02)+1)*6;
+      ctx.fillRect(x, groundY-h, 7, h);
+      ctx.fillRect(x-8, groundY-h+12, 23, 6);
+    }
+
+    const grd = ctx.createLinearGradient(0,groundY,0,H);
+    grd.addColorStop(0,'#a86c33');
+    grd.addColorStop(1,'#6e3e22');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0,groundY,W,H-groundY);
+
+    for (const d of world.dust){
+      const a = 1 - d.t/d.life;
+      ctx.fillStyle = `rgba(245,220,170,${0.25*a})`;
+      ctx.beginPath();
+      ctx.arc(d.x,d.y,d.r,0,Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function drawPlayer(){
+    const x=player.x,y=player.y,w=player.w,h=player.h;
+    const bob = player.onGround ? Math.sin(time*18)*1.5 : 0;
+
+    ctx.fillStyle = '#3b2a1f';
+    ctx.fillRect(x+12,y+h-10+bob,9,10);
+    ctx.fillRect(x+24,y+h-10-bob,9,10);
+
+    ctx.fillStyle = '#253547';
+    ctx.fillRect(x+8,y+18,w-16,h-28);
+
+    ctx.fillStyle = '#caa07a';
+    ctx.fillRect(x+14,y+2,16,18);
+
+    ctx.fillStyle = '#2b1b10';
+    ctx.fillRect(x+8,y-2,28,6);
+    ctx.fillRect(x+17,y-8,12,8);
+
+    ctx.fillStyle = '#5a3a27';
+    ctx.fillRect(x+30,y+26,14,8);
+
+    if (world.deadEyeActive){
+      ctx.strokeStyle = 'rgba(130,240,255,0.8)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x+w*0.5,y+h*0.45,30+Math.sin(time*8)*3,0,Math.PI*2);
+      ctx.stroke();
+    }
+  }
+
+  function drawEnemy(e){
+    ctx.fillStyle = e.tough ? '#2f1a13' : '#3e2618';
+    ctx.fillRect(e.x,e.y+16,e.w,e.h-16);
+    ctx.fillStyle = '#b88a62';
+    ctx.fillRect(e.x+10,e.y+2,e.w-20,18);
+    ctx.fillStyle = '#1d100b';
+    ctx.fillRect(e.x+6,e.y-2,e.w-12,6);
+    if (e.tough){
+      ctx.fillStyle = '#6d0f0f';
+      ctx.fillRect(e.x+3,e.y+34,e.w-6,8);
+    }
+    ctx.fillStyle = '#252525';
+    ctx.fillRect(e.x-8,e.y+e.h*0.38,10,4);
+  }
+
+  function drawBullets(){
+    ctx.fillStyle = '#ffe9a9';
+    for (const b of pBullets){
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle = '#ff6f61';
+    for (const b of eBullets){
+      ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill();
+    }
+  }
+
+  function drawEffects(){
+    for (const p of effects){
+      const a = 1 - p.t/p.life;
+      ctx.fillStyle = p.red ? `rgba(190,40,40,${a})` : `rgba(255,230,170,${a})`;
+      ctx.fillRect(p.x,p.y,3,3);
+    }
+  }
+
+  function drawOverlayTint(){
+    if (!world.deadEyeActive) return;
+    ctx.fillStyle = 'rgba(85,180,220,0.12)';
+    ctx.fillRect(0,0,W,H);
+  }
+
+  function render(){
+    drawBackground();
+    drawPlayer();
+    for (const e of enemies) drawEnemy(e);
+    drawBullets();
+    drawEffects();
+    drawOverlayTint();
+  }
+
+  function frame(ts){
+    if (!last) last = ts;
+    const dt = Math.min(0.033, (ts - last) / 1000);
+    last = ts;
+    update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  function holdButton(el, key){
+    const down = (ev) => {
+      ev.preventDefault();
+      controls[key] = true;
+      el.classList.add('active');
+    };
+    const up = (ev) => {
+      ev.preventDefault();
+      controls[key] = false;
+      el.classList.remove('active');
+    };
+    el.addEventListener('pointerdown', down, {passive:false});
+    el.addEventListener('pointerup', up, {passive:false});
+    el.addEventListener('pointercancel', up, {passive:false});
+    el.addEventListener('pointerleave', up, {passive:false});
+  }
+
+  holdButton(document.getElementById('btnLeft'),'left');
+  holdButton(document.getElementById('btnRight'),'right');
+  holdButton(document.getElementById('btnShoot'),'shoot');
+
+  const jumpBtn = document.getElementById('btnJump');
+  jumpBtn.addEventListener('pointerdown',(e)=>{ e.preventDefault(); controls.jump = true; jumpBtn.classList.add('active'); },{passive:false});
+  jumpBtn.addEventListener('pointerup',(e)=>{ e.preventDefault(); controls.jump = false; jumpBtn.classList.remove('active'); },{passive:false});
+  jumpBtn.addEventListener('pointercancel',(e)=>{ e.preventDefault(); controls.jump = false; jumpBtn.classList.remove('active'); },{passive:false});
+
+  btnDead.addEventListener('pointerdown',(e)=>{ e.preventDefault(); activateDeadEye(); },{passive:false});
+
+  window.addEventListener('keydown',(e)=>{
+    if (e.repeat) return;
+    if (e.code==='ArrowLeft' || e.code==='KeyA') controls.left = true;
+    if (e.code==='ArrowRight' || e.code==='KeyD') controls.right = true;
+    if (e.code==='ArrowUp' || e.code==='Space' || e.code==='KeyW') controls.jump = true;
+    if (e.code==='KeyJ' || e.code==='KeyK') controls.shoot = true;
+    if (e.code==='KeyE') activateDeadEye();
+  });
+  window.addEventListener('keyup',(e)=>{
+    if (e.code==='ArrowLeft' || e.code==='KeyA') controls.left = false;
+    if (e.code==='ArrowRight' || e.code==='KeyD') controls.right = false;
+    if (e.code==='ArrowUp' || e.code==='Space' || e.code==='KeyW') controls.jump = false;
+    if (e.code==='KeyJ' || e.code==='KeyK') controls.shoot = false;
+  });
+
+  function startGame(){
+    resetGame();
+    state = 'playing';
+    menu.style.display = 'none';
+    gameover.style.display = 'none';
+  }
+
+  startBtn.addEventListener('click', startGame);
+  restartBtn.addEventListener('click', startGame);
+
+  window.addEventListener('resize', resize);
+  resize();
+  render();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

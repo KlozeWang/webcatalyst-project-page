@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>FIFA Card Duel - Unity Game Spec Deliverable</title>
+<style>
+  :root{
+    --bg:#08131f;
+    --panel:#10263a;
+    --panel2:#17324a;
+    --text:#eaf3ff;
+    --muted:#9fb4cc;
+    --accent:#38d39f;
+    --accent2:#4aa3ff;
+    --danger:#ff5d6c;
+    --gold:#f2c14e;
+    --silver:#cdd6df;
+    --bronze:#c98a5a;
+    --special:#c86bff;
+    --code:#0d1723;
+  }
+  html,body{margin:0;padding:0;background:linear-gradient(180deg,#06111b,#0b1f31 45%,#06111b);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  body{padding:20px}
+  .wrap{max-width:1200px;margin:0 auto}
+  h1,h2,h3{margin:0 0 10px}
+  h1{font-size:2rem}
+  h2{margin-top:24px;font-size:1.2rem;color:#d8e7f8}
+  p,li{color:var(--muted);line-height:1.45}
+  .badge{display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(72,163,255,.12);border:1px solid rgba(72,163,255,.28);color:#d8ecff;font-size:.85rem;margin-right:8px}
+  .grid{display:grid;grid-template-columns:1fr;gap:16px}
+  .card{background:rgba(16,38,58,.82);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  pre{margin:0;white-space:pre-wrap;word-break:break-word;background:var(--code);padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.08);color:#d9e7f5;overflow:auto;font-size:.9rem;line-height:1.35}
+  .small{font-size:.95rem}
+  .mono{font-family:ui-monospace,SFMono-Regular,Consolas,Monaco,monospace}
+  .two{display:grid;grid-template-columns:1fr;gap:16px}
+  .note{background:rgba(56,211,159,.08);border-left:4px solid var(--accent);padding:12px 14px;border-radius:10px}
+  .warn{background:rgba(242,193,78,.08);border-left:4px solid var(--gold);padding:12px 14px;border-radius:10px}
+  @media (min-width: 1000px){
+    .two{grid-template-columns:1fr 1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>FIFA Card Duel</h1>
+  <div>
+    <span class="badge">2D Sprite-Based</span>
+    <span class="badge">Portrait Only</span>
+    <span class="badge">Async Multiplayer</span>
+    <span class="badge">Unity / C#</span>
+  </div>
+
+  <div class="grid" style="margin-top:16px">
+    <div class="card">
+      <h2>Game Summary</h2>
+      <p class="small">
+        A turn-based football card battler for mobile where players build a 40-card deck, place cards across 5 zones
+        (GK-DEF-MID-ATT-ATT), and resolve attacks with stat-based combat. The design supports asynchronous multiplayer,
+        quick matches, ranked divisions, and draft mode. Monetization is cosmetic-only; energy gates session frequency without
+        pay-to-win benefits.
+      </p>
+      <div class="note small">
+        <strong>Turn loop:</strong> Draw → Place → Attack → End. Each async turn has a 90-second action window.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Included Deliverables</h2>
+      <ul class="small">
+        <li><span class="mono">Card.cs</span></li>
+        <li><span class="mono">GameManager.cs</span></li>
+        <li><span class="mono">CombatSystem.cs</span></li>
+        <li><span class="mono">UIManager.cs</span></li>
+        <li>50-card JSON database</li>
+      </ul>
+      <div class="warn small">
+        This response provides a self-contained Unity-oriented implementation blueprint and data set in C# and JSON form.
+      </div>
+    </div>
+  </div>
+
+  <h2>Card.cs</h2>
+  <div class="card">
+<pre>using System;
+using UnityEngine;
+
+public enum CardType
+{
+    Player,
+    Tactic,
+    Reaction
+}
+
+public enum CardRarity
+{
+    Bronze = 1,
+    Silver = 2,
+    Gold = 3,
+    Special = 4
+}
+
+public enum ZoneType
+{
+    GK,
+    DEF,
+    MID,
+    ATT1,
+    ATT2
+}
+
+[Serializable]
+public class Card
+{
+    public string id;
+    public string name;
+    public CardType type;
+    public CardRarity rarity;
+    [Range(1, 5)] public int stars = 1;
+
+    // Player stats
+    [Range(0, 99)] public int PAC;
+    [Range(0, 99)] public int SHO;
+    [Range(0, 99)] public int PAS;
+    [Range(0, 99)] public int DRI;
+    [Range(0, 99)] public int DEF;
+    [Range(0, 99)] public int PHY;
+
+    // Meta
+    public string club;
+    public string nation;
+    public string league;
+    public string formation; // for Tactic cards, e.g. "4-3-3"
+    public string reactionEffect; // for Reaction cards, e.g. "Intercept", "Block", "Counter"
+    public string description;
+    public Sprite artwork;
+
+    public int ManaCost
+    {
+        get
+        {
+            int baseCost = stars + ((int)rarity - 1);
+            if (type == CardType.Tactic) baseCost += 1;
+            if (type == CardType.Reaction) baseCost += 1;
+            return Mathf.Clamp(baseCost, 1, 8);
+        }
+    }
+
+    public int Overall
+    {
+        get
+        {
+            int total = PAC + SHO + PAS + DRI + DEF + PHY;
+            return Mathf.RoundToInt(total / 6f);
+        }
+    }
+
+    public bool IsPlayer =&gt; type == CardType.Player;
+    public bool IsTactic =&gt; type == CardType.Tactic;
+    public bool IsReaction =&gt; type == CardType.Reaction;
+
+    public string DisplayStatLine()
+    {
+        return $"PAC {PAC} | SHO {SHO} | PAS {PAS} | DRI {DRI} | DEF {DEF} | PHY {PHY}";
+    }
+
+    public Color RarityColor()
+    {
+        switch (rarity)
+        {
+            case CardRarity.Bronze: return new Color(0.79f, 0.55f, 0.35f);
+            case CardRarity.Silver: return new Color(0.82f, 0.84f, 0.88f);
+            case CardRarity.Gold: return new Color(0.95f, 0.76f, 0.31f);
+            case CardRarity.Special: return new Color(0.78f, 0.42f, 1f);
+            default: return Color.white;
+        }
+    }
+
+    public static Card Clone(Card c)
+    {
+        return new Card
+        {
+            id = c.id,
+            name = c.name,
+            type = c.type,
+            rarity = c.rarity,
+            stars = c.stars,
+            PAC = c.PAC,
+            SHO = c.SHO,
+            PAS = c.PAS,
+            DRI = c.DRI,
+            DEF = c.DEF,
+            PHY = c.PHY,
+            club = c.club,
+            nation = c.nation,
+            league = c.league,
+            formation = c.formation,
+            reactionEffect = c.reactionEffect,
+            description = c.description,
+            artwork = c.artwork
+        };
+    }
+}</pre>
+  </div>
+
+  <h2>GameManager.cs</h2>
+  <div class="card">
+<pre>using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+public enum MatchMode
+{
+    QuickMatch,
+    Ranked,
+    Draft
+}
+
+public enum TurnPhase
+{
+    Draw,
+    Place,
+    Attack,
+    End
+}
+
+[Serializable]
+public class BoardSlot
+{
+    public ZoneType zone;
+    public Card placedCard;
+    public bool occupied =&gt; placedCard != null;
+}
+
+[Serializable]
+public class PlayerState
+{
+    public string playerId;
+    public string displayName;
+    public int energy = 10;
+    public int divisionPoints;
+    public int wins;
+    public int losses;
+
+    public List&lt;Card&gt; deck = new List&lt;Card&gt;();
+    public List&lt;Card&gt; hand = new List&lt;Card&gt;();
+    public List&lt;Card&gt; bench = new List&lt;Card&gt;();
+    public List&lt;BoardSlot&gt; field = new List&lt;BoardSlot&gt;();
+
+    public int goalsScored;
+    public int goalsConceded;
+    public int turnTimerSeconds = 90;
+    public TurnPhase phase = TurnPhase.Draw;
+
+    public PlayerState(string id, string name)
+    {
+        playerId = id;
+        displayName = name;
+        field.Add(new BoardSlot { zone = ZoneType.GK });
+        field.Add(new BoardSlot { zone = ZoneType.DEF });
+        field.Add(new BoardSlot { zone = ZoneType.MID });
+        field.Add(new BoardSlot { zone = ZoneType.ATT1 });
+        field.Add(new BoardSlot { zone = ZoneType.ATT2 });
+    }
+}
+
+public class GameManager : MonoBehaviour
+{
+    public static GameManager Instance;
+
+    [Header("Match")]
+    public MatchMode mode;
+    public PlayerState localPlayer;
+    public PlayerState remotePlayer;
+    public bool isAsyncMultiplayer = true;
+
+    [Header("Timers")]
+    public float turnDuration = 90f;
+    public float quickMatchDuration = 180f;
+
+    [Header("Deck Rules")]
+    public int deckSize = 40;
+    public int minPlayers = 11;
+    public int benchSize = 5;
+    public int maxHandSize = 7;
+
+    [Header("AI")]
+    public string aiArchetype = "Balanced"; // Defensive / Balanced / Aggressive
+
+    public event Action&lt;PlayerState&gt; OnStateChanged;
+    public event Action&lt;string&gt; OnLog;
+    public event Action&lt;PlayerState, Card&gt; OnCardPlaced;
+    public event Action&lt;Card, Card, CombatResult&gt; OnCombatResolved;
+    public event Action&lt;PlayerState&gt; OnTurnAdvanced;
+    public event Action&lt;PlayerState&gt; OnGoalScored;
+
+    private System.Random rng = new System.Random();
+    private CombatSystem combatSystem;
+
+    void Awake()
+    {
+        if (Instance != null &amp;&amp; Instance != this) { Destroy(gameObject); return; }
+        Instance = this;
+        combatSystem = GetComponent&lt;CombatSystem&gt;();
+        if (combatSystem == null) combatSystem = gameObject.AddComponent&lt;CombatSystem&gt;();
+    }
+
+    public void StartMatch(PlayerState p1, PlayerState p2, MatchMode matchMode)
+    {
+        localPlayer = p1;
+        remotePlayer = p2;
+        mode = matchMode;
+
+        SetupDeckAndHand(localPlayer);
+        SetupDeckAndHand(remotePlayer);
+
+        localPlayer.phase = TurnPhase.Draw;
+        remotePlayer.phase = TurnPhase.Draw;
+
+        Log($"Match started: {p1.displayName} vs {p2.displayName} ({matchMode})");
+        OnStateChanged?.Invoke(localPlayer);
+        OnStateChanged?.Invoke(remotePlayer);
+    }
+
+    void SetupDeckAndHand(PlayerState p)
+    {
+        Shuffle(p.deck);
+        p.hand.Clear();
+        p.bench.Clear();
+
+        int initialHand = Mathf.Min(5, p.deck.Count);
+        for (int i = 0; i &lt; initialHand; i++)
+            DrawCard(p);
+
+        int benchCount = Mathf.Min(benchSize, p.deck.Count);
+        for (int i = 0; i &lt; benchCount; i++)
+            p.bench.Add(p.deck[i]);
+    }
+
+    public void DrawCard(PlayerState p)
+    {
+        if (p.deck.Count == 0 || p.hand.Count &gt;= maxHandSize) return;
+        Card c = p.deck[0];
+        p.deck.RemoveAt(0);
+        p.hand.Add(c);
+        Log($"{p.displayName} draws {c.name}");
+        OnStateChanged?.Invoke(p);
+    }
+
+    public bool CanPlaceCard(Card c, ZoneType zone)
+    {
+        if (c == null) return false;
+        if (c.type == CardType.Reaction) return false;
+        if (c.type == CardType.Tactic) return zone == ZoneType.MID;
+        if (c.type == CardType.Player)
+        {
+            if (zone == ZoneType.GK) return c.DEF &gt;= 55 || c.Overall &gt;= 60;
+            if (zone == ZoneType.DEF) return c.DEF &gt;= 45;
+            if (zone == ZoneType.MID) return c.PAS + c.DRI &gt;= 85;
+            if (zone == ZoneType.ATT1 || zone == ZoneType.ATT2) return c.SHO + c.DRI &gt;= 80;
+        }
+        return false;
+    }
+
+    public bool PlaceCard(PlayerState p, Card c, int zoneIndex)
+    {
+        if (zoneIndex &lt; 0 || zoneIndex &gt;= p.field.Count) return false;
+        BoardSlot slot = p.field[zoneIndex];
+        if (slot.occupied) return false;
+        if (!p.hand.Contains(c)) return false;
+        if (!CanPlaceCard(c, slot.zone)) return false;
+
+        slot.placedCard = c;
+        p.hand.Remove(c);
+        OnCardPlaced?.Invoke(p, c);
+        ApplyChemistry(p);
+        Log($"{p.displayName} places {c.name} in {slot.zone}");
+        OnStateChanged?.Invoke(p);
+        return true;
+    }
+
+    void ApplyChemistry(PlayerState p)
+    {
+        for (int i = 0; i &lt; p.field.Count; i++)
+        {
+            Card current = p.field[i].placedCard;
+            if (current == null) continue;
+
+            int boost = 0;
+            if (i &gt; 0 &amp;&amp; p.field[i - 1].placedCard != null)
+            {
+                Card left = p.field[i - 1].placedCard;
+                if (!string.IsNullOrEmpty(current.club) &amp;&amp; current.club == left.club) boost += 1;
+                if (!string.IsNullOrEmpty(current.nation) &amp;&amp; current.nation == left.nation) boost += 1;
+            }
+            if (i &lt; p.field.Count - 1 &amp;&amp; p.field[i + 1].placedCard != null)
+            {
+                Card right = p.field[i + 1].placedCard;
+                if (!string.IsNullOrEmpty(current.club) &amp;&amp; current.club == right.club) boost += 1;
+                if (!string.IsNullOrEmpty(current.nation) &amp;&amp; current.nation == right.nation) boost += 1;
+            }
+            if (boost &gt; 0)
+            {
+                current.PAC = Mathf.Min(99, current.PAC + boost);
+                current.SHO = Mathf.Min(99, current.SHO + boost);
+                current.PAS = Mathf.Min(99, current.PAS + boost);
+                current.DRI = Mathf.Min(99, current.DRI + boost);
+                current.DEF = Mathf.Min(99, current.DEF + boost);
+                current.PHY = Mathf.Min(99, current.PHY + boost);
+            }
+        }
+    }
+
+    public CombatResult Attack(PlayerState attackerOwner, int attackerZoneIndex, PlayerState defenderOwner, int defenderZoneIndex)
+    {
+        if (attackerZoneIndex &lt; 0 || attackerZoneIndex &gt;= attackerOwner.field.Count) return CombatResult.Fail("Invalid attacker");
+        if (defenderZoneIndex &lt; 0 || defenderZoneIndex &gt;= defenderOwner.field.Count) return CombatResult.Fail("Invalid defender");
+
+        Card attacker = attackerOwner.field[attackerZoneIndex].placedCard;
+        Card defender = defenderOwner.field[defenderZoneIndex].placedCard;
+        if (attacker == null) return CombatResult.Fail("No attacker card");
+
+        CombatResult result = combatSystem.ResolveAttack(attackerOwner, attacker, defenderOwner, defender, attackerZoneIndex, defenderZoneIndex);
+
+        OnCombatResolved?.Invoke(attacker, defender, result);
+
+        if (result.goal)
+        {
+            attackerOwner.goalsScored++;
+            defenderOwner.goalsConceded++;
+            OnGoalScored?.Invoke(attackerOwner);
+            Log($"GOAL by {attackerOwner.displayName}!");
+        }
+        else
+        {
+            Log(result.message);
+        }
+
+        OnStateChanged?.Invoke(attackerOwner);
+        OnStateChanged?.Invoke(defenderOwner);
+        return result;
+    }
+
+    public void EndTurn(PlayerState p)
+    {
+        p.phase = TurnPhase.End;
+        OnTurnAdvanced?.Invoke(p);
+        Log($"{p.displayName} ends turn");
+        OnStateChanged?.Invoke(p);
+    }
+
+    public void AdvanceToNextPhase(PlayerState p)
+    {
+        p.phase = (TurnPhase)(((int)p.phase + 1) % 4);
+        if (p.phase == TurnPhase.Draw) DrawCard(p);
+        OnTurnAdvanced?.Invoke(p);
+        OnStateChanged?.Invoke(p);
+    }
+
+    public void TickAsyncTimer(PlayerState p, float deltaTime)
+    {
+        p.turnTimerSeconds = Mathf.Max(0, p.turnTimerSeconds - Mathf.RoundToInt(deltaTime));
+        if (p.turnTimerSeconds == 0) EndTurn(p);
+    }
+
+    public bool IsDeckLegal(PlayerState p)
+    {
+        if (p.deck == null || p.deck.Count != deckSize) return false;
+        int players = 0;
+        foreach (var c in p.deck) if (c != null &amp;&amp; c.type == CardType.Player) players++;
+        return players &gt;= minPlayers;
+    }
+
+    public List&lt;Card&gt; BuildDraftPool(List&lt;Card&gt; database, int count)
+    {
+        List&lt;Card&gt; pool = new List&lt;Card&gt;();
+        for (int i = 0; i &lt; count &amp;&amp; database.Count &gt; 0; i++)
+        {
+            int idx = rng.Next(database.Count);
+            pool.Add(Card.Clone(database[idx]));
+            database.RemoveAt(idx);
+        }
+        return pool;
+    }
+
+    void Shuffle(List&lt;Card&gt; list)
+    {
+        for (int i = 0; i &lt; list.Count; i++)
+        {
+            int j = rng.Next(i, list.Count);
+            (list[i], list[j]) = (list[j], list[i]);
+        }
+    }
+
+    void Log(string msg)
+    {
+        Debug.Log(msg);
+        OnLog?.Invoke(msg);
+    }
+
+    public bool CanPlayEnergy(PlayerState p, int cost) =&gt; p.energy &gt;= cost;
+    public void SpendEnergy(PlayerState p, int cost) =&gt; p.energy = Mathf.Max(0, p.energy - cost);
+    public void RegenEnergy(PlayerState p)
+    {
+        p.energy = Mathf.Min(10, p.energy + 1);
+    }
+}</pre>
+  </div>
+
+  <h2>CombatSystem.cs</h2>
+  <div class="card">
+<pre>using System;
+using UnityEngine;
+
+[Serializable]
+public class CombatResult
+{
+    public bool success;
+    public bool goal;
+    public int attackerScore;
+    public int defenderScore;
+    public int damage;
+    public string message;
+
+    public static CombatResult Fail(string msg)
+    {
+        return new CombatResult { success = false, goal = false, message = msg };
+    }
+}
+
+public class CombatSystem : MonoBehaviour
+{
+    public CombatResult ResolveAttack(PlayerState attackerOwner, Card attacker, PlayerState defenderOwner, Card defender, int attackerZoneIndex, int defenderZoneIndex)
+    {
+        int attackStat = GetAttackStat(attacker, attackerZoneIndex);
+        int defendStat = defender != null ? GetDefendStat(defender, defenderZoneIndex) : GetEmptyLaneDefense(defenderZoneIndex);
+
+        int tacticBonusA = GetTacticBonus(attackerOwner, attackerZoneIndex);
+        int tacticBonusD = GetTacticBonus(defenderOwner, defenderZoneIndex);
+
+        int reactionBonusD = GetReactionBonus(defenderOwner, defenderZoneIndex);
+
+        int attackerScore = attackStat + tacticBonusA + UnityEngine.Random.Range(0, 6);
+        int defenderScore = defendStat + tacticBonusD + reactionBonusD + UnityEngine.Random.Range(0, 6);
+
+        bool beat = attackerScore &gt; defenderScore;
+        bool isGoal = beat &amp;&amp; defenderZoneIndex == 0;
+
+        string msg;
+        if (isGoal) msg = $"{attacker.name} beats GK and scores!";
+        else if (beat) msg = $"{attacker.name} wins the duel.";
+        else msg = defender != null ? $"{defender.name} stops {attacker.name}." : "Attack contained.";
+
+        return new CombatResult
+        {
+            success = true,
+            goal = isGoal,
+            attackerScore = attackerScore,
+            defenderScore = defenderScore,
+            damage = beat ? 1 : 0,
+            message = msg
+        };
+    }
+
+    int GetAttackStat(Card c, int zoneIndex)
+    {
+        if (c == null) return 0;
+        if (zoneIndex == 0) return c.PAS + c.PHY;
+        if (zoneIndex == 1) return c.DEF + c.PHY;
+        if (zoneIndex == 2) return c.PAS + c.DRI;
+        return c.SHO + c.DRI + c.PAC / 2;
+    }
+
+    int GetDefendStat(Card c, int zoneIndex)
+    {
+        if (c == null) return 0;
+        if (zoneIndex == 0) return c.DEF + c.PHY + 10;
+        if (zoneIndex == 1) return c.DEF + c.PHY;
+        if (zoneIndex == 2) return c.PAS + c.DEF;
+        return c.DEF + c.PHY / 2;
+    }
+
+    int GetEmptyLaneDefense(int zoneIndex)
+    {
+        switch (zoneIndex)
+        {
+            case 0: return 35;
+            case 1: return 25;
+            case 2: return 20;
+            default: return 15;
+        }
+    }
+
+    int GetTacticBonus(PlayerState p, int zoneIndex)
+    {
+        int bonus = 0;
+        foreach (var slot in p.field)
+        {
+            if (slot.placedCard != null &amp;&amp; slot.placedCard.type == CardType.Tactic)
+            {
+                if (!string.IsNullOrEmpty(slot.placedCard.formation))
+                {
+                    if (slot.placedCard.formation == "4-3-3" &amp;&amp; zoneIndex &gt;= 2) bonus += 2;
+                    if (slot.placedCard.formation == "5-4-1" &amp;&amp; zoneIndex &lt;= 1) bonus += 2;
+                    if (slot.placedCard.formation == "4-2-3-1" &amp;&amp; zoneIndex == 2) bonus += 2;
+                }
+            }
+        }
+        return bonus;
+    }
+
+    int GetReactionBonus(PlayerState p, int zoneIndex)
+    {
+        int bonus = 0;
+        foreach (var slot in p.field)
+        {
+            if (slot.placedCard != null &amp;&amp; slot.placedCard.type == CardType.Reaction)
+            {
+                if (slot.placedCard.reactionEffect == "Intercept" &amp;&amp; zoneIndex == 2) bonus += 3;
+                if (slot.placedCard.reactionEffect == "Block" &amp;&amp; zoneIndex &lt;= 1) bonus += 3;
+                if (slot.placedCard.reactionEffect == "Counter" &amp;&amp; zoneIndex == 0) bonus += 2;
+            }
+        }
+        return bonus;
+    }
+}</pre>
+  </div>
+
+  <h2>UIManager.cs</h2>
+  <div class="card">
+<pre>using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using TMPro;
+
+public class UIManager : MonoBehaviour
+{
+    [Header("Top Stats")]
+    public TextMeshProUGUI scoreText;
+    public TextMeshProUGUI turnText;
+    public TextMeshProUGUI energyText;
+    public TextMeshProUGUI timerText;
+
+    [Header("Field")]
+    public Transform fieldRoot;
+    public List&lt;Button&gt; zoneButtons = new List&lt;Button&gt;();
+
+    [Header("Hand")]
+    public Transform handRoot;
+    public GameObject handCardPrefab;
+    public ScrollRect handScroll;
+
+    [Header("Card Zoom")]
+    public GameObject zoomPanel;
+    public TextMeshProUGUI zoomName;
+    public TextMeshProUGUI zoomStats;
+    public TextMeshProUGUI zoomDesc;
+    public Image zoomBorder;
+    public Button closeZoomButton;
+
+    private GameManager gm;
+    private Card selectedCard;
+    private int selectedZone = -1;
+
+    void Start()
+    {
+        gm = GameManager.Instance;
+        if (gm != null)
+        {
+            gm.OnStateChanged += Refresh;
+            gm.OnLog += _ =&gt; Refresh(gm.localPlayer);
+            gm.OnCardPlaced += OnCardPlaced;
+            gm.OnGoalScored += _ =&gt; Refresh(gm.localPlayer);
+        }
+
+        if (closeZoomButton != null) closeZoomButton.onClick.AddListener(HideZoom);
+        HideZoom();
+    }
+
+    void OnDestroy()
+    {
+        if (gm != null)
+        {
+            gm.OnStateChanged -= Refresh;
+            gm.OnGoalScored -= _ =&gt; Refresh(gm.localPlayer);
+        }
+    }
+
+    public void Refresh(PlayerState p)
+    {
+        if (gm == null || p == null) return;
+
+        scoreText.text = $"{gm.localPlayer.goalsScored} - {gm.remotePlayer.goalsScored}";
+        turnText.text = $"{p.displayName} • {p.phase}";
+        energyText.text = $"Energy {p.energy}/10";
+        timerText.text = $"{p.turnTimerSeconds}s";
+
+        RebuildHand();
+        UpdateField();
+    }
+
+    void RebuildHand()
+    {
+        if (gm == null || gm.localPlayer == null) return;
+
+        for (int i = handRoot.childCount - 1; i &gt;= 0; i--) Destroy(handRoot.GetChild(i).gameObject);
+
+        foreach (Card c in gm.localPlayer.hand)
+        {
+            GameObject go = Instantiate(handCardPrefab, handRoot);
+            CardView view = go.GetComponent&lt;CardView&gt;();
+            if (view != null) view.Bind(c, OnTapCard, OnDragCard);
+        }
+    }
+
+    void UpdateField()
+    {
+        for (int i = 0; i &lt; zoneButtons.Count &amp;&amp; i &lt; gm.localPlayer.field.Count; i++)
+        {
+            int idx = i;
+            zoneButtons[i].onClick.RemoveAllListeners();
+            zoneButtons[i].onClick.AddListener(() =&gt; OnZoneTapped(idx));
+        }
+    }
+
+    void OnTapCard(Card c)
+    {
+        selectedCard = c;
+        ShowZoom(c);
+    }
+
+    void OnDragCard(Card c)
+    {
+        selectedCard = c;
+    }
+
+    void OnZoneTapped(int idx)
+    {
+        selectedZone = idx;
+        if (selectedCard != null)
+        {
+            if (gm.PlaceCard(gm.localPlayer, selectedCard, idx))
+            {
+                selectedCard = null;
+                selectedZone = -1;
+                HideZoom();
+            }
+        }
+    }
+
+    public void OnAttackButton()
+    {
+        if (selectedZone &lt; 0) return;
+        gm.Attack(gm.localPlayer, selectedZone, gm.remotePlayer, selectedZone);
+    }
+
+    void ShowZoom(Card c)
+    {
+        if (zoomPanel == null || c == null) return;
+        zoomPanel.SetActive(true);
+        zoomName.text = c.name;
+        zoomStats.text = c.DisplayStatLine();
+        zoomDesc.text = $"{c.description}\n\nClub: {c.club}\nNation: {c.nation}\nRarity: {c.rarity} • {c.stars}★";
+        if (zoomBorder != null) zoomBorder.color = c.RarityColor();
+    }
+
+    void HideZoom()
+    {
+        if (zoomPanel != null) zoomPanel.SetActive(false);
+    }
+
+    void OnCardPlaced(PlayerState p, Card c)
+    {
+        if (p == gm.localPlayer) Refresh(p);
+    }
+}
+
+public class CardView : MonoBehaviour
+{
+    public TextMeshProUGUI title;
+    public TextMeshProUGUI statLine;
+    public Image rarityFrame;
+    private Card boundCard;
+    private System.Action&lt;Card&gt; tapCallback;
+    private System.Action&lt;Card&gt; dragCallback;
+
+    public void Bind(Card c, System.Action&lt;Card&gt; onTap, System.Action&lt;Card&gt; onDrag)
+    {
+        boundCard = c;
+        tapCallback = onTap;
+        dragCallback = onDrag;
+        if (title != null) title.text = c.name;
+        if (statLine != null) statLine.text = c.type == CardType.Player ? c.DisplayStatLine() : c.description;
+        if (rarityFrame != null) rarityFrame.color = c.RarityColor();
+    }
+
+    public void OnTap() { tapCallback?.Invoke(boundCard); }
+    public void OnDragStart() { dragCallback?.Invoke(boundCard); }
+}</pre>
+  </div>
+
+  <h2>50 Card JSON Database</h2>
+  <div class="card">
+<pre>[
+  {"id":"p001","name":"M. Striker","type":"Player","rarity":"Gold","stars":4,"PAC":88,"SHO":91,"PAS":68,"DRI":84,"DEF":34,"PHY":79,"club":"Madrid FC","nation":"Spain","league":"LaLiga","description":"Clinical finisher with explosive movement."},
+  {"id":"p002","name":"A. Playmaker","type":"Player","rarity":"Gold","stars":4,"PAC":76,"SHO":74,"PAS":92,"DRI":86,"DEF":44,"PHY":70,"club":"London United","nation":"England","league":"Premier League","description":"Controls tempo and unlocks defenses."},
+  {"id":"p003","name":"C. Wall","type":"Player","rarity":"Special","stars":5,"PAC":68,"SHO":45,"PAS":70,"DRI":62,"DEF":94,"PHY":93,"club":"Turin Black","nation":"Italy","league":"Serie A","description":"Elite center-back with dominant aerial duels."},
+  {"id":"p004","name":"R. Flash","type":"Player","rarity":"Silver","stars":3,"PAC":90,"SHO":62,"PAS":63,"DRI":88,"DEF":28,"PHY":58,"club":"Paris Bleu","nation":"France","league":"Ligue 1","description":"Wing runner who breaks lines at pace."},
+  {"id":"p005","name":"N. Keeper","type":"Player","rarity":"Gold","stars":4,"PAC":42,"SHO":20,"PAS":58,"DRI":40,"DEF":92,"PHY":88,"club":"Munich Red","nation":"Germany","league":"Bundesliga","description":"Reliable shot stopper and command of box."},
+  {"id":"p006","name":"L. Anchor","type":"Player","rarity":"Silver","stars":3,"PAC":55,"SHO":41,"PAS":66,"DRI":51,"DEF":80,"PHY":84,"club":"Amsterdam Star","nation":"Netherlands","league":"Eredivisie","description":"Defensive midfielder that shields the back line."},
+  {"id":"p007","name":"S. Creator","type":"Player","rarity":"Gold","stars":4,"PAC":73,"SHO":71,"PAS":90,"DRI":82,"DEF":45,"PHY":67,"club":"Catalan Sun","nation":"Spain","league":"LaLiga","description":"Inventive passer with sharp final balls."},
+  {"id":"p008","name":"B. Finisher","type":"Player","rarity":"Bronze","stars":2,"PAC":71,"SHO":78,"PAS":52,"DRI":69,"DEF":24,"PHY":57,"club":"Milan Blue","nation":"Argentina","league":"Serie A","description":"Budget scorer with good positioning."},
+  {"id":"p009","name":"D. Stopper","type":"Player","rarity":"Bronze","stars":2,"PAC":44,"SHO":18,"PAS":45,"DRI":36,"DEF":73,"PHY":77,"club":"Lisbon Green","nation":"Portugal","league":"Primeira Liga","description":"Simple but strong defensive option."},
+  {"id":"p010","name":"E. Engine","type":"Player","rarity":"Silver","stars":3,"PAC":78,"SHO":58,"PAS":74,"DRI":76,"DEF":60,"PHY":69,"club":"Manchester Sky","nation":"England","league":"Premier League","description":"All-action midfielder for transitions."},
+  {"id":"p011","name":"T. Tackle","type":"Player","rarity":"Bronze","stars":2,"PAC":49,"SHO":22,"PAS":40,"DRI":41,"DEF":76,"PHY":72,"club":"Berlin White","nation":"Germany","league":"Bundesliga","description":"Aggressive tackler for the back four."},
+  {"id":"p012","name":"J. Maestro","type":"Player","rarity":"Special","stars":5,"PAC":82,"SHO":84,"PAS":96,"DRI":94,"DEF":55,"PHY":72,"club":"Barcelona Azul","nation":"Spain","league":"LaLiga","description":"Legend-level creator with elite dribbling."},
+  {"id":"p013","name":"K. Poacher","type":"Player","rarity":"Silver","stars":3,"PAC":80,"SHO":86,"PAS":57,"DRI":77,"DEF":30,"PHY":65,"club":"Turin Black","nation":"Italy","league":"Serie A","description":"Always arrives in the six-yard box."},
+  {"id":"p014","name":"H. Shield","type":"Player","rarity":"Gold","stars":4,"PAC":58,"SHO":36,"PAS":69,"DRI":55,"DEF":90,"PHY":91,"club":"London United","nation":"England","league":"Premier League","description":"Physical defender who wins duels."},
+  {"id":"p015","name":"I. Arrow","type":"Player","rarity":"Bronze","stars":2,"PAC":86,"SHO":55,"PAS":48,"DRI":74,"DEF":31,"PHY":54,"club":"Paris Bleu","nation":"Morocco","league":"Ligue 1","description":"Direct winger with sharp acceleration."},
+  {"id":"p016","name":"O. Sentinel","type":"Player","rarity":"Silver","stars":3,"PAC":40,"SHO":17,"PAS":43,"DRI":35,"DEF":86,"PHY":83,"club":"Madrid FC","nation":"Uruguay","league":"LaLiga","description":"No-nonsense center-back."},
+  {"id":"p017","name":"P. Vision","type":"Player","rarity":"Gold","stars":4,"PAC":69,"SHO":63,"PAS":93,"DRI":79,"DEF":50,"PHY":61,"club":"Munich Red","nation":"Germany","league":"Bundesliga","description":"Long-range passer and crossing specialist."},
+  {"id":"p018","name":"Q. Spark","type":"Player","rarity":"Bronze","stars":2,"PAC":75,"SHO":61,"PAS":50,"DRI":77,"DEF":29,"PHY":50,"club":"Amsterdam Star","nation":"Brazil","league":"Eredivisie","description":"Flair attacker with quick feet."},
+  {"id":"p019","name":"R. Tower","type":"Player","rarity":"Gold","stars":4,"PAC":34,"SHO":25,"PAS":54,"DRI":37,"DEF":95,"PHY":94,"club":"Lisbon Green","nation":"Denmark","league":"Primeira Liga","description":"Huge center-back with aerial dominance."},
+  {"id":"p020","name":"S. Runner","type":"Player","rarity":"Silver","stars":3,"PAC":84,"SHO":68,"PAS":64,"DRI":80,"DEF":42,"PHY":60,"club":"Manchester Sky","nation":"Jamaica","league":"Premier League","description":"High-motor attacker with end product."},
+  {"id":"t001","name":"4-3-3 High Press","type":"Tactic","rarity":"Gold","stars":3,"formation":"4-3-3","description":"Boosts attacking lanes and wide pressure."},
+  {"id":"t002","name":"5-4-1 Low Block","type":"Tactic","rarity":"Silver","stars":2,"formation":"5-4-1","description":"Strengthens defensive compactness."},
+  {"id":"t003","name":"4-2-3-1 Control","type":"Tactic","rarity":"Gold","stars":3,"formation":"4-2-3-1","description":"Midfield stability with a creative hub."},
+  {"id":"t004","name":"3-5-2 Overload","type":"Tactic","rarity":"Special","stars":4,"formation":"3-5-2","description":"Overloads central areas and second balls."},
+  {"id":"t005","name":"Compact 4-4-2","type":"Tactic","rarity":"Bronze","stars":2,"formation":"4-4-2","description":"Balanced shape with solid lines."},
+  {"id":"r001","name":"Intercept Trap","type":"Reaction","rarity":"Silver","stars":2,"reactionEffect":"Intercept","description":"Stops a midfield attack with sharp reading."},
+  {"id":"r002","name":"Wall Block","type":"Reaction","rarity":"Bronze","stars":1,"reactionEffect":"Block","description":"Boosts defender resistance in the box."},
+  {"id":"r003","name":"Counter Burst","type":"Reaction","rarity":"Gold","stars":3,"reactionEffect":"Counter","description":"Punishes overcommitment on the break."},
+  {"id":"r004","name":"Offside Snare","type":"Reaction","rarity":"Silver","stars":2,"reactionEffect":"Intercept","description":"Disrupts timing and tempo."},
+  {"id":"r005","name":"Last-Ditch Clearance","type":"Reaction","rarity":"Gold","stars":3,"reactionEffect":"Block","description":"Emergency defending under pressure."},
+  {"id":"p021","name":"A. Keeper","type":"Player","rarity":"Bronze","stars":2,"PAC":41,"SHO":15,"PAS":50,"DRI":34,"DEF":74,"PHY":76,"club":"Madrid FC","nation":"Brazil","league":"LaLiga","description":"Solid budget keeper."},
+  {"id":"p022","name":"B. Wingback","type":"Player","rarity":"Silver","stars":3,"PAC":82,"SHO":48,"PAS":72,"DRI":73,"DEF":67,"PHY":68,"club":"London United","nation":"England","league":"Premier League","description":"Up-and-down fullback with stamina."},
+  {"id":"p023","name":"C. Pivot","type":"Player","rarity":"Bronze","stars":2,"PAC":57,"SHO":29,"PAS":61,"DRI":54,"DEF":63,"PHY":66,"club":"Turin Black","nation":"France","league":"Serie A","description":"Simple distributor in midfield."},
+  {"id":"p024","name":"D. Sniper","type":"Player","rarity":"Gold","stars":4,"PAC":79,"SHO":89,"PAS":60,"DRI":81,"DEF":33,"PHY":64,"club":"Paris Bleu","nation":"Portugal","league":"Ligue 1","description":"Deadly from distance and in transition."},
+  {"id":"p025","name":"E. General","type":"Player","rarity":"Special","stars":5,"PAC":66,"SHO":72,"PAS":95,"DRI":88,"DEF":78,"PHY":80,"club":"Munich Red","nation":"Germany","league":"Bundesliga","description":"Elite organizer who leads every line."},
+  {"id":"p026","name":"F. Skimmer","type":"Player","rarity":"Bronze","stars":2,"PAC":83,"SHO":47,"PAS":49,"DRI":70,"DEF":26,"PHY":52,"club":"Amsterdam Star","nation":"Brazil","league":"Eredivisie","description":"Fast dribbler with low center of gravity."},
+  {"id":"p027","name":"G. Hammer","type":"Player","rarity":"Silver","stars":3,"PAC":52,"SHO":33,"PAS":46,"DRI":44,"DEF":82,"PHY":89,"club":"Barcelona Azul","nation":"Uruguay","league":"LaLiga","description":"Tough defender who wins headers."},
+  {"id":"p028","name":"H. Arrow","type":"Player","rarity":"Gold","stars":4,"PAC":91,"SHO":67,"PAS":66,"DRI":89,"DEF":38,"PHY":63,"club":"Manchester Sky","nation":"France","league":"Premier League","description":"Blistering wide threat."},
+  {"id":"p029","name":"I. Tempo","type":"Player","rarity":"Silver","stars":3,"PAC":66,"SHO":54,"PAS":85,"DRI":75,"DEF":53,"PHY":59,"club":"Lisbon Green","nation":"Spain","league":"Primeira Liga","description":"Keeps possession moving."},
+  {"id":"p030","name":"J. Fortress","type":"Player","rarity":"Gold","stars":4,"PAC":45,"SHO":24,"PAS":55,"DRI":40,"DEF":93,"PHY":92,"club":"Berlin White","nation":"Netherlands","league":"Bundesliga","description":"Impenetrable defensive unit."},
+  {"id":"p031","name":"K. Ace","type":"Player","rarity":"Special","stars":5,"PAC":88,"SHO":93,"PAS":84,"DRI":95,"DEF":52,"PHY":78,"club":"Catalan Sun","nation":"Argentina","league":"LaLiga","description":"Superstar attacker with clutch ability."},
+  {"id":"p032","name":"L. Spark","type":"Player","rarity":"Bronze","stars":2,"PAC":78,"SHO":58,"PAS":55,"DRI":76,"DEF":27,"PHY":49,"club":"Madrid FC","nation":"Spain","league":"LaLiga","description":"Small-space dribbler."},
+  {"id":"p033","name":"M. Sentinel","type":"Player","rarity":"Silver","stars":3,"PAC":47,"SHO":19,"PAS":44,"DRI":37,"DEF":85,"PHY":80,"club":"Turin Black","nation":"Italy","league":"Serie A","description":"Disciplined stopper in defense."},
+  {"id":"p034","name":"N. Threader","type":"Player","rarity":"Gold","stars":4,"PAC":72,"SHO":65,"PAS":91,"DRI":80,"DEF":49,"PHY":60,"club":"London United","nation":"Spain","league":"Premier League","description":"Threaded passes and smart movement."},
+  {"id":"p035","name":"O. Boulder","type":"Player","rarity":"Bronze","stars":2,"PAC":38,"SHO":16,"PAS":41,"DRI":33,"DEF":79,"PHY":85,"club":"Paris Bleu","nation":"Senegal","league":"Ligue 1","description":"Strong simple defender."},
+  {"id":"p036","name":"P. Cruise","type":"Player","rarity":"Silver","stars":3,"PAC":74,"SHO":60,"PAS":70,"DRI":72,"DEF":56,"PHY":65,"club":"Munich Red","nation":"Austria","league":"Bundesliga","description":"Dependable box-to-box card."},
+  {"id":"p037","name":"Q. Arrowhead","type":"Player","rarity":"Gold","stars":4,"PAC":87,"SHO":77,"PAS":65,"DRI":85,"DEF":40,"PHY":66,"club":"Barcelona Azul","nation":"Brazil","league":"LaLiga","description":"Cuts inside and strikes cleanly."},
+  {"id":"p038","name":"R. Brain","type":"Player","rarity":"Special","stars":5,"PAC":70,"SHO":71,"PAS":98,"DRI":90,"DEF":59,"PHY":74,"club":"Paris Bleu","nation":"Spain","league":"Ligue 1","description":"High-IQ playmaker with complete passing."},
+  {"id":"p039","name":"S. Hammer","type":"Player","rarity":"Bronze","stars":2,"PAC":50,"SHO":27,"PAS":42,"DRI":39,"DEF":77,"PHY":78,"club":"London United","nation":"Scotland","league":"Premier League","description":"Hard-hitting defensive depth."},
+  {"id":"p040","name":"T. Comet","type":"Player","rarity":"Silver","stars":3,"PAC":89,"SHO":64,"PAS":58,"DRI":83,"DEF":29,"PHY":57,"club":"Amsterdam Star","nation":"Brazil","league":"Eredivisie","description":"Breakaway threat from the wing."},
+  {"id":"t006","name":"Diamond Midfield","type":"Tactic","rarity":"Gold","stars":3,"formation":"4-1-2-1-2","description":"Dominates central zones with triangles."},
+  {"id":"t007","name":"Asymmetric Press","type":"Tactic","rarity":"Silver","stars":2,"formation":"4-3-3","description":"Loads one flank for pressure."},
+  {"id":"t008","name":"Deep Retreat","type":"Tactic","rarity":"Bronze","stars":1,"formation":"5-4-1","description":"Helps protect a narrow lead."},
+  {"id":"r006","name":"Screening Line","type":"Reaction","rarity":"Gold","stars":3,"reactionEffect":"Block","description":"Adds a strong final layer in front of GK."},
+  {"id":"r007","name":"Reading Play","type":"Reaction","rarity":"Silver","stars":2,"reactionEffect":"Intercept","description":"Improves anticipation in midfield."},
+  {"id":"r008","name":"Fast Break","type":"Reaction","rarity":"Special","stars":4,"reactionEffect":"Counter","description":"Turns defense into a dangerous counterattack."}
+]</pre>
+  </div>
+</div>
+</body>
+</html>

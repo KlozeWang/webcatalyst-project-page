@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BMW M4 High Graphics Drive</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #05070b;
+      font-family: Arial, Helvetica, sans-serif;
+      touch-action: none;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: linear-gradient(#89b9ff 0%, #b9dcff 24%, #d7ecff 30%, #7db0ff 31%, #4a5f7f 100%);
+    }
+    .hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      color: #fff;
+      text-shadow: 0 2px 4px rgba(0,0,0,.8);
+    }
+    .topbar {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .panel {
+      background: rgba(8, 10, 16, 0.35);
+      border: 1px solid rgba(255,255,255,0.16);
+      backdrop-filter: blur(8px);
+      border-radius: 16px;
+      padding: 10px 14px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.22);
+    }
+    .title {
+      font-weight: 700;
+      letter-spacing: 1px;
+      font-size: 14px;
+      opacity: .95;
+    }
+    .stats {
+      margin-top: 6px;
+      font-size: 13px;
+      line-height: 1.45;
+      opacity: .96;
+    }
+    .speedo {
+      position: absolute;
+      right: 14px;
+      bottom: 14px;
+      width: 150px;
+      height: 150px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.15), rgba(255,255,255,.04) 55%, rgba(255,255,255,0) 70%);
+      border: 1px solid rgba(255,255,255,0.16);
+      box-shadow: inset 0 0 20px rgba(255,255,255,.06), 0 8px 30px rgba(0,0,0,.28);
+    }
+    .speedo canvas {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+    }
+    .controls {
+      position: absolute;
+      left: 14px;
+      bottom: 14px;
+      display: grid;
+      grid-template-columns: 84px 84px;
+      grid-template-rows: 84px 84px;
+      gap: 10px;
+      pointer-events: auto;
+      opacity: .95;
+    }
+    .btn {
+      border: 0;
+      border-radius: 22px;
+      color: white;
+      font-size: 22px;
+      font-weight: 700;
+      background: linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.08));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 8px 20px rgba(0,0,0,.25);
+      border: 1px solid rgba(255,255,255,.18);
+      backdrop-filter: blur(8px);
+      touch-action: none;
+      user-select: none;
+    }
+    .btn:active, .btn.active {
+      background: linear-gradient(180deg, rgba(255,255,255,.3), rgba(255,255,255,.14));
+      transform: translateY(1px);
+    }
+    .btn.small {
+      font-size: 16px;
+    }
+    .help {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
+      font-size: 12px;
+      opacity: .92;
+      text-align: center;
+    }
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at center, rgba(12,14,20,.65), rgba(2,3,7,.88));
+      color: white;
+      z-index: 20;
+    }
+    .card {
+      width: min(520px, calc(100vw - 32px));
+      background: rgba(10,12,18,.62);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 24px;
+      padding: 24px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,.45);
+    }
+    .card h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      letter-spacing: 1px;
+    }
+    .card p {
+      margin: 8px 0;
+      line-height: 1.5;
+      color: rgba(255,255,255,.9);
+    }
+    .start {
+      margin-top: 18px;
+      padding: 14px 22px;
+      border: 0;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #ffffff, #c9d6ff);
+      color: #0b1220;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 10px 24px rgba(0,0,0,.35);
+    }
+    .start:active { transform: translateY(1px); }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div class="hud">
+    <div class="help panel">W/↑ Accelerate • S/↓ Brake • A/D or ←/→ Steer • Space Handbrake • R Restart</div>
+    <div class="topbar">
+      <div class="panel">
+        <div class="title">BMW M4 HIGH GRAPHICS DRIVE</div>
+        <div class="stats" id="stats">Speed: 0 km/h<br>Distance: 0.0 km<br>Score: 0</div>
+      </div>
+      <div class="panel">
+        <div class="title">ROAD STATUS</div>
+        <div class="stats" id="status">Grip: Good<br>Traffic: Light<br>Mode: Endless Run</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn small" id="leftBtn">⟵</button>
+      <button class="btn small" id="rightBtn">⟶</button>
+      <button class="btn" id="brakeBtn">⟱</button>
+      <button class="btn" id="gasBtn">⟰</button>
+    </div>
+
+    <div class="speedo"><canvas id="speedCanvas" width="300" height="300"></canvas></div>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="card">
+      <h1>BMW M4</h1>
+      <p>High-graphics endless driving game with reflections, lighting, motion, traffic, and a detailed sports car feel.</p>
+      <p>Use keyboard or touch controls to drive as far as you can without crashing.</p>
+      <button class="start" id="startBtn">Start Driving</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const speedCanvas = document.getElementById('speedCanvas');
+  const sctx = speedCanvas.getContext('2d');
+  const statsEl = document.getElementById('stats');
+  const statusEl = document.getElementById('status');
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+
+  const leftBtn = document.getElementById('leftBtn');
+  const rightBtn = document.getElementById('rightBtn');
+  const gasBtn = document.getElementById('gasBtn');
+  const brakeBtn = document.getElementById('brakeBtn');
+
+  let W=0,H=0,DPR=1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = canvas.width = Math.floor(innerWidth * DPR);
+    H = canvas.height = Math.floor(innerHeight * DPR);
+  }
+  window.addEventListener('resize', resize, {passive:true});
+  resize();
+
+  const keys = {};
+  addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if (e.key.toLowerCase()==='r') reset(); });
+  addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+  function bindHold(el, key){
+    const on = e => { e.preventDefault(); keys[key]=true; el.classList.add('active'); };
+    const off = e => { e.preventDefault(); keys[key]=false; el.classList.remove('active'); };
+    el.addEventListener('pointerdown', on);
+    addEventListener('pointerup', off);
+    addEventListener('pointercancel', off);
+    addEventListener('blur', off);
+  }
+  bindHold(leftBtn, 'a');
+  bindHold(rightBtn, 'd');
+  bindHold(gasBtn, 'w');
+  bindHold(brakeBtn, 's');
+
+  startBtn.onclick = () => overlay.style.display = 'none';
+
+  let roadOffset = 0, roadCurve = 0, roadTargetCurve = 0;
+  let speed = 0, distance = 0, score = 0;
+  let playerX = 0, playerY = 0;
+  let crashed = false;
+  let shake = 0;
+
+  const traffic = [];
+  function spawnTraffic(z){
+    const lane = (Math.random() * 3 | 0) - 1;
+    traffic.push({
+      z,
+      lane,
+      x: lane * 0.55 + (Math.random()*0.12-0.06),
+      speed: 0.35 + Math.random()*0.45,
+      color: ['#e53935','#00acc1','#fdd835','#8e24aa','#ffffff'][Math.random()*5|0]
+    });
+  }
+  for(let i=0;i<18;i++) spawnTraffic(i*70 + 40);
+
+  function reset(){
+    roadOffset = 0; roadCurve = 0; roadTargetCurve = 0;
+    speed = 0; distance = 0; score = 0; playerX = 0; crashed = false; shake = 0;
+    traffic.length = 0;
+    for(let i=0;i<18;i++) spawnTraffic(i*70 + 40);
+    overlay.style.display = 'none';
+  }
+
+  function lerp(a,b,t){ return a + (b-a)*t; }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+
+  function drawBackground(){
+    const sky = ctx.createLinearGradient(0,0,0,H*0.55);
+    sky.addColorStop(0, '#7fb7ff');
+    sky.addColorStop(0.38, '#cfeaff');
+    sky.addColorStop(0.55, '#9ec4ff');
+    sky.addColorStop(1, '#5d8dd9');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0,0,W,H);
+
+    const sunX = W*0.78, sunY = H*0.16;
+    const rg = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, H*0.22);
+    rg.addColorStop(0,'rgba(255,255,255,0.9)');
+    rg.addColorStop(0.18,'rgba(255,245,210,0.55)');
+    rg.addColorStop(1,'rgba(255,245,210,0)');
+    ctx.fillStyle = rg;
+    ctx.fillRect(0,0,W,H);
+
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = '#ffffff';
+    for(let i=0;i<7;i++){
+      const cx = (i*0.18 + 0.1)*W;
+      const cy = H*0.17 + Math.sin(i*12.7)*10*DPR;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, 65*DPR, 22*DPR, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    ctx.fillStyle = '#8f5b32';
+    ctx.beginPath();
+    ctx.moveTo(0,H*0.52); ctx.lineTo(W*0.14,H*0.42); ctx.lineTo(W*0.25,H*0.48); ctx.lineTo(0,H*0.58); ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(W,H*0.54); ctx.lineTo(W*0.82,H*0.43); ctx.lineTo(W*0.68,H*0.49); ctx.lineTo(W,H*0.61); ctx.closePath();
+    ctx.fill();
+  }
+
+  function roadX(z){
+    return Math.sin((z + distance*1.1) * 0.0014) * 0.32 + Math.sin(z*0.0009) * 0.12;
+  }
+
+  function project(x, y, z){
+    const f = 1 / (z * 0.0012 + 0.9);
+    return {
+      x: W*0.5 + x * W*0.38 * f,
+      y: H*0.72 - y * H*0.46 * f,
+      s: f
+    };
+  }
+
+  function drawRoad(){
+    const segments = 40;
+    const maxZ = 900;
+    let prev = null;
+    for(let i=segments-1;i>=0;i--){
+      const z = i*(maxZ/segments) + 1;
+      const curve = roadX(z);
+      const roadW = 1.9 + i*0.028;
+      const p1 = project((curve-roadW), 0, z);
+      const p2 = project((curve+roadW), 0, z);
+      const y2 = project(0, 0, z + maxZ/segments).y;
+      const fog = i/segments;
+      const grassL = ctx.createLinearGradient(0,p1.y,0,y2);
+      grassL.addColorStop(0, `rgba(20,120,50,${0.9*fog})`);
+      grassL.addColorStop(1, `rgba(10,80,32,${0.9*fog})`);
+      ctx.fillStyle = grassL;
+      ctx.beginPath();
+      ctx.moveTo(0, p1.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, y2);
+      ctx.lineTo(0, y2);
+      ctx.closePath();
+      ctx.fill();
+
+      const grassR = ctx.createLinearGradient(0,p1.y,0,y2);
+      grassR.addColorStop(0, `rgba(18,104,44,${0.9*fog})`);
+      grassR.addColorStop(1, `rgba(8,66,28,${0.9*fog})`);
+      ctx.fillStyle = grassR;
+      ctx.beginPath();
+      ctx.moveTo(W, p1.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, y2);
+      ctx.lineTo(W, y2);
+      ctx.closePath();
+      ctx.fill();
+
+      const roadGrad = ctx.createLinearGradient(0,p1.y,0,y2);
+      roadGrad.addColorStop(0, `rgba(45,45,52,${0.98*fog})`);
+      roadGrad.addColorStop(1, `rgba(18,18,22,${0.98*fog})`);
+      ctx.fillStyle = roadGrad;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, y2);
+      ctx.lineTo(W-p2.x, y2);
+      ctx.lineTo(W-p1.x, p1.y);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(255,255,255,${0.22*fog})`;
+      ctx.lineWidth = Math.max(1, 4*DPR*fog);
+      ctx.beginPath();
+      ctx.moveTo(W*0.5 + (curve-roadW*0.02)*W*0.38*(1/(z*0.0012+0.9)), p1.y);
+      ctx.lineTo(W*0.5 + (curve-roadW*0.02)*W*0.38*(1/((z+maxZ/segments)*0.0012+0.9)), y2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(W*0.5 + (curve+roadW*0.02)*W*0.38*(1/(z*0.0012+0.9)), p1.y);
+      ctx.lineTo(W*0.5 + (curve+roadW*0.02)*W*0.38*(1/((z+maxZ/segments)*0.0012+0.9)), y2);
+      ctx.stroke();
+    }
+  }
+
+  function drawCar(){
+    const cx = W*0.5 + playerX*W*0.22;
+    const cy = H*0.78;
+    const bodyW = W*0.18, bodyH = H*0.17;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(playerX * 0.05);
+    if (shake > 0) ctx.translate((Math.random()-0.5)*shake*DPR*3, (Math.random()-0.5)*shake*DPR*2);
+
+    const shadow = ctx.createRadialGradient(0, bodyH*0.3, 10, 0, bodyH*0.3, bodyW*0.8);
+    shadow.addColorStop(0, 'rgba(0,0,0,.45)');
+    shadow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = shadow;
+    ctx.beginPath();
+    ctx.ellipse(0, bodyH*0.34, bodyW*0.55, bodyH*0.18, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(0, -bodyH*0.03);
+    const bodyGrad = ctx.createLinearGradient(-bodyW*0.5, -bodyH*0.45, bodyW*0.5, bodyH*0.55);
+    bodyGrad.addColorStop(0, '#f7fbff');
+    bodyGrad.addColorStop(0.18, '#c9d2da');
+    bodyGrad.addColorStop(0.42, '#ffffff');
+    bodyGrad.addColorStop(0.68, '#8c97a3');
+    bodyGrad.addColorStop(1, '#eff4f8');
+    ctx.fillStyle = bodyGrad;
+    roundRect(-bodyW*0.5, -bodyH*0.28, bodyW, bodyH*0.34, bodyH*0.12);
+    ctx.fill();
+
+    const topGrad = ctx.createLinearGradient(0, -bodyH*0.42, 0, bodyH*0.08);
+    topGrad.addColorStop(0, '#f6fbff');
+    topGrad.addColorStop(1, '#81909f');
+    ctx.fillStyle = topGrad;
+    ctx.beginPath();
+    ctx.moveTo(-bodyW*0.28, -bodyH*0.27);
+    ctx.quadraticCurveTo(-bodyW*0.18, -bodyH*0.5, 0, -bodyH*0.52);
+    ctx.quadraticCurveTo(bodyW*0.2, -bodyH*0.5, bodyW*0.3, -bodyH*0.27);
+    ctx.quadraticCurveTo(bodyW*0.16, -bodyH*0.22, -bodyW*0.28, -bodyH*0.27);
+    ctx.closePath();
+    ctx.fill();
+
+    const glass = ctx.createLinearGradient(0,-bodyH*0.5,0,-bodyH*0.15);
+    glass.addColorStop(0,'rgba(220,245,255,.95)');
+    glass.addColorStop(0.5,'rgba(80,120,160,.75)');
+    glass.addColorStop(1,'rgba(20,30,40,.95)');
+    ctx.fillStyle = glass;
+    ctx.beginPath();
+    ctx.moveTo(-bodyW*0.19, -bodyH*0.27);
+    ctx.quadraticCurveTo(-bodyW*0.12, -bodyH*0.44, 0, -bodyH*0.45);
+    ctx.quadraticCurveTo(bodyW*0.12, -bodyH*0.44, bodyW*0.2, -bodyH*0.27);
+    ctx.quadraticCurveTo(0, -bodyH*0.18, -bodyW*0.19, -bodyH*0.27);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,.25)';
+    ctx.beginPath();
+    ctx.ellipse(-bodyW*0.12, -bodyH*0.36, bodyW*0.06, bodyH*0.03, -0.4, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = '#111';
+    const wheelR = bodyH*0.11;
+    [-bodyW*0.28, bodyW*0.28].forEach((wx, i) => {
+      const wy = bodyH*0.11;
+      ctx.save();
+      ctx.translate(wx, wy);
+      ctx.fillStyle = '#060606';
+      ctx.beginPath(); ctx.arc(0,0,wheelR*1.15,0,Math.PI*2); ctx.fill();
+      const rim = ctx.createRadialGradient(0,0,wheelR*0.1,0,0,wheelR);
+      rim.addColorStop(0,'#d9dee3'); rim.addColorStop(0.55,'#8a949f'); rim.addColorStop(1,'#2a3138');
+      ctx.fillStyle = rim;
+      ctx.beginPath(); ctx.arc(0,0,wheelR*0.78,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.5)';
+      ctx.lineWidth = 2;
+      for(let k=0;k<6;k++){
+        ctx.rotate(Math.PI/3);
+        ctx.beginPath();
+        ctx.moveTo(0,0);
+        ctx.lineTo(wheelR*0.62,0);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#111';
+      ctx.beginPath(); ctx.arc(0,0,wheelR*0.18,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    });
+
+    ctx.fillStyle = '#1b1b1b';
+    roundRect(-bodyW*0.56, -bodyH*0.12, bodyW*0.13, bodyH*0.07, 8*DPR); ctx.fill();
+    roundRect(bodyW*0.43, -bodyH*0.12, bodyW*0.13, bodyH*0.07, 8*DPR); ctx.fill();
+
+    ctx.fillStyle = '#0a0a0a';
+    roundRect(-bodyW*0.44, -bodyH*0.2, bodyW*0.08, bodyH*0.05, 5*DPR); ctx.fill();
+    roundRect(bodyW*0.36, -bodyH*0.2, bodyW*0.08, bodyH*0.05, 5*DPR); ctx.fill();
+
+    ctx.fillStyle = '#d7dde4';
+    roundRect(-bodyW*0.08, -bodyH*0.28, bodyW*0.16, bodyH*0.05, 5*DPR); ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.fillRect(-bodyW*0.012, -bodyH*0.28, bodyW*0.024, bodyH*0.05);
+
+    ctx.restore();
+  }
+
+  function roundRect(x,y,w,h,r){
+    const rr = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr,y);
+    ctx.arcTo(x+w,y,x+w,y+h,rr);
+    ctx.arcTo(x+w,y+h,x,y+h,rr);
+    ctx.arcTo(x,y+h,x,y,rr);
+    ctx.arcTo(x,y,x+w,y,rr);
+    ctx.closePath();
+  }
+
+  function drawTraffic(){
+    for(const car of traffic){
+      const rel = car.z - distance;
+      if (rel < 5) continue;
+      const y = H*0.78 - rel * 0.95 * DPR;
+      if (y < H*0.18 || y > H*0.9) continue;
+      const s = clamp(1300 / (rel+300), 0.18, 1.05);
+      const x = W*0.5 + (car.x + roadX(car.z)*0.8) * W*0.22 * s;
+      const w = 58*DPR*s, h = 92*DPR*s;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(1,1);
+      const g = ctx.createLinearGradient(-w/2, -h/2, w/2, h/2);
+      g.addColorStop(0, car.color);
+      g.addColorStop(0.55, '#ffffff');
+      g.addColorStop(1, '#111');
+      ctx.fillStyle = g;
+      roundRect(-w/2, -h/2, w, h*0.72, 12*DPR*s); ctx.fill();
+      ctx.fillStyle = 'rgba(25,35,50,.9)';
+      roundRect(-w*0.24, -h*0.42, w*0.48, h*0.2, 8*DPR*s); ctx.fill();
+      ctx.fillStyle = '#111';
+      ctx.beginPath(); ctx.ellipse(-w*0.24, h*0.28, w*0.16, h*0.12, 0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(w*0.24, h*0.28, w*0.16, h*0.12, 0,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawSpeedo(){
+    sctx.clearRect(0,0,300,300);
+    const cx=150, cy=150, r=112;
+    const bg = sctx.createRadialGradient(cx,cy,20,cx,cy,r);
+    bg.addColorStop(0,'rgba(255,255,255,.18)');
+    bg.addColorStop(1,'rgba(255,255,255,0)');
+    sctx.fillStyle = bg;
+    sctx.beginPath(); sctx.arc(cx,cy,r,0,Math.PI*2); sctx.fill();
+    sctx.strokeStyle='rgba(255,255,255,.12)';
+    sctx.lineWidth=4;
+    sctx.beginPath(); sctx.arc(cx,cy,r-8,0,Math.PI*2); sctx.stroke();
+
+    const max=260, val = clamp(speed*3.6, 0, max);
+    for(let i=0;i<=26;i++){
+      const a = Math.PI*0.76 + (i/26)*Math.PI*1.48;
+      const len = i%5===0 ? 18 : 10;
+      sctx.strokeStyle = i/26 < 0.72 ? 'rgba(255,255,255,.55)' : 'rgba(255,90,90,.8)';
+      sctx.lineWidth = i%5===0 ? 4 : 2;
+      sctx.beginPath();
+      sctx.moveTo(cx + Math.cos(a)*(r-18), cy + Math.sin(a)*(r-18));
+      sctx.lineTo(cx + Math.cos(a)*(r-18-len), cy + Math.sin(a)*(r-18-len));
+      sctx.stroke();
+    }
+    const a = Math.PI*0.76 + (val/max)*Math.PI*1.48;
+    sctx.strokeStyle = '#ff3b3b';
+    sctx.lineWidth = 6;
+    sctx.beginPath();
+    sctx.moveTo(cx,cy);
+    sctx.lineTo(cx + Math.cos(a)*(r-34), cy + Math.sin(a)*(r-34));
+    sctx.stroke();
+    sctx.fillStyle = '#fff';
+    sctx.beginPath(); sctx.arc(cx,cy,10,0,Math.PI*2); sctx.fill();
+
+    sctx.fillStyle='#fff';
+    sctx.font='bold 34px Arial';
+    sctx.textAlign='center';
+    sctx.fillText(Math.round(val), cx, cy+14);
+    sctx.font='bold 14px Arial';
+    sctx.fillStyle='rgba(255,255,255,.8)';
+    sctx.fillText('km/h', cx, cy+36);
+  }
+
+  function update(dt){
+    if (overlay.style.display !== 'none') return;
+    const accel = keys['w'] || keys['arrowup'];
+    const brake = keys['s'] || keys['arrowdown'];
+    const left = keys['a'] || keys['arrowleft'];
+    const right = keys['d'] || keys['arrowright'];
+    const hand = keys[' '];
+
+    if (!crashed){
+      if (accel) speed += 42 * dt;
+      else speed -= 16 * dt;
+      if (brake) speed -= 60 * dt;
+      if (hand) speed -= 38 * dt;
+      speed = clamp(speed, 0, 95);
+
+      const steer = (right?1:0) - (left?1:0);
+      playerX += steer * dt * (0.85 + speed/80) * 1.2;
+      playerX *= (1 - dt*0.9);
+      playerX = clamp(playerX, -1.15, 1.15);
+
+      roadTargetCurve = Math.sin(distance*0.0008) * 0.9 + Math.sin(distance*0.0025) * 0.35;
+      roadCurve = lerp(roadCurve, roadTargetCurve, dt*0.7);
+      roadOffset += roadCurve * dt * speed * 0.08;
+
+      distance += speed * dt * 0.01;
+      score += Math.floor(speed * dt * 4);
+
+      const lanePos = playerX;
+      for(const car of traffic){
+        car.z -= speed * dt * 22 * car.speed;
+        if (car.z < 12){
+          car.z += 1300 + Math.random()*500;
+          car.lane = (Math.random() * 3 | 0) - 1;
+          car.x = car.lane * 0.55 + (Math.random()*0.12-0.06);
+          car.color = ['#e53935','#00acc1','#fdd835','#8e24aa','#ffffff'][Math.random()*5|0];
+        }
+        const rel = car.z - (distance*22);
+        if (rel > 0 && rel < 18){
+          if (Math.abs(lanePos - car.x) < 0.26 && speed > 15){
+            crashed = true;
+            shake = 12;
+          }
+        }
+      }
+    } else {
+      speed -= 22 * dt;
+      if (speed < 0) speed = 0;
+      shake = Math.max(0, shake - dt*10);
+      if (speed <= 0 && Math.random() < 0.02) overlay.style.display = 'grid';
+    }
+
+    statsEl.innerHTML = `Speed: ${Math.round(speed*3.6)} km/h<br>Distance: ${distance.toFixed(1)} km<br>Score: ${score}`;
+    statusEl.innerHTML = `Grip: ${speed > 55 ? 'Sport' : 'Good'}<br>Traffic: ${crashed ? 'Crash' : (speed > 45 ? 'Busy' : 'Light')}<br>Mode: Endless Run`;
+  }
+
+  let last = performance.now();
+  function frame(t){
+    const dt = Math.min(0.033, (t-last)/1000);
+    last = t;
+    update(dt);
+    drawBackground();
+    ctx.save();
+    if (shake > 0) ctx.translate((Math.random()-0.5)*shake*DPR, (Math.random()-0.5)*shake*DPR);
+    drawRoad();
+    drawTraffic();
+    drawCar();
+    ctx.restore();
+
+    const roadShade = ctx.createLinearGradient(0,H*0.62,0,H);
+    roadShade.addColorStop(0,'rgba(0,0,0,0)');
+    roadShade.addColorStop(1,'rgba(0,0,0,.32)');
+    ctx.fillStyle = roadShade;
+    ctx.fillRect(0,H*0.66,W,H*0.34);
+
+    drawSpeedo();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  setInterval(() => {
+    if (overlay.style.display === 'none' && !crashed) return;
+  }, 1000);
+
+  addEventListener('keydown', e => {
+    if (e.key === 'Enter' && overlay.style.display !== 'none') overlay.style.display = 'none';
+  });
+
+  reset();
+})();
+</script>
+</body>
+</html>

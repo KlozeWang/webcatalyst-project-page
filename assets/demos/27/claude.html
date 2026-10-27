@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>A* Patrol Chase</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #1a1a2e;
+    color: #eee;
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px;
+  }
+  h1 { margin-bottom: 8px; color: #4ecca3; text-shadow: 0 0 10px #4ecca3; }
+  #info { margin-bottom: 8px; font-size: 14px; }
+  #hud { display: flex; gap: 20px; margin-bottom: 8px; font-size: 18px; }
+  #hud span { color: #4ecca3; }
+  canvas {
+    background: #0f3460;
+    border: 3px solid #4ecca3;
+    border-radius: 6px;
+    box-shadow: 0 0 30px rgba(78, 204, 163, 0.4);
+    touch-action: none;
+    max-width: 100%;
+    height: auto;
+  }
+  #overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    z-index: 10;
+  }
+  #overlay h2 { color: #e94560; font-size: 42px; margin-bottom: 16px; }
+  #overlay p { margin-bottom: 16px; max-width: 400px; text-align: center; }
+  button {
+    background: #4ecca3; color: #1a1a2e;
+    border: none; padding: 12px 28px;
+    font-size: 18px; font-weight: bold;
+    border-radius: 6px; cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover { background: #6dffc7; }
+  .hidden { display: none !important; }
+  #controls { margin-top: 10px; display: none; gap: 8px; }
+  @media (max-width: 700px) {
+    #controls { display: grid; grid-template-columns: repeat(3, 60px); gap: 6px; }
+    #controls button { padding: 18px 0; font-size: 22px; }
+    .cspace { visibility: hidden; }
+  }
+</style>
+</head>
+<body>
+<h1>★ A* Patrol Chase ★</h1>
+<div id="info">Arrow keys / WASD to move. Collect yellow gems. Avoid the red guards!</div>
+<div id="hud">Score: <span id="score">0</span> &nbsp; Gems: <span id="gems">0</span>/<span id="totalGems">0</span></div>
+<canvas id="game" width="640" height="640"></canvas>
+<div id="controls">
+  <button class="cspace"></button>
+  <button data-dir="up">▲</button>
+  <button class="cspace"></button>
+  <button data-dir="left">◀</button>
+  <button class="cspace"></button>
+  <button data-dir="right">▶</button>
+  <button class="cspace"></button>
+  <button data-dir="down">▼</button>
+  <button class="cspace"></button>
+</div>
+
+<div id="overlay">
+  <h2 id="ovTitle">Ready?</h2>
+  <p id="ovMsg">Move with arrows/WASD. Enemies patrol until you get close — then they hunt you with A* pathfinding. Collect all gems to win!</p>
+  <button id="startBtn">START</button>
+</div>
+
+<script>
+// ===== Grid Map (1 = wall, 0 = empty) =====
+const MAP = [
+  "1111111111111111",
+  "1000000010000001",
+  "1011110010111101",
+  "1010000000000101",
+  "1010111110111101",
+  "1000100010001001",
+  "1110101110101111",
+  "1000100000100001",
+  "1011101111101101",
+  "1000001000001001",
+  "1110111011101111",
+  "1000001000000001",
+  "1011110111110101",
+  "1010000000000101",
+  "1000111110111001",
+  "1111111111111111",
+];
+const ROWS = MAP.length, COLS = MAP[0].length;
+const TILE = 40;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = COLS * TILE;
+canvas.height = ROWS * TILE;
+
+function isWall(c, r) {
+  if (c < 0 || r < 0 || c >= COLS || r >= ROWS) return true;
+  return MAP[r][c] === '1';
+}
+
+// ===== Audio =====
+let actx;
+function beep(freq, dur=0.1, type='square', vol=0.1) {
+  try {
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.value = vol;
+    o.connect(g); g.connect(actx.destination);
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
+    o.stop(actx.currentTime + dur);
+  } catch(e){}
+}
+
+// ===== A* Pathfinding =====
+function astar(start, goal) {
+  const key = (c,r) => c+","+r;
+  const open = new Map();
+  const came = new Map();
+  const g = new Map();
+  const startK = key(start.c,start.r);
+  g.set(startK, 0);
+  open.set(startK, {c:start.c, r:start.r, f: Math.abs(goal.c-start.c)+Math.abs(goal.r-start.r)});
+  
+  while (open.size) {
+    // pick lowest f
+    let curK=null, cur=null, bestF=Infinity;
+    for (const [k,v] of open) if (v.f < bestF){bestF=v.f; curK=k; cur=v;}
+    if (cur.c===goal.c && cur.r===goal.r) {
+      const path = [];
+      let k = curK;
+      while (k) { const [c,r] = k.split(',').map(Number); path.push({c,r}); k = came.get(k); }
+      return path.reverse();
+    }
+    open.delete(curK);
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+    for (const [dc,dr] of dirs) {
+      const nc=cur.c+dc, nr=cur.r+dr;
+      if (isWall(nc,nr)) continue;
+      const nk = key(nc,nr);
+      const tg = g.get(curK)+1;
+      if (tg < (g.get(nk) ?? Infinity)) {
+        came.set(nk, curK);
+        g.set(nk, tg);
+        const f = tg + Math.abs(goal.c-nc)+Math.abs(goal.r-nr);
+        open.set(nk, {c:nc,r:nr,f});
+      }
+    }
+  }
+  return null;
+}
+
+// ===== Player =====
+class Player {
+  constructor(c, r) {
+    this.x = c*TILE + TILE/2;
+    this.y = r*TILE + TILE/2;
+    this.speed = 2.6;
+    this.radius = TILE*0.35;
+    this.dir = {x:0,y:0};
+    this.anim = 0;
+  }
+  update(input) {
+    let dx = (input.right?1:0) - (input.left?1:0);
+    let dy = (input.down?1:0) - (input.up?1:0);
+    if (dx && dy) { dx*=0.7071; dy*=0.7071; }
+    this.tryMove(dx*this.speed, 0);
+    this.tryMove(0, dy*this.speed);
+    if (dx||dy) this.anim += 0.2;
+  }
+  tryMove(dx, dy) {
+    const nx = this.x + dx, ny = this.y + dy;
+    // check corners around new pos
+    const r = this.radius;
+    const points = [[nx-r,ny-r],[nx+r,ny-r],[nx-r,ny+r],[nx+r,ny+r]];
+    for (const [px,py] of points) {
+      if (isWall(Math.floor(px/TILE), Math.floor(py/TILE))) return;
+    }
+    this.x = nx; this.y = ny;
+  }
+  draw() {
+    // body
+    ctx.fillStyle = '#4ecca3';
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+    ctx.fill();
+    // eyes
+    ctx.fillStyle = '#1a1a2e';
+    const bob = Math.sin(this.anim)*2;
+    ctx.beginPath();
+    ctx.arc(this.x-5, this.y-3+bob*0.2, 3, 0, Math.PI*2);
+    ctx.arc(this.x+5, this.y-3+bob*0.2, 3, 0, Math.PI*2);
+    ctx.fill();
+  }
+  cell() { return {c: Math.floor(this.x/TILE), r: Math.floor(this.y/TILE)}; }
+}
+
+// ===== Enemy =====
+class Enemy {
+  constructor(patrol, color='#e94560') {
+    this.patrol = patrol; // array of {c,r}
+    this.patrolIdx = 0;
+    const p = patrol[0];
+    this.x = p.c*TILE + TILE/2;
+    this.y = p.r*TILE + TILE/2;
+    this.speed = 1.7;
+    this.radius = TILE*0.35;
+    this.color = color;
+    this.path = [];
+    this.chaseDist = 6; // tiles
+    this.state = 'patrol';
+    this.repathTimer = 0;
+    this.anim = 0;
+  }
+  update(player) {
+    const myCell = {c: Math.floor(this.x/TILE), r: Math.floor(this.y/TILE)};
+    const pCell = player.cell();
+    const dist = Math.hypot(this.x-player.x, this.y-player.y) / TILE;
+    
+    this.state = dist < this.chaseDist ? 'chase' : 'patrol';
+    
+    this.repathTimer--;
+    if (this.repathTimer <= 0 || !this.path || this.path.length<2) {
+      let goal;
+      if (this.state === 'chase') {
+        goal = pCell;
+        this.repathTimer = 15;
+      } else {
+        goal = this.patrol[this.patrolIdx];
+        if (myCell.c === goal.c && myCell.r === goal.r) {
+          this.patrolIdx = (this.patrolIdx+1) % this.patrol.length;
+          goal = this.patrol[this.patrolIdx];
+        }
+        this.repathTimer = 30;
+      }
+      this.path = astar(myCell, goal) || [];
+    }
+    
+    // Move toward next path node
+    if (this.path.length >= 2) {
+      const next = this.path[1];
+      const tx = next.c*TILE + TILE/2;
+      const ty = next.r*TILE + TILE/2;
+      const dx = tx - this.x, dy = ty - this.y;
+      const d = Math.hypot(dx,dy);
+      if (d < 2) {
+        this.path.shift();
+      } else {
+        this.x += (dx/d)*this.speed;
+        this.y += (dy/d)*this.speed;
+        this.anim += 0.2;
+      }
+    }
+  }
+  draw() {
+    // path visualization
+    if (this.path && this.path.length > 1) {
+      ctx.strokeStyle = this.state==='chase' ? 'rgba(233,69,96,0.5)' : 'rgba(255,255,255,0.2)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y);
+      for (let i=1; i<this.path.length; i++) {
+        ctx.lineTo(this.path[i].c*TILE+TILE/2, this.path[i].r*TILE+TILE/2);
+      }
+      ctx.stroke();
+    }
+    // body
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+    ctx.fill();
+    // angry eyes
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(this.x-5, this.y-3, 3.5, 0, Math.PI*2);
+    ctx.arc(this.x+5, this.y-3, 3.5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(this.x-5, this.y-3, 1.8, 0, Math.PI*2);
+    ctx.arc(this.x+5, this.y-3, 1.8, 0, Math.PI*2);
+    ctx.fill();
+    // alert
+    if (this.state === 'chase') {
+      ctx.fillStyle = '#ffeb3b';
+      ctx.font = 'bold 16px Courier';
+      ctx.fillText('!', this.x-3, this.y-this.radius-4);
+    }
+  }
+}
+
+// ===== Game State =====
+let player, enemies, gems, score, gemsCollected, totalGems, running, gameOver;
+const input = {up:false,down:false,left:false,right:false};
+
+function initGame() {
+  player = new Player(1, 1);
+  enemies = [
+    new Enemy([{c:14,r:1},{c:14,r:6},{c:8,r:6},{c:8,r:1}], '#e94560'),
+    new Enemy([{c:1,r:14},{c:7,r:14},{c:7,r:9},{c:1,r:9}], '#ff8c42'),
+    new Enemy([{c:14,r:14},{c:11,r:11},{c:14,r:11}], '#c724b1'),
+  ];
+  // place gems in open spaces
+  gems = [];
+  const spots = [];
+  for (let r=1; r<ROWS-1; r++) for (let c=1; c<COLS-1; c++) {
+    if (!isWall(c,r) && !(c<=2 && r<=2)) spots.push({c,r});
+  }
+  spots.sort(()=>Math.random()-0.5);
+  for (let i=0;i<12;i++) gems.push(spots[i]);
+  totalGems = gems.length;
+  gemsCollected = 0;
+  score = 0;
+  running = true;
+  gameOver = false;
+  document.getElementById('totalGems').textContent = totalGems;
+  updateHUD();
+}
+
+function updateHUD() {
+  document.getElementById('score').textContent = score;
+  document.getElementById('gems').textContent = gemsCollected;
+}
+
+// ===== Drawing =====
+function drawMap() {
+  for (let r=0; r<ROWS; r++) {
+    for (let c=0; c<COLS; c++) {
+      if (isWall(c,r)) {
+        ctx.fillStyle = '#16213e';
+        ctx.fillRect(c*TILE, r*TILE, TILE, TILE);
+        ctx.strokeStyle = '#0a1428';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(c*TILE, r*TILE, TILE, TILE);
+      } else {
+        // subtle dot
+        ctx.fillStyle = 'rgba(255,255,255,0.03)';
+        ctx.fillRect(c*TILE, r*TILE, TILE, TILE);
+      }
+    }
+  }
+}
+
+function drawGems() {
+  const t = performance.now()/300;
+  for (const g of gems) {
+    const x = g.c*TILE+TILE/2, y = g.r*TILE+TILE/2 + Math.sin(t+g.c)*2;
+    ctx.fillStyle = '#ffd93d';
+    ctx.beginPath();
+    ctx.moveTo(x, y-8);
+    ctx.lineTo(x+6, y);
+    ctx.lineTo(x, y+8);
+    ctx.lineTo(x-6, y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#fff8a0';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+}
+
+// ===== Game Loop =====
+function loop() {
+  if (running) {
+    player.update(input);
+    for (const e of enemies) e.update(player);
+    
+    // gem collection
+    for (let i=gems.length-1; i>=0; i--) {
+      const g = gems[i];
+      const gx = g.c*TILE+TILE/2, gy = g.r*TILE+TILE/2;
+      if (Math.hypot(player.x-gx, player.y-gy) < TILE*0.5) {
+        gems.splice(i,1);
+        gemsCollected++;
+        score += 100;
+        beep(880, 0.1, 'square');
+        updateHUD();
+        if (gemsCollected === totalGems) winGame();
+      }
+    }
+    // collision with enemy
+    for (const e of enemies) {
+      if (Math.hypot(player.x-e.x, player.y-e.y) < player.radius+e.radius-4) {
+        endGame();
+        break;
+      }
+    }
+  }
+  
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawMap();
+  drawGems();
+  for (const e of enemies) e.draw();
+  if (player) player.draw();
+  
+  requestAnimationFrame(loop);
+}
+
+function endGame() {
+  running = false; gameOver = true;
+  beep(110, 0.4, 'sawtooth', 0.15);
+  setTimeout(()=>beep(80,0.5,'sawtooth',0.15), 150);
+  document.getElementById('ovTitle').textContent = 'GAME OVER';
+  document.getElementById('ovMsg').textContent = `You scored ${score} points and collected ${gemsCollected}/${totalGems} gems.`;
+  document.getElementById('startBtn').textContent = 'RESTART';
+  document.getElementById('overlay').classList.remove('hidden');
+}
+function winGame() {
+  running = false;
+  beep(660,0.1); setTimeout(()=>beep(880,0.1),100); setTimeout(()=>beep(1320,0.2),200);
+  document.getElementById('ovTitle').textContent = 'YOU WIN! ★';
+  document.getElementById('ovTitle').style.color = '#ffd93d';
+  document.getElementById('ovMsg').textContent = `Amazing! All gems collected! Score: ${score}`;
+  document.getElementById('startBtn').textContent = 'PLAY AGAIN';
+  document.getElementById('overlay').classList.remove('hidden');
+}
+
+// ===== Input =====
+const keyMap = {
+  ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right',
+  w:'up', s:'down', a:'left', d:'right', W:'up', S:'down', A:'left', D:'right'
+};
+window.addEventListener('keydown', e => { if (keyMap[e.key]) { input[keyMap[e.key]]=true; e.preventDefault(); }});
+window.addEventListener('keyup', e => { if (keyMap[e.key]) { input[keyMap[e.key]]=false; e.preventDefault(); }});
+
+// touch buttons
+document.querySelectorAll('#controls button[data-dir]').forEach(b => {
+  const d = b.dataset.dir;
+  const on = e => { e.preventDefault(); input[d]=true; };
+  const off = e => { e.preventDefault(); input[d]=false; };
+  b.addEventListener('touchstart', on);
+  b.addEventListener('touchend', off);
+  b.addEventListener('mousedown', on);
+  b.addEventListener('mouseup', off);
+  b.addEventListener('mouseleave', off);
+});
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  document.getElementById('overlay').classList.add('hidden');
+  document.getElementById('ovTitle').style.color = '#e94560';
+  initGame();
+});
+
+initGame();
+running = false;
+loop();
+</script>
+</body>
+</html>

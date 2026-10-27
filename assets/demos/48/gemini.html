@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hacker Mindset Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --terminal-green: #0f0;
+            --terminal-dark: #050505;
+        }
+        body {
+            background-color: var(--terminal-dark);
+            color: var(--terminal-green);
+            font-family: 'VT323', monospace;
+            overflow: hidden;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+        }
+        
+        /* CRT Effect */
+        .crt::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2;
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+        }
+        .crt {
+            animation: flicker 0.15s infinite;
+        }
+        @keyframes flicker {
+            0% { opacity: 0.95; }
+            5% { opacity: 0.85; }
+            10% { opacity: 0.95; }
+            100% { opacity: 1; }
+        }
+
+        .terminal-container {
+            width: 90%;
+            max-width: 800px;
+            height: 80vh;
+            border: 2px solid var(--terminal-green);
+            padding: 20px;
+            position: relative;
+            background-color: rgba(0, 20, 0, 0.8);
+            box-shadow: 0 0 10px var(--terminal-green), inset 0 0 10px var(--terminal-green);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .output {
+            flex-grow: 1;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 1.2rem;
+            line-height: 1.2;
+            text-shadow: 0 0 5px var(--terminal-green);
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: transparent;
+            color: var(--terminal-green);
+            border: 1px solid var(--terminal-green);
+            padding: 5px 15px;
+            font-family: 'VT323', monospace;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        button:hover:not(:disabled) {
+            background: var(--terminal-green);
+            color: var(--terminal-dark);
+            box-shadow: 0 0 10px var(--terminal-green);
+        }
+        
+        button:disabled {
+            border-color: #333;
+            color: #333;
+            cursor: not-allowed;
+        }
+
+        .input-group {
+            display: flex;
+            width: 100%;
+        }
+
+        input[type="text"] {
+            flex-grow: 1;
+            background: transparent;
+            border: 1px solid var(--terminal-green);
+            color: var(--terminal-green);
+            font-family: 'VT323', monospace;
+            font-size: 1.2rem;
+            padding: 5px;
+            outline: none;
+        }
+
+        input[type="text"]:focus {
+            box-shadow: 0 0 5px var(--terminal-green);
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 10px;
+            height: 1.2rem;
+            background-color: var(--terminal-green);
+            animation: blink 1s step-end infinite;
+            vertical-align: text-bottom;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        .header-bar {
+            border-bottom: 1px solid var(--terminal-green);
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.2rem;
+        }
+
+        .trace-bar-container {
+            width: 150px;
+            height: 15px;
+            border: 1px solid var(--terminal-green);
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 10px;
+        }
+
+        .trace-bar {
+            height: 100%;
+            width: 0%;
+            background-color: red;
+            transition: width 0.3s;
+        }
+        
+        .hidden { display: none !important; }
+        .text-red { color: #f00; text-shadow: 0 0 5px #f00; }
+        .text-yellow { color: #ff0; text-shadow: 0 0 5px #ff0; }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--terminal-dark); border-left: 1px solid #333; }
+        ::-webkit-scrollbar-thumb { background: var(--terminal-green); }
+    </style>
+</head>
+<body class="crt">
+
+    <div class="terminal-container" id="game-container">
+        <div class="header-bar">
+            <span>TERMINAL v2.4.1 // CONNECTION: SECURE</span>
+            <span id="trace-indicator" class="hidden">TRACE PROGRESS: <div class="trace-bar-container"><div class="trace-bar" id="trace-bar"></div></div></span>
+        </div>
+        
+        <div class="output" id="output"></div>
+
+        <!-- Start Controls -->
+        <div class="controls" id="controls-start">
+            <button onclick="startGame()">Init Sequence</button>
+        </div>
+
+        <!-- Recon Controls -->
+        <div class="controls hidden" id="controls-recon">
+            <button id="btn-nmap" onclick="runCommand('nmap')">Port Scan (-sV)</button>
+            <button id="btn-osint" onclick="runCommand('osint')">OSINT Gather</button>
+            <button id="btn-exploit" onclick="enterExploitPhase()" disabled>Proceed to Exploit</button>
+        </div>
+
+        <!-- Exploit Controls -->
+        <div class="controls hidden" id="controls-exploit">
+            <div class="input-group">
+                <span class="mr-2 pt-1 text-xl">root@target:~# </span>
+                <input type="text" id="exploit-input" placeholder="Enter password or payload..." autocomplete="off">
+                <button onclick="attemptExploit()">Execute</button>
+            </div>
+        </div>
+        
+        <!-- End Controls -->
+        <div class="controls hidden" id="controls-end">
+            <button onclick="location.reload()">Restart Terminal</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Web Audio API Setup ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            if (type === 'type') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(800 + Math.random() * 200, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.02);
+            } else if (type === 'error') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.3);
+                gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+            } else if (type === 'success') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.2);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.4);
+            }
+        }
+
+        // --- Game State & Data ---
+        const outputEl = document.getElementById('output');
+        let isTyping = false;
+        let reconData = { nmap: false, osint: false };
+        let traceLevel = 0;
+        const maxTrace = 3;
+
+        const targetInfo = {
+            company: "OmniCorp",
+            year: 1987,
+            password: "OmniCorp1987"
+        };
+
+        const texts = {
+            intro: `[SYSTEM] Booting hacker persona...
+[SYSTEM] Mindset: Active. Observe, Analyze, Exploit.
+[MISSION] Penetrate the mainframe of ${targetInfo.company}.
+[DIRECTIVE] 1. Reconnaissance (Gather intel).
+[DIRECTIVE] 2. Exploitation (Breach).
+[WARNING] Trace algorithms active. Leave no footprints.
+
+Awaiting input...`,
+            
+            nmap: `> nmap -sV target.local
+Starting Nmap 7.92...
+Scanning target (192.168.1.104)
+Discovered open port 22/tcp on 192.168.1.104
+Discovered open port 80/tcp on 192.168.1.104
+
+PORT   STATE SERVICE VERSION
+22/tcp open  ssh     OpenSSH 8.2p1 (protocol 2.0)
+80/tcp open  http    Apache httpd 2.4.41
+
+[ANALYSIS] SSH port open. Potential brute force entry or credential stuffing if intel gathered.`,
+            
+            osint: `> scrape_web target.local && search_db
+Target Website: ${targetInfo.company} Industries.
+[INFO] "Building the future since ${targetInfo.year}."
+[LEAK] Found IT staff memo on pastebin:
+       "Reminder to all sysadmins: Stop using CompanyName+Year as the temporary root password. 
+        It is a security risk. Change immediately upon deployment."
+
+[ANALYSIS] Weak password policy identified. Potential credential construction possible.`,
+
+            exploit_intro: `[PHASE SHIFT] Entering Exploitation.
+Target SSH service targeted.
+Enter password payload based on recon data:`
+        };
+
+        // --- UI Functions ---
+        function switchControls(id) {
+            document.querySelectorAll('.controls').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`controls-${id}`).classList.remove('hidden');
+        }
+
+        async function typeText(text, isHTML = false) {
+            if (isTyping) return;
+            isTyping = true;
+            
+            // Disable all buttons while typing
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(b => b.style.pointerEvents = 'none');
+
+            // Remove existing cursor
+            const existingCursor = document.querySelector('.cursor');
+            if (existingCursor) existingCursor.remove();
+
+            const lines = text.split('\n');
+            for (let i = 0; i < lines.length; i++) {
+                const lineSpan = document.createElement('span');
+                if (lines[i].includes('[WARNING]') || lines[i].includes('CRITICAL')) lineSpan.className = 'text-red';
+                else if (lines[i].includes('[ANALYSIS]') || lines[i].includes('[LEAK]')) lineSpan.className = 'text-yellow';
+                
+                outputEl.appendChild(lineSpan);
+                
+                const cursor = document.createElement('span');
+                cursor.className = 'cursor';
+                outputEl.appendChild(cursor);
+
+                for (let j = 0; j < lines[i].length; j++) {
+                    lineSpan.innerHTML += lines[i].charAt(j);
+                    if (j % 3 === 0) playSound('type');
+                    outputEl.scrollTop = outputEl.scrollHeight;
+                    await new Promise(r => setTimeout(r, 10 + Math.random() * 20));
+                }
+                
+                lineSpan.innerHTML += '\n';
+                cursor.remove();
+                await new Promise(r => setTimeout(r, 100));
+            }
+            
+            const cursor = document.createElement('span');
+            cursor.className = 'cursor';
+            outputEl.appendChild(cursor);
+            outputEl.scrollTop = outputEl.scrollHeight;
+            
+            buttons.forEach(b => b.style.pointerEvents = 'auto');
+            isTyping = false;
+        }
+
+        // --- Game Logic ---
+        function startGame() {
+            outputEl.innerHTML = '';
+            switchControls('recon');
+            typeText(texts.intro);
+        }
+
+        function runCommand(cmd) {
+            if (isTyping) return;
+            
+            let textToType = "";
+            if (cmd === 'nmap') {
+                textToType = '\n' + texts.nmap;
+                reconData.nmap = true;
+                document.getElementById('btn-nmap').disabled = true;
+            } else if (cmd === 'osint') {
+                textToType = '\n' + texts.osint;
+                reconData.osint = true;
+                document.getElementById('btn-osint').disabled = true;
+            }
+
+            typeText(textToType).then(() => {
+                if (reconData.nmap && reconData.osint) {
+                    document.getElementById('btn-exploit').disabled = false;
+                    typeText('\n[SYSTEM] Sufficient intel gathered. Exploitation vector available.');
+                }
+            });
+        }
+
+        function enterExploitPhase() {
+            if (isTyping) return;
+            outputEl.innerHTML = '';
+            document.getElementById('trace-indicator').classList.remove('hidden');
+            switchControls('exploit');
+            typeText(texts.exploit_intro).then(() => {
+                document.getElementById('exploit-input').focus();
+            });
+        }
+
+        function attemptExploit() {
+            if (isTyping) return;
+            const input = document.getElementById('exploit-input');
+            const attempt = input.value.trim();
+            input.value = '';
+            
+            if (attempt === '') return;
+
+            typeText(`\n> SSH attempt with payload: ${attempt}\n...authenticating...`).then(() => {
+                if (attempt === targetInfo.password) {
+                    playSound('success');
+                    handleWin();
+                } else {
+                    playSound('error');
+                    handleFail();
+                }
+            });
+        }
+
+        function handleFail() {
+            traceLevel++;
+            const percent = (traceLevel / maxTrace) * 100;
+            document.getElementById('trace-bar').style.width = `${percent}%`;
+            
+            if (traceLevel >= maxTrace) {
+                switchControls('end');
+                document.getElementById('trace-bar').style.backgroundColor = 'red';
+                typeText(`\n[CRITICAL] ACCESS DENIED. Trace complete.
+[CRITICAL] Source IP compromised. Authorities dispatched.
+[SYSTEM] CONNECTION TERMINATED.`).then(()=>{
+                     document.body.style.background = "#500";
+                });
+            } else {
+                typeText(`\n[WARNING] ACCESS DENIED. Invalid payload. Active trace increased. (${traceLevel}/${maxTrace})`);
+            }
+        }
+
+        function handleWin() {
+            switchControls('end');
+            document.getElementById('trace-indicator').classList.add('hidden');
+            typeText(`\n[SUCCESS] ACCESS GRANTED.
+root@${targetInfo.company.toLowerCase()}:~# 
+[SYSTEM] Mainframe breached. 
+[LESSON] A hacker's mindset relies on gathering information (OSINT/Scanning) to find weak points (Human Error/Bad Policies) before executing the exploit.
+[SYSTEM] Simulation Complete.`).then(()=>{
+                document.body.style.background = "#020";
+            });
+        }
+
+        // Handle Enter key for input
+        document.getElementById('exploit-input').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                attemptExploit();
+            }
+        });
+
+        // Initial setup
+        outputEl.innerHTML = "<span class='cursor'></span>";
+    </script>
+</body>
+</html>

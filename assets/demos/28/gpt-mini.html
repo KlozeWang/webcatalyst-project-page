@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cobrinha Frutífera</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+    font-family: Arial, Helvetica, sans-serif;
+    color: #fff;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #gameWrap {
+    position: relative;
+    width: min(92vw, 720px);
+    aspect-ratio: 1 / 1;
+    max-height: 92vh;
+    border-radius: 18px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    overflow: hidden;
+    background: radial-gradient(circle at top, #1f2937 0%, #0b1220 70%);
+    border: 1px solid rgba(255,255,255,.1);
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+  }
+  .hud {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .topbar {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    text-shadow: 0 2px 8px rgba(0,0,0,.5);
+    font-size: 16px;
+  }
+  .pill {
+    background: rgba(17,24,39,.65);
+    border: 1px solid rgba(255,255,255,.12);
+    padding: 8px 12px;
+    border-radius: 999px;
+    backdrop-filter: blur(6px);
+  }
+  .centerMsg {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 24px;
+  }
+  .card {
+    max-width: 420px;
+    background: rgba(15, 23, 42, .82);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 20px;
+    padding: 22px 20px;
+    box-shadow: 0 18px 48px rgba(0,0,0,.35);
+  }
+  h1 {
+    margin: 0 0 10px;
+    font-size: 28px;
+  }
+  p {
+    margin: 8px 0;
+    line-height: 1.45;
+    color: #dbeafe;
+  }
+  .small {
+    font-size: 13px;
+    color: #cbd5e1;
+    opacity: .95;
+  }
+  .btn {
+    display: inline-block;
+    margin-top: 14px;
+    background: linear-gradient(180deg, #34d399, #10b981);
+    color: #052e2b;
+    font-weight: 800;
+    padding: 10px 16px;
+    border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(16,185,129,.25);
+  }
+  .mobileControls {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 14px;
+    display: none;
+    justify-content: center;
+    gap: 10px;
+    pointer-events: auto;
+  }
+  .mobileControls .pad {
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,.14);
+    background: rgba(17,24,39,.7);
+    color: white;
+    font-size: 24px;
+    display: grid;
+    place-items: center;
+    user-select: none;
+    touch-action: manipulation;
+  }
+  @media (max-width: 768px) {
+    .mobileControls { display: flex; }
+    .topbar { font-size: 14px; }
+    h1 { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<div id="gameWrap">
+  <canvas id="game"></canvas>
+  <div class="hud">
+    <div class="topbar">
+      <div class="pill">Pontos: <span id="score">0</span></div>
+      <div class="pill">Melhor: <span id="best">0</span></div>
+    </div>
+
+    <div id="overlay" class="centerMsg">
+      <div class="card">
+        <h1>Cobrinha Frutífera</h1>
+        <p>Coma as frutas para crescer e ganhar pontos.</p>
+        <p class="small">Use <b>setas</b> ou <b>WASD</b>. No celular, toque nos botões. Evite bater nas paredes e no próprio corpo.</p>
+        <div class="btn">Clique ou toque para começar</div>
+      </div>
+    </div>
+
+    <div class="mobileControls" aria-label="Controles móveis">
+      <div class="pad" data-dir="up">▲</div>
+      <div class="pad" data-dir="left">◀</div>
+      <div class="pad" data-dir="down">▼</div>
+      <div class="pad" data-dir="right">▶</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const overlay = document.getElementById('overlay');
+  const wrap = document.getElementById('gameWrap');
+
+  const gridSize = 20;
+  let cols, rows, cell;
+  let snake, dir, nextDir, fruit, score, best, running, dead, tickRate, lastTime, acc;
+
+  best = Number(localStorage.getItem('snakeBest') || 0);
+  bestEl.textContent = best;
+
+  function resize() {
+    const rect = wrap.getBoundingClientRect();
+    canvas.width = Math.floor(rect.width * devicePixelRatio);
+    canvas.height = Math.floor(rect.height * devicePixelRatio);
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    cols = Math.floor(rect.width / gridSize);
+    rows = Math.floor(rect.height / gridSize);
+    cell = gridSize;
+    draw();
+  }
+
+  function randInt(max) { return Math.floor(Math.random() * max); }
+
+  function spawnFruit() {
+    let f;
+    do {
+      f = { x: randInt(cols), y: randInt(rows) };
+    } while (snake.some(p => p.x === f.x && p.y === f.y));
+    fruit = f;
+  }
+
+  function reset() {
+    const startX = Math.floor(cols / 2);
+    const startY = Math.floor(rows / 2);
+    snake = [
+      { x: startX, y: startY },
+      { x: startX - 1, y: startY },
+      { x: startX - 2, y: startY }
+    ];
+    dir = { x: 1, y: 0 };
+    nextDir = { x: 1, y: 0 };
+    score = 0;
+    tickRate = 120;
+    dead = false;
+    running = false;
+    acc = 0;
+    scoreEl.textContent = score;
+    spawnFruit();
+    overlay.style.display = 'grid';
+    overlay.querySelector('h1').textContent = 'Cobrinha Frutífera';
+    overlay.querySelector('.btn').textContent = 'Clique ou toque para começar';
+    draw();
+  }
+
+  function start() {
+    if (dead) reset();
+    running = true;
+    overlay.style.display = 'none';
+    lastTime = performance.now();
+    requestAnimationFrame(loop);
+  }
+
+  function gameOver() {
+    dead = true;
+    running = false;
+    if (score > best) {
+      best = score;
+      localStorage.setItem('snakeBest', best);
+      bestEl.textContent = best;
+    }
+    overlay.style.display = 'grid';
+    overlay.querySelector('h1').textContent = 'Fim de jogo';
+    overlay.querySelector('p').innerHTML = `Você fez <b>${score}</b> ponto(s).`;
+    overlay.querySelector('.small').textContent = 'Toque para jogar novamente.';
+    overlay.querySelector('.btn').textContent = 'Jogar de novo';
+  }
+
+  function setDirection(nx, ny) {
+    if (dir.x === -nx && dir.y === -ny) return;
+    nextDir = { x: nx, y: ny };
+  }
+
+  function step() {
+    dir = nextDir;
+    const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+    if (head.x < 0 || head.y < 0 || head.x >= cols || head.y >= rows) {
+      gameOver();
+      return;
+    }
+
+    if (snake.some(p => p.x === head.x && p.y === head.y)) {
+      gameOver();
+      return;
+    }
+
+    snake.unshift(head);
+
+    if (head.x === fruit.x && head.y === fruit.y) {
+      score++;
+      scoreEl.textContent = score;
+      spawnFruit();
+      tickRate = Math.max(55, 120 - score * 2);
+    } else {
+      snake.pop();
+    }
+  }
+
+  function drawGrid() {
+    const w = canvas.width / devicePixelRatio;
+    const h = canvas.height / devicePixelRatio;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= w; x += cell) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= h; y += cell) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawFruit() {
+    const fx = fruit.x * cell;
+    const fy = fruit.y * cell;
+    const r = cell * 0.38;
+    const cx = fx + cell / 2;
+    const cy = fy + cell / 2;
+
+    const grad = ctx.createRadialGradient(cx - 4, cy - 6, 4, cx, cy, r + 8);
+    grad.addColorStop(0, '#fde68a');
+    grad.addColorStop(0.4, '#fb7185');
+    grad.addColorStop(1, '#ef4444');
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(239,68,68,.55)';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,255,255,.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = '#16a34a';
+    ctx.beginPath();
+    ctx.ellipse(cx + 7, cy - 12, 7, 4, -0.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawSnake() {
+    snake.forEach((p, i) => {
+      const x = p.x * cell;
+      const y = p.y * cell;
+      const inset = i === 0 ? 2 : 3;
+      const radius = 8;
+      const isHead = i === 0;
+
+      ctx.save();
+      if (isHead) {
+        ctx.shadowColor = 'rgba(74,222,128,.5)';
+        ctx.shadowBlur = 14;
+      }
+
+      const grad = ctx.createLinearGradient(x, y, x + cell, y + cell);
+      grad.addColorStop(0, isHead ? '#86efac' : '#22c55e');
+      grad.addColorStop(1, isHead ? '#10b981' : '#15803d');
+      ctx.fillStyle = grad;
+      roundRect(ctx, x + inset, y + inset, cell - inset * 2, cell - inset * 2, radius);
+      ctx.fill();
+
+      if (isHead) {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#052e2b';
+        const eyeY = y + cell * 0.38;
+        const eyeX1 = x + cell * 0.36;
+        const eyeX2 = x + cell * 0.64;
+        ctx.beginPath();
+        ctx.arc(eyeX1, eyeY, 2.2, 0, Math.PI * 2);
+        ctx.arc(eyeX2, eyeY, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    });
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  }
+
+  function drawBackground() {
+    const w = canvas.width / devicePixelRatio;
+    const h = canvas.height / devicePixelRatio;
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#0f172a');
+    g.addColorStop(1, '#111827');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  function draw() {
+    drawBackground();
+    drawGrid();
+    if (fruit) drawFruit();
+    if (snake) drawSnake();
+    if (!running && !dead) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,255,255,0.03)';
+      ctx.fillRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
+      ctx.restore();
+    }
+  }
+
+  function loop(now) {
+    if (!running) { draw(); return; }
+    const dt = now - lastTime;
+    lastTime = now;
+    acc += dt;
+    while (acc >= tickRate && running) {
+      step();
+      acc -= tickRate;
+    }
+    draw();
+    if (running) requestAnimationFrame(loop);
+  }
+
+  window.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'arrowup' || k === 'w') setDirection(0, -1);
+    else if (k === 'arrowdown' || k === 's') setDirection(0, 1);
+    else if (k === 'arrowleft' || k === 'a') setDirection(-1, 0);
+    else if (k === 'arrowright' || k === 'd') setDirection(1, 0);
+    else if (k === 'enter' || k === ' ') {
+      if (!running) start();
+    }
+  });
+
+  overlay.addEventListener('pointerdown', () => {
+    if (!running) start();
+    else if (dead) { reset(); start(); }
+  });
+
+  document.querySelectorAll('.pad').forEach(btn => {
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const d = btn.dataset.dir;
+      if (!running) start();
+      if (d === 'up') setDirection(0, -1);
+      if (d === 'down') setDirection(0, 1);
+      if (d === 'left') setDirection(-1, 0);
+      if (d === 'right') setDirection(1, 0);
+    });
+  });
+
+  window.addEventListener('resize', resize);
+  resize();
+  reset();
+})();
+</script>
+</body>
+</html>

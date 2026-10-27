@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Duel: Block, Dodge, Counter</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #0f1116; overflow: hidden; font-family: Arial, Helvetica, sans-serif; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+(() => {
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  const keys = {};
+  const justPressed = {};
+  const actionKeys = new Set(["KeyA","KeyD","KeyJ","KeyK","KeyL","KeyI","KeyR","Space"]);
+  window.addEventListener("keydown", (e) => {
+    if (actionKeys.has(e.code)) e.preventDefault();
+    if (!keys[e.code]) justPressed[e.code] = true;
+    keys[e.code] = true;
+  });
+  window.addEventListener("keyup", (e) => {
+    keys[e.code] = false;
+  });
+
+  const game = {
+    time: 0,
+    over: false,
+    winner: null,
+    message: "",
+    messageTimer: 0,
+    floorY: 0
+  };
+
+  function fighter(name, isPlayer, x) {
+    return {
+      name, isPlayer, x, y: 0,
+      dir: isPlayer ? 1 : -1,
+      vx: 0,
+      hp: 100,
+      stamina: 100,
+      state: "idle", // idle, attackWindup, attackStrike, dodge, counter, recovery, stun
+      timer: 0,
+      totalTimer: 0,
+      counterActive: false,
+      blocking: false,
+      cooldown: 0,
+      dodgeDir: 0,
+      ai: {
+        think: 0,
+        reactionDelay: 0,
+        queuedReaction: null,
+        blockUntil: 0
+      }
+    };
+  }
+
+  let player = fighter("You", true, 280);
+  let enemy = fighter("Rival", false, 760);
+
+  const meleeRange = 120;
+  const arenaPadding = 80;
+
+  function resetGame() {
+    player = fighter("You", true, Math.max(180, canvas.width * 0.28));
+    enemy = fighter("Rival", false, Math.min(canvas.width - 180, canvas.width * 0.72));
+    game.time = 0;
+    game.over = false;
+    game.winner = null;
+    game.message = "Fight!";
+    game.messageTimer = 1.2;
+  }
+
+  function opponentOf(f) {
+    return f === player ? enemy : player;
+  }
+
+  function setState(f, state, duration) {
+    f.state = state;
+    f.timer = duration;
+    f.totalTimer = duration;
+    if (state !== "counter") f.counterActive = false;
+    if (state !== "idle") f.blocking = false;
+  }
+
+  function canAct(f) {
+    return f.state === "idle";
+  }
+
+  function canBlock(f) {
+    return !["stun","dodge","attackWindup","attackStrike","counter"].includes(f.state) && f.stamina > 3;
+  }
+
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  function showMessage(msg, t = 0.8) {
+    game.message = msg;
+    game.messageTimer = t;
+  }
+
+  function endGame(winnerName) {
+    game.over = true;
+    game.winner = winnerName;
+  }
+
+  function dealDamage(target, amount) {
+    target.hp = Math.max(0, target.hp - amount);
+    if (target.hp <= 0 && !game.over) {
+      endGame(target === player ? "Rival" : "You");
+    }
+  }
+
+  function startStun(f, dur) {
+    setState(f, "stun", dur);
+    f.vx = 0;
+    f.blocking = false;
+  }
+
+  function startAttack(f) {
+    if (!canAct(f) || f.stamina < 18 || f.cooldown > 0 || game.over) return false;
+    f.stamina -= 18;
+    setState(f, "attackWindup", f.isPlayer ? 0.28 : 0.36 + Math.random() * 0.18);
+    f.cooldown = 0.45;
+    return true;
+  }
+
+  function startDodge(f, forcedDir = null) {
+    if (!canAct(f) || f.stamina < 24 || game.over) return false;
+    f.stamina -= 24;
+    let dir = forcedDir;
+    const opp = opponentOf(f);
+
+    if (dir == null) {
+      if (f.isPlayer) {
+        const inputDir = (keys["KeyD"] ? 1 : 0) - (keys["KeyA"] ? 1 : 0);
+        dir = inputDir !== 0 ? inputDir : Math.sign(f.x - opp.x) || -1; // default backstep
+      } else {
+        dir = (Math.random() < 0.72) ? (Math.sign(f.x - opp.x) || 1) : (Math.sign(opp.x - f.x) || -1);
+      }
+    }
+    f.dodgeDir = dir;
+    setState(f, "dodge", 0.28);
+    return true;
+  }
+
+  function startCounter(f) {
+    if (!canAct(f) || f.stamina < 16 || game.over) return false;
+    f.stamina -= 16;
+    setState(f, "counter", 0.30);
+    return true;
+  }
+
+  function resolveAttack(attacker, defender) {
+    const dist = Math.abs(attacker.x - defender.x);
+    if (dist > meleeRange + 16) {
+      if (attacker.isPlayer) showMessage("Your strike missed.");
+      return;
+    }
+
+    if (defender.state === "dodge") {
+      if (attacker.isPlayer) showMessage("Dodged!");
+      else showMessage("You dodged the attack!");
+      return;
+    }
+
+    if (defender.state === "counter" && defender.counterActive) {
+      const riposte = 22 + Math.random() * 6;
+      dealDamage(attacker, riposte);
+      startStun(attacker, 0.85);
+      showMessage(defender.isPlayer ? "Perfect counter!" : "You got countered!");
+      return;
+    }
+
+    if (defender.blocking && canBlock(defender)) {
+      defender.stamina -= 24;
+      const chip = 3 + Math.random() * 2.5;
+      dealDamage(defender, chip);
+      if (defender.stamina <= 0) {
+        defender.stamina = 0;
+        dealDamage(defender, 11);
+        startStun(defender, 0.7);
+        showMessage(defender.isPlayer ? "Guard broken!" : "Enemy guard broken!");
+      } else {
+        if (attacker.isPlayer) showMessage("Blocked.");
+      }
+      return;
+    }
+
+    const dmg = 14 + Math.random() * 10;
+    dealDamage(defender, dmg);
+    startStun(defender, 0.34);
+    if (attacker.isPlayer) showMessage("Clean hit!");
+  }
+
+  function updateState(f, dt) {
+    if (f.cooldown > 0) f.cooldown -= dt;
+    f.cooldown = Math.max(0, f.cooldown);
+
+    // stamina
+    if (f.blocking) {
+      f.stamina -= 10 * dt;
+    } else if (["attackWindup","attackStrike","dodge","counter","stun"].includes(f.state)) {
+      f.stamina += 7 * dt;
+    } else {
+      f.stamina += 20 * dt;
+    }
+    f.stamina = clamp(f.stamina, 0, 100);
+    if (f.stamina <= 0 && f.blocking) f.blocking = false;
+
+    switch (f.state) {
+      case "attackWindup":
+        f.timer -= dt;
+        if (f.timer <= 0) {
+          setState(f, "attackStrike", 0.11);
+          resolveAttack(f, opponentOf(f));
+        }
+        break;
+      case "attackStrike":
+        f.timer -= dt;
+        if (f.timer <= 0) setState(f, "recovery", 0.26);
+        break;
+      case "dodge":
+        f.timer -= dt;
+        if (f.timer <= 0) setState(f, "recovery", 0.15);
+        break;
+      case "counter": {
+        f.timer -= dt;
+        const elapsed = f.totalTimer - f.timer;
+        f.counterActive = elapsed > 0.06 && elapsed < 0.24;
+        if (f.timer <= 0) {
+          f.counterActive = false;
+          setState(f, "recovery", 0.2);
+        }
+        break;
+      }
+      case "recovery":
+        f.timer -= dt;
+        if (f.timer <= 0) setState(f, "idle", 0);
+        break;
+      case "stun":
+        f.timer -= dt;
+        if (f.timer <= 0) setState(f, "idle", 0);
+        break;
+      default:
+        break;
+    }
+  }
+
+  function updatePlayer(dt) {
+    if (game.over) return;
+    const f = player;
+    const opp = enemy;
+
+    f.dir = opp.x >= f.x ? 1 : -1;
+
+    // One-shot actions
+    if (justPressed["KeyJ"] || justPressed["Space"]) startAttack(f);
+    if (justPressed["KeyL"]) startDodge(f);
+    if (justPressed["KeyI"]) startCounter(f);
+
+    // Block (hold)
+    if (keys["KeyK"] && canBlock(f) && !game.over) f.blocking = true;
+    else f.blocking = false;
+
+    // Movement
+    if (f.state === "dodge") {
+      f.vx = f.dodgeDir * 480;
+    } else if (f.state === "stun") {
+      f.vx = 0;
+    } else {
+      const move = (keys["KeyD"] ? 1 : 0) - (keys["KeyA"] ? 1 : 0);
+      let speed = 220;
+      if (f.blocking) speed *= 0.45;
+      if (f.state === "attackWindup" || f.state === "recovery") speed *= 0.55;
+      f.vx = move * speed;
+    }
+
+    f.x += f.vx * dt;
+    f.x = clamp(f.x, arenaPadding, canvas.width - arenaPadding);
+  }
+
+  function tryEnemyReaction() {
+    const e = enemy, p = player;
+    const dist = Math.abs(e.x - p.x);
+    if (!canAct(e) || e.stamina < 14 || dist > 170) return;
+
+    if (p.state === "attackWindup" || p.state === "attackStrike") {
+      const r = Math.random();
+      if (r < 0.45 && e.stamina > 12) {
+        e.ai.queuedReaction = "block";
+      } else if (r < 0.75 && e.stamina > 24) {
+        e.ai.queuedReaction = "dodge";
+      } else if (e.stamina > 16) {
+        e.ai.queuedReaction = "counter";
+      }
+      e.ai.reactionDelay = 0.08 + Math.random() * 0.16;
+    }
+  }
+
+  function updateEnemyAI(dt) {
+    if (game.over) return;
+    const e = enemy, p = player;
+    const dist = Math.abs(e.x - p.x);
+    e.dir = p.x >= e.x ? 1 : -1;
+
+    e.ai.think -= dt;
+    if (e.ai.think <= 0) {
+      e.ai.think = 0.14 + Math.random() * 0.2;
+
+      if (canAct(e)) {
+        tryEnemyReaction();
+
+        if (!e.ai.queuedReaction) {
+          if (dist < 135 && e.cooldown <= 0 && e.stamina >= 18 && Math.random() < 0.65) {
+            startAttack(e);
+          } else if (dist < 125 && e.stamina > 16 && Math.random() < 0.15) {
+            startCounter(e);
+          } else if (dist < 130 && e.stamina > 18 && Math.random() < 0.2) {
+            e.ai.blockUntil = game.time + (0.25 + Math.random() * 0.35);
+          }
+        }
+      }
+    }
+
+    if (e.ai.reactionDelay > 0) {
+      e.ai.reactionDelay -= dt;
+      if (e.ai.reactionDelay <= 0 && e.ai.queuedReaction && canAct(e)) {
+        const act = e.ai.queuedReaction;
+        if (act === "block") e.ai.blockUntil = game.time + 0.45;
+        if (act === "dodge") startDodge(e);
+        if (act === "counter") startCounter(e);
+        e.ai.queuedReaction = null;
+      }
+    }
+
+    if (canBlock(e) && game.time < e.ai.blockUntil) e.blocking = true;
+    else e.blocking = false;
+
+    if (e.state === "dodge") {
+      e.vx = e.dodgeDir * 470;
+    } else if (e.state === "stun") {
+      e.vx = 0;
+    } else {
+      const target = 110;
+      let speed = e.blocking ? 90 : 170;
+      if (dist > target + 15) e.vx = (p.x > e.x ? 1 : -1) * speed;
+      else if (dist < target - 20) e.vx = (p.x > e.x ? -1 : 1) * (speed * 0.8);
+      else e.vx = 0;
+
+      if (e.state === "attackWindup" || e.state === "recovery") e.vx *= 0.4;
+    }
+
+    e.x += e.vx * dt;
+    e.x = clamp(e.x, arenaPadding, canvas.width - arenaPadding);
+  }
+
+  function drawBar(x, y, w, h, value, color, bg = "#00000088") {
+    ctx.fillStyle = bg;
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = color;
+    ctx.fillRect(x + 2, y + 2, (w - 4) * clamp(value, 0, 1), h - 4);
+    ctx.strokeStyle = "#ffffff33";
+    ctx.strokeRect(x, y, w, h);
+  }
+
+  function drawFighter(f, bodyColor, accentColor) {
+    const ground = game.floorY;
+    const x = f.x, y = ground;
+    const s = Math.max(0.8, Math.min(1.2, canvas.width / 1100));
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(f.dir, 1);
+
+    if (f.state === "dodge") {
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = "#9ec5ff";
+      ctx.fillRect(-20*s, -95*s, 40*s, 95*s);
+      ctx.globalAlpha = 1;
+    }
+
+    // Legs
+    ctx.strokeStyle = bodyColor;
+    ctx.lineWidth = 8*s;
+    ctx.beginPath();
+    ctx.moveTo(0, -8*s);
+    ctx.lineTo(-12*s, 28*s);
+    ctx.moveTo(0, -8*s);
+    ctx.lineTo(14*s, 28*s);
+    ctx.stroke();
+
+    // Torso
+    ctx.lineWidth = 10*s;
+    let lean = 0;
+    if (f.state === "attackWindup") lean = -8*s;
+    if (f.state === "attackStrike") lean = 8*s;
+    if (f.state === "stun") lean = -5*s;
+    ctx.beginPath();
+    ctx.moveTo(0, -10*s);
+    ctx.lineTo(lean, -64*s);
+    ctx.stroke();
+
+    // Head
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.arc(lean, -80*s, 12*s, 0, Math.PI*2);
+    ctx.fill();
+
+    // Weapon / arms
+    ctx.strokeStyle = accentColor;
+    ctx.lineWidth = 6*s;
+    ctx.beginPath();
+
+    if (f.blocking) {
+      ctx.moveTo(lean, -50*s);
+      ctx.lineTo(26*s, -54*s);
+      ctx.strokeStyle = "#89b6ff";
+      ctx.stroke();
+
+      ctx.fillStyle = "#89b6ff";
+      ctx.fillRect(24*s, -65*s, 8*s, 26*s);
+    } else if (f.state === "attackWindup") {
+      ctx.moveTo(lean, -52*s);
+      ctx.lineTo(-26*s, -64*s);
+      ctx.stroke();
+      ctx.strokeStyle = "#ff5555";
+      ctx.beginPath();
+      ctx.moveTo(-26*s, -64*s);
+      ctx.lineTo(-44*s, -74*s);
+      ctx.stroke();
+    } else if (f.state === "attackStrike") {
+      ctx.moveTo(lean, -52*s);
+      ctx.lineTo(34*s, -56*s);
+      ctx.stroke();
+      ctx.strokeStyle = "#ffd479";
+      ctx.beginPath();
+      ctx.moveTo(34*s, -56*s);
+      ctx.lineTo(58*s, -58*s);
+      ctx.stroke();
+    } else if (f.state === "counter") {
+      ctx.moveTo(lean, -52*s);
+      ctx.lineTo(15*s, -68*s);
+      ctx.stroke();
+      if (f.counterActive) {
+        ctx.fillStyle = "#ffd166";
+        ctx.beginPath();
+        ctx.arc(20*s, -72*s, 6*s, 0, Math.PI*2);
+        ctx.fill();
+      }
+    } else {
+      ctx.moveTo(lean, -52*s);
+      ctx.lineTo(20*s, -58*s);
+      ctx.stroke();
+    }
+
+    // Telegraph for enemy windup
+    if (!f.isPlayer && f.state === "attackWindup") {
+      ctx.fillStyle = "#ff4646";
+      ctx.font = `${22*s}px Arial`;
+      ctx.fillText("!", -4*s, -110*s);
+    }
+
+    ctx.restore();
+  }
+
+  function drawScene() {
+    // Background
+    const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    g.addColorStop(0, "#1a2230");
+    g.addColorStop(1, "#0d1017");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    game.floorY = canvas.height * 0.78;
+
+    // Arena floor
+    ctx.fillStyle = "#1f2a37";
+    ctx.fillRect(0, game.floorY + 28, canvas.width, canvas.height - game.floorY);
+    ctx.fillStyle = "#ffffff14";
+    ctx.fillRect(0, game.floorY + 26, canvas.width, 3);
+
+    // Fighters
+    drawFighter(player, "#d8e9ff", "#9ed0ff");
+    drawFighter(enemy, "#ffd9d9", "#ffb0b0");
+
+    // HUD
+    const w = Math.min(320, canvas.width * 0.28);
+    drawBar(24, 22, w, 22, player.hp / 100, "#4de06f");
+    drawBar(24, 52, w, 14, player.stamina / 100, "#5ab8ff");
+    ctx.fillStyle = "#e8eef9";
+    ctx.font = "16px Arial";
+    ctx.fillText("YOU", 24, 92);
+
+    drawBar(canvas.width - w - 24, 22, w, 22, enemy.hp / 100, "#e06161");
+    drawBar(canvas.width - w - 24, 52, w, 14, enemy.stamina / 100, "#ffb35a");
+    ctx.fillStyle = "#ffe9e9";
+    ctx.fillText("RIVAL", canvas.width - w - 24, 92);
+
+    // Center message
+    if (game.messageTimer > 0) {
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "24px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(game.message, canvas.width / 2, canvas.height * 0.18);
+      ctx.textAlign = "left";
+    }
+
+    // Controls
+    ctx.fillStyle = "#d7deea";
+    ctx.font = "15px Arial";
+    const cx = 24, cy = canvas.height - 118;
+    ctx.fillText("Move: A / D", cx, cy);
+    ctx.fillText("Attack: J or Space", cx, cy + 20);
+    ctx.fillText("Hold Block: K", cx, cy + 40);
+    ctx.fillText("Dodge: L", cx, cy + 60);
+    ctx.fillText("Counter (timed): I", cx, cy + 80);
+
+    if (game.over) {
+      ctx.fillStyle = "#000000aa";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.font = "52px Arial";
+      ctx.fillText(game.winner === "You" ? "YOU WIN" : "YOU LOSE", canvas.width / 2, canvas.height / 2 - 16);
+      ctx.font = "24px Arial";
+      ctx.fillText("Press R to restart", canvas.width / 2, canvas.height / 2 + 30);
+      ctx.textAlign = "left";
+    }
+  }
+
+  let last = performance.now();
+  function loop(now) {
+    const dt = Math.min(0.033, (now - last) / 1000);
+    last = now;
+
+    if (justPressed["KeyR"] && game.over) resetGame();
+
+    game.time += dt;
+    if (game.messageTimer > 0) game.messageTimer -= dt;
+
+    updatePlayer(dt);
+    updateEnemyAI(dt);
+
+    updateState(player, dt);
+    updateState(enemy, dt);
+
+    // Face each other
+    player.dir = enemy.x >= player.x ? 1 : -1;
+    enemy.dir = player.x >= enemy.x ? 1 : -1;
+
+    drawScene();
+
+    for (const k in justPressed) delete justPressed[k];
+    requestAnimationFrame(loop);
+  }
+
+  resetGame();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

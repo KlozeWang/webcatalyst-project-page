@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Shadow Fight Mini</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; user-select:none; }
+  body { background:#000; overflow:hidden; font-family: 'Arial', sans-serif; color:#fff; }
+  #game {
+    position:relative;
+    width:100vw; height:100vh;
+    background: linear-gradient(180deg, #1a0033 0%, #4b0082 40%, #ff4500 80%, #2a1a0a 100%);
+    overflow:hidden;
+  }
+  /* Ground */
+  .ground {
+    position:absolute; bottom:0; left:0; right:0; height:120px;
+    background: linear-gradient(180deg, #1a0a05 0%, #000 100%);
+    border-top:2px solid #ff6600;
+    box-shadow: 0 -10px 30px rgba(255,100,0,0.4);
+  }
+  /* Moon */
+  .moon {
+    position:absolute; top:8%; right:10%;
+    width:90px; height:90px; border-radius:50%;
+    background: radial-gradient(circle at 35% 35%, #fff, #ffeecc 60%, #cc8855);
+    box-shadow:0 0 60px rgba(255,200,150,0.6);
+  }
+  /* Fighters */
+  .fighter {
+    position:absolute; bottom:120px;
+    width:80px; height:160px;
+    transition: filter 0.1s;
+  }
+  .shadow-body {
+    width:100%; height:100%;
+    position:relative;
+    filter: drop-shadow(0 0 8px rgba(0,0,0,0.9));
+  }
+  /* Player parts */
+  .part {
+    position:absolute;
+    background:#000;
+    border-radius:6px;
+    transform-origin: center top;
+    transition: transform 0.1s;
+  }
+  .head { width:30px; height:30px; border-radius:50%; left:25px; top:0; background:#0a0a0a; border:1px solid #222;}
+  .torso { width:30px; height:55px; left:25px; top:28px; border-radius:8px;}
+  .arm { width:12px; height:50px; top:32px;}
+  .arm-l { left:15px; transform-origin: top center;}
+  .arm-r { left:53px; transform-origin: top center;}
+  .leg { width:14px; height:55px; top:80px;}
+  .leg-l { left:22px;}
+  .leg-r { left:44px;}
+  .weapon {
+    position:absolute; width:6px; height:60px;
+    background: linear-gradient(180deg,#ccc,#888);
+    top:75px; border-radius:3px;
+    box-shadow: 0 0 6px rgba(255,255,255,0.6);
+  }
+
+  #player { left:15%; }
+  #enemy { right:15%; transform: scaleX(-1); }
+  #enemy .head { background:#1a0000; }
+  #enemy .part { background:#1a0000; }
+  #enemy .weapon { background: linear-gradient(180deg,#f55,#900); box-shadow:0 0 8px #f00;}
+
+  .attacking .arm-r { transform: rotate(110deg); }
+  .kicking .leg-r { transform: rotate(-80deg); }
+  .blocking .arm-l { transform: rotate(-90deg); }
+  .blocking .arm-r { transform: rotate(-70deg); }
+  .hurt { filter: brightness(2) drop-shadow(0 0 15px red); }
+  .jumping { bottom:240px !important; }
+
+  /* Health bars */
+  .hud {
+    position:absolute; top:20px; left:0; right:0;
+    display:flex; justify-content:space-between;
+    padding:0 30px;
+    z-index:10;
+  }
+  .health-wrap {
+    width:40%; max-width:400px;
+  }
+  .name { font-size:16px; font-weight:bold; margin-bottom:4px; letter-spacing:2px;}
+  .health-bar {
+    height:18px; background:rgba(0,0,0,0.6);
+    border:2px solid #fff; border-radius:4px;
+    overflow:hidden;
+  }
+  .health-fill {
+    height:100%; width:100%;
+    background: linear-gradient(90deg, #ff0, #f30);
+    transition: width 0.3s;
+  }
+  #enemy-hud { text-align:right;}
+  #enemy-hud .health-fill { float:right; background: linear-gradient(270deg, #f0f, #80f);}
+
+  /* Round Info */
+  #round-info {
+    position:absolute; top:60px; left:50%; transform:translateX(-50%);
+    font-size:20px; letter-spacing:3px; color:#ffaa00;
+    text-shadow:0 0 10px #ff6600;
+  }
+
+  /* Overlay screens */
+  .screen {
+    position:absolute; inset:0;
+    background:rgba(0,0,0,0.85);
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    z-index:20;
+    text-align:center;
+    padding:20px;
+  }
+  .screen h1 {
+    font-size:60px;
+    background: linear-gradient(180deg,#ff6, #f30);
+    -webkit-background-clip:text;
+    color:transparent;
+    text-shadow: 0 0 30px rgba(255,100,0,0.5);
+    margin-bottom:20px;
+    letter-spacing:5px;
+  }
+  .screen p { margin-bottom:10px; max-width:500px; line-height:1.6;}
+  .screen button {
+    margin-top:25px; padding:14px 40px;
+    background: linear-gradient(180deg,#ff8800,#cc3300);
+    color:#fff; border:2px solid #fff; border-radius:8px;
+    font-size:20px; cursor:pointer; letter-spacing:2px;
+    font-weight:bold;
+  }
+  .screen button:hover { transform: scale(1.05); box-shadow: 0 0 20px #ff6600;}
+  .controls {
+    margin-top:20px; font-size:14px; color:#aaa;
+    background:rgba(255,255,255,0.05);
+    padding:15px 25px; border-radius:8px;
+  }
+  .controls span { color:#ffaa00; font-weight:bold;}
+
+  /* Hit FX */
+  .hit-fx {
+    position:absolute;
+    width:80px; height:80px;
+    pointer-events:none;
+    background: radial-gradient(circle, #fff 0%, #ff0 30%, #f00 60%, transparent 70%);
+    border-radius:50%;
+    animation: hit 0.4s ease-out forwards;
+    z-index:5;
+  }
+  @keyframes hit {
+    0% { transform: scale(0.3); opacity:1;}
+    100% { transform: scale(1.8); opacity:0;}
+  }
+
+  /* Mobile controls */
+  #mobile {
+    position:absolute; bottom:10px; left:0; right:0;
+    display:none; justify-content:space-between;
+    padding:0 15px; z-index:15;
+  }
+  .mbtn {
+    width:60px; height:60px; border-radius:50%;
+    background:rgba(255,255,255,0.15);
+    border:2px solid rgba(255,255,255,0.4);
+    color:#fff; font-size:20px;
+    display:flex; align-items:center; justify-content:center;
+    backdrop-filter: blur(4px);
+  }
+  .mbtn:active { background:rgba(255,150,0,0.5);}
+  .mgroup { display:flex; gap:10px;}
+  @media (max-width:768px), (pointer:coarse) {
+    #mobile { display:flex;}
+    .screen h1 { font-size:40px;}
+  }
+</style>
+</head>
+<body>
+<div id="game">
+  <div class="moon"></div>
+  <div class="ground"></div>
+
+  <div class="hud">
+    <div class="health-wrap">
+      <div class="name">SHADOW</div>
+      <div class="health-bar"><div class="health-fill" id="player-hp"></div></div>
+    </div>
+    <div class="health-wrap" id="enemy-hud">
+      <div class="name">DEMON</div>
+      <div class="health-bar"><div class="health-fill" id="enemy-hp"></div></div>
+    </div>
+  </div>
+  <div id="round-info">ROUND 1</div>
+
+  <div id="player" class="fighter">
+    <div class="shadow-body">
+      <div class="part head"></div>
+      <div class="part torso"></div>
+      <div class="part arm arm-l"></div>
+      <div class="part arm arm-r"></div>
+      <div class="part leg leg-l"></div>
+      <div class="part leg leg-r"></div>
+      <div class="weapon"></div>
+    </div>
+  </div>
+
+  <div id="enemy" class="fighter">
+    <div class="shadow-body">
+      <div class="part head"></div>
+      <div class="part torso"></div>
+      <div class="part arm arm-l"></div>
+      <div class="part arm arm-r"></div>
+      <div class="part leg leg-l"></div>
+      <div class="part leg leg-r"></div>
+      <div class="weapon"></div>
+    </div>
+  </div>
+
+  <div id="mobile">
+    <div class="mgroup">
+      <div class="mbtn" data-key="a">◀</div>
+      <div class="mbtn" data-key="d">▶</div>
+    </div>
+    <div class="mgroup">
+      <div class="mbtn" data-key="s">🛡</div>
+      <div class="mbtn" data-key="w">⤴</div>
+      <div class="mbtn" data-key="j">👊</div>
+      <div class="mbtn" data-key="k">🦵</div>
+    </div>
+  </div>
+
+  <div class="screen" id="start-screen">
+    <h1>SHADOW FIGHT</h1>
+    <p>Defeat the demon warrior in deadly combat!</p>
+    <div class="controls">
+      <p><span>A / D</span> — Move Left / Right</p>
+      <p><span>W</span> — Jump &nbsp; <span>S</span> — Block</p>
+      <p><span>J</span> — Punch / Sword &nbsp; <span>K</span> — Kick</p>
+    </div>
+    <button onclick="startGame()">START FIGHT</button>
+  </div>
+
+  <div class="screen" id="end-screen" style="display:none">
+    <h1 id="end-title">VICTORY</h1>
+    <p id="end-text"></p>
+    <button onclick="restart()">FIGHT AGAIN</button>
+  </div>
+</div>
+
+<script>
+const player = document.getElementById('player');
+const enemy = document.getElementById('enemy');
+const playerHP = document.getElementById('player-hp');
+const enemyHP = document.getElementById('enemy-hp');
+const game = document.getElementById('game');
+
+let state = {
+  px: 0, ex: 0,
+  php: 100, ehp: 100,
+  pBlocking: false,
+  pJumping: false,
+  pAttacking: false,
+  gameOn: false,
+  round: 1,
+  facing: 1
+};
+
+// Audio
+let actx;
+function sfx(freq, dur, type='square', vol=0.1) {
+  if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+  const o = actx.createOscillator();
+  const g = actx.createGain();
+  o.type=type; o.frequency.value=freq;
+  o.connect(g); g.connect(actx.destination);
+  g.gain.setValueAtTime(vol, actx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime+dur);
+  o.start(); o.stop(actx.currentTime+dur);
+}
+
+function setPositions() {
+  player.style.left = (window.innerWidth*0.15 + state.px) + 'px';
+  enemy.style.right = (window.innerWidth*0.15 - state.ex) + 'px';
+}
+
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  handleKey(e.key.toLowerCase());
+});
+document.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+// Mobile
+document.querySelectorAll('.mbtn').forEach(b => {
+  const k = b.dataset.key;
+  b.addEventListener('touchstart', e => { e.preventDefault(); keys[k]=true; handleKey(k);});
+  b.addEventListener('touchend', e => { e.preventDefault(); keys[k]=false;});
+  b.addEventListener('mousedown', e => { keys[k]=true; handleKey(k);});
+  b.addEventListener('mouseup', e => { keys[k]=false;});
+});
+
+function handleKey(k) {
+  if(!state.gameOn) return;
+  if(k==='w' && !state.pJumping) {
+    state.pJumping = true;
+    player.classList.add('jumping');
+    sfx(300, 0.15, 'sine', 0.08);
+    setTimeout(()=>{ player.classList.remove('jumping'); state.pJumping=false;}, 500);
+  }
+  if(k==='j') doAttack('punch');
+  if(k==='k') doAttack('kick');
+}
+
+function doAttack(type) {
+  if(state.pAttacking) return;
+  state.pAttacking = true;
+  player.classList.add(type==='punch'?'attacking':'kicking');
+  sfx(type==='punch'?180:120, 0.1, 'square', 0.08);
+  setTimeout(()=>{
+    if(checkHit()) {
+      const dmg = type==='punch' ? 12 : 16;
+      damageEnemy(dmg);
+    }
+  }, 100);
+  setTimeout(()=>{
+    player.classList.remove('attacking','kicking');
+    state.pAttacking = false;
+  }, 300);
+}
+
+function checkHit() {
+  const pr = player.getBoundingClientRect();
+  const er = enemy.getBoundingClientRect();
+  const dist = Math.abs((pr.left+pr.width/2)-(er.left+er.width/2));
+  return dist < 130 && !state.pJumping;
+}
+
+function showHit(x,y) {
+  const fx = document.createElement('div');
+  fx.className='hit-fx';
+  fx.style.left=(x-40)+'px';
+  fx.style.top=(y-40)+'px';
+  game.appendChild(fx);
+  setTimeout(()=>fx.remove(),400);
+}
+
+function damageEnemy(d) {
+  state.ehp = Math.max(0, state.ehp - d);
+  enemyHP.style.width = state.ehp + '%';
+  const er = enemy.getBoundingClientRect();
+  showHit(er.left+er.width/2, er.top+er.height/2);
+  enemy.classList.add('hurt');
+  sfx(150, 0.2, 'sawtooth', 0.12);
+  setTimeout(()=>enemy.classList.remove('hurt'), 150);
+  if(state.ehp<=0) endGame(true);
+}
+
+function damagePlayer(d) {
+  if(state.pBlocking) d = Math.floor(d*0.2);
+  state.php = Math.max(0, state.php - d);
+  playerHP.style.width = state.php + '%';
+  const pr = player.getBoundingClientRect();
+  showHit(pr.left+pr.width/2, pr.top+pr.height/2);
+  player.classList.add('hurt');
+  sfx(120, 0.2, 'sawtooth', 0.12);
+  setTimeout(()=>player.classList.remove('hurt'), 150);
+  if(state.php<=0) endGame(false);
+}
+
+// Enemy AI
+let enemyAttackCD = 0;
+function enemyAI(dt) {
+  const pr = player.getBoundingClientRect();
+  const er = enemy.getBoundingClientRect();
+  const dist = Math.abs((pr.left+pr.width/2)-(er.left+er.width/2));
+  
+  enemyAttackCD -= dt;
+  
+  // Move toward player
+  if(dist > 140) {
+    const dir = pr.left < er.left ? -1 : 1;
+    state.ex -= dir * 1.5;
+  } else if(dist < 100) {
+    const dir = pr.left < er.left ? -1 : 1;
+    state.ex += dir * 1.0;
+  }
+  
+  // Attack
+  if(dist < 150 && enemyAttackCD <= 0) {
+    const type = Math.random()<0.5?'punch':'kick';
+    enemy.classList.add(type==='punch'?'attacking':'kicking');
+    sfx(type==='punch'?200:140, 0.1, 'square', 0.08);
+    setTimeout(()=>{
+      const pr2 = player.getBoundingClientRect();
+      const er2 = enemy.getBoundingClientRect();
+      const d2 = Math.abs((pr2.left+pr2.width/2)-(er2.left+er2.width/2));
+      if(d2 < 130 && !state.pJumping) {
+        damagePlayer(type==='punch'?8:12);
+      }
+    }, 200);
+    setTimeout(()=>enemy.classList.remove('attacking','kicking'), 400);
+    enemyAttackCD = 800 + Math.random()*800;
+  }
+  
+  // Clamp
+  const maxRight = window.innerWidth*0.7 - window.innerWidth*0.15;
+  state.ex = Math.max(-200, Math.min(maxRight, state.ex));
+}
+
+let lastT = 0;
+function loop(t) {
+  const dt = t - lastT;
+  lastT = t;
+  
+  if(state.gameOn) {
+    // Player movement
+    if(keys['a']) state.px -= 4;
+    if(keys['d']) state.px += 4;
+    state.pBlocking = !!keys['s'];
+    if(state.pBlocking) player.classList.add('blocking');
+    else player.classList.remove('blocking');
+    
+    const maxLeft = -window.innerWidth*0.1;
+    const maxRight = window.innerWidth*0.7;
+    state.px = Math.max(maxLeft, Math.min(maxRight, state.px));
+    
+    enemyAI(dt);
+    setPositions();
+  }
+  
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+function startGame() {
+  document.getElementById('start-screen').style.display='none';
+  state.gameOn = true;
+  state.php = 100; state.ehp = 100;
+  playerHP.style.width='100%'; enemyHP.style.width='100%';
+  state.px = 0; state.ex = 0;
+  setPositions();
+}
+
+function endGame(win) {
+  state.gameOn = false;
+  const s = document.getElementById('end-screen');
+  document.getElementById('end-title').textContent = win?'VICTORY!':'DEFEATED';
+  document.getElementById('end-text').textContent = win?'The demon falls before your shadow blade!':'Your shadow fades into darkness...';
+  s.style.display='flex';
+  sfx(win?440:80, 0.6, 'triangle', 0.15);
+}
+
+function restart() {
+  document.getElementById('end-screen').style.display='none';
+  startGame();
+}
+
+window.addEventListener('resize', setPositions);
+setPositions();
+</script>
+</body>
+</html>

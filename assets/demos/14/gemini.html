@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Habit Tree</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+        .pointer-events-auto { pointer-events: auto; }
+        
+        /* Custom Animations */
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        .floating { animation: float 3s ease-in-out infinite; }
+        
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        .shaking { animation: shake 0.5s; }
+
+        /* Glassmorphism */
+        .glass {
+            background: rgba(255, 255, 255, 0.25);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer" class="flex flex-col items-center justify-between p-4 h-full">
+        
+        <!-- Header -->
+        <div id="header" class="hidden w-full max-w-md flex justify-between items-center glass p-4 rounded-xl pointer-events-auto transition-opacity duration-500">
+            <div>
+                <h1 id="habit-display" class="text-xl font-bold text-gray-800 drop-shadow-md">My Habit</h1>
+                <p id="level-display" class="text-sm font-semibold text-green-700">Level: 1</p>
+            </div>
+            <div class="flex space-x-1" id="health-display">
+                <!-- Hearts -->
+            </div>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="absolute inset-0 flex items-center justify-center pointer-events-auto bg-black bg-opacity-40 backdrop-blur-sm z-50 transition-opacity duration-500">
+            <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full text-center transform transition-transform scale-100">
+                <h1 class="text-3xl font-extrabold text-green-600 mb-2">Habit Tree</h1>
+                <p class="text-gray-600 mb-6">Grow a realistic tree by sticking to your habit. Missing days will cause branches to break.</p>
+                
+                <input type="text" id="habit-input" placeholder="e.g., Read 10 pages, Drink water" class="w-full px-4 py-3 border-2 border-green-200 rounded-xl focus:outline-none focus:border-green-500 mb-4 text-gray-700 font-medium">
+                
+                <button id="start-btn" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-lg transform hover:-translate-y-1">
+                    Plant Seed
+                </button>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden absolute inset-0 flex items-center justify-center pointer-events-auto bg-black bg-opacity-60 backdrop-blur-md z-50">
+            <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center">
+                <h1 id="end-title" class="text-3xl font-bold text-red-600 mb-4">Tree Withered</h1>
+                <p id="end-message" class="text-gray-600 mb-6">You missed too many days. The tree couldn't survive.</p>
+                <button id="restart-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-xl transition duration-200 shadow-lg">
+                    Try Again
+                </button>
+            </div>
+        </div>
+
+        <!-- Action Controls -->
+        <div id="controls" class="hidden w-full max-w-md flex flex-col gap-3 pointer-events-auto mb-4 transition-transform duration-500 translate-y-20 opacity-0">
+            <button id="success-btn" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-4 rounded-2xl shadow-lg border-b-4 border-green-700 active:border-b-0 active:translate-y-1 transition-all flex items-center justify-center gap-2 text-lg">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                I did my habit today!
+            </button>
+            <button id="fail-btn" class="w-full bg-red-400 hover:bg-red-500 text-white font-bold py-3 rounded-2xl shadow border-b-4 border-red-600 active:border-b-0 active:translate-y-1 transition-all flex items-center justify-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                I forgot / Broke habit
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Audio Context setup ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+            
+            if (type === 'grow') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.exponentialRampToValueAtTime(800, now + 0.3);
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(0.3, now + 0.1);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+            } else if (type === 'break') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.3);
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(0.4, now + 0.05);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.start(now);
+                osc.stop(now + 0.4);
+            }
+        }
+
+        // --- Three.js Setup ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); // Sky blue
+        scene.fog = new THREE.FogExp2(0x87CEEB, 0.02);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 5, 15);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        dirLight.shadow.camera.top = 20;
+        dirLight.shadow.camera.bottom = -20;
+        dirLight.shadow.camera.left = -20;
+        dirLight.shadow.camera.right = 20;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        scene.add(dirLight);
+
+        // Ground
+        const groundGeo = new THREE.PlaneGeometry(100, 100);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x3d8c40, roughness: 0.8 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Tree Materials
+        const woodMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9, metalness: 0.0 });
+        const leafMat = new THREE.MeshStandardMaterial({ color: 0x2e8b57, roughness: 0.6, metalness: 0.1 });
+
+        let treeGroup = new THREE.Group();
+        scene.add(treeGroup);
+        
+        // Particles for breaking branches
+        let particles = [];
+        const particleGeo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+
+        // --- Procedural Tree Generation ---
+        function createCylinder(start, end, radiusStart, radiusEnd) {
+            const dir = new THREE.Vector3().subVectors(end, start);
+            const len = dir.length();
+            const geo = new THREE.CylinderGeometry(radiusEnd, radiusStart, len, 8);
+            const mesh = new THREE.Mesh(geo, woodMat);
+            
+            mesh.position.copy(start);
+            mesh.position.add(dir.multiplyScalar(0.5));
+            mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            return mesh;
+        }
+
+        // Seeded random for deterministic tree shape per level
+        let seed = 1;
+        function random() {
+            let x = Math.sin(seed++) * 10000;
+            return x - Math.floor(x);
+        }
+
+        function buildBranch(startPoint, direction, length, radius, depth, maxDepth) {
+            if (depth > maxDepth) return;
+
+            const endPoint = startPoint.clone().add(direction.clone().multiplyScalar(length));
+            const branch = createCylinder(startPoint, endPoint, radius, radius * 0.7);
+            treeGroup.add(branch);
+
+            if (depth === maxDepth && maxDepth > 1) {
+                // Add leaves
+                const leafGeo = new THREE.IcosahedronGeometry(radius * 5, 1);
+                const leaf = new THREE.Mesh(leafGeo, leafMat);
+                leaf.position.copy(endPoint);
+                leaf.castShadow = true;
+                
+                // Add slight random offset to leaves
+                leaf.position.x += (random() - 0.5);
+                leaf.position.y += (random() - 0.5);
+                leaf.position.z += (random() - 0.5);
+                
+                leaf.scale.set(0.01, 0.01, 0.01); // Start small for animation
+                treeGroup.add(leaf);
+                
+                // Animate leaf scaling
+                let scale = 0.01;
+                const targetScale = 1;
+                const animateLeaf = () => {
+                    if(scale < targetScale) {
+                        scale += 0.05;
+                        leaf.scale.set(scale, scale, scale);
+                        requestAnimationFrame(animateLeaf);
+                    }
+                }
+                animateLeaf();
+            } else {
+                // Generate child branches
+                const numBranches = (depth === 0) ? 1 : Math.floor(random() * 2) + 2; // 2-3 branches
+                for (let i = 0; i < numBranches; i++) {
+                    const angleX = (random() - 0.5) * 1.5;
+                    const angleZ = (random() - 0.5) * 1.5;
+                    
+                    const newDir = direction.clone().applyEuler(new THREE.Euler(angleX, 0, angleZ)).normalize();
+                    const newLen = length * (0.7 + random() * 0.2);
+                    const newRad = radius * 0.7;
+                    
+                    buildBranch(endPoint, newDir, newLen, newRad, depth + 1, maxDepth);
+                }
+            }
+        }
+
+        function generateTree(level) {
+            // Clear old tree
+            while(treeGroup.children.length > 0){ 
+                const child = treeGroup.children[0];
+                treeGroup.remove(child); 
+            }
+            
+            seed = 12345; // Reset seed for consistent shape
+            
+            const maxDepth = Math.min(Math.floor(level / 2) + 1, 6);
+            const baseLength = 2 + (level * 0.3);
+            const baseRadius = 0.5 + (level * 0.1);
+            
+            buildBranch(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0), baseLength, baseRadius, 0, maxDepth);
+            
+            // Adjust camera based on tree size
+            const targetY = baseLength * 2;
+            const targetZ = 15 + (level * 1.5);
+            
+            // Simple camera tween
+            let progress = 0;
+            const startPos = camera.position.clone();
+            const targetPos = new THREE.Vector3(0, targetY/2 + 2, targetZ);
+            
+            const moveCamera = () => {
+                progress += 0.05;
+                if(progress <= 1) {
+                    camera.position.lerpVectors(startPos, targetPos, progress);
+                    camera.lookAt(0, targetY/2, 0);
+                    requestAnimationFrame(moveCamera);
+                }
+            };
+            moveCamera();
+        }
+
+        function spawnBreakParticles(yPos) {
+            for(let i=0; i<10; i++) {
+                const mesh = new THREE.Mesh(particleGeo, woodMat);
+                mesh.position.set((Math.random()-0.5)*3, yPos + Math.random()*2, (Math.random()-0.5)*3);
+                mesh.velocity = new THREE.Vector3((Math.random()-0.5)*5, Math.random()*5, (Math.random()-0.5)*5);
+                mesh.rotationSpeed = new THREE.Vector3(Math.random(), Math.random(), Math.random());
+                scene.add(mesh);
+                particles.push(mesh);
+            }
+        }
+
+        // --- Game State & Logic ---
+        let gameState = {
+            habit: "",
+            level: 0,
+            maxLevel: 15,
+            health: 3
+        };
+
+        const ui = {
+            startScreen: document.getElementById('start-screen'),
+            habitInput: document.getElementById('habit-input'),
+            startBtn: document.getElementById('start-btn'),
+            header: document.getElementById('header'),
+            controls: document.getElementById('controls'),
+            habitDisplay: document.getElementById('habit-display'),
+            levelDisplay: document.getElementById('level-display'),
+            healthDisplay: document.getElementById('health-display'),
+            successBtn: document.getElementById('success-btn'),
+            failBtn: document.getElementById('fail-btn'),
+            gameOverScreen: document.getElementById('game-over-screen'),
+            endTitle: document.getElementById('end-title'),
+            endMessage: document.getElementById('end-message'),
+            restartBtn: document.getElementById('restart-btn')
+        };
+
+        const heartSVG = `<svg class="w-6 h-6 text-red-500 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`;
+        const brokenHeartSVG = `<svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3l18 18"></path></svg>`;
+
+        function updateUI() {
+            ui.habitDisplay.innerText = gameState.habit;
+            ui.levelDisplay.innerText = `Growth Level: ${gameState.level}`;
+            
+            ui.healthDisplay.innerHTML = '';
+            for(let i=0; i<3; i++) {
+                if(i < gameState.health) {
+                    ui.healthDisplay.innerHTML += heartSVG;
+                } else {
+                    ui.healthDisplay.innerHTML += brokenHeartSVG;
+                }
+            }
+        }
+
+        function startGame() {
+            const val = ui.habitInput.value.trim();
+            if(!val) return;
+            
+            gameState.habit = val;
+            gameState.level = 1;
+            gameState.health = 3;
+            
+            ui.startScreen.classList.add('opacity-0', 'pointer-events-none');
+            setTimeout(() => ui.startScreen.classList.add('hidden'), 500);
+            
+            ui.header.classList.remove('hidden');
+            ui.controls.classList.remove('hidden');
+            
+            // Animate controls in
+            setTimeout(() => {
+                ui.controls.classList.remove('translate-y-20', 'opacity-0');
+            }, 100);
+
+            updateUI();
+            generateTree(gameState.level);
+            playSound('grow');
+        }
+
+        function growTree() {
+            if(gameState.level < gameState.maxLevel) {
+                gameState.level++;
+                updateUI();
+                generateTree(gameState.level);
+                playSound('grow');
+            } else {
+                showGameOver(true);
+            }
+        }
+
+        function breakBranch() {
+            playSound('break');
+            
+            // Visual shake
+            document.body.classList.add('shaking');
+            setTimeout(() => document.body.classList.remove('shaking'), 500);
+
+            gameState.health--;
+            
+            if(gameState.level > 1) {
+                gameState.level--;
+            }
+
+            updateUI();
+            
+            // Spawn particles roughly where top of tree is
+            spawnBreakParticles(gameState.level * 2);
+            
+            // Re-generate smaller tree
+            generateTree(gameState.level);
+
+            if(gameState.health <= 0) {
+                setTimeout(() => showGameOver(false), 1000);
+            }
+        }
+
+        function showGameOver(victory) {
+            ui.controls.classList.add('hidden');
+            ui.header.classList.add('hidden');
+            ui.gameOverScreen.classList.remove('hidden');
+            
+            if(victory) {
+                ui.endTitle.innerText = "Magnificent Tree!";
+                ui.endTitle.className = "text-3xl font-bold text-green-600 mb-4";
+                ui.endMessage.innerText = `You successfully mastered "${gameState.habit}"!`;
+                
+                // Add spinning animation to tree
+                const spin = () => {
+                    treeGroup.rotation.y += 0.01;
+                    if(!ui.gameOverScreen.classList.contains('hidden')) {
+                        requestAnimationFrame(spin);
+                    }
+                }
+                spin();
+            } else {
+                ui.endTitle.innerText = "Tree Withered";
+                ui.endTitle.className = "text-3xl font-bold text-red-600 mb-4";
+                ui.endMessage.innerText = `You broke your streak for "${gameState.habit}".`;
+                
+                // Make tree fall over
+                let angle = 0;
+                const fall = () => {
+                    if(angle < Math.PI / 2) {
+                        angle += 0.05;
+                        treeGroup.rotation.x = angle;
+                        requestAnimationFrame(fall);
+                    }
+                }
+                fall();
+            }
+        }
+
+        function resetGame() {
+            ui.gameOverScreen.classList.add('hidden');
+            ui.startScreen.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
+            ui.habitInput.value = '';
+            treeGroup.rotation.set(0,0,0);
+            while(treeGroup.children.length > 0){ treeGroup.remove(treeGroup.children[0]); }
+        }
+
+        // Event Listeners
+        ui.startBtn.addEventListener('click', startGame);
+        ui.habitInput.addEventListener('keypress', (e) => { if(e.key === 'Enter') startGame(); });
+        ui.successBtn.addEventListener('click', growTree);
+        ui.failBtn.addEventListener('click', breakBranch);
+        ui.restartBtn.addEventListener('click', resetGame);
+
+        // --- Animation Loop ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+
+            // Animate leaves slightly (wind effect)
+            treeGroup.children.forEach(child => {
+                if(child.geometry.type === 'IcosahedronGeometry') {
+                    child.rotation.x += 0.5 * delta;
+                    child.rotation.y += 0.3 * delta;
+                }
+            });
+
+            // Physics for breaking particles
+            for(let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.velocity.y -= 9.8 * delta; // Gravity
+                p.position.add(p.velocity.clone().multiplyScalar(delta));
+                p.rotation.x += p.rotationSpeed.x;
+                p.rotation.y += p.rotationSpeed.y;
+                
+                if(p.position.y < 0) {
+                    scene.remove(p);
+                    particles.splice(i, 1);
+                }
+            }
+
+            // Slowly rotate scene
+            scene.rotation.y += 0.05 * delta;
+
+            renderer.render(scene, camera);
+        }
+
+        // Handle Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start animation loop
+        animate();
+
+    </script>
+</body>
+</html>

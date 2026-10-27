@@ -1,0 +1,1689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Red Dead Redemption - Mobile</title>
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+body {
+  background: #000;
+  overflow: hidden;
+  touch-action: none;
+  font-family: 'Courier New', monospace;
+}
+canvas {
+  display: block;
+}
+#ui-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+#controls {
+  position: absolute;
+  bottom: 20px;
+  left: 0;
+  width: 100%;
+  height: 200px;
+  pointer-events: none;
+  z-index: 20;
+}
+#joystick-area {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  width: 150px;
+  height: 150px;
+  pointer-events: auto;
+}
+#joystick-base {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  border: 2px solid rgba(255,255,255,0.3);
+  position: relative;
+}
+#joystick-thumb {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.4);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition: none;
+}
+.action-buttons {
+  position: absolute;
+  bottom: 30px;
+  right: 20px;
+  pointer-events: auto;
+}
+.action-btn {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.5);
+  background: rgba(139,69,19,0.6);
+  color: #fff;
+  font-size: 12px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 5px;
+  cursor: pointer;
+  text-shadow: 1px 1px 2px #000;
+}
+.action-btn:active {
+  background: rgba(255,100,0,0.8);
+}
+#shoot-btn {
+  width: 80px;
+  height: 80px;
+  background: rgba(180,30,30,0.7);
+  font-size: 14px;
+}
+#aim-btn {
+  width: 60px;
+  height: 60px;
+  background: rgba(30,30,180,0.7);
+  font-size: 10px;
+  position: absolute;
+  top: -70px;
+  right: 0;
+}
+#holster-btn {
+  width: 60px;
+  height: 60px;
+  background: rgba(30,180,30,0.7);
+  font-size: 10px;
+  position: absolute;
+  top: 0;
+  right: -70px;
+}
+#hud {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  pointer-events: none;
+  z-index: 15;
+}
+.hud-bar {
+  width: 200px;
+  height: 16px;
+  background: rgba(0,0,0,0.6);
+  border: 1px solid rgba(255,255,255,0.3);
+  margin: 3px 0;
+  border-radius: 2px;
+}
+.hud-fill {
+  height: 100%;
+  border-radius: 1px;
+  transition: width 0.3s;
+}
+#health-fill {
+  background: linear-gradient(to right, #8B0000, #FF0000);
+  width: 100%;
+}
+#armor-fill {
+  background: linear-gradient(to right, #2244AA, #4488FF);
+  width: 100%;
+}
+#dead-eye-fill {
+  background: linear-gradient(to right, #8B4513, #FFD700);
+  width: 100%;
+}
+.hud-label {
+  color: #fff;
+  font-size: 11px;
+  text-shadow: 1px 1px 2px #000;
+  margin-bottom: 1px;
+}
+#money {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: #FFD700;
+  font-size: 20px;
+  font-weight: bold;
+  text-shadow: 2px 2px 4px #000;
+  pointer-events: none;
+  z-index: 15;
+}
+#wanted-stars {
+  position: absolute;
+  top: 40px;
+  right: 10px;
+  pointer-events: none;
+  z-index: 15;
+}
+.star {
+  color: #555;
+  font-size: 24px;
+  margin: 0 2px;
+}
+.star.active {
+  color: #FFD700;
+  text-shadow: 0 0 10px #FFD700;
+}
+#minimap {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.5);
+  background: rgba(0,0,0,0.5);
+  pointer-events: none;
+  z-index: 15;
+  overflow: hidden;
+}
+#minimap canvas {
+  width: 100%;
+  height: 100%;
+}
+#game-over {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.8);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+#game-over h1 {
+  color: #8B0000;
+  font-size: 48px;
+  text-shadow: 3px 3px 6px #000;
+  margin-bottom: 20px;
+}
+#game-over p {
+  color: #fff;
+  font-size: 18px;
+  margin: 5px;
+}
+#restart-btn {
+  margin-top: 30px;
+  padding: 15px 40px;
+  background: #8B4513;
+  color: #fff;
+  border: 2px solid #FFD700;
+  font-size: 20px;
+  font-family: 'Courier New', monospace;
+  cursor: pointer;
+  pointer-events: auto;
+}
+#start-screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to bottom, #1a0a00, #000);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+#start-screen h1 {
+  color: #FFD700;
+  font-size: 36px;
+  text-shadow: 3px 3px 6px #000;
+  margin-bottom: 10px;
+  text-align: center;
+}
+#start-screen h2 {
+  color: #8B4513;
+  font-size: 24px;
+  margin-bottom: 30px;
+  text-shadow: 2px 2px 4px #000;
+}
+#start-btn {
+  padding: 20px 60px;
+  background: #8B4513;
+  color: #FFD700;
+  border: 2px solid #FFD700;
+  font-size: 24px;
+  font-family: 'Courier New', monospace;
+  cursor: pointer;
+  pointer-events: auto;
+  text-shadow: 2px 2px 4px #000;
+}
+#start-btn:active {
+  background: #A0522D;
+}
+#weapon-info {
+  position: absolute;
+  bottom: 230px;
+  right: 20px;
+  color: #fff;
+  font-size: 14px;
+  text-shadow: 1px 1px 2px #000;
+  pointer-events: none;
+  z-index: 15;
+  text-align: right;
+}
+#mission-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #FFD700;
+  font-size: 24px;
+  text-shadow: 2px 2px 4px #000;
+  pointer-events: none;
+  z-index: 25;
+  display: none;
+  text-align: center;
+  background: rgba(0,0,0,0.7);
+  padding: 20px;
+  border: 1px solid #FFD700;
+}
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui-overlay">
+  <div id="hud">
+    <div class="hud-label">HEALTH</div>
+    <div class="hud-bar"><div class="hud-fill" id="health-fill"></div></div>
+    <div class="hud-label">ARMOR</div>
+    <div class="hud-bar"><div class="hud-fill" id="armor-fill"></div></div>
+    <div class="hud-label">DEAD EYE</div>
+    <div class="hud-bar"><div class="hud-fill" id="dead-eye-fill"></div></div>
+  </div>
+
+  <div id="money">$150</div>
+
+  <div id="wanted-stars">
+    <span class="star" id="star1">★</span>
+    <span class="star" id="star2">★</span>
+    <span class="star" id="star3">★</span>
+    <span class="star" id="star4">★</span>
+    <span class="star" id="star5">★</span>
+  </div>
+
+  <div id="weapon-info">
+    <div id="weapon-name">Revolver</div>
+    <div id="ammo-count">12/60</div>
+  </div>
+
+  <div id="minimap">
+    <canvas id="minimapCanvas" width="120" height="120"></canvas>
+  </div>
+
+  <div id="mission-text"></div>
+</div>
+
+<div id="controls">
+  <div id="joystick-area">
+    <div id="joystick-base">
+      <div id="joystick-thumb"></div>
+    </div>
+  </div>
+  <div class="action-buttons">
+    <div class="action-btn" id="aim-btn" ontouchstart="game.aimStart()" ontouchend="game.aimEnd()">AIM</div>
+    <div class="action-btn" id="holster-btn" ontouchstart="game.holster()" ontouchend="game.unholster()">HOLSTER</div>
+    <div class="action-btn" id="shoot-btn" ontouchstart="game.shoot()" ontouchend="game.shootEnd()">SHOOT</div>
+  </div>
+</div>
+
+<div id="game-over">
+  <h1>WANTED DEAD</h1>
+  <p id="final-score"></p>
+  <p id="final-money"></p>
+  <button id="restart-btn" onclick="game.restart()">TRY AGAIN</button>
+</div>
+
+<div id="start-screen">
+  <h1>🤠 RED DEAD 🤠</h1>
+  <h2>MOBILE EDITION</h2>
+  <p style="color:#aaa; margin-bottom:20px; text-align:center; padding:0 20px;">
+    Explore the wild west<br>
+    Shoot bandits • Ride horses<br>
+    Complete missions • Survive
+  </p>
+  <button id="start-btn" onclick="game.start()">PLAY</button>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const minimapCanvas = document.getElementById('minimapCanvas');
+const minimapCtx = minimapCanvas.getContext('2d');
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Game State
+const game = {
+  running: false,
+  paused: false,
+  time: 0,
+  dayNightCycle: 0,
+  
+  player: {
+    x: 0,
+    y: 0,
+    angle: 0,
+    speed: 3,
+    health: 100,
+    maxHealth: 100,
+    armor: 50,
+    maxArmor: 100,
+    deadEye: 100,
+    maxDeadEye: 100,
+    money: 150,
+    wanted: 0,
+    wantedTimer: 0,
+    weapon: 'revolver',
+    ammo: { revolver: 12, shotgun: 6, rifle: 8 },
+    maxAmmo: { revolver: 12, shotgun: 6, rifle: 8 },
+    reserveAmmo: { revolver: 60, shotgun: 30, rifle: 40 },
+    isAiming: false,
+    isHorseRiding: false,
+    horse: null,
+    state: 'walking',
+    invincible: 0,
+    animFrame: 0,
+    animTimer: 0
+  },
+
+  camera: { x: 0, y: 0 },
+  
+  world: {
+    width: 4000,
+    height: 4000,
+    buildings: [],
+    trees: [],
+    roads: [],
+    npcs: [],
+    enemies: [],
+    bullets: [],
+    particles: [],
+    horses: [],
+    pickups: [],
+    missions: []
+  },
+
+  joystick: {
+    active: false,
+    startX: 0,
+    startY: 0,
+    dx: 0,
+    dy: 0,
+    id: null
+  },
+
+  keys: {},
+
+  init() {
+    this.generateWorld();
+    this.player.x = this.world.width / 2;
+    this.player.y = this.world.height / 2;
+    this.setupControls();
+  },
+
+  generateWorld() {
+    // Generate roads
+    for (let i = 0; i < 8; i++) {
+      this.world.roads.push({
+        x: Math.random() * this.world.width,
+        y: Math.random() * this.world.height,
+        w: 60 + Math.random() * 40,
+        h: 200 + Math.random() * 300,
+        horizontal: Math.random() > 0.5
+      });
+    }
+
+    // Generate buildings (town)
+    const townX = this.world.width / 2;
+    const townY = this.world.height / 2;
+    
+    const buildingTypes = ['saloon', 'general_store', 'bank', 'hotel', 'bakery', 'tavern', 'sheriff', 'stables'];
+    
+    for (let i = 0; i < 30; i++) {
+      const type = buildingTypes[Math.floor(Math.random() * buildingTypes.length)];
+      this.world.buildings.push({
+        x: townX - 400 + Math.random() * 800,
+        y: townY - 400 + Math.random() * 800,
+        w: 60 + Math.random() * 80,
+        h: 50 + Math.random() * 60,
+        type: type,
+        color: this.getBuildingColor(type),
+        roofColor: this.getRoofColor(type)
+      });
+    }
+
+    // Generate trees
+    for (let i = 0; i < 200; i++) {
+      this.world.trees.push({
+        x: Math.random() * this.world.width,
+        y: Math.random() * this.world.height,
+        size: 15 + Math.random() * 25,
+        type: Math.random() > 0.3 ? 'oak' : 'pine'
+      });
+    }
+
+    // Generate NPCs
+    for (let i = 0; i < 25; i++) {
+      this.world.npcs.push(this.createNPC());
+    }
+
+    // Generate enemies (bandits)
+    for (let i = 0; i < 15; i++) {
+      this.world.enemies.push(this.createEnemy());
+    }
+
+    // Generate horses
+    for (let i = 0; i < 5; i++) {
+      this.world.horses.push({
+        x: townX - 300 + Math.random() * 600,
+        y: townY - 300 + Math.random() * 600,
+        angle: Math.random() * Math.PI * 2,
+        speed: 0,
+        health: 100,
+        owned: false,
+        color: ['#8B4513', '#2F1810', '#D2B48C', '#654321'][Math.floor(Math.random() * 4)]
+      });
+    }
+
+    // Generate pickups
+    for (let i = 0; i < 20; i++) {
+      this.world.pickups.push({
+        x: Math.random() * this.world.width,
+        y: Math.random() * this.world.height,
+        type: ['health', 'armor', 'ammo', 'money'][Math.floor(Math.random() * 4)],
+        amount: 10 + Math.random() * 20
+      });
+    }
+
+    // Generate missions
+    this.world.missions.push({
+      x: townX + 200,
+      y: townY - 200,
+      type: 'kill_bandits',
+      target: 5,
+      completed: 0,
+      active: true,
+      reward: 100
+    });
+    this.world.missions.push({
+      x: townX - 300,
+      y: townY + 150,
+      type: 'collect_money',
+      target: 5,
+      completed: 0,
+      active: true,
+      reward: 200
+    });
+  },
+
+  getBuildingColor(type) {
+    const colors = {
+      'saloon': '#8B4513',
+      'general_store': '#A0522D',
+      'bank': '#696969',
+      'hotel': '#D2B48C',
+      'bakery': '#DEB887',
+      'tavern': '#8B6914',
+      'sheriff': '#556B2F',
+      'stables': '#654321'
+    };
+    return colors[type] || '#8B4513';
+  },
+
+  getRoofColor(type) {
+    const colors = {
+      'saloon': '#4A0E0E',
+      'general_store': '#3E2723',
+      'bank': '#2F4F4F',
+      'hotel': '#8B0000',
+      'bakery': '#5D4037',
+      'tavern': '#4A0E0E',
+      'sheriff': '#2E4A1E',
+      'stables': '#3E2723'
+    };
+    return colors[type] || '#4A0E0E';
+  },
+
+  createNPC() {
+    const townX = this.world.width / 2;
+    const townY = this.world.height / 2;
+    return {
+      x: townX - 200 + Math.random() * 400,
+      y: townY - 200 + Math.random() * 400,
+      angle: Math.random() * Math.PI * 2,
+      speed: 0.5 + Math.random() * 0.5,
+      type: ['citizen', 'cowboy', 'lady'][Math.floor(Math.random() * 3)],
+      health: 50,
+      state: 'walking',
+      targetX: 0,
+      targetY: 0,
+      changeTimer: 0,
+      color: ['#FFD700', '#FFA500', '#FF6347'][Math.floor(Math.random() * 3)]
+    };
+  },
+
+  createEnemy() {
+    const edge = Math.floor(Math.random() * 4);
+    let x, y;
+    switch(edge) {
+      case 0: x = Math.random() * this.world.width; y = 0; break;
+      case 1: x = this.world.width; y = Math.random() * this.world.height; break;
+      case 2: x = Math.random() * this.world.width; y = this.world.height; break;
+      case 3: x = 0; y = Math.random() * this.world.height; break;
+    }
+    return {
+      x: x,
+      y: y,
+      angle: 0,
+      speed: 1.5 + Math.random(),
+      health: 60 + Math.random() * 40,
+      maxHealth: 100,
+      type: 'bandit',
+      state: 'patrol',
+      targetX: 0,
+      targetY: 0,
+      shootTimer: 0,
+      alertTimer: 0,
+      color: '#8B0000',
+      animFrame: 0,
+      animTimer: 0
+    };
+  },
+
+  setupControls() {
+    // Joystick
+    const joystickArea = document.getElementById('joystick-area');
+    const joystickThumb = document.getElementById('joystick-thumb');
+    
+    joystickArea.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      this.joystick.active = true;
+      this.joystick.id = touch.identifier;
+      this.joystick.startX = touch.clientX;
+      this.joystick.startY = touch.clientY;
+    });
+
+    joystickArea.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (!this.joystick.active) return;
+      
+      for (let touch of e.changedTouches) {
+        if (touch.identifier === this.joystick.id) {
+          let dx = touch.clientX - this.joystick.startX;
+          let dy = touch.clientY - this.joystick.startY;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          const maxDist = 50;
+          
+          if (dist > maxDist) {
+            dx = (dx / dist) * maxDist;
+            dy = (dy / dist) * maxDist;
+          }
+          
+          this.joystick.dx = dx / maxDist;
+          this.joystick.dy = dy / maxDist;
+          
+          joystickThumb.style.left = `calc(50% + ${dx}px - 30px)`;
+          joystickThumb.style.top = `calc(50% + ${dy}px - 30px)`;
+        }
+      }
+    });
+
+    joystickArea.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      this.joystick.active = false;
+      this.joystick.dx = 0;
+      this.joystick.dy = 0;
+      joystickThumb.style.left = '50%';
+      joystickThumb.style.top = '50%';
+    });
+
+    // Keyboard controls
+    document.addEventListener('keydown', (e) => {
+      this.keys[e.key] = true;
+      if (e.key === ' ') this.shoot();
+      if (e.key === 'e') this.holster();
+      if (e.key === 'q') this.switchWeapon();
+    });
+    document.addEventListener('keyup', (e) => {
+      this.keys[e.key] = false;
+    });
+  },
+
+  shoot() {
+    if (this.player.health <= 0) return;
+    
+    const weapon = this.player.weapon;
+    if (this.player.ammo[weapon] <= 0) {
+      this.player.ammo[weapon] = this.player.reserveAmmo[weapon];
+      return;
+    }
+    
+    this.player.ammo[weapon]--;
+    
+    const bulletSpeed = 12;
+    const angle = this.player.isAiming ? this.player.angle : this.player.angle;
+    
+    this.world.bullets.push({
+      x: this.player.x + Math.cos(angle) * 20,
+      y: this.player.y + Math.sin(angle) * 20,
+      vx: Math.cos(angle) * bulletSpeed,
+      vy: Math.sin(angle) * bulletSpeed,
+      owner: 'player',
+      damage: weapon === 'shotgun' ? 25 : weapon === 'rifle' ? 40 : 20,
+      life: 60,
+      size: weapon === 'shotgun' ? 4 : 2
+    });
+
+    // Muzzle flash
+    for (let i = 0; i < 5; i++) {
+      this.world.particles.push({
+        x: this.player.x + Math.cos(angle) * 25,
+        y: this.player.y + Math.sin(angle) * 25,
+        vx: Math.cos(angle + (Math.random() - 0.5)) * 3,
+        vy: Math.sin(angle + (Math.random() - 0.5)) * 3,
+        life: 10,
+        maxLife: 10,
+        color: '#FFD700',
+        size: 3
+      });
+    }
+
+    // Sound effect simulation
+    this.playSound('shoot');
+  },
+
+  shootEnd() {
+    // Release shoot
+  },
+
+  aimStart() {
+    this.player.isAiming = true;
+  },
+
+  aimEnd() {
+    this.player.isAiming = false;
+  },
+
+  holster() {
+    this.player.isAiming = false;
+  },
+
+  unholster() {
+    // Ready weapon
+  },
+
+  switchWeapon() {
+    const weapons = ['revolver', 'shotgun', 'rifle'];
+    const idx = weapons.indexOf(this.player.weapon);
+    this.player.weapon = weapons[(idx + 1) % weapons.length];
+    document.getElementById('weapon-name').textContent = this.player.weapon.charAt(0).toUpperCase() + this.player.weapon.slice(1);
+    this.updateHUD();
+  },
+
+  playSound(type) {
+    // Visual feedback instead of audio
+  },
+
+  update() {
+    if (!this.running || this.paused) return;
+    
+    this.time++;
+    this.dayNightCycle = (Math.sin(this.time * 0.001) + 1) / 2;
+    
+    this.updatePlayer();
+    this.updateEnemies();
+    this.updateNPCs();
+    this.updateBullets();
+    this.updateParticles();
+    this.updatePickups();
+    this.updateMissions();
+    this.updateCamera();
+    this.updateWanted();
+    this.updateHUD();
+  },
+
+  updatePlayer() {
+    const p = this.player;
+    
+    // Movement from joystick
+    let mx = this.joystick.dx;
+    let my = this.joystick.dy;
+    
+    // Keyboard override
+    if (this.keys['w'] || this.keys['ArrowUp']) my = -1;
+    if (this.keys['s'] || this.keys['ArrowDown']) my = 1;
+    if (this.keys['a'] || this.keys['ArrowLeft']) mx = -1;
+    if (this.keys['d'] || this.keys['ArrowRight']) mx = 1;
+    
+    const speed = p.isHorseRiding ? p.speed * 2.5 : p.speed;
+    
+    if (mx !== 0 || my !== 0) {
+      const dist = Math.sqrt(mx*mx + my*my);
+      p.x += (mx / dist) * speed;
+      p.y += (my / dist) * speed;
+      p.angle = Math.atan2(my, mx);
+      p.state = p.isHorseRiding ? 'riding' : 'walking';
+      p.animTimer++;
+      if (p.animTimer > 10) {
+        p.animFrame = (p.animFrame + 1) % 4;
+        p.animTimer = 0;
+      }
+    } else {
+      p.state = 'idle';
+      p.animFrame = 0;
+    }
+
+    // World bounds
+    p.x = Math.max(20, Math.min(this.world.width - 20, p.x));
+    p.y = Math.max(20, Math.min(this.world.height - 20, p.y));
+
+    // Dead eye regen
+    if (!p.isAiming) {
+      p.deadEye = Math.min(p.maxDeadEye, p.deadEye + 0.1);
+    }
+
+    // Invincibility timer
+    if (p.invincible > 0) p.invincible--;
+
+    // Check horse interaction
+    for (let horse of this.world.horses) {
+      const dx = p.x - horse.x;
+      const dy = p.y - horse.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 40 && !horse.owned) {
+        // Auto mount if close enough
+      }
+    }
+  },
+
+  updateEnemies() {
+    for (let enemy of this.world.enemies) {
+      const dx = this.player.x - enemy.x;
+      const dy = this.player.y - enemy.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      enemy.angle = Math.atan2(dy, dx);
+
+      if (dist < 300 && this.player.health > 0) {
+        // Chase player
+        enemy.state = 'chase';
+        enemy.x += Math.cos(enemy.angle) * enemy.speed;
+        enemy.y += Math.sin(enemy.angle) * enemy.speed;
+        
+        // Shoot at player
+        enemy.shootTimer++;
+        if (enemy.shootTimer > 60 && dist < 250) {
+          enemy.shootTimer = 0;
+          this.world.bullets.push({
+            x: enemy.x + Math.cos(enemy.angle) * 15,
+            y: enemy.y + Math.sin(enemy.angle) * 15,
+            vx: Math.cos(enemy.angle) * 6,
+            vy: Math.sin(enemy.angle) * 6,
+            owner: 'enemy',
+            damage: 10,
+            life: 40,
+            size: 2
+          });
+        }
+      } else {
+        // Patrol
+        enemy.state = 'patrol';
+        enemy.changeTimer++;
+        if (enemy.changeTimer > 120) {
+          enemy.changeTimer = 0;
+          enemy.targetX = enemy.x + (Math.random() - 0.5) * 200;
+          enemy.targetY = enemy.y + (Math.random() - 0.5) * 200;
+        }
+        const tdx = enemy.targetX - enemy.x;
+        const tdy = enemy.targetY - enemy.y;
+        const tdist = Math.sqrt(tdx*tdx + tdy*tdy);
+        if (tdist > 5) {
+          enemy.x += (tdx / tdist) * enemy.speed * 0.5;
+          enemy.y += (tdy / tdist) * enemy.speed * 0.5;
+          enemy.angle = Math.atan2(tdy, tdx);
+        }
+      }
+
+      // Animation
+      enemy.animTimer++;
+      if (enemy.animTimer > 10) {
+        enemy.animFrame = (enemy.animFrame + 1) % 4;
+        enemy.animTimer = 0;
+      }
+
+      // World bounds
+      enemy.x = Math.max(20, Math.min(this.world.width - 20, enemy.x));
+      enemy.y = Math.max(20, Math.min(this.world.height - 20, enemy.y));
+    }
+  },
+
+  updateNPCs() {
+    for (let npc of this.world.npcs) {
+      npc.changeTimer++;
+      if (npc.changeTimer > 180) {
+        npc.changeTimer = 0;
+        npc.targetX = npc.x + (Math.random() - 0.5) * 150;
+        npc.targetY = npc.y + (Math.random() - 0.5) * 150;
+        npc.angle = Math.atan2(npc.targetY - npc.y, npc.targetX - npc.x);
+      }
+      
+      const dx = npc.targetX - npc.x;
+      const dy = npc.targetY - npc.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      
+      if (dist > 5) {
+        npc.x += (dx / dist) * npc.speed;
+        npc.y += (dy / dist) * npc.speed;
+      }
+      
+      npc.x = Math.max(20, Math.min(this.world.width - 20, npc.x));
+      npc.y = Math.max(20, Math.min(this.world.height - 20, npc.y));
+    }
+  },
+
+  updateBullets() {
+    for (let i = this.world.bullets.length - 1; i >= 0; i--) {
+      const b = this.world.bullets[i];
+      b.x += b.vx;
+      b.y += b.vy;
+      b.life--;
+
+      if (b.life <= 0 || b.x < 0 || b.x > this.world.width || b.y < 0 || b.y > this.world.height) {
+        this.world.bullets.splice(i, 1);
+        continue;
+      }
+
+      // Hit buildings
+      let hitBuilding = false;
+      for (let building of this.world.buildings) {
+        if (b.x > building.x && b.x < building.x + building.w &&
+            b.y > building.y && b.y < building.y + building.h) {
+          hitBuilding = true;
+          // Spark particles
+          for (let j = 0; j < 3; j++) {
+            this.world.particles.push({
+              x: b.x, y: b.y,
+              vx: (Math.random() - 0.5) * 4,
+              vy: (Math.random() - 0.5) * 4,
+              life: 15, maxLife: 15,
+              color: '#FFA500', size: 2
+            });
+          }
+          break;
+        }
+      }
+      if (hitBuilding) {
+        this.world.bullets.splice(i, 1);
+        continue;
+      }
+
+      if (b.owner === 'player') {
+        // Hit enemies
+        for (let j = this.world.enemies.length - 1; j >= 0; j--) {
+          const e = this.world.enemies[j];
+          const dx = b.x - e.x;
+          const dy = b.y - e.y;
+          if (Math.sqrt(dx*dx + dy*dy) < 20) {
+            e.health -= b.damage;
+            this.world.bullets.splice(i, 1);
+            
+            // Blood particles
+            for (let k = 0; k < 8; k++) {
+              this.world.particles.push({
+                x: e.x, y: e.y,
+                vx: (Math.random() - 0.5) * 5,
+                vy: (Math.random() - 0.5) * 5,
+                life: 30, maxLife: 30,
+                color: '#8B0000', size: 3
+              });
+            }
+
+            if (e.health <= 0) {
+              this.world.enemies.splice(j, 1);
+              this.player.money += 10 + Math.random() * 20;
+              this.player.wanted = Math.min(5, this.player.wanted + 0.5);
+              
+              // Spawn new enemy
+              setTimeout(() => {
+                if (this.running) this.world.enemies.push(this.createEnemy());
+              }, 5000);
+            }
+            break;
+          }
+        }
+      } else if (b.owner === 'enemy') {
+        // Hit player
+        const dx = b.x - this.player.x;
+        const dy = b.y - this.player.y;
+        if (Math.sqrt(dx*dx + dy*dy) < 15 && this.player.invincible <= 0) {
+          let damage = b.damage;
+          if (this.player.armor > 0) {
+            const armorAbsorb = Math.min(this.player.armor, damage * 0.7);
+            this.player.armor -= armorAbsorb;
+            damage -= armorAbsorb;
+          }
+          this.player.health -= damage;
+          this.player.invincible = 10;
+          this.world.bullets.splice(i, 1);
+          
+          // Blood particles
+          for (let k = 0; k < 5; k++) {
+            this.world.particles.push({
+              x: this.player.x, y: this.player.y,
+              vx: (Math.random() - 0.5) * 4,
+              vy: (Math.random() - 0.5) * 4,
+              life: 20, maxLife: 20,
+              color: '#FF0000', size: 2
+            });
+          }
+
+          if (this.player.health <= 0) {
+            this.gameOver();
+          }
+        }
+      }
+    }
+  },
+
+  updateParticles() {
+    for (let i = this.world.particles.length - 1; i >= 0; i--) {
+      const p = this.world.particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life--;
+      p.vx *= 0.95;
+      p.vy *= 0.95;
+      
+      if (p.life <= 0) {
+        this.world.particles.splice(i, 1);
+      }
+    }
+  },
+
+  updatePickups() {
+    for (let i = this.world.pickups.length - 1; i >= 0; i--) {
+      const p = this.world.pickups[i];
+      const dx = this.player.x - p.x;
+      const dy = this.player.y - p.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      
+      if (dist < 30) {
+        switch(p.type) {
+          case 'health':
+            this.player.health = Math.min(this.player.maxHealth, this.player.health + p.amount);
+            break;
+          case 'armor':
+            this.player.armor = Math.min(this.player.maxArmor, this.player.armor + p.amount);
+            break;
+          case 'ammo':
+            this.player.reserveAmmo[this.player.weapon] += Math.floor(p.amount);
+            break;
+          case 'money':
+            this.player.money += Math.floor(p.amount);
+            break;
+        }
+        this.world.pickups.splice(i, 1);
+        
+        // Pickup particles
+        for (let j = 0; j < 10; j++) {
+          this.world.particles.push({
+            x: p.x, y: p.y,
+            vx: (Math.random() - 0.5) * 6,
+            vy: (Math.random() - 0.5) * 6,
+            life: 20, maxLife: 20,
+            color: '#FFD700', size: 3
+          });
+        }
+      }
+    }
+  },
+
+  updateMissions() {
+    for (let mission of this.world.missions) {
+      if (!mission.active) continue;
+      
+      const dx = this.player.x - mission.x;
+      const dy = this.player.y - mission.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      
+      if (dist < 50 && mission.type === 'kill_bandits') {
+        mission.completed = this.world.enemies.length;
+        if (mission.completed >= mission.target) {
+          mission.active = false;
+          this.player.money += mission.reward;
+          this.showMissionText(`Mission Complete! +$${mission.reward}`);
+        }
+      }
+    }
+  },
+
+  updateCamera() {
+    this.camera.x = this.player.x - canvas.width / 2;
+    this.camera.y = this.player.y - canvas.height / 2;
+    
+    this.camera.x = Math.max(0, Math.min(this.world.width - canvas.width, this.camera.x));
+    this.camera.y = Math.max(0, Math.min(this.world.height - canvas.height, this.camera.y));
+  },
+
+  updateWanted() {
+    if (this.player.wanted > 0) {
+      this.player.wantedTimer++;
+      if (this.player.wantedTimer > 600) {
+        this.player.wanted = Math.max(0, this.player.wanted - 0.1);
+        this.player.wantedTimer = 0;
+      }
+    }
+    
+    // Update star display
+    for (let i = 1; i <= 5; i++) {
+      const star = document.getElementById(`star${i}`);
+      if (i <= Math.ceil(this.player.wanted)) {
+        star.classList.add('active');
+      } else {
+        star.classList.remove('active');
+      }
+    }
+  },
+
+  updateHUD() {
+    document.getElementById('health-fill').style.width = `${(this.player.health / this.player.maxHealth) * 100}%`;
+    document.getElementById('armor-fill').style.width = `${(this.player.armor / this.player.maxArmor) * 100}%`;
+    document.getElementById('dead-eye-fill').style.width = `${(this.player.deadEye / this.player.maxDeadEye) * 100}%`;
+    document.getElementById('money').textContent = `$${Math.floor(this.player.money)}`;
+    document.getElementById('ammo-count').textContent = `${this.player.ammo[this.player.weapon]}/${this.player.reserveAmmo[this.player.weapon]}`;
+  },
+
+  showMissionText(text) {
+    const el = document.getElementById('mission-text');
+    el.textContent = text;
+    el.style.display = 'block';
+    setTimeout(() => {
+      el.style.display = 'none';
+    }, 3000);
+  },
+
+  render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.save();
+    ctx.translate(-this.camera.x, -this.camera.y);
+    
+    this.renderGround();
+    this.renderRoads();
+    this.renderPickups();
+    this.renderBuildings();
+    this.renderTrees();
+    this.renderNPCs();
+    this.renderEnemies();
+    this.renderHorses();
+    this.renderPlayer();
+    this.renderBullets();
+    this.renderParticles();
+    this.renderMissions();
+    
+    ctx.restore();
+    
+    this.renderMinimap();
+    this.renderDayNight();
+  },
+
+  renderGround() {
+    // Ground
+    ctx.fillStyle = '#8B7355';
+    ctx.fillRect(0, 0, this.world.width, this.world.height);
+    
+    // Ground texture
+    ctx.fillStyle = '#7A6B4F';
+    for (let i = 0; i < 500; i++) {
+      const x = (i * 137) % this.world.width;
+      const y = (i * 251) % this.world.height;
+      ctx.fillRect(x, y, 2, 2);
+    }
+  },
+
+  renderRoads() {
+    for (let road of this.world.roads) {
+      ctx.fillStyle = '#6B5B3E';
+      if (road.horizontal) {
+        ctx.fillRect(road.x, road.y, road.w, road.h);
+      } else {
+        ctx.fillRect(road.x, road.y, road.w, road.h);
+      }
+      
+      // Road lines
+      ctx.strokeStyle = '#8B7355';
+      ctx.setLineDash([10, 10]);
+      ctx.beginPath();
+      if (road.horizontal) {
+        ctx.moveTo(road.x, road.y + road.h/2);
+        ctx.lineTo(road.x + road.w, road.y + road.h/2);
+      } else {
+        ctx.moveTo(road.x + road.w/2, road.y);
+        ctx.lineTo(road.x + road.w/2, road.y + road.h);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  },
+
+  renderBuildings() {
+    for (let building of this.world.buildings) {
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(building.x + 5, building.y + 5, building.w, building.h);
+      
+      // Building body
+      ctx.fillStyle = building.color;
+      ctx.fillRect(building.x, building.y, building.w, building.h);
+      
+      // Roof
+      ctx.fillStyle = building.roofColor;
+      ctx.fillRect(building.x - 3, building.y - 5, building.w + 6, 10);
+      
+      // Door
+      ctx.fillStyle = '#3E2723';
+      ctx.fillRect(building.x + building.w/2 - 8, building.y + building.h - 20, 16, 20);
+      
+      // Windows
+      ctx.fillStyle = '#87CEEB';
+      ctx.fillRect(building.x + 10, building.y + 15, 15, 15);
+      ctx.fillRect(building.x + building.w - 25, building.y + 15, 15, 15);
+      
+      // Building name
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText(building.type.toUpperCase(), building.x + building.w/2, building.y - 10);
+    }
+  },
+
+  renderTrees() {
+    for (let tree of this.world.trees) {
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.beginPath();
+      ctx.ellipse(tree.x + 3, tree.y + 3, tree.size, tree.size * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Trunk
+      ctx.fillStyle = '#3E2723';
+      ctx.fillRect(tree.x - 3, tree.y - 5, 6, 15);
+      
+      // Canopy
+      if (tree.type === 'oak') {
+        ctx.fillStyle = '#228B22';
+        ctx.beginPath();
+        ctx.arc(tree.x, tree.y - 10, tree.size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        ctx.fillStyle = '#2E8B2E';
+        ctx.beginPath();
+        ctx.arc(tree.x - 5, tree.y - 15, tree.size * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = '#006400';
+        ctx.beginPath();
+        ctx.moveTo(tree.x, tree.y - tree.size * 2);
+        ctx.lineTo(tree.x - tree.size, tree.y);
+        ctx.lineTo(tree.x + tree.size, tree.y);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  },
+
+  renderPlayer() {
+    const p = this.player;
+    
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.angle);
+    
+    // Horse
+    if (p.isHorseRiding && p.horse) {
+      // Horse body
+      ctx.fillStyle = p.horse.color;
+      ctx.fillRect(-20, -12, 40, 24);
+      
+      // Horse head
+      ctx.fillRect(20, -8, 15, 12);
+      
+      // Horse legs
+      ctx.fillStyle = '#3E2723';
+      const legAnim = Math.sin(p.animTimer * 0.5) * 5;
+      ctx.fillRect(-15, 12, 6, 10 + legAnim);
+      ctx.fillRect(-5, 12, 6, 10 - legAnim);
+      ctx.fillRect(10, 12, 6, 10 + legAnim);
+      ctx.fillRect(20, 12, 6, 10 - legAnim);
+      
+      // Rider
+      ctx.fillStyle = '#8B4513';
+      ctx.fillRect(-5, -15, 12, 15);
+      
+      // Hat
+      ctx.fillStyle = '#3E2723';
+      ctx.fillRect(-8, -20, 20, 5);
+      ctx.fillRect(-4, -25, 12, 8);
+      
+      // Gun
+      ctx.fillStyle = '#333';
+      ctx.fillRect(15, -3, 15, 4);
+    } else {
+      // Player body
+      ctx.fillStyle = '#8B4513';
+      ctx.fillRect(-8, -8, 16, 16);
+      
+      // Head
+      ctx.fillStyle = '#DEB887';
+      ctx.beginPath();
+      ctx.arc(0, 0, 8, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Hat
+      ctx.fillStyle = '#3E2723';
+      ctx.fillRect(-12, -10, 24, 5);
+      ctx.fillRect(-6, -16, 12, 8);
+      
+      // Gun arm
+      ctx.fillStyle = '#DEB887';
+      ctx.fillRect(10, -2, 12, 4);
+      
+      // Gun
+      ctx.fillStyle = '#333';
+      ctx.fillRect(20, -3, 10, 6);
+      
+      // Legs
+      ctx.fillStyle = '#4A3728';
+      const legAnim = Math.sin(p.animTimer * 0.3) * 3;
+      ctx.fillRect(-6, 8, 5, 10 + legAnim);
+      ctx.fillRect(1, 8, 5, 10 - legAnim);
+    }
+    
+    ctx.restore();
+    
+    // Invincibility flash
+    if (p.invincible > 0 && p.invincible % 4 < 2) {
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 20, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  },
+
+  renderEnemies() {
+    for (let enemy of this.world.enemies) {
+      ctx.save();
+      ctx.translate(enemy.x, enemy.y);
+      ctx.rotate(enemy.angle);
+      
+      // Body
+      ctx.fillStyle = enemy.color;
+      ctx.fillRect(-8, -8, 16, 16);
+      
+      // Head
+      ctx.fillStyle = '#DEB887';
+      ctx.beginPath();
+      ctx.arc(0, 0, 7, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Hat
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(-10, -8, 20, 4);
+      ctx.fillRect(-5, -12, 10, 6);
+      
+      // Gun
+      ctx.fillStyle = '#333';
+      ctx.fillRect(10, -2, 12, 4);
+      
+      // Legs
+      ctx.fillStyle = '#333';
+      const legAnim = Math.sin(enemy.animTimer * 0.3) * 3;
+      ctx.fillRect(-5, 8, 4, 8 + legAnim);
+      ctx.fillRect(1, 8, 4, 8 - legAnim);
+      
+      ctx.restore();
+      
+      // Health bar
+      if (enemy.health < enemy.maxHealth) {
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(enemy.x - 15, enemy.y - 25, 30, 4);
+        ctx.fillStyle = '#FF0000';
+        ctx.fillRect(enemy.x - 15, enemy.y - 25, 30 * (enemy.health / enemy.maxHealth), 4);
+      }
+    }
+  },
+
+  renderNPCs() {
+    for (let npc of this.world.npcs) {
+      ctx.save();
+      ctx.translate(npc.x, npc.y);
+      ctx.rotate(npc.angle);
+      
+      // Body
+      ctx.fillStyle = npc.color;
+      ctx.fillRect(-6, -6, 12, 12);
+      
+      // Head
+      ctx.fillStyle = '#DEB887';
+      ctx.beginPath();
+      ctx.arc(0, 0, 6, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Hat
+      ctx.fillStyle = '#8B6914';
+      ctx.fillRect(-8, -6, 16, 3);
+      
+      ctx.restore();
+    }
+  },
+
+  renderHorses() {
+    for (let horse of this.world.horses) {
+      if (horse.owned) continue;
+      
+      ctx.save();
+      ctx.translate(horse.x, horse.y);
+      ctx.rotate(horse.angle);
+      
+      // Body
+      ctx.fillStyle = horse.color;
+      ctx.fillRect(-15, -10, 30, 20);
+      
+      // Head
+      ctx.fillRect(15, -6, 12, 10);
+      
+      // Legs
+      ctx.fillStyle = '#3E2723';
+      ctx.fillRect(-12, 10, 5, 8);
+      ctx.fillRect(-3, 10, 5, 8);
+      ctx.fillRect(8, 10, 5, 8);
+      ctx.fillRect(15, 10, 5, 8);
+      
+      // Tail
+      ctx.fillStyle = horse.color;
+      ctx.fillRect(-18, -5, 5, 10);
+      
+      ctx.restore();
+      
+      // Interaction hint
+      const dx = this.player.x - horse.x;
+      const dy = this.player.y - horse.y;
+      if (Math.sqrt(dx*dx + dy*dy) < 50) {
+        ctx.fillStyle = '#FFD700';
+        ctx.font = '12px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS E', horse.x, horse.y - 30);
+      }
+    }
+  },
+
+  renderBullets() {
+    for (let b of this.world.bullets) {
+      ctx.fillStyle = b.owner === 'player' ? '#FFD700' : '#FF4444';
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Trail
+      ctx.fillStyle = b.owner === 'player' ? 'rgba(255,215,0,0.3)' : 'rgba(255,68,68,0.3)';
+      ctx.beginPath();
+      ctx.arc(b.x - b.vx, b.y - b.vy, b.size * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  },
+
+  renderParticles() {
+    for (let p of this.world.particles) {
+      const alpha = p.life / p.maxLife;
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  },
+
+  renderPickups() {
+    for (let p of this.world.pickups) {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      
+      // Glow
+      ctx.fillStyle = 'rgba(255,215,0,0.3)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 15, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Item
+      switch(p.type) {
+        case 'health':
+          ctx.fillStyle = '#FF0000';
+          ctx.fillRect(-5, -2, 10, 4);
+          ctx.fillRect(-2, -5, 4, 10);
+          break;
+        case 'armor':
+          ctx.fillStyle = '#4488FF';
+          ctx.beginPath();
+          ctx.moveTo(0, -8);
+          ctx.lineTo(8, 0);
+          ctx.lineTo(0, 8);
+          ctx.lineTo(-8, 0);
+          ctx.closePath();
+          ctx.fill();
+          break;
+        case 'ammo':
+          ctx.fillStyle = '#FFD700';
+          ctx.fillRect(-3, -6, 6, 12);
+          break;
+        case 'money':
+          ctx.fillStyle = '#00FF00';
+          ctx.font = '14px Courier New';
+          ctx.textAlign = 'center';
+          ctx.fillText('$', 0, 5);
+          break;
+      }
+      
+      ctx.restore();
+    }
+  },
+
+  renderMissions() {
+    for (let mission of this.world.missions) {
+      if (!mission.active) continue;
+      
+      ctx.save();
+      ctx.translate(mission.x, mission.y);
+      
+      // Mission marker
+      const pulse = Math.sin(this.time * 0.1) * 5;
+      ctx.fillStyle = 'rgba(255,215,0,0.5)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 20 + pulse, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#FFD700';
+      ctx.font = '20px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText('!', 0, 7);
+      
+      // Label
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px Courier New';
+      ctx.fillText(mission.type.replace('_', ' ').toUpperCase(), 0, -25);
+      
+      ctx.restore();
+    }
+  },
+
+  renderMinimap() {
+    minimapCtx.clearRect(0, 0, 120, 120);
+    
+    // Background
+    minimapCtx.fillStyle = '#2E4A1E';
+    minimapCtx.fillRect(0, 0, 120, 120);
+    
+    const scale = 120 / this.world.width;
+    
+    // Roads
+    minimapCtx.fillStyle = '#6B5B3E';
+    for (let road of this.world.roads) {
+      minimapCtx.fillRect(road.x * scale, road.y * scale, road.w * scale, road.h * scale);
+    }
+    
+    // Buildings
+    minimapCtx.fillStyle = '#8B4513';
+    for (let building of this.world.buildings) {
+      minimapCtx.fillRect(building.x * scale, building.y * scale, building.w * scale, building.h * scale);
+    }
+    
+    // Trees
+    minimapCtx.fillStyle = '#228B22';
+    for (let tree of this.world.trees) {
+      minimapCtx.fillRect(tree.x * scale - 1, tree.y * scale - 1, 2, 2);
+    }
+    
+    // Enemies
+    minimapCtx.fillStyle = '#FF0000';
+    for (let enemy of this.world.enemies) {
+      minimapCtx.fillRect(enemy.x * scale - 1, enemy.y * scale - 1, 3, 3);
+    }
+    
+    // NPCs
+    minimapCtx.fillStyle = '#FFD700';
+    for (let npc of this.world.npcs) {
+      minimapCtx.fillRect(npc.x * scale - 1, npc.y * scale - 1, 2, 2);
+    }
+    
+    // Player
+    minimapCtx.fillStyle = '#00FF00';
+    minimapCtx.beginPath();
+    minimapCtx.arc(this.player.x * scale, this.player.y * scale, 3, 0, Math.PI * 2);
+    minimapCtx.fill();
+    
+    // Player direction
+    minimapCtx.strokeStyle = '#00FF00';
+    minimapCtx.lineWidth = 1;
+    minimapCtx.beginPath();
+    minimapCtx.moveTo(this.player.x * scale, this.player.y * scale);
+    minimapCtx.lineTo(
+      this.player.x * scale + Math.cos(this.player.angle) * 10,
+      this.player.y * scale + Math.sin(this.player.angle) * 10
+    );
+    minimapCtx.stroke();
+    
+    // Circular clip
+    minimapCtx.globalCompositeOperation = 'destination-in';
+    minimapCtx.beginPath();
+    minimapCtx.arc(60, 60, 60, 0, Math.PI * 2);
+    minimapCtx.fill();
+    minimapCtx.globalCompositeOperation = 'source-over';
+  },
+
+  renderDayNight() {
+    const nightAlpha = (1 - this.dayNightCycle) * 0.5;
+    if (nightAlpha > 0) {
+      ctx.fillStyle = `rgba(0,0,30,${nightAlpha})`;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+  },
+
+  gameOver() {
+    this.running = false;
+    document.getElementById('game-over').style.display = 'flex';
+    document.getElementById('final-score').textContent = `Enemies Defeated: ${this.world.enemies.length}`;
+    document.getElementById('final-money').textContent = `Money: $${Math.floor(this.player.money)}`;
+  },
+
+  restart() {
+    document.getElementById('game-over').style.display = 'none';
+    this.player.health = 100;
+    this.player.armor = 50;
+    this.player.deadEye = 100;
+    this.player.money = 150;
+    this.player.wanted = 0;
+    this.player.x = this.world.width / 2;
+    this.player.y = this.world.height / 2;
+    this.world.enemies = [];
+    for (let i = 0; i < 15; i++) {
+      this.world.enemies.push(this.createEnemy());
+    }
+    this.world.bullets = [];
+    this.world.particles = [];
+    this.running = true;
+  },
+
+  start() {
+    document.getElementById('start-screen').style.display = 'none';
+    this.init();
+    this.running = true;
+    this.gameLoop();
+  },
+
+  gameLoop() {
+    this.update();
+    this.render();
+    requestAnimationFrame(() => this.gameLoop());
+  }
+};
+
+// Handle horse mounting
+document.addEventListener('touchstart', (e) => {
+  for (let touch of e.changedTouches) {
+    const x = touch.clientX;
+    const y = touch.clientY;
+    
+    // Check if touching near a horse
+    for (let horse of game.world.horses) {
+      const dx = x - (horse.x - game.camera.x);
+      const dy = y - (horse.y - game.camera.y);
+      if (Math.sqrt(dx*dx + dy*dy) < 40 && !horse.owned) {
+        game.player.isHorseRiding = true;
+        game.player.horse = horse;
+        horse.owned = true;
+        break;
+      }
+    }
+  }
+});
+
+// Start button
+document.getElementById('start-btn').addEventListener('click', () => {
+  game.start();
+});
+
+// Prevent default touch behaviors
+document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+</script>
+</body>
+</html>

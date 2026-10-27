@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Habit Tree</title>
+<style>
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: linear-gradient(#87c9ff 0%, #cfefff 45%, #eff9ff 100%);
+    font-family: Arial, Helvetica, sans-serif;
+  }
+  #ui {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    width: min(380px, calc(100vw - 32px));
+    background: rgba(10, 18, 28, 0.42);
+    color: #fff;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 16px;
+    padding: 14px;
+    box-sizing: border-box;
+    z-index: 10;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+  }
+  #ui h1 {
+    font-size: 18px;
+    margin: 0 0 10px 0;
+    letter-spacing: 0.3px;
+  }
+  #ui p {
+    margin: 8px 0;
+    font-size: 13px;
+    line-height: 1.35;
+    opacity: 0.95;
+  }
+  #habitInput {
+    width: 100%;
+    box-sizing: border-box;
+    border: 0;
+    outline: none;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 15px;
+    margin-top: 8px;
+    background: rgba(255,255,255,0.92);
+    color: #102030;
+  }
+  #buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  button {
+    flex: 1;
+    border: 0;
+    border-radius: 12px;
+    padding: 11px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    color: white;
+    background: linear-gradient(180deg, #2fb35a, #1f8f44);
+    box-shadow: 0 8px 18px rgba(0,0,0,0.15);
+  }
+  button.secondary {
+    background: linear-gradient(180deg, #6b7c92, #4b5a6d);
+  }
+  #status {
+    margin-top: 10px;
+    font-size: 13px;
+    min-height: 18px;
+    color: #e9f7ea;
+  }
+  #canvasWrap {
+    position: absolute;
+    inset: 0;
+  }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at 50% 75%, rgba(255,255,255,0) 0, rgba(255,255,255,0) 40%, rgba(0,0,0,0.05) 100%);
+  }
+</style>
+</head>
+<body>
+<div id="ui">
+  <h1>Habit Tree</h1>
+  <p>Write your habit every day. If you miss it, the tree gets stressed and branches may break. Keep writing to grow a healthier, bigger tree.</p>
+  <input id="habitInput" type="text" placeholder="Example: Read 10 pages" maxlength="80" />
+  <div id="buttons">
+    <button id="saveBtn">Save Habit</button>
+    <button id="missBtn" class="secondary">I Missed Today</button>
+  </div>
+  <div id="status">No habit saved yet.</div>
+</div>
+<div id="canvasWrap"></div>
+<div id="overlay"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  const wrap = document.getElementById('canvasWrap');
+  const input = document.getElementById('habitInput');
+  const saveBtn = document.getElementById('saveBtn');
+  const missBtn = document.getElementById('missBtn');
+  const statusEl = document.getElementById('status');
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0xcfefff, 20, 90);
+
+  const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
+  camera.position.set(0, 4, 18);
+  camera.lookAt(0, 5, 0);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  wrap.appendChild(renderer.domElement);
+
+  const ambient = new THREE.AmbientLight(0xffffff, 1.2);
+  scene.add(ambient);
+
+  const sun = new THREE.DirectionalLight(0xfff5e0, 2.2);
+  sun.position.set(10, 18, 8);
+  scene.add(sun);
+
+  const hemi = new THREE.HemisphereLight(0xcfefff, 0x5f7a4f, 1.6);
+  scene.add(hemi);
+
+  const groundGeo = new THREE.CircleGeometry(40, 64);
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x5f8f4b, roughness: 1, metalness: 0 });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.01;
+  scene.add(ground);
+
+  const grassPatchGeo = new THREE.CircleGeometry(0.18, 8);
+  const grassPatchMat = new THREE.MeshStandardMaterial({ color: 0x7fb35a, roughness: 1 });
+  for (let i = 0; i < 450; i++) {
+    const patch = new THREE.Mesh(grassPatchGeo, grassPatchMat);
+    const r = 18 * Math.sqrt(Math.random());
+    const a = Math.random() * Math.PI * 2;
+    patch.position.set(Math.cos(a) * r, 0.001, Math.sin(a) * r);
+    patch.rotation.z = Math.random() * Math.PI;
+    patch.scale.setScalar(0.4 + Math.random() * 1.2);
+    scene.add(patch);
+  }
+
+  const tree = new THREE.Group();
+  scene.add(tree);
+
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6a452b, roughness: 1 });
+  const barkMat = new THREE.MeshStandardMaterial({ color: 0x5a3822, roughness: 1 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x2f7d3c, roughness: 1 });
+  const leafMat2 = new THREE.MeshStandardMaterial({ color: 0x3d9a4c, roughness: 1 });
+
+  let savedHabit = '';
+  let daysStrong = 0;
+  let stress = 0;
+  let brokenBranches = 0;
+  const branches = [];
+  const leaves = [];
+  let crownScale = 0.15;
+
+  function makeTrunkSegment(height, radiusTop, radiusBottom, y) {
+    const geo = new THREE.CylinderGeometry(radiusTop, radiusBottom, height, 10, 1);
+    const mesh = new THREE.Mesh(geo, trunkMat);
+    mesh.position.y = y;
+    mesh.castShadow = true;
+    return mesh;
+  }
+
+  function makeBranch(level, length, radius, angleY, angleZ, yPos) {
+    const group = new THREE.Group();
+    group.position.y = yPos;
+    group.rotation.y = angleY;
+    group.rotation.z = angleZ;
+    const geo = new THREE.CylinderGeometry(radius * 0.55, radius, length, 8, 1);
+    const mesh = new THREE.Mesh(geo, barkMat);
+    mesh.position.y = length * 0.5;
+    mesh.castShadow = true;
+    group.add(mesh);
+    group.userData = { level, length, baseZ: angleZ, baseY: angleY, broken: false, bend: 0 };
+    tree.add(group);
+    branches.push(group);
+    return group;
+  }
+
+  function makeLeafCluster(pos, scale) {
+    const g = new THREE.Group();
+    g.position.copy(pos);
+    const count = 18 + Math.floor(Math.random() * 12);
+    for (let i = 0; i < count; i++) {
+      const geo = new THREE.SphereGeometry(0.22 + Math.random() * 0.18, 7, 7);
+      const m = new THREE.Mesh(geo, Math.random() > 0.5 ? leafMat : leafMat2);
+      const rr = 0.5 + Math.random() * 1.1;
+      const aa = Math.random() * Math.PI * 2;
+      const bb = Math.random() * Math.PI;
+      m.position.set(Math.cos(aa) * rr * Math.sin(bb), Math.cos(bb) * rr, Math.sin(aa) * rr * Math.sin(bb));
+      m.scale.setScalar(0.7 + Math.random() * 0.7);
+      g.add(m);
+    }
+    g.scale.setScalar(scale);
+    tree.add(g);
+    leaves.push(g);
+    return g;
+  }
+
+  function buildTree() {
+    tree.clear();
+    branches.length = 0;
+    leaves.length = 0;
+
+    const trunkHeight = 6;
+    const segments = 6;
+    for (let i = 0; i < segments; i++) {
+      const t = i / segments;
+      const seg = makeTrunkSegment(trunkHeight / segments + 0.02, 0.55 - t * 0.22, 0.75 - t * 0.24, i * trunkHeight / segments);
+      seg.rotation.y = (i % 2 === 0 ? 0.06 : -0.05) * i;
+      tree.add(seg);
+    }
+
+    const rootBase = new THREE.Group();
+    rootBase.position.y = -0.08;
+    tree.add(rootBase);
+    for (let i = 0; i < 5; i++) {
+      const g = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.2 + Math.random() * 0.8, 7), barkMat);
+      g.position.y = -0.4;
+      g.rotation.z = (Math.PI / 2) + (i * Math.PI * 2 / 5) + (Math.random() * 0.2 - 0.1);
+      g.rotation.x = Math.PI / 2 + (Math.random() * 0.25 - 0.12);
+      g.position.x = Math.cos(i * Math.PI * 2 / 5) * 0.4;
+      g.position.z = Math.sin(i * Math.PI * 2 / 5) * 0.4;
+      tree.add(g);
+    }
+
+    for (let i = 0; i < 7; i++) {
+      const y = 2.0 + i * 0.45;
+      const len = 2.1 - i * 0.12;
+      const left = makeBranch(i, len, 0.18 - i * 0.01, -0.7 - i * 0.15, 0.55 + i * 0.06, y);
+      const right = makeBranch(i, len * 0.92, 0.17 - i * 0.01, 0.7 + i * 0.12, -0.52 - i * 0.05, y + 0.1);
+      left.scale.y = 0.8;
+      right.scale.y = 0.8;
+    }
+
+    for (let i = 0; i < 12; i++) {
+      const p = new THREE.Vector3(
+        (Math.random() - 0.5) * 2.3,
+        5.5 + Math.random() * 3.0,
+        (Math.random() - 0.5) * 2.3
+      );
+      makeLeafCluster(p, 0.8 + Math.random() * 0.9);
+    }
+
+    crownScale = 0.15;
+    tree.scale.setScalar(crownScale);
+    tree.position.set(0, 0, 0);
+  }
+
+  buildTree();
+
+  function updateStatus() {
+    statusEl.textContent = savedHabit
+      ? `Habit: "${savedHabit}" | Strong days: ${daysStrong} | Stress: ${stress}`
+      : 'No habit saved yet.';
+  }
+
+  function growTree() {
+    if (!savedHabit) return;
+    daysStrong++;
+    stress = Math.max(0, stress - 1);
+
+    crownScale = Math.min(1.75, crownScale + 0.06);
+    tree.scale.setScalar(crownScale);
+    tree.position.y = Math.min(1.8, (crownScale - 0.15) * 1.1);
+
+    if (daysStrong % 2 === 0) {
+      const y = 5.8 + daysStrong * 0.05;
+      const side = Math.random() > 0.5 ? 1 : -1;
+      const br = makeBranch(daysStrong, 1.2 + Math.random() * 1.2, 0.08, side * (0.5 + Math.random() * 0.4), side * (0.15 + Math.random() * 0.25), y);
+      br.scale.y = 0.9;
+      const tip = new THREE.Vector3(side * (0.8 + Math.random()), y + 1.2, (Math.random() - 0.5) * 0.7);
+      makeLeafCluster(tip, 0.7 + Math.random() * 0.7);
+    }
+    updateStatus();
+  }
+
+  function missDay() {
+    stress++;
+    daysStrong = Math.max(0, daysStrong - 1);
+
+    branches.forEach((b, idx) => {
+      if (b.userData.broken) return;
+      const chance = Math.min(0.18 + stress * 0.08, 0.72);
+      if (Math.random() < chance && idx % 2 === stress % 3) {
+        b.userData.broken = true;
+        brokenBranches++;
+        b.rotation.z += (Math.random() > 0.5 ? 1 : -1) * (0.5 + Math.random() * 0.8);
+        b.rotation.x += (Math.random() - 0.5) * 0.7;
+        b.position.y -= 0.1;
+        b.scale.y *= 0.75;
+      }
+    });
+
+    crownScale = Math.max(0.12, crownScale - 0.03);
+    tree.scale.setScalar(crownScale);
+
+    leaves.forEach(l => {
+      l.children.forEach(m => {
+        if (Math.random() < 0.02 + stress * 0.01) m.scale.multiplyScalar(0.96);
+      });
+    });
+
+    updateStatus();
+  }
+
+  saveBtn.addEventListener('click', () => {
+    const val = input.value.trim();
+    if (!val) {
+      statusEl.textContent = 'Please write a habit first.';
+      return;
+    }
+    savedHabit = val;
+    growTree();
+  });
+
+  missBtn.addEventListener('click', () => {
+    if (!savedHabit) {
+      statusEl.textContent = 'Save a habit first, then the tree can respond.';
+      return;
+    }
+    missDay();
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveBtn.click();
+  });
+
+  let lastAuto = Date.now();
+  function animate() {
+    requestAnimationFrame(animate);
+    const t = performance.now() * 0.001;
+
+    tree.rotation.y = Math.sin(t * 0.25) * 0.1;
+    tree.rotation.z = Math.sin(t * 0.18) * 0.03;
+
+    branches.forEach((b, i) => {
+      if (b.userData.broken) {
+        b.rotation.x += Math.sin(t * 2 + i) * 0.0007;
+      } else {
+        b.rotation.z = b.userData.baseZ + Math.sin(t * 1.1 + i) * 0.02 - Math.min(stress * 0.03, 0.18);
+      }
+    });
+
+    leaves.forEach((l, i) => {
+      l.rotation.y += 0.001 + i * 0.00001;
+      l.rotation.x = Math.sin(t * 0.5 + i) * 0.03;
+    });
+
+    if (savedHabit && Date.now() - lastAuto > 3500) {
+      lastAuto = Date.now();
+      if (Math.random() < 0.72) growTree(); else missDay();
+    }
+
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  updateStatus();
+})();
+</script>
+</body>
+</html>

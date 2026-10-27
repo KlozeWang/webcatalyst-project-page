@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Jump & Shot Platformer</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #111827;
+    touch-action: none;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  }
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    background: linear-gradient(#87ceeb, #dff4ff 65%, #b6e3a4 65%, #8ccf7a 100%);
+  }
+  .hud {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    color: #fff;
+    text-shadow: 0 2px 3px rgba(0,0,0,.45);
+    font-weight: 700;
+    font-size: 16px;
+    z-index: 10;
+  }
+  .panel {
+    background: rgba(15,23,42,.28);
+    padding: 8px 12px;
+    border-radius: 12px;
+    backdrop-filter: blur(4px);
+  }
+  .controls {
+    position: fixed;
+    inset: auto 0 0 0;
+    height: 32vh;
+    pointer-events: none;
+    z-index: 20;
+  }
+  .btn {
+    position: absolute;
+    width: 18vw;
+    max-width: 92px;
+    min-width: 66px;
+    aspect-ratio: 1/1;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.55);
+    background: rgba(255,255,255,.16);
+    box-shadow: inset 0 0 24px rgba(255,255,255,.1), 0 8px 20px rgba(0,0,0,.18);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 800;
+    pointer-events: auto;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+  .btn:active, .btn.active {
+    background: rgba(255,255,255,.32);
+    transform: scale(.97);
+  }
+  #leftBtn { left: 4vw; bottom: 4vh; }
+  #rightBtn { left: 24vw; bottom: 4vh; }
+  #jumpBtn { right: 22vw; bottom: 4vh; }
+  #shotBtn { right: 4vw; bottom: 4vh; }
+  .hint {
+    position: fixed;
+    left: 50%;
+    top: 48%;
+    transform: translate(-50%, -50%);
+    color: rgba(255,255,255,.9);
+    text-align: center;
+    font-size: 15px;
+    line-height: 1.4;
+    text-shadow: 0 2px 3px rgba(0,0,0,.5);
+    background: rgba(15,23,42,.22);
+    padding: 12px 16px;
+    border-radius: 14px;
+    display: none;
+    z-index: 15;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="hud">
+  <div class="panel" id="scoreHud">Score: 0</div>
+  <div class="panel" id="lifeHud">Lives: 3</div>
+</div>
+
+<div class="hint" id="hint">Reach the flag!<br>Left/Right to move, Jump, Shot to fire.</div>
+
+<div class="controls">
+  <button class="btn" id="leftBtn">◀</button>
+  <button class="btn" id="rightBtn">▶</button>
+  <button class="btn" id="jumpBtn">JUMP</button>
+  <button class="btn" id="shotBtn">SHOT</button>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreHud = document.getElementById('scoreHud');
+  const lifeHud = document.getElementById('lifeHud');
+  const hint = document.getElementById('hint');
+
+  let W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    W = Math.floor(innerWidth);
+    H = Math.floor(innerHeight);
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    buildLevel();
+  }
+  addEventListener('resize', resize, { passive: true });
+
+  const input = { left:false, right:false, jump:false, shot:false };
+  function bindBtn(id, key) {
+    const el = document.getElementById(id);
+    const down = e => { e.preventDefault(); input[key] = true; el.classList.add('active'); };
+    const up = e => { e.preventDefault(); input[key] = false; el.classList.remove('active'); };
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('pointerleave', up);
+  }
+  bindBtn('leftBtn','left');
+  bindBtn('rightBtn','right');
+  bindBtn('jumpBtn','jump');
+  bindBtn('shotBtn','shot');
+
+  addEventListener('keydown', e => {
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') input.left = true;
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') input.right = true;
+    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') input.jump = true;
+    if (e.code === 'KeyJ' || e.code === 'Enter' || e.code === 'KeyK') input.shot = true;
+  });
+  addEventListener('keyup', e => {
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') input.left = false;
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') input.right = false;
+    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') input.jump = false;
+    if (e.code === 'KeyJ' || e.code === 'Enter' || e.code === 'KeyK') input.shot = false;
+  });
+
+  let platforms = [], coins = [], enemies = [], bullets = [];
+  let flag = { x: 0, y: 0, w: 34, h: 90 };
+  let worldW = 3200;
+  let score = 0, lives = 3;
+  let won = false, gameOver = false;
+  let camX = 0;
+  let lastShot = 0;
+  let jumpLatch = false;
+  let msgTimer = 0;
+
+  const player = {
+    x: 80, y: 0, w: 28, h: 38,
+    vx: 0, vy: 0,
+    onGround: false,
+    face: 1
+  };
+
+  function buildLevel() {
+    platforms = [];
+    coins = [];
+    enemies = [];
+    bullets = [];
+    worldW = Math.max(2800, W * 4);
+
+    const groundY = H - 48;
+    platforms.push({ x: -200, y: groundY, w: worldW + 400, h: 80, solid: true });
+
+    const p = (x,y,w,h) => platforms.push({ x,y,w,h,solid:true });
+    const c = (x,y) => coins.push({ x,y,r:10, taken:false });
+    const e = (x,y) => enemies.push({ x,y,w:28,h:28,vx: (Math.random()<0.5?-1:1)*1.2, alive:true });
+
+    for (let i = 0; i < 10; i++) {
+      const x = 300 + i * 260 + (i % 2) * 40;
+      p(x, groundY - 120 - (i%3)*20, 120, 18);
+      c(x + 40, groundY - 150 - (i%3)*20);
+      if (i % 2 === 0) e(x + 80, groundY - 148 - (i%3)*20);
+    }
+    p(900, groundY - 230, 150, 18);
+    p(1260, groundY - 300, 180, 18);
+    p(1600, groundY - 180, 130, 18);
+    p(1920, groundY - 260, 170, 18);
+    p(2250, groundY - 210, 180, 18);
+    p(2520, groundY - 320, 220, 18);
+    c(970, groundY - 260);
+    c(1330, groundY - 330);
+    c(1680, groundY - 220);
+    c(1980, groundY - 290);
+    c(2620, groundY - 350);
+    e(1360, groundY - 332);
+    e(2310, groundY - 242);
+    e(2570, groundY - 352);
+
+    flag.x = worldW - 120;
+    flag.y = groundY - 90;
+
+    if (player.y === 0) {
+      player.x = 80;
+      player.y = groundY - player.h - 2;
+      player.vx = 0; player.vy = 0;
+    }
+    if (!hint.dataset.showed) {
+      hint.style.display = 'block';
+      hint.dataset.showed = '1';
+      msgTimer = 2.8;
+    }
+  }
+
+  function rects(a,b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  function resolveCollisions(obj, solids) {
+    obj.onGround = false;
+    for (const s of solids) {
+      if (!rects(obj, s)) continue;
+      const ox = Math.min(obj.x + obj.w - s.x, s.x + s.w - obj.x);
+      const oy = Math.min(obj.y + obj.h - s.y, s.y + s.h - obj.y);
+      if (ox < oy) {
+        if (obj.x < s.x) obj.x -= ox; else obj.x += ox;
+        obj.vx = 0;
+      } else {
+        if (obj.y < s.y) { obj.y -= oy; obj.vy = 0; obj.onGround = true; }
+        else { obj.y += oy; obj.vy = 0; }
+      }
+    }
+  }
+
+  function shoot() {
+    const now = performance.now();
+    if (now - lastShot < 260 || gameOver || won) return;
+    lastShot = now;
+    bullets.push({
+      x: player.face === 1 ? player.x + player.w + 2 : player.x - 10,
+      y: player.y + 16,
+      w: 10, h: 4,
+      vx: player.face * 7.5,
+      life: 1.6
+    });
+  }
+
+  function resetGame() {
+    score = 0;
+    lives = 3;
+    won = false;
+    gameOver = false;
+    buildLevel();
+    scoreHud.textContent = `Score: ${score}`;
+    lifeHud.textContent = `Lives: ${lives}`;
+  }
+
+  function update(dt) {
+    if (msgTimer > 0) {
+      msgTimer -= dt;
+      if (msgTimer <= 0) hint.style.display = 'none';
+    }
+    if (input.shot) { shoot(); input.shot = false; }
+
+    if (gameOver || won) return;
+
+    const accel = 0.75;
+    const maxV = 3.5;
+    if (input.left) { player.vx -= accel; player.face = -1; }
+    if (input.right) { player.vx += accel; player.face = 1; }
+    if (!input.left && !input.right) player.vx *= 0.84;
+    player.vx = Math.max(-maxV, Math.min(maxV, player.vx));
+
+    const jumpPressed = input.jump && !jumpLatch;
+    jumpLatch = input.jump;
+    if (jumpPressed && player.onGround) {
+      player.vy = -10.2;
+      player.onGround = false;
+    }
+
+    player.vy += 0.48;
+    player.x += player.vx;
+    player.y += player.vy;
+
+    const solids = platforms;
+    resolveCollisions(player, solids);
+
+    if (player.y > H + 300) {
+      lives--;
+      lifeHud.textContent = `Lives: ${lives}`;
+      if (lives <= 0) { gameOver = true; }
+      else {
+        player.x = 80;
+        player.y = H - 86;
+        player.vx = player.vy = 0;
+      }
+    }
+
+    for (const b of bullets) {
+      b.x += b.vx;
+      b.life -= dt;
+      for (const s of solids) {
+        if (rects(b, s)) b.life = 0;
+      }
+      for (const en of enemies) {
+        if (!en.alive) continue;
+        if (rects(b, en)) {
+          en.alive = false;
+          b.life = 0;
+          score += 10;
+          scoreHud.textContent = `Score: ${score}`;
+        }
+      }
+    }
+    bullets = bullets.filter(b => b.life > 0 && b.x > camX - 100 && b.x < camX + W + 100);
+
+    for (const en of enemies) {
+      if (!en.alive) continue;
+      en.vy = (en.vy || 0) + 0.45;
+      en.x += en.vx;
+      en.y += en.vy;
+      resolveCollisions(en, solids);
+      if (en.onGround && Math.random() < 0.01) en.vx *= -1;
+      if (rects(player, en)) {
+        if (player.vy > 1 && player.y + player.h - en.y < 18) {
+          en.alive = false;
+          player.vy = -7.6;
+          score += 15;
+          scoreHud.textContent = `Score: ${score}`;
+        } else {
+          lives--;
+          lifeHud.textContent = `Lives: ${lives}`;
+          if (lives <= 0) { gameOver = true; }
+          else {
+            player.x = 80;
+            player.y = H - 86;
+            player.vx = player.vy = 0;
+          }
+        }
+      }
+    }
+
+    for (const c of coins) {
+      if (!c.taken) {
+        const box = { x:c.x-c.r, y:c.y-c.r, w:c.r*2, h:c.r*2 };
+        if (rects(player, box)) {
+          c.taken = true;
+          score += 1;
+          scoreHud.textContent = `Score: ${score}`;
+        }
+      }
+    }
+
+    if (rects(player, flag)) {
+      won = true;
+      hint.style.display = 'block';
+      hint.innerHTML = 'You Win!<br>Tap to play again.';
+      msgTimer = 999;
+    }
+
+    camX += ((player.x - W * 0.42) - camX) * 0.08;
+    camX = Math.max(0, Math.min(worldW - W, camX));
+  }
+
+  function drawRoundedRect(x,y,w,h,r,color,stroke) {
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y, x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x, y+h, r);
+    ctx.arcTo(x, y+h, x, y, r);
+    ctx.arcTo(x, y, x+w, y, r);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke(); }
+  }
+
+  function render() {
+    ctx.clearRect(0,0,W,H);
+
+    const skyGrad = ctx.createLinearGradient(0,0,0,H);
+    skyGrad.addColorStop(0,'#87ceeb');
+    skyGrad.addColorStop(0.66,'#dff4ff');
+    skyGrad.addColorStop(0.67,'#a7df8c');
+    skyGrad.addColorStop(1,'#74c56a');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0,0,W,H);
+
+    const hillX = -camX * 0.2;
+    ctx.fillStyle = 'rgba(80,180,104,.25)';
+    for (let i=0;i<5;i++) {
+      ctx.beginPath();
+      ctx.ellipse(hillX + i*320 + 150, H-40, 180, 70, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    ctx.save();
+    ctx.translate(-camX, 0);
+
+    for (const s of platforms) {
+      drawRoundedRect(s.x, s.y, s.w, s.h, 8, '#6b4f2a', '#553c1f');
+      ctx.fillStyle = '#8b5e34';
+      ctx.fillRect(s.x, s.y, s.w, 8);
+    }
+
+    for (const c of coins) {
+      if (c.taken) continue;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
+      ctx.fillStyle = '#ffd84d';
+      ctx.fill();
+      ctx.strokeStyle = '#f5b800';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(c.x-3, c.y-3, 3, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(255,255,255,.9)';
+      ctx.fill();
+    }
+
+    for (const en of enemies) {
+      if (!en.alive) continue;
+      drawRoundedRect(en.x, en.y, en.w, en.h, 6, '#8b1e3f', '#5d1027');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(en.x + 6, en.y + 8, 5, 5);
+      ctx.fillRect(en.x + 17, en.y + 8, 5, 5);
+      ctx.fillStyle = '#2d0b12';
+      ctx.fillRect(en.x + 9, en.y + 18, 10, 3);
+    }
+
+    ctx.fillStyle = '#d6d6d6';
+    ctx.fillRect(flag.x + 12, flag.y, 6, flag.h);
+    ctx.fillStyle = '#ff3b3b';
+    ctx.beginPath();
+    ctx.moveTo(flag.x + 18, flag.y + 10);
+    ctx.lineTo(flag.x + 52, flag.y + 20);
+    ctx.lineTo(flag.x + 18, flag.y + 30);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#2b8cff';
+    ctx.fillRect(flag.x - 2, flag.y + flag.h - 10, 34, 10);
+
+    for (const b of bullets) {
+      ctx.fillStyle = '#ffef7a';
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.fillStyle = '#ff9f1a';
+      ctx.fillRect(b.x + (b.vx > 0 ? b.w - 2 : 0), b.y + 1, 2, 2);
+    }
+
+    ctx.fillStyle = '#2b6cff';
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+    ctx.fillStyle = '#173a8f';
+    ctx.fillRect(player.x, player.y + 24, player.w, 14);
+    ctx.fillStyle = '#ffe0bd';
+    ctx.beginPath();
+    ctx.arc(player.x + player.w/2, player.y + 10, 10, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(player.x + (player.face===1 ? 19 : 4), player.y + 12, 5, 5);
+    ctx.fillStyle = '#2b1a12';
+    ctx.fillRect(player.x + (player.face===1 ? 22 : 7), player.y + 14, 2, 2);
+
+    ctx.restore();
+
+    if (gameOver) {
+      overlay('Game Over<br>Tap to restart');
+    } else if (won) {
+      overlay('You Win!<br>Tap to play again');
+    }
+
+    requestAnimationFrame(render);
+  }
+
+  function overlay(text) {
+    hint.style.display = 'block';
+    hint.innerHTML = text;
+    hint.style.background = 'rgba(15,23,42,.45)';
+    hint.style.display = 'block';
+  }
+
+  addEventListener('pointerdown', () => {
+    if (gameOver || won) {
+      hint.style.display = 'none';
+      hint.style.background = 'rgba(15,23,42,.22)';
+      hint.innerHTML = 'Reach the flag!<br>Left/Right to move, Jump, Shot to fire.';
+      hint.dataset.showed = '1';
+      resetGame();
+    }
+  });
+
+  resize();
+  resetGame();
+  render();
+  setInterval(() => update(1/60), 1000/60);
+})();
+</script>
+</body>
+</html>

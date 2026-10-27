@@ -1,0 +1,1468 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jeu de l'Imposteur</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-dark: #0f0e17;
+    --bg-card: #1a1a2e;
+    --bg-card2: #16213e;
+    --accent: #e94560;
+    --accent2: #ff6b6b;
+    --accent3: #4ecdc4;
+    --accent4: #ffe66d;
+    --text: #fffffe;
+    --text-dim: #a7a9be;
+    --green: #2ecc71;
+    --blue: #3498db;
+    --purple: #9b59b6;
+    --orange: #f39c12;
+  }
+
+  body {
+    font-family: 'Nunito', sans-serif;
+    background: var(--bg-dark);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .stars {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 0;
+    background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
+  }
+
+  .stars::after {
+    content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background-image:
+      radial-gradient(2px 2px at 20px 30px, #eee, transparent),
+      radial-gradient(2px 2px at 40px 70px, rgba(255,255,255,0.8), transparent),
+      radial-gradient(1px 1px at 90px 40px, #fff, transparent),
+      radial-gradient(1px 1px at 130px 80px, rgba(255,255,255,0.6), transparent),
+      radial-gradient(2px 2px at 160px 30px, #ddd, transparent);
+    background-size: 200px 100px;
+    animation: twinkle 5s ease-in-out infinite alternate;
+    opacity: 0.5;
+  }
+
+  @keyframes twinkle { 0% { opacity: 0.3; } 100% { opacity: 0.7; } }
+
+  .container {
+    position: relative; z-index: 1;
+    max-width: 800px; margin: 0 auto; padding: 20px;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+
+  h1, h2, h3 { font-family: 'Fredoka One', cursive; }
+
+  .screen { display: none; flex-direction: column; align-items: center; flex: 1; }
+  .screen.active { display: flex; }
+
+  /* Title Screen */
+  .title-screen { justify-content: center; text-align: center; gap: 30px; }
+
+  .game-title {
+    font-size: 3em;
+    background: linear-gradient(135deg, var(--accent), var(--accent4), var(--accent3));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+
+  .subtitle {
+    font-size: 1.2em; color: var(--text-dim);
+    max-width: 500px; line-height: 1.6;
+  }
+
+  .emoji-row { font-size: 2.5em; letter-spacing: 10px; }
+
+  /* Buttons */
+  .btn {
+    padding: 14px 36px; border: none; border-radius: 50px;
+    font-family: 'Nunito', sans-serif; font-weight: 800;
+    font-size: 1.1em; cursor: pointer; transition: all 0.3s;
+    text-transform: uppercase; letter-spacing: 1px;
+    position: relative; overflow: hidden;
+  }
+
+  .btn:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+  .btn:active { transform: translateY(0); }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: white;
+  }
+
+  .btn-secondary {
+    background: linear-gradient(135deg, var(--accent3), #45b7aa);
+    color: var(--bg-dark);
+  }
+
+  .btn-small {
+    padding: 8px 20px; font-size: 0.85em;
+  }
+
+  .btn-outline {
+    background: transparent;
+    border: 2px solid var(--accent);
+    color: var(--accent);
+  }
+
+  .btn-outline:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .btn-green {
+    background: linear-gradient(135deg, var(--green), #27ae60);
+    color: white;
+  }
+
+  .btn-purple {
+    background: linear-gradient(135deg, var(--purple), #8e44ad);
+    color: white;
+  }
+
+  /* Setup Screen */
+  .setup-section {
+    width: 100%; background: var(--bg-card);
+    border-radius: 20px; padding: 24px; margin-bottom: 16px;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .setup-section h3 {
+    margin-bottom: 16px; font-size: 1.2em;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .option-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 10px;
+  }
+
+  .option-btn {
+    padding: 12px 8px; border: 2px solid rgba(255,255,255,0.1);
+    border-radius: 12px; background: rgba(255,255,255,0.03);
+    color: var(--text); cursor: pointer; text-align: center;
+    transition: all 0.3s; font-family: 'Nunito', sans-serif;
+    font-weight: 700; font-size: 0.9em;
+  }
+
+  .option-btn:hover { border-color: var(--accent); background: rgba(233,69,96,0.1); }
+  .option-btn.selected {
+    border-color: var(--accent);
+    background: rgba(233,69,96,0.2);
+    box-shadow: 0 0 15px rgba(233,69,96,0.3);
+  }
+
+  .option-btn .opt-emoji { font-size: 1.5em; display: block; margin-bottom: 4px; }
+
+  .player-count {
+    display: flex; align-items: center; gap: 20px;
+    justify-content: center; font-size: 2em; font-weight: 800;
+  }
+
+  .player-count button {
+    width: 50px; height: 50px; border-radius: 50%;
+    border: 2px solid var(--accent); background: transparent;
+    color: var(--accent); font-size: 1.5em; cursor: pointer;
+    transition: all 0.3s; font-family: 'Nunito', sans-serif;
+  }
+
+  .player-count button:hover { background: var(--accent); color: white; }
+  .player-count span { min-width: 60px; text-align: center; }
+
+  /* Reveal Screen */
+  .reveal-card {
+    background: var(--bg-card); border-radius: 24px;
+    padding: 40px; text-align: center; width: 100%;
+    max-width: 500px; border: 1px solid rgba(255,255,255,0.05);
+    animation: slideUp 0.5s ease;
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .reveal-card .player-label {
+    font-size: 1.1em; color: var(--text-dim); margin-bottom: 8px;
+  }
+
+  .reveal-card .player-number {
+    font-size: 1.4em; font-weight: 800; color: var(--accent);
+    margin-bottom: 20px;
+  }
+
+  .reveal-card .secret-word {
+    font-size: 2.2em; font-weight: 800;
+    background: linear-gradient(135deg, var(--accent4), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 20px 0; padding: 20px;
+    border-radius: 16px;
+    background-color: rgba(255,230,109,0.1);
+    border: 2px solid rgba(255,230,109,0.3);
+  }
+
+  .reveal-card .imposter-word {
+    font-size: 2.2em; font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), #ff0000);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 20px 0; padding: 20px;
+    border-radius: 16px;
+    background-color: rgba(233,69,96,0.1);
+    border: 2px solid rgba(233,69,96,0.3);
+  }
+
+  .reveal-card .category-label {
+    color: var(--accent3); font-weight: 700; margin-top: 10px;
+  }
+
+  .reveal-card .role-badge {
+    display: inline-block; padding: 6px 20px; border-radius: 20px;
+    font-weight: 800; font-size: 0.9em; margin-top: 10px;
+  }
+
+  .role-badge.crewmate {
+    background: rgba(78,205,196,0.2); color: var(--accent3);
+    border: 1px solid var(--accent3);
+  }
+
+  .role-badge.imposter {
+    background: rgba(233,69,96,0.2); color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+
+  /* Discussion Screen */
+  .players-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px; width: 100%; margin-bottom: 20px;
+  }
+
+  .player-card {
+    background: var(--bg-card); border-radius: 16px;
+    padding: 16px; text-align: center;
+    border: 2px solid rgba(255,255,255,0.05);
+    cursor: pointer; transition: all 0.3s;
+  }
+
+  .player-card:hover { border-color: var(--accent); transform: translateY(-3px); }
+  .player-card.eliminated {
+    opacity: 0.4; pointer-events: none;
+    border-color: rgba(255,0,0,0.3);
+  }
+  .player-card.eliminated::after {
+    content: '❌'; position: absolute; font-size: 2em;
+  }
+
+  .player-card .p-avatar {
+    width: 50px; height: 50px; border-radius: 50%;
+    margin: 0 auto 10px; display: flex; align-items: center;
+    justify-content: center; font-size: 1.5em; font-weight: 800;
+    color: white;
+  }
+
+  .player-card .p-name { font-weight: 700; font-size: 0.95em; }
+  .player-card .p-status { font-size: 0.8em; color: var(--text-dim); margin-top: 4px; }
+
+  .discussion-box {
+    width: 100%; background: var(--bg-card); border-radius: 20px;
+    padding: 20px; margin-bottom: 16px;
+    border: 1px solid rgba(255,255,255,0.05);
+    max-height: 300px; overflow-y: auto;
+  }
+
+  .discussion-box::-webkit-scrollbar { width: 6px; }
+  .discussion-box::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
+
+  .msg {
+    padding: 10px 14px; margin-bottom: 8px;
+    border-radius: 12px; font-size: 0.95em;
+    animation: fadeIn 0.3s ease;
+  }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .msg.self {
+    background: rgba(78,205,196,0.15);
+    border-left: 3px solid var(--accent3);
+    margin-left: 20px;
+  }
+
+  .msg.other {
+    background: rgba(255,255,255,0.05);
+    border-left: 3px solid var(--text-dim);
+    margin-right: 20px;
+  }
+
+  .msg .msg-author {
+    font-weight: 800; font-size: 0.8em;
+    margin-bottom: 4px; opacity: 0.7;
+  }
+
+  .msg-input-row {
+    display: flex; gap: 10px; width: 100%;
+  }
+
+  .msg-input-row input {
+    flex: 1; padding: 14px 20px; border-radius: 50px;
+    border: 2px solid rgba(255,255,255,0.1);
+    background: var(--bg-card); color: var(--text);
+    font-family: 'Nunito', sans-serif; font-size: 1em;
+    outline: none; transition: border-color 0.3s;
+  }
+
+  .msg-input-row input:focus { border-color: var(--accent); }
+
+  /* Vote Screen */
+  .vote-header {
+    text-align: center; margin-bottom: 24px;
+  }
+
+  .vote-header h2 {
+    font-size: 1.8em; color: var(--accent);
+  }
+
+  .vote-results {
+    width: 100%; background: var(--bg-card); border-radius: 20px;
+    padding: 24px; border: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .vote-bar-row {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .vote-bar-row .vote-name {
+    min-width: 100px; font-weight: 700; font-size: 0.95em;
+  }
+
+  .vote-bar-bg {
+    flex: 1; height: 28px; background: rgba(255,255,255,0.05);
+    border-radius: 14px; overflow: hidden;
+  }
+
+  .vote-bar-fill {
+    height: 100%; border-radius: 14px;
+    transition: width 1s ease;
+    display: flex; align-items: center;
+    padding-left: 10px; font-weight: 700; font-size: 0.8em;
+    min-width: fit-content;
+  }
+
+  .vote-bar-fill.winner {
+    background: linear-gradient(135deg, var(--accent), #ff0000);
+  }
+
+  .vote-bar-fill.loser {
+    background: linear-gradient(135deg, var(--accent3), #45b7aa);
+  }
+
+  /* Result Screen */
+  .result-card {
+    text-align: center; padding: 40px;
+    background: var(--bg-card); border-radius: 24px;
+    width: 100%; max-width: 500px;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .result-card .result-emoji { font-size: 4em; margin-bottom: 16px; }
+  .result-card .result-title {
+    font-size: 2em; margin-bottom: 12px;
+  }
+  .result-card .result-title.win { color: var(--green); }
+  .result-card .result-title.lose { color: var(--accent); }
+
+  .result-card .result-info {
+    color: var(--text-dim); font-size: 1.1em; line-height: 1.8;
+  }
+
+  .result-card .result-info strong { color: var(--text); }
+
+  /* Timer */
+  .timer-bar {
+    width: 100%; height: 6px; background: rgba(255,255,255,0.1);
+    border-radius: 3px; margin-bottom: 16px; overflow: hidden;
+  }
+
+  .timer-bar-fill {
+    height: 100%; background: linear-gradient(90deg, var(--green), var(--accent4), var(--accent));
+    border-radius: 3px; transition: width 1s linear;
+  }
+
+  /* Language selector */
+  .lang-selector {
+    display: flex; gap: 8px; margin-bottom: 16px;
+  }
+
+  .lang-btn {
+    padding: 8px 16px; border-radius: 20px;
+    border: 2px solid rgba(255,255,255,0.1);
+    background: transparent; color: var(--text);
+    cursor: pointer; font-family: 'Nunito', sans-serif;
+    font-weight: 700; font-size: 0.85em; transition: all 0.3s;
+  }
+
+  .lang-btn:hover { border-color: var(--accent); }
+  .lang-btn.selected {
+    border-color: var(--accent);
+    background: rgba(233,69,96,0.2);
+  }
+
+  /* Category multi-select */
+  .category-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+  }
+
+  .cat-btn {
+    padding: 10px 8px; border: 2px solid rgba(255,255,255,0.1);
+    border-radius: 12px; background: rgba(255,255,255,0.03);
+    color: var(--text); cursor: pointer; text-align: center;
+    transition: all 0.3s; font-family: 'Nunito', sans-serif;
+    font-weight: 700; font-size: 0.85em;
+  }
+
+  .cat-btn:hover { border-color: var(--accent3); }
+  .cat-btn.selected {
+    border-color: var(--accent3);
+    background: rgba(78,205,196,0.15);
+    box-shadow: 0 0 10px rgba(78,205,196,0.2);
+  }
+
+  .cat-btn .cat-emoji { font-size: 1.4em; display: block; margin-bottom: 2px; }
+
+  /* Rules */
+  .rules-box {
+    width: 100%; background: var(--bg-card); border-radius: 20px;
+    padding: 24px; margin-bottom: 16px;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .rules-box ul {
+    list-style: none; padding: 0;
+  }
+
+  .rules-box li {
+    padding: 8px 0; padding-left: 28px;
+    position: relative; color: var(--text-dim); line-height: 1.5;
+  }
+
+  .rules-box li::before {
+    content: '🎯'; position: absolute; left: 0;
+  }
+
+  /* Round indicator */
+  .round-indicator {
+    display: flex; gap: 8px; margin-bottom: 16px;
+  }
+
+  .round-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+    transition: all 0.3s;
+  }
+
+  .round-dot.active {
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+  }
+
+  .round-dot.done { background: var(--green); }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .game-title { font-size: 2em; }
+    .option-grid { grid-template-columns: repeat(3, 1fr); }
+    .players-grid { grid-template-columns: repeat(2, 1fr); }
+    .reveal-card { padding: 24px; }
+    .reveal-card .secret-word,
+    .reveal-card .imposter-word { font-size: 1.6em; }
+  }
+
+  .hidden { display: none !important; }
+
+  .phase-label {
+    display: inline-block; padding: 4px 14px;
+    border-radius: 20px; font-size: 0.8em;
+    font-weight: 800; text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 12px;
+  }
+
+  .phase-label.discussion { background: rgba(78,205,196,0.2); color: var(--accent3); }
+  .phase-label.voting { background: rgba(233,69,96,0.2); color: var(--accent); }
+  .phase-label.reveal { background: rgba(255,230,109,0.2); color: var(--accent4); }
+
+  .imposter-reveal-box {
+    width: 100%; max-width: 500px;
+    background: var(--bg-card); border-radius: 24px;
+    padding: 30px; text-align: center;
+    border: 2px solid var(--accent);
+    animation: slideUp 0.5s ease;
+  }
+
+  .imposter-reveal-box .imposter-name {
+    font-size: 2em; font-weight: 800; color: var(--accent);
+    margin: 16px 0;
+  }
+
+  .imposter-reveal-box .imposter-word-reveal {
+    font-size: 1.3em; color: var(--text-dim); margin: 8px 0;
+  }
+
+  .score-board {
+    display: flex; gap: 16px; margin-bottom: 16px;
+    flex-wrap: wrap; justify-content: center;
+  }
+
+  .score-item {
+    background: var(--bg-card); border-radius: 12px;
+    padding: 10px 16px; text-align: center;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .score-item .score-val {
+    font-size: 1.5em; font-weight: 800;
+  }
+
+  .score-item .score-label {
+    font-size: 0.75em; color: var(--text-dim);
+  }
+
+  .ai-thinking {
+    display: flex; gap: 8px; justify-content: center;
+    padding: 20px;
+  }
+
+  .ai-thinking span {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--accent); animation: bounce 1.4s ease-in-out infinite;
+  }
+
+  .ai-thinking span:nth-child(2) { animation-delay: 0.2s; }
+  .ai-thinking span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes bounce {
+    0%, 80%, 100% { transform: scale(0); }
+    40% { transform: scale(1); }
+  }
+
+  .confetti {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 100;
+  }
+
+  .confetti-piece {
+    position: absolute; width: 10px; height: 10px;
+    top: -10px; animation: confetti-fall 3s ease-in forwards;
+  }
+
+  @keyframes confetti-fall {
+    0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="stars"></div>
+<div class="container">
+
+  <!-- TITLE SCREEN -->
+  <div class="screen active" id="screen-title">
+    <div class="emoji-row">🕵️‍♂️🎭🔍</div>
+    <h1 class="game-title">JEU DE L'IMPOSTEUR</h1>
+    <p class="subtitle" id="title-subtitle">Découvrez qui est l'imposteur parmi vous !</p>
+    <div style="display:flex;flex-direction:column;gap:12px;align-items:center;">
+      <button class="btn btn-primary" onclick="showScreen('screen-setup')">🎮 JOUER</button>
+      <button class="btn btn-outline btn-small" onclick="showScreen('screen-rules')">📖 RÈGLES</button>
+    </div>
+  </div>
+
+  <!-- RULES SCREEN -->
+  <div class="screen" id="screen-rules">
+    <h2 style="margin-bottom:20px;">📖 Règles du Jeu</h2>
+    <div class="rules-box">
+      <ul>
+        <li>Chaque joueur reçoit un mot secret d'une catégorie donnée</li>
+        <li>Un joueur est l'<strong style="color:var(--accent)">IMPOSTEUR</strong> — il ne connaît pas le mot !</li>
+        <li>Les joueurs décrivent leur mot sans le dire directement</li>
+        <li>L'imposteur doit deviner le mot ou se faire passer pour un crewmate</li>
+        <li>Après la discussion, tout le monde vote pour éliminer un suspect</li>
+        <li>Si l'imposteur est voté → les <strong style="color:var(--green)">CREWMATES gagnent</strong></li>
+        <li>Si l'imposteur survit → l'<strong style="color:var(--accent)">IMPOSTEUR gagne</strong></li>
+        <li>Plusieurs tours : l'imposteur change à chaque round !</li>
+      </ul>
+    </div>
+    <button class="btn btn-secondary" onclick="showScreen('screen-title')">← RETOUR</button>
+  </div>
+
+  <!-- SETUP SCREEN -->
+  <div class="screen" id="screen-setup">
+    <h2 style="margin-bottom:16px;">⚙️ Configuration</h2>
+
+    <div class="setup-section">
+      <h3>🌐 Langue / Language / Idioma</h3>
+      <div class="lang-selector">
+        <button class="lang-btn selected" data-lang="fr" onclick="setLang('fr',this)">🇫🇷 Français</button>
+        <button class="lang-btn" data-lang="en" onclick="setLang('en',this)">🇬🇧 English</button>
+        <button class="lang-btn" data-lang="es" onclick="setLang('es',this)">🇪🇸 Español</button>
+      </div>
+    </div>
+
+    <div class="setup-section">
+      <h3>👥 Nombre de joueurs</h3>
+      <div class="player-count">
+        <button onclick="changePlayers(-1)">−</button>
+        <span id="player-count-display">4</span>
+        <button onclick="changePlayers(1)">+</button>
+      </div>
+    </div>
+
+    <div class="setup-section">
+      <h3>📂 Catégories (sélectionnez au moins 1)</h3>
+      <div class="category-grid" id="category-grid"></div>
+    </div>
+
+    <div class="setup-section">
+      <h3>🤖 Mode de jeu</h3>
+      <div class="option-grid">
+        <button class="option-btn selected" data-mode="hotseat" onclick="setMode('hotseat',this)">
+          <span class="opt-emoji">👥</span>
+          <span data-t="hotseat">Pass & Play</span>
+        </button>
+        <button class="option-btn" data-mode="ai" onclick="setMode('ai',this)">
+          <span class="opt-emoji">🤖</span>
+          <span data-t="ai">Contre IA</span>
+        </button>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+      <button class="btn btn-outline" onclick="showScreen('screen-title')">← <span data-t="back">Retour</span></button>
+      <button class="btn btn-primary" onclick="startGame()">🚀 <span data-t="start">COMMENCER</span></button>
+    </div>
+  </div>
+
+  <!-- REVEAL SCREEN -->
+  <div class="screen" id="screen-reveal">
+    <span class="phase-label reveal" id="reveal-phase-label">Phase de révélation</span>
+    <div class="reveal-card" id="reveal-card"></div>
+  </div>
+
+  <!-- DISCUSSION SCREEN -->
+  <div class="screen" id="screen-discussion">
+    <span class="phase-label discussion">💬 Discussion</span>
+    <div class="timer-bar"><div class="timer-bar-fill" id="discussion-timer" style="width:100%"></div></div>
+    <div class="round-indicator" id="round-indicator"></div>
+    <div class="players-grid" id="players-grid"></div>
+    <div class="discussion-box" id="discussion-box"></div>
+    <div class="msg-input-row" id="msg-input-row">
+      <input type="text" id="msg-input" placeholder="Décrivez votre mot..." maxlength="120">
+      <button class="btn btn-secondary btn-small" onclick="sendMessage()">➤</button>
+    </div>
+    <div style="margin-top:12px;">
+      <button class="btn btn-primary" onclick="startVoting()" id="btn-start-vote">🗳️ Passer au vote</button>
+    </div>
+  </div>
+
+  <!-- VOTE SCREEN -->
+  <div class="screen" id="screen-vote">
+    <span class="phase-label voting">🗳️ Vote</span>
+    <div class="vote-header">
+      <h2 id="vote-title">Votez pour éliminer un joueur</h2>
+      <p style="color:var(--text-dim)" id="vote-subtitle"></p>
+    </div>
+    <div class="players-grid" id="vote-grid"></div>
+    <div id="vote-results" class="vote-results hidden"></div>
+  </div>
+
+  <!-- RESULT SCREEN -->
+  <div class="screen" id="screen-result">
+    <div class="result-card" id="result-card"></div>
+  </div>
+
+  <!-- IMPOSTER REVEAL SCREEN -->
+  <div class="screen" id="screen-imposter-reveal">
+    <div class="imposter-reveal-box" id="imposter-reveal-box"></div>
+  </div>
+
+</div>
+
+<script>
+// ==================== WORD DATABASE ====================
+const WORDS = {
+  fr: {
+    sport: ["Football","Basketball","Tennis","Natation","Cyclisme","Rugby","Golf","Boxe","Volleyball","Handball","Athlétisme","Skateboard","Surf","Escalade","Judo","Aviron","Escrime","Gymnastique","Badminton","Cricket"],
+    joueur: ["Messi","Ronaldo","Neymar","Mbappé","Lewandowski","Delpiero","Pelé","Zidane","Beckham","Federer","Nadal","Usain Bolt","Michael Jordan","LeBron James","Griezmann","Hazard","Iniesta","Xavi","Modric","Haaland"],
+    country: ["France","Japon","Brésil","Allemagne","Australie","Canada","Mexique","Inde","Italie","Espagne","Argentine","Corée du Sud","Égypte","Norvège","Portugal","Thaïlande","Colombie","Perou","Nouvelle-Zélande","Maroc"],
+    places: ["Tour Eiffel","Pyramides","Machu Picchu","Grand Canyon","Mont Blanc","Plage","Forêt","Désert","Lac","Montagne","Château","Cathédrale","Stade","Musée","Bibliothèque","Hôpital","Université","Gare","Aéroport","Port"],
+    nourriture: ["Pizza","Sushi","Burger","Croissant","Pâtes","Ramen","Tacos","Pad Thaï","Paella","Riz","Salade","Fromage","Chocolat","Gâteau","Crêpes","Soupe","Curry","Tapas","Moules-frites","Quiche"],
+    acteur: ["Tom Cruise","Scarlett Johansson","Leonardo DiCaprio","Brad Pitt","Angelina Jolie","Denzel Washington","Morgan Freeman","Cate Blanchett","Will Smith","Jennifer Lawrence","Robert Downey Jr","Emma Watson","Johnny Depp","Meryl Streep","Matt Damon","Charlize Theron","Idris Elba","Zendaya","Oscar Isaac","Saoirse Ronan"],
+    voitures: ["Tesla","Ferrari","Lamborghini","BMW","Mercedes","Porsche","Audi","Toyota","Honda","Ford","Peugeot","Renault","Volvo","Jaguar","Bentley","Bugatti","Maserati","Chevrolet","Nissan","Volkswagen"],
+    animals: ["Lion","Éléphant","Girafe","Panda","Dauphin","Aigle","Tigre","Ours","Renard","Loup","Serpent","Tortue","Pingouin","Kangourou","Poule","Vache","Cheval","Poisson","Papillon","Colibri"],
+    anime: ["Naruto","One Piece","Dragon Ball","Attack on Titan","Death Note","Demon Slayer","My Hero Academia","Sailor Moon","Goku","Luffy","Sakura","Lelouch","Tanjiro","Deku","Vegeta","Sasuke","Zoro","Eren","Light Yagami","Gon"]
+  },
+  en: {
+    sport: ["Football","Basketball","Tennis","Swimming","Cycling","Rugby","Golf","Boxing","Volleyball","Handball","Athletics","Skateboarding","Surfing","Climbing","Judo","Rowing","Fencing","Gymnastics","Badminton","Cricket"],
+    joueur: ["Messi","Ronaldo","Neymar","Mbappé","Lewandowski","Pele","Zidane","Beckham","Federer","Nadal","Usain Bolt","Michael Jordan","LeBron James","Griezmann","Hazard","Iniesta","Xavi","Modric","Haaland","Wimbledon"],
+    country: ["France","Japan","Brazil","Germany","Australia","Canada","Mexico","India","Italy","Spain","Argentina","South Korea","Egypt","Norway","Portugal","Thailand","Colombia","Peru","New Zealand","Morocco"],
+    places: ["Eiffel Tower","Pyramids","Machu Picchu","Grand Canyon","Mount Blanc","Beach","Forest","Desert","Lake","Mountain","Castle","Cathedral","Stadium","Museum","Library","Hospital","University","Train Station","Airport","Harbor"],
+    nourriture: ["Pizza","Sushi","Burger","Croissant","Pasta","Ramen","Tacos","Pad Thai","Paella","Rice","Salad","Cheese","Chocolate","Cake","Crepe","Soup","Curry","Tapas","Mussels","Quiche"],
+    acteur: ["Tom Cruise","Scarlett Johansson","Leonardo DiCaprio","Brad Pitt","Angelina Jolie","Denzel Washington","Morgan Freeman","Cate Blanchett","Will Smith","Jennifer Lawrence","Robert Downey Jr","Emma Watson","Johnny Depp","Meryl Streep","Matt Damon","Charlize Theron","Idris Elba","Zendaya","Oscar Isaac","Saoirse Ronan"],
+    voitures: ["Tesla","Ferrari","Lamborghini","BMW","Mercedes","Porsche","Audi","Toyota","Honda","Ford","Peugeot","Renault","Volvo","Jaguar","Bentley","Bugatti","Maserati","Chevrolet","Nissan","Volkswagen"],
+    animals: ["Lion","Elephant","Giraffe","Panda","Dolphin","Eagle","Tiger","Bear","Fox","Wolf","Snake","Turtle","Penguin","Kangaroo","Chicken","Cow","Horse","Fish","Butterfly","Hummingbird"],
+    anime: ["Naruto","One Piece","Dragon Ball","Attack on Titan","Death Note","Demon Slayer","My Hero Academia","Sailor Moon","Goku","Luffy","Sakura","Lelouch","Tanjiro","Deku","Vegeta","Sasuke","Zoro","Eren","Light Yagami","Gon"]
+  },
+  es: {
+    sport: ["Fútbol","Baloncesto","Tenis","Natación","Ciclismo","Rugby","Golf","Boxeo","Voleibol","Balonmano","Atletismo","Patinaje","Surf","Escalada","Judo","Remo","Esgrima","Gimnasia","Bádminton","Cricket"],
+    joueur: ["Messi","Ronaldo","Neymar","Mbappé","Lewandowski","Pele","Zidane","Beckham","Federer","Nadal","Usain Bolt","Michael Jordan","LeBron James","Griezmann","Hazard","Iniesta","Xavi","Modric","Haaland","Wimbledon"],
+    country: ["Francia","Japón","Brasil","Alemania","Australia","Canadá","México","India","Italia","España","Argentina","Corea del Sur","Egipto","Noruega","Portugal","Tailandia","Colombia","Perú","Nueva Zelanda","Marruecos"],
+    places: ["Torre Eiffel","Pirámides","Machu Picchu","Gran Cañón","Monte Blanc","Playa","Bosque","Desierto","Lago","Montaña","Castillo","Catedral","Estadio","Museo","Biblioteca","Hospital","Universidad","Estación de Tren","Aeropuerto","Puerto"],
+    nourriture: ["Pizza","Sushi","Hamburguesa","Croissant","Pasta","Ramen","Tacos","Pad Thai","Paella","Arroz","Ensalada","Queso","Chocolate","Pastel","Crepe","Sopa","Curry","Tapas","Mejillones","Quiche"],
+    acteur: ["Tom Cruise","Scarlett Johansson","Leonardo DiCaprio","Brad Pitt","Angelina Jolie","Denzel Washington","Morgan Freeman","Cate Blanchett","Will Smith","Jennifer Lawrence","Robert Downey Jr","Emma Watson","Johnny Depp","Meryl Streep","Matt Damon","Charlize Theron","Idris Elba","Zendaya","Oscar Isaac","Saoirse Ronan"],
+    voitures: ["Tesla","Ferrari","Lamborghini","BMW","Mercedes","Porsche","Audi","Toyota","Honda","Ford","Peugeot","Renault","Volvo","Jaguar","Bentley","Bugatti","Maserati","Chevrolet","Nissan","Volkswagen"],
+    animals: ["León","Elefante","Jirafa","Panda","Delfín","Águila","Tigre","Oso","Zorro","Lobo","Serpiente","Tortuga","Pingüino","Canguro","Pollo","Vaca","Caballo","Pez","Mariposa","Colibrí"],
+    anime: ["Naruto","One Piece","Dragon Ball","Attack on Titan","Death Note","Demon Slayer","My Hero Academia","Sailor Moon","Goku","Luffy","Sakura","Lelouch","Tanjiro","Deku","Vegeta","Sasuke","Zoro","Eren","Light Yagami","Gon"]
+  }
+};
+
+const CATEGORY_INFO = {
+  sport: { emoji: "⚽", name_fr: "Sport", name_en: "Sport", name_es: "Deporte" },
+  joueur: { emoji: "🏆", name_fr: "Joueur", name_en: "Player", name_es: "Jugador" },
+  country: { emoji: "🌍", name_fr: "Pays", name_en: "Country", name_es: "País" },
+  places: { emoji: "🏛️", name_fr: "Lieux", name_en: "Places", name_es: "Lugares" },
+  nourriture: { emoji: "🍕", name_fr: "Nourriture", name_en: "Food", name_es: "Comida" },
+  acteur: { emoji: "🎬", name_fr: "Acteur/Actrice", name_en: "Actor/Actress", name_es: "Actor/Actriz" },
+  voitures: { emoji: "🚗", name_fr: "Voitures", name_en: "Cars", name_es: "Coches" },
+  animals: { emoji: "🦁", name_fr: "Animaux", name_en: "Animals", name_es: "Animales" },
+  anime: { emoji: "🎌", name_fr: "Anime", name_en: "Anime", name_es: "Anime" }
+};
+
+const TRANSLATIONS = {
+  fr: {
+    hotseat: "Pass & Play", ai: "Contre IA", back: "Retour", start: "COMMENCER",
+    title: "Jeu de l'Imposteur", subtitle: "Découvrez qui est l'imposteur parmi vous !",
+    reveal: "Tour {n} — Montrez votre mot", revealSub: "Passez l'appareil à {player}",
+    imposter: "IMPOSTEUR", crewmate: "CREWMATE",
+    discussion: "Discussion", discussionSub: "Décrivez votre mot sans le dire !",
+    vote: "Vote", voteSub: "Votez pour éliminer un joueur",
+    voteTitle: "Votez pour éliminer un joueur",
+    eliminated: "a été éliminé",
+    imposterFound: "L'imposteur a été trouvé !",
+    imposterWins: "L'imposteur a gagné !",
+    crewmateWins: "Les Crewmates ont gagné !",
+    round: "Tour", result: "Résultat",
+    imposterWas: "L'imposteur était",
+    yourWord: "Votre mot était",
+    playAgain: "Rejouer", menu: "Menu",
+    msgPlaceholder: "Décrivez votre mot...", send: "Envoyer",
+    startVote: "Passer au vote", noWords: "Aucun mot trouvé",
+    selectCategory: "Sélectionnez au moins une catégorie",
+    aiThinking: "L'IA réfléchit...",
+    yourTurn: "C'est votre tour",
+    eliminated_players: "joueurs éliminés",
+    remaining: "restants"
+  },
+  en: {
+    hotseat: "Pass & Play", ai: "vs AI", back: "Back", start: "START",
+    title: "Impostor Game", subtitle: "Find out who the impostor is among you!",
+    reveal: "Round {n} — Show your word", revealSub: "Pass the device to {player}",
+    imposter: "IMPOSTOR", crewmate: "CREWMATE",
+    discussion: "Discussion", discussionSub: "Describe your word without saying it!",
+    vote: "Vote", voteSub: "Vote to eliminate a player",
+    voteTitle: "Vote to eliminate a player",
+    eliminated: "has been eliminated",
+    imposterFound: "The impostor was found!",
+    imposterWins: "The impostor won!",
+    crewmateWins: "The Crewmates won!",
+    round: "Round", result: "Result",
+    imposterWas: "The impostor was",
+    yourWord: "Your word was",
+    playAgain: "Play Again", menu: "Menu",
+    msgPlaceholder: "Describe your word...", send: "Send",
+    startVote: "Proceed to vote", noWords: "No words found",
+    selectCategory: "Select at least one category",
+    aiThinking: "AI is thinking...",
+    yourTurn: "Your turn",
+    eliminated_players: "players eliminated",
+    remaining: "remaining"
+  },
+  es: {
+    hotseat: "Pasar y Jugar", ai: "vs IA", back: "Volver", start: "EMPEZAR",
+    title: "Juego del Impostor", subtitle: "¡Descubre quién es el impostor entre ustedes!",
+    reveal: "Ronda {n} — Muestra tu palabra", revealSub: "Pasa el dispositivo a {player}",
+    imposter: "IMPOSTOR", crewmate: "TRIPULANTE",
+    discussion: "Discusión", discussionSub: "¡Describe tu palabra sin decirlo!",
+    vote: "Voto", voteSub: "Vota para eliminar un jugador",
+    voteTitle: "Vota para eliminar un jugador",
+    eliminated: "ha sido eliminado",
+    imposterFound: "¡El impostor fue encontrado!",
+    imposterWins: "¡El impostor ganó!",
+    crewmateWins: "¡Los Tripulantes ganaron!",
+    round: "Ronda", result: "Resultado",
+    imposterWas: "El impostor era",
+    yourWord: "Tu palabra era",
+    playAgain: "Jugar de Nuevo", menu: "Menú",
+    msgPlaceholder: "Describe tu palabra...", send: "Enviar",
+    startVote: "Proceder al voto", noWords: "No se encontraron palabras",
+    selectCategory: "Selecciona al menos una categoría",
+    aiThinking: "La IA está pensando...",
+    yourTurn: "Tu turno",
+    eliminated_players: "jugadores eliminados",
+    remaining: "restantes"
+  }
+};
+
+// ==================== GAME STATE ====================
+let state = {
+  lang: 'fr',
+  numPlayers: 4,
+  categories: [],
+  mode: 'hotseat',
+  players: [],
+  imposterIndex: -1,
+  secretWord: '',
+  currentRound: 1,
+  maxRounds: 3,
+  currentPlayerIndex: 0,
+  messages: [],
+  votes: {},
+  eliminatedPlayers: [],
+  discussionTimer: null,
+  discussionTimeLeft: 60,
+  gamePhase: 'setup',
+  scores: { crewmate: 0, imposter: 0 }
+};
+
+// ==================== UTILITY ====================
+function t(key) { return TRANSLATIONS[state.lang][key] || key; }
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function setLang(lang, btn) {
+  state.lang = lang;
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  updateAllTranslations();
+  renderCategoryGrid();
+}
+
+function updateAllTranslations() {
+  document.querySelectorAll('[data-t]').forEach(el => {
+    const key = el.getAttribute('data-t');
+    if (TRANSLATIONS[state.lang][key]) {
+      el.textContent = TRANSLATIONS[state.lang][key];
+    }
+  });
+  const sub = document.getElementById('title-subtitle');
+  if (sub) sub.textContent = t('subtitle');
+}
+
+function changePlayers(delta) {
+  state.numPlayers = Math.max(3, Math.min(10, state.numPlayers + delta));
+  document.getElementById('player-count-display').textContent = state.numPlayers;
+}
+
+function setMode(mode, btn) {
+  state.mode = mode;
+  document.querySelectorAll('.option-btn[data-mode]').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+
+// ==================== CATEGORY GRID ====================
+function renderCategoryGrid() {
+  const grid = document.getElementById('category-grid');
+  grid.innerHTML = '';
+  for (const [key, info] of Object.entries(CATEGORY_INFO)) {
+    const name = info['name_' + state.lang];
+    const btn = document.createElement('button');
+    btn.className = 'cat-btn' + (state.categories.includes(key) ? ' selected' : '');
+    btn.innerHTML = `<span class="cat-emoji">${info.emoji}</span>${name}`;
+    btn.onclick = () => toggleCategory(key, btn);
+    btn.dataset.cat = key;
+    grid.appendChild(btn);
+  }
+}
+
+function toggleCategory(cat, btn) {
+  const idx = state.categories.indexOf(cat);
+  if (idx >= 0) {
+    state.categories.splice(idx, 1);
+    btn.classList.remove('selected');
+  } else {
+    state.categories.push(cat);
+    btn.classList.add('selected');
+  }
+}
+
+// ==================== START GAME ====================
+function startGame() {
+  if (state.categories.length === 0) {
+    alert(t('selectCategory'));
+    return;
+  }
+
+  state.currentRound = 1;
+  state.scores = { crewmate: 0, imposter: 0 };
+  setupRound();
+}
+
+function setupRound() {
+  state.eliminatedPlayers = [];
+  state.messages = [];
+  state.votes = {};
+
+  // Build combined word list from selected categories
+  let allWords = [];
+  for (const cat of state.categories) {
+    if (WORDS[state.lang][cat]) {
+      allWords = allWords.concat(WORDS[state.lang][cat]);
+    }
+  }
+
+  if (allWords.length < 2) {
+    alert(t('noWords'));
+    return;
+  }
+
+  // Pick secret word
+  state.secretWord = allWords[Math.floor(Math.random() * allWords.length)];
+
+  // Pick imposter
+  state.imposterIndex = Math.floor(Math.random() * state.numPlayers);
+
+  // Create players
+  state.players = [];
+  const colors = ['#e94560','#4ecdc4','#ffe66d','#a78bfa','#f97316','#06b6d4','#84cc16','#ec4899','#f43f5e','#14b8a6'];
+  const avatars = ['🎭','🕵️','👤','🦊','🐱','🐶','🦁','🐼','🐸','🐵'];
+  for (let i = 0; i < state.numPlayers; i++) {
+    state.players.push({
+      id: i,
+      name: state.lang === 'fr' ? `Joueur ${i+1}` : state.lang === 'es' ? `Jugador ${i+1}` : `Player ${i+1}`,
+      color: colors[i % colors.length],
+      avatar: avatars[i % avatars.length],
+      word: i === state.imposterIndex ? null : state.secretWord,
+      isImposter: i === state.imposterIndex,
+      eliminated: false
+    });
+  }
+
+  state.currentPlayerIndex = 0;
+  state.gamePhase = 'reveal';
+  showRevealScreen();
+}
+
+// ==================== REVEAL SCREEN ====================
+function showRevealScreen() {
+  showScreen('screen-reveal');
+  const player = state.players[state.currentPlayerIndex];
+  const card = document.getElementById('reveal-card');
+
+  const phaseLabel = document.getElementById('reveal-phase-label');
+  phaseLabel.textContent = t('reveal').replace('{n}', state.currentRound) + ' — ' + t('reveal');
+
+  if (state.mode === 'hotseat' && state.currentPlayerIndex > 0) {
+    const prevPlayer = state.players[state.currentPlayerIndex - 1];
+    card.innerHTML = `
+      <div class="player-label">${t('revealSub').replace('{player}', prevPlayer.name)}</div>
+      <div style="font-size:3em;margin:20px 0;">📱</div>
+      <p style="color:var(--text-dim);margin-bottom:20px;">${state.currentPlayerIndex > 1 ? 'Passez l\'appareil à ' + player.name : ''}</p>
+      <button class="btn btn-primary" onclick="showPlayerCard()">${player.name} — ${t('yourTurn')}</button>
+    `;
+  } else {
+    showPlayerCard();
+  }
+}
+
+function showPlayerCard() {
+  const player = state.players[state.currentPlayerIndex];
+  const card = document.getElementById('reveal-card');
+
+  let wordHTML = '';
+  if (player.isImposter) {
+    wordHTML = `<div class="imposter-word">🎭 ${t('imposter')}</div>`;
+  } else {
+    wordHTML = `<div class="secret-word">${player.word}</div>`;
+  }
+
+  const catNames = state.categories.map(c => CATEGORY_INFO[c]['name_' + state.lang]).join(', ');
+
+  card.innerHTML = `
+    <div class="player-label">${t('reveal').replace('{n}', state.currentRound)}</div>
+    <div class="player-number">${player.avatar} ${player.name}</div>
+    ${wordHTML}
+    <div class="category-label">📂 ${catNames}</div>
+    <span class="role-badge ${player.isImposter ? 'imposter' : 'crewmate'}">
+      ${player.isImposter ? '🎭 ' + t('imposter') : '✅ ' + t('crewmate')}
+    </span>
+    <div style="margin-top:24px;">
+      <button class="btn btn-primary" onclick="nextReveal()">
+        ${state.currentPlayerIndex < state.numPlayers - 1 ? '➡️ Suivant' : '🚀 Commencer la discussion'}
+      </button>
+    </div>
+  `;
+}
+
+function nextReveal() {
+  state.currentPlayerIndex++;
+  if (state.currentPlayerIndex >= state.numPlayers) {
+    // All players have seen their cards
+    startDiscussion();
+  } else {
+    showRevealScreen();
+  }
+}
+
+// ==================== DISCUSSION ====================
+function startDiscussion() {
+  state.gamePhase = 'discussion';
+  showScreen('screen-discussion');
+
+  document.getElementById('discussion-box').innerHTML = '';
+  document.getElementById('msg-input').value = '';
+
+  // Add system message
+  addSystemMessage(`${t('discussionSub')}`);
+
+  // Render players
+  renderPlayersGrid();
+
+  // Start timer
+  state.discussionTimeLeft = state.numPlayers * 10;
+  updateTimerBar();
+  if (state.discussionTimer) clearInterval(state.discussionTimer);
+  state.discussionTimer = setInterval(() => {
+    state.discussionTimeLeft--;
+    updateTimerBar();
+    if (state.discussionTimeLeft <= 0) {
+      clearInterval(state.discussionTimer);
+      startVoting();
+    }
+  }, 1000);
+
+  // AI messages if in AI mode
+  if (state.mode === 'ai') {
+    setTimeout(() => generateAIMessages(), 1500);
+  }
+}
+
+function updateTimerBar() {
+  const total = state.numPlayers * 10;
+  const pct = (state.discussionTimeLeft / total) * 100;
+  document.getElementById('discussion-timer').style.width = pct + '%';
+}
+
+function renderPlayersGrid() {
+  const grid = document.getElementById('players-grid');
+  grid.innerHTML = '';
+  state.players.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'player-card' + (p.eliminated ? ' eliminated' : '');
+    card.innerHTML = `
+      <div class="p-avatar" style="background:${p.color}">${p.avatar}</div>
+      <div class="p-name">${p.name}</div>
+      <div class="p-status">${p.eliminated ? '❌ ' + t('eliminated') : '🟢 ' + t('remaining')}</div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function addSystemMessage(text) {
+  const box = document.getElementById('discussion-box');
+  const msg = document.createElement('div');
+  msg.className = 'msg';
+  msg.style.textAlign = 'center';
+  msg.style.color = 'var(--text-dim)';
+  msg.style.fontStyle = 'italic';
+  msg.style.fontSize = '0.85em';
+  msg.textContent = text;
+  box.appendChild(msg);
+  box.scrollTop = box.scrollHeight;
+}
+
+function addMessage(author, text, isSelf) {
+  const box = document.getElementById('discussion-box');
+  const msg = document.createElement('div');
+  msg.className = 'msg ' + (isSelf ? 'self' : 'other');
+  msg.innerHTML = `<div class="msg-author">${author}</div>${text}`;
+  box.appendChild(msg);
+  box.scrollTop = box.scrollHeight;
+}
+
+function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  const player = state.players.find(p => !p.eliminated);
+  if (player) {
+    addMessage(player.name, text, true);
+    state.messages.push({ author: player.name, text, isSelf: true });
+  }
+  input.value = '';
+
+  // AI responses
+  if (state.mode === 'ai') {
+    setTimeout(() => generateAIMessage(), 1000 + Math.random() * 2000);
+  }
+}
+
+function generateAIMessages() {
+  const alivePlayers = state.players.filter(p => !p.eliminated && p.id !== 0);
+  let delay = 2000;
+
+  alivePlayers.forEach((p, i) => {
+    setTimeout(() => {
+      const msg = generateAIChatMessage(p);
+      addMessage(p.name, msg, false);
+      state.messages.push({ author: p.name, text: msg, isSelf: false });
+    }, delay + i * 2500);
+  });
+}
+
+function generateAIMessage() {
+  const alivePlayers = state.players.filter(p => !p.eliminated && p.id !== 0);
+  if (alivePlayers.length === 0) return;
+
+  const p = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+  const msg = generateAIChatMessage(p);
+  addMessage(p.name, msg, false);
+  state.messages.push({ author: p.name, text: msg, isSelf: false });
+}
+
+function generateAIChatMessage(player) {
+  const imposter = state.players[state.imposterIndex];
+  const isImposterAI = player.isImposter;
+
+  if (isImposterAI) {
+    // Imposter tries to blend in
+    const imposterLines = [
+      `Je pense que c'est quelque chose de ${player.word || 'commun'}...`,
+      `Hmm, je dirais que ça a un rapport avec la ${player.word || 'nature'}...`,
+      `C'est assez facile à deviner, non ?`,
+      `Pour moi c'est clairement lié à ${player.word || 'un sport'}...`,
+      `Je suis presque sûr de savoir de quoi il s'agit...`,
+      `Ça me fait penser à quelque chose de ${player.word || 'classique'}...`,
+      `Mon indice : c'est ${player.word ? 'très connu' : 'assez commun'} dans notre catégorie...`,
+      `Je pense que ${state.players.filter(p => !p.eliminated && p.id !== player.id)[0]?.name || 'personne'} va deviner vite...`,
+    ];
+    return imposterLines[Math.floor(Math.random() * imposterLines.length)];
+  }
+
+  // Crewmate gives hints about their word
+  const word = player.word;
+  if (!word) return "Je ne sais pas...";
+
+  const hintTemplates = {
+    sport: [
+      `C'est un sport ${word === 'Football' ? 'très populaire' : word === 'Tennis' ? 'sur terre battue' : word === 'Natation' ? 'dans l\'eau' : word === 'Boxe' ? 'sans arme' : 'amusant'}.`,
+      `Les fans adorent ${word.toLowerCase()} !`,
+      `C'est un sport olympique, ${word.toLowerCase()} en fait partie.`,
+    ],
+    joueur: [
+      `${word} est un ${word === 'Messi' || word === 'Ronaldo' || word === 'Neymar' || word === 'Mbappé' || word === 'Lewandowski' || word === 'Delpiero' || word === 'Pele' || word === 'Zidane' || word === 'Beckham' || word === 'Griezmann' || word === 'Hazard' || word === 'Iniesta' || word === 'Xavi' || word === 'Modric' || word === 'Haaland' ? 'footballeur' : word === 'Federer' || word === 'Nadal' ? 'tennisman' : word === 'Usain Bolt' ? 'athlète' : word === 'Michael Jordan' || word === 'LeBron James' ? 'basketteur' : 'sportif de renommée mondiale'}.`,
+      `${word} a remporté de nombreux ${word === 'Messi' || word === 'Ronaldo' ? 'Ballons d\'Or' : 'titres'}.`,
+    ],
+    country: [
+      `${word} est un ${word === 'France' || word === 'Italie' || word === 'Espagne' || word === 'Allemagne' || word === 'Portugal' ? 'pays européen' : word === 'Japon' || word === 'Corée du Sud' || word === 'Thaïlande' ? 'asiatique' : word === 'Brésil' || word === 'Argentine' || word === 'Colombie' || word === 'Perou' ? 'sud-américain' : word === 'Australie' || word === 'Nouvelle-Zélande' ? 'océanien' : word === 'Canada' || word === 'Mexique' ? 'américain du Nord' : word === 'Inde' ? 'asiatique' : word === 'Égypte' || word === 'Maroc' ? 'africain' : 'pays magnifique'}.`,
+      `La capitale de ${word} est très belle.`,
+    ],
+    places: [
+      `${word} est un lieu ${word === 'Tour Eiffel' || word === 'Château' || word === 'Cathédrale' ? 'historique' : word === 'Plage' || word === 'Lac' || word === 'Montagne' || word === 'Forêt' || word === 'Désert' ? 'naturel' : word === 'Stade' || word === 'Musée' || word === 'Bibliothèque' || word === 'Hôpital' || word === 'Université' || word === 'Gare' || word === 'Aéroport' || word === 'Port' ? 'moderne' : 'intéressant'}.`,
+      `On peut visiter ${word} en voyage.`,
+    ],
+    nourriture: [
+      `${word} est un plat ${word === 'Pizza' || word === 'Pâtes' || word === 'Riz' || word === 'Curry' || word === 'Pad Thai' || word === 'Paella' ? 'très répandu' : word === 'Sushi' || word === 'Ramen' ? 'asiatique' : word === 'Burger' || word === 'Tacos' ? 'fast-food' : word === 'Croissant' || word === 'Crêpes' || word === 'Quiche' ? 'français' : word === 'Soupe' ? 'réconfortant' : word === 'Fromage' ? 'délicieux' : word === 'Chocolat' ? 'sucré' : word === 'Gâteau' ? 'gâteau' : word === 'Salade' ? 'sain' : word === 'Tapas' || word === 'Moules-frites' ? 'partageable' : 'délicieux'}.`,
+      `J'adore manger ${word.toLowerCase()} !`,
+    ],
+    acteur: [
+      `${word} est un ${word === 'Tom Cruise' || word === 'Brad Pitt' || word === 'Denzel Washington' || word === 'Morgan Freeman' || word === 'Will Smith' || word === 'Robert Downey Jr' || word === 'Johnny Depp' || word === 'Matt Damon' || word === 'Idris Elba' || word === 'Oscar Isaac' ? 'acteur' : word === 'Scarlett Johansson' || word === 'Angelina Jolie' || word === 'Cate Blanchett' || word === 'Jennifer Lawrence' || word === 'Emma Watson' || word === 'Meryl Streep' || word === 'Charlize Theron' || word === 'Zendaya' || word === 'Saoirse Ronan' ? 'actrice' : 'célèbre'} ${word === 'Tom Cruise' || word === 'Brad Pitt' || word === 'Denzel Washington' || word === 'Morgan Freeman' || word === 'Will Smith' || word === 'Robert Downey Jr' || word === 'Johnny Depp' || word === 'Matt Damon' || word === 'Idris Elba' || word === 'Oscar Isaac' ? 'américain' : word === 'Scarlett Johansson' || word === 'Angelina Jolie' || word === 'Cate Blanchett' || word === 'Jennifer Lawrence' || word === 'Emma Watson' || word === 'Meryl Streep' || word === 'Charlize Theron' || word === 'Zendaya' || word === 'Saoirse Ronan' ? 'britannique/anglaise' : 'célèbre'}.`,
+      `${word} a joué dans de nombreux films populaires.`,
+    ],
+    voitures: [
+      `${word} est une marque ${word === 'Tesla' || word === 'Ford' || word === 'Chevrolet' || word === 'Nissan' ? 'américaine' : word === 'Ferrari' || word === 'Lamborghini' || word === 'Maserati' || word === 'Peugeot' ? 'italienne' : word === 'BMW' || word === 'Mercedes' || word === 'Porsche' || word === 'Audi' || word === 'Volkswagen' || word === 'Volvo' || word === 'Jaguar' || word === 'Bentley' || word === 'Bugatti' ? 'européenne' : word === 'Toyota' || word === 'Honda' ? 'japonaise' : 'célèbre'}.`,
+      `${word} produit des ${word === 'Tesla' || word === 'BMW' || word === 'Mercedes' ? 'voitures électriques aussi' : 'voitures de qualité'}.`,
+    ],
+    animals: [
+      `${word} est un ${word === 'Lion' || word === 'Tigre' ? 'félidé' : word === 'Éléphant' || word === 'Girafe' || word === 'Ours' ? 'grand mammifère' : word === 'Panda' || word === 'Kangourou' ? 'mammifère spécial' : word === 'Dauphin' || word === 'Poisson' ? 'animal marin' : word === 'Aigle' || word === 'Papillon' || word === 'Colibri' ? 'animal qui vole' : word === 'Loup' || word === 'Renard' ? 'carnivore' : word === 'Serpent' ? 'reptile' : word === 'Tortue' ? 'reptile' : word === 'Pingouin' ? 'oiseau' : word === 'Poule' || word === 'Vache' || word === 'Cheval' ? 'animal domestique' : 'animal fascinant')}.`,
+      `${word} vit ${word === 'Dauphin' || word === 'Poisson' ? 'dans l\'eau' : word === 'Aigle' || word === 'Papillon' || word === 'Colibri' ? 'dans les airs' : word === 'Désert' ? 'dans le désert' : 'dans la nature'}.`,
+    ],
+    anime: [
+      `${word} est un ${word === 'Naruto' || word === 'One Piece' || word === 'Dragon Ball' || word === 'Attack on Titan' || word === 'Death Note' || word === 'Demon Slayer' || word === 'My Hero Academia' || word === 'Sailor Moon' ? 'anime très populaire' : 'anime culte'}.`,
+      `${word === 'Goku' || word === 'Vegeta' ? 'C\'est un personnage de Dragon Ball' : word === 'Luffy' ? 'C\'est le capitaine des Pirates' : word === 'Sakura' ? 'C\'est une ninja' : word === 'Lelouch' ? 'C\'est un génie stratégique' : word === 'Tanjiro' ? 'C\'est un chasseur de démons' : word === 'Deku' ? 'C\'est un héros' : word === 'Sasuke' ? 'C\'est un ninja rival' : word === 'Zoro' ? 'C\'est un épéiste' : word === 'Eren' ? 'C\'est un titan' : word === 'Light Yagami' ? 'C\'est un tueur en série' : word === 'Gon' ? 'C\'est un chasseur' : 'C\'est un personnage marquant')}.`,
+    ]
+  };
+
+  const cat = getWordCategory(word);
+  const templates = hintTemplates[cat] || hintTemplates.sport;
+  return templates[Math.floor(Math.random() * templates.length)];
+}
+
+function getWordCategory(word) {
+  for (const [cat, words] of Object.entries(WORDS[state.lang])) {
+    if (words.includes(word)) return cat;
+  }
+  return 'sport';
+}
+
+// ==================== VOTING ====================
+function startVoting() {
+  if (state.discussionTimer) clearInterval(state.discussionTimer);
+  state.gamePhase = 'voting';
+  showScreen('screen-vote');
+
+  document.getElementById('vote-results').classList.add('hidden');
+  document.getElementById('btn-start-vote').classList.add('hidden');
+
+  const alivePlayers = state.players.filter(p => !p.eliminated);
+  const grid = document.getElementById('vote-grid');
+  grid.innerHTML = '';
+
+  document.getElementById('vote-title').textContent = t('voteTitle');
+  document.getElementById('vote-subtitle').textContent = `${alivePlayers.length} ${t('remaining')}`;
+
+  alivePlayers.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'player-card';
+    card.innerHTML = `
+      <div class="p-avatar" style="background:${p.color}">${p.avatar}</div>
+      <div class="p-name">${p.name}</div>
+      <div class="p-status">🗳️ Voter</div>
+    `;
+    card.onclick = () => castVote(p);
+    grid.appendChild(card);
+  });
+
+  // AI votes
+  if (state.mode === 'ai') {
+    setTimeout(() => {
+      const aiPlayers = alivePlayers.filter(p => p.id !== 0);
+      aiPlayers.forEach(p => {
+        const voteTarget = aiVoteTarget(p, alivePlayers);
+        state.votes[p.id] = voteTarget.id;
+      });
+    }, 1000);
+  }
+}
+
+function castVote(victim) {
+  // Player votes
+  const alivePlayers = state.players.filter(p => !p.eliminated && p.id !== 0);
+  state.votes[0] = victim.id;
+
+  // AI votes
+  if (state.mode === 'ai') {
+    alivePlayers.forEach(p => {
+      if (!state.votes[p.id]) {
+        const voteTarget = aiVoteTarget(p, alivePlayers);
+        state.votes[p.id] = voteTarget.id;
+      }
+    });
+  }
+
+  // Calculate results
+  const voteCounts = {};
+  state.players.filter(p => !p.eliminated).forEach(p => {
+    const vote = state.votes[p.id];
+    if (vote !== undefined) {
+      voteCounts[vote] = (voteCounts[vote] || 0) + 1;
+    }
+  });
+
+  // Find max votes
+  let maxVotes = 0;
+  let votedOut = null;
+  for (const [pid, count] of Object.entries(voteCounts)) {
+    if (count > maxVotes) {
+      maxVotes = count;
+      votedOut = state.players[parseInt(pid)];
+    }
+  }
+
+  // Show results
+  showVoteResults(voteCounts, votedOut, maxVotes);
+}
+
+function aiVoteTarget(aiPlayer, alivePlayers) {
+  // AI votes randomly but slightly smarter
+  // Imposter AI votes for crewmates
+  // Crewmate AI votes randomly (with slight bias against suspicious players)
+  const candidates = alivePlayers.filter(p => p.id !== aiPlayer.id);
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function showVoteResults(voteCounts, votedOut, maxVotes) {
+  const resultsDiv = document.getElementById('vote-results');
+  resultsDiv.classList.remove('hidden');
+
+  const alivePlayers = state.players.filter(p => !p.eliminated);
+  const totalVotes = alivePlayers.length;
+
+  let html = '';
+  alivePlayers.forEach(p => {
+    const count = voteCounts[p.id] || 0;
+    const pct = (count / totalVotes) * 100;
+    const isWinner = p === votedOut;
+    html += `
+      <div class="vote-bar-row">
+        <div class="vote-name">${p.avatar} ${p.name}</div>
+        <div class="vote-bar-bg">
+          <div class="vote-bar-fill ${isWinner ? 'winner' : 'loser'}" style="width:${Math.max(pct, 5)}%">
+            ${count} ${t('eliminated_players')}
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  resultsDiv.innerHTML = html;
+
+  // Show next button
+  const btnRow = document.createElement('div');
+  btnRow.style.marginTop = '20px';
+  btnRow.style.textAlign = 'center';
+
+  if (votedOut) {
+    votedOut.eliminated = true;
+    state.eliminatedPlayers.push(votedOut);
+
+    btnRow.innerHTML = `
+      <p style="margin-bottom:12px;font-size:1.1em;">
+        ${votedOut.name} ${t('eliminated')} (${maxVotes} ${t('eliminated_players')})
+      </p>
+      <button class="btn btn-primary" onclick="showImposterReveal()">🔍 Révéler l'imposteur</button>
+    `;
+    resultsDiv.appendChild(btnRow);
+  }
+
+  // Scroll to results
+  setTimeout(() => {
+    resultsDiv.scrollIntoView({ behavior: 'smooth' });
+  }, 100);
+}
+
+// ==================== IMPOSTER REVEAL ====================
+function showImposterReveal() {
+  showScreen('screen-imposter-reveal');
+  const imposter = state.players[state.imposterIndex];
+  const votedOut = state.eliminatedPlayers[state.eliminatedPlayers.length - 1];
+  const box = document.getElementById('imposter-reveal-box');
+
+  const isImposterCaught = votedOut === imposter;
+
+  box.innerHTML = `
+    <div style="font-size:3em;margin-bottom:16px;">${isImposterCaught ? '🎉' : '😈'}</div>
+    <h2 style="margin-bottom:8px;">${isImposterCaught ? t('imposterFound') : t('imposterWins')}</h2>
+    <div class="imposter-name">${imposter.avatar} ${imposter.name}</div>
+    <div class="imposter-word-reveal">${t('imposterWas')}: <strong>${imposter.name}</strong></div>
+    <div class="imposter-word-reveal">${t('yourWord')}: <strong>${state.secretWord}</strong></div>
+    <div style="margin-top:20px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+      ${state.currentRound < state.maxRounds ? `
+        <button class="btn btn-primary" onclick="nextRound()">➡️ ${t('round')} ${state.currentRound + 1}</button>
+      ` : `
+        <button class="btn btn-primary" onclick="showFinalResult(${isImposterCaught ? 'crewmate' : 'imposter'})">🏆 ${t('result')}</button>
+      `}
+      <button class="btn btn-outline" onclick="showScreen('screen-setup')">🔄 ${t('menu')}</button>
+    </div>
+  `;
+
+  if (isImposterCaught) {
+    state.scores.crewmate++;
+    spawnConfetti();
+  } else {
+    state.scores.imposter++;
+  }
+}
+
+function nextRound() {
+  state.currentRound++;
+  state.eliminatedPlayers = [];
+  state.messages = [];
+  state.votes = {};
+  setupRound();
+}
+
+function showFinalResult(winner) {
+  showScreen('screen-result');
+  const card = document.getElementById('result-card');
+
+  const isCrewmateWin = winner === 'crewmate';
+
+  card.innerHTML = `
+    <div class="result-emoji">${isCrewmateWin ? '🎉🏆🎊' : '😈🎭💀'}</div>
+    <h2 class="result-title ${isCrewmateWin ? 'win' : 'lose'}">
+      ${isCrewmateWin ? t('crewmateWins') : t('imposterWins')}
+    </h2>
+    <div class="result-info">
+      <p>${t('imposterWas')}: <strong>${state.players[state.imposterIndex].name}</strong></p>
+      <p>${t('yourWord')}: <strong>${state.secretWord}</strong></p>
+      <p style="margin-top:12px;">
+        ${t('round')} 1-${state.maxRounds}: ${state.scores.crewmate} - ${state.scores.imposter}
+      </p>
+    </div>
+    <div style="margin-top:24px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="state.currentRound=1;state.scores={crewmate:0,imposter:0};setupRound();">🔄 ${t('playAgain')}</button>
+      <button class="btn btn-outline" onclick="showScreen('screen-setup')">📋 ${t('menu')}</button>
+    </div>
+  `;
+
+  if (isCrewmateWin) spawnConfetti();
+}
+
+// ==================== CONFETTI ====================
+function spawnConfetti() {
+  const container = document.createElement('div');
+  container.className = 'confetti';
+  document.body.appendChild(container);
+
+  const colors = ['#e94560','#4ecdc4','#ffe66d','#a78bfa','#f97316','#06b6d4','#84cc16','#ec4899'];
+
+  for (let i = 0; i < 50; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = Math.random() * 100 + '%';
+    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.animationDelay = Math.random() * 2 + 's';
+    piece.style.animationDuration = (2 + Math.random() * 2) + 's';
+    piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    piece.style.width = (6 + Math.random() * 8) + 'px';
+    piece.style.height = (6 + Math.random() * 8) + 'px';
+    container.appendChild(piece);
+  }
+
+  setTimeout(() => container.remove(), 4000);
+}
+
+// ==================== INIT ====================
+function init() {
+  renderCategoryGrid();
+  updateAllTranslations();
+
+  // Enter key for messages
+  document.getElementById('msg-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendMessage();
+  });
+}
+
+init();
+</script>
+</body>
+</html>

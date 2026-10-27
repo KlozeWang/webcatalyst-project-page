@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gesture Blocks TV</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            font-family: 'Press Start 2P', cursive;
+            background-color: #111;
+            color: white;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Mirrored video for natural interaction */
+        #webcam {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+            opacity: 0.3; /* Keep it subtle */
+            z-index: 1;
+        }
+
+        #game-canvas {
+            position: relative;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.8);
+            border: 4px solid #333;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 50;
+        }
+
+        .zone-overlay {
+            position: absolute;
+            z-index: 5;
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.3);
+            text-transform: uppercase;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+
+        .zone-active {
+            background-color: rgba(0, 255, 0, 0.3);
+            border-color: rgba(0, 255, 0, 0.8);
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        /* Define interaction zones */
+        #zone-left { top: 20%; left: 5%; width: 20%; height: 60%; }
+        #zone-right { top: 20%; right: 5%; width: 20%; height: 60%; }
+        #zone-rotate { top: 5%; left: 30%; width: 40%; height: 20%; }
+        #zone-drop { bottom: 5%; left: 30%; width: 40%; height: 20%; }
+
+        .btn {
+            background: #ef4444;
+            color: white;
+            padding: 15px 30px;
+            font-size: 1.5rem;
+            border: 4px solid white;
+            cursor: pointer;
+            text-shadow: 2px 2px 0 #000;
+            transition: transform 0.1s;
+        }
+        .btn:active { transform: scale(0.95); }
+        .btn:focus { outline: none; border-color: #fcd34d; }
+
+        #score-board {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 20;
+            font-size: 1.5rem;
+            text-shadow: 2px 2px 0 #000;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <video id="webcam" autoplay playsinline></video>
+        
+        <!-- Visual guides for gestures -->
+        <div id="zone-left" class="zone-overlay">WAVE LEFT</div>
+        <div id="zone-right" class="zone-overlay">WAVE RIGHT</div>
+        <div id="zone-rotate" class="zone-overlay">WAVE UP<br>(ROTATE)</div>
+        <div id="zone-drop" class="zone-overlay">WAVE DOWN<br>(DROP)</div>
+
+        <div id="score-board">
+            SCORE: <span id="score">0</span><br>
+            LEVEL: <span id="level">1</span>
+        </div>
+
+        <canvas id="game-canvas" width="300" height="600"></canvas>
+
+        <div id="start-screen" class="overlay">
+            <h1 class="text-4xl md:text-6xl mb-8 text-center text-blue-400" style="text-shadow: 4px 4px 0 #000;">GESTURE<br>BLOCKS</h1>
+            <p class="mb-8 text-center text-sm md:text-base max-w-lg leading-loose">
+                Allow camera access.<br>
+                Wave hands in the zones to play!<br>
+                Perfect for playing on TV.
+            </p>
+            <button id="start-btn" class="btn hover:bg-red-500">START GAME</button>
+        </div>
+
+        <div id="game-over-screen" class="overlay hidden">
+            <h1 class="text-5xl md:text-7xl mb-4 text-red-500" style="text-shadow: 4px 4px 0 #000;">GAME OVER</h1>
+            <p class="text-2xl mb-8">FINAL SCORE: <span id="final-score">0</span></p>
+            <button id="restart-btn" class="btn hover:bg-red-500">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <!-- Hidden canvas for processing video frames -->
+    <canvas id="motion-canvas" width="64" height="48" style="display:none;"></canvas>
+
+    <script>
+        // --- GAME LOGIC (TETRIS CLONE) ---
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        const COLS = 10;
+        const ROWS = 20;
+        const BLOCK_SIZE = 30; // 10*30 = 300px width, 20*30 = 600px height
+        
+        // Tetromino colors and shapes
+        const COLORS = [
+            null,
+            '#00FFFF', // I
+            '#0000FF', // J
+            '#FFA500', // L
+            '#FFFF00', // O
+            '#00FF00', // S
+            '#800080', // T
+            '#FF0000'  // Z
+        ];
+
+        const SHAPES = [
+            [],
+            [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]], // I
+            [[2,0,0], [2,2,2], [0,0,0]], // J
+            [[0,0,3], [3,3,3], [0,0,0]], // L
+            [[4,4], [4,4]], // O
+            [[0,5,5], [5,5,0], [0,0,0]], // S
+            [[0,6,0], [6,6,6], [0,0,0]], // T
+            [[7,7,0], [0,7,7], [0,0,0]]  // Z
+        ];
+
+        let board = [];
+        let score = 0;
+        let level = 1;
+        let linesCleared = 0;
+        let dropCounter = 0;
+        let dropInterval = 1000;
+        let lastTime = 0;
+        let gameActive = false;
+        let requestAnimationId;
+
+        const player = {
+            pos: {x: 0, y: 0},
+            matrix: null,
+            score: 0
+        };
+
+        function createMatrix(w, h) {
+            const matrix = [];
+            while (h--) {
+                matrix.push(new Array(w).fill(0));
+            }
+            return matrix;
+        }
+
+        function drawMatrix(matrix, offset) {
+            matrix.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        ctx.fillStyle = COLORS[value];
+                        ctx.fillRect((x + offset.x) * BLOCK_SIZE, (y + offset.y) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+                        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+                        ctx.strokeRect((x + offset.x) * BLOCK_SIZE, (y + offset.y) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+                        
+                        // Inner highlight for 3D effect
+                        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                        ctx.fillRect((x + offset.x) * BLOCK_SIZE + 2, (y + offset.y) * BLOCK_SIZE + 2, BLOCK_SIZE - 4, BLOCK_SIZE / 3);
+                    }
+                });
+            });
+        }
+
+        function draw() {
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid lines
+            ctx.strokeStyle = '#222';
+            for(let i=0; i<=COLS; i++) {
+                ctx.beginPath(); ctx.moveTo(i*BLOCK_SIZE, 0); ctx.lineTo(i*BLOCK_SIZE, canvas.height); ctx.stroke();
+            }
+            for(let i=0; i<=ROWS; i++) {
+                ctx.beginPath(); ctx.moveTo(0, i*BLOCK_SIZE); ctx.lineTo(canvas.width, i*BLOCK_SIZE); ctx.stroke();
+            }
+
+            drawMatrix(board, {x: 0, y: 0});
+            if(player.matrix) drawMatrix(player.matrix, player.pos);
+        }
+
+        function collide(board, player) {
+            const m = player.matrix;
+            const o = player.pos;
+            for (let y = 0; y < m.length; ++y) {
+                for (let x = 0; x < m[y].length; ++x) {
+                    if (m[y][x] !== 0 &&
+                       (board[y + o.y] && board[y + o.y][x + o.x]) !== 0) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function merge(board, player) {
+            player.matrix.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        board[y + player.pos.y][x + player.pos.x] = value;
+                    }
+                });
+            });
+        }
+
+        function playerReset() {
+            const pieces = 'ILJOTSZ';
+            const typeId = Math.floor(Math.random() * 7) + 1;
+            player.matrix = SHAPES[typeId];
+            player.pos.y = 0;
+            player.pos.x = (Math.floor(COLS / 2)) - (Math.floor(player.matrix[0].length / 2));
+            
+            if (collide(board, player)) {
+                gameOver();
+            }
+        }
+
+        function playerDrop() {
+            player.pos.y++;
+            if (collide(board, player)) {
+                player.pos.y--;
+                merge(board, player);
+                playerReset();
+                arenaSweep();
+                updateScore();
+            }
+            dropCounter = 0;
+        }
+
+        function playerMove(dir) {
+            player.pos.x += dir;
+            if (collide(board, player)) {
+                player.pos.x -= dir;
+            }
+        }
+
+        function rotate(matrix, dir) {
+            for (let y = 0; y < matrix.length; ++y) {
+                for (let x = 0; x < y; ++x) {
+                    [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
+                }
+            }
+            if (dir > 0) {
+                matrix.forEach(row => row.reverse());
+            } else {
+                matrix.reverse();
+            }
+        }
+
+        function playerRotate(dir) {
+            const pos = player.pos.x;
+            let offset = 1;
+            rotate(player.matrix, dir);
+            while (collide(board, player)) {
+                player.pos.x += offset;
+                offset = -(offset + (offset > 0 ? 1 : -1));
+                if (offset > player.matrix[0].length) {
+                    rotate(player.matrix, -dir);
+                    player.pos.x = pos;
+                    return;
+                }
+            }
+        }
+
+        function arenaSweep() {
+            let rowCount = 1;
+            outer: for (let y = board.length - 1; y >= 0; --y) {
+                for (let x = 0; x < board[y].length; ++x) {
+                    if (board[y][x] === 0) {
+                        continue outer;
+                    }
+                }
+                const row = board.splice(y, 1)[0].fill(0);
+                board.unshift(row);
+                ++y;
+                
+                score += rowCount * 100;
+                rowCount *= 2;
+                linesCleared++;
+                
+                if (linesCleared % 5 === 0) {
+                    level++;
+                    dropInterval = Math.max(100, 1000 - (level * 100));
+                }
+            }
+        }
+
+        function updateScore() {
+            document.getElementById('score').innerText = score;
+            document.getElementById('level').innerText = level;
+        }
+
+        function update(time = 0) {
+            if (!gameActive) return;
+            const deltaTime = time - lastTime;
+            lastTime = time;
+
+            dropCounter += deltaTime;
+            if (dropCounter > dropInterval) {
+                playerDrop();
+            }
+
+            draw();
+            requestAnimationId = requestAnimationFrame(update);
+        }
+
+        function initGame() {
+            board = createMatrix(COLS, ROWS);
+            score = 0;
+            level = 1;
+            linesCleared = 0;
+            dropInterval = 1000;
+            updateScore();
+            playerReset();
+            gameActive = true;
+            lastTime = performance.now();
+            update();
+        }
+
+        function gameOver() {
+            gameActive = false;
+            cancelAnimationFrame(requestAnimationId);
+            document.getElementById('final-score').innerText = score;
+            document.getElementById('game-over-screen').classList.remove('hidden');
+        }
+
+        // --- WEBCAM & MOTION DETECTION ---
+        const video = document.getElementById('webcam');
+        const motionCanvas = document.getElementById('motion-canvas');
+        const mCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
+        
+        let previousFrameData = null;
+        let motionLoopId;
+        
+        // Cooldowns to prevent spamming moves
+        const COOLDOWN_MS = 400;
+        let lastActionTime = { left: 0, right: 0, rotate: 0, drop: 0 };
+
+        // Play sound synthesis (Web Audio API)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playTone(freq, type, duration) {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 320, height: 240, facingMode: "user" } 
+                });
+                video.srcObject = stream;
+                return new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        resolve();
+                    };
+                });
+            } catch (err) {
+                console.error("Camera access denied or unavailable.", err);
+                alert("Camera access is required to play with gestures.");
+            }
+        }
+
+        function triggerAction(action) {
+            const now = performance.now();
+            if (now - lastActionTime[action] < COOLDOWN_MS) return;
+            
+            lastActionTime[action] = now;
+            
+            // Visual feedback
+            const el = document.getElementById(`zone-${action}`);
+            if(el) {
+                el.classList.add('zone-active');
+                setTimeout(() => el.classList.remove('zone-active'), 200);
+            }
+
+            if (!gameActive) return;
+
+            switch(action) {
+                case 'left':
+                    playerMove(-1);
+                    playTone(300, 'square', 0.1);
+                    break;
+                case 'right':
+                    playerMove(1);
+                    playTone(300, 'square', 0.1);
+                    break;
+                case 'rotate':
+                    playerRotate(1);
+                    playTone(500, 'sine', 0.1);
+                    break;
+                case 'drop':
+                    playerDrop();
+                    score += 1; // bonus for hard drop
+                    updateScore();
+                    playTone(150, 'sawtooth', 0.15);
+                    break;
+            }
+            if(gameActive) draw(); // Immediate feedback
+        }
+
+        function detectMotion() {
+            if (video.videoWidth === 0) {
+                motionLoopId = requestAnimationFrame(detectMotion);
+                return;
+            }
+
+            // Draw current video frame to small canvas (flipped horizontally to match CSS mirror)
+            mCtx.save();
+            mCtx.scale(-1, 1);
+            mCtx.drawImage(video, -motionCanvas.width, 0, motionCanvas.width, motionCanvas.height);
+            mCtx.restore();
+
+            const currentFrame = mCtx.getImageData(0, 0, motionCanvas.width, motionCanvas.height);
+            const currentData = currentFrame.data;
+
+            if (previousFrameData) {
+                // Define zones on the small canvas (matching CSS percentages roughly)
+                const w = motionCanvas.width;
+                const h = motionCanvas.height;
+                
+                // [x, y, w, h]
+                const zones = {
+                    left: { rect: [0, Math.floor(h*0.2), Math.floor(w*0.3), Math.floor(h*0.6)], threshold: 25 },
+                    right: { rect: [Math.floor(w*0.7), Math.floor(h*0.2), Math.floor(w*0.3), Math.floor(h*0.6)], threshold: 25 },
+                    rotate: { rect: [Math.floor(w*0.3), 0, Math.floor(w*0.4), Math.floor(h*0.3)], threshold: 20 },
+                    drop: { rect: [Math.floor(w*0.3), Math.floor(h*0.7), Math.floor(w*0.4), Math.floor(h*0.3)], threshold: 20 }
+                };
+
+                for (const [action, zone] of Object.entries(zones)) {
+                    let motionAmount = 0;
+                    const [zx, zy, zw, zh] = zone.rect;
+                    let pixelCount = 0;
+
+                    for (let y = zy; y < zy + zh; y+=2) { // Skip pixels for performance
+                        for (let x = zx; x < zx + zw; x+=2) {
+                            const i = (y * w + x) * 4;
+                            // Calculate grayscale diff
+                            const rDiff = Math.abs(currentData[i] - previousFrameData[i]);
+                            const gDiff = Math.abs(currentData[i+1] - previousFrameData[i+1]);
+                            const bDiff = Math.abs(currentData[i+2] - previousFrameData[i+2]);
+                            
+                            // Average diff
+                            if ((rDiff + gDiff + bDiff)/3 > 30) { 
+                                motionAmount++;
+                            }
+                            pixelCount++;
+                        }
+                    }
+
+                    const motionPercentage = (motionAmount / pixelCount) * 100;
+                    if (motionPercentage > zone.threshold) {
+                        triggerAction(action);
+                    }
+                }
+            }
+
+            // Store current frame for next comparison
+            previousFrameData = new Uint8ClampedArray(currentData);
+            motionLoopId = requestAnimationFrame(detectMotion);
+        }
+
+        // --- EVENT LISTENERS ---
+        document.getElementById('start-btn').addEventListener('click', async () => {
+            if(audioCtx.state === 'suspended') await audioCtx.resume();
+            document.getElementById('start-btn').innerText = "CONNECTING CAMERA...";
+            await setupCamera();
+            document.getElementById('start-screen').classList.add('hidden');
+            initGame();
+            detectMotion();
+        });
+
+        document.getElementById('restart-btn').addEventListener('click', () => {
+            document.getElementById('game-over-screen').classList.add('hidden');
+            initGame();
+        });
+
+        // Keyboard fallback for testing/accessibility
+        document.addEventListener('keydown', event => {
+            if (!gameActive) return;
+            switch(event.keyCode) {
+                case 37: triggerAction('left'); break;
+                case 39: triggerAction('right'); break;
+                case 38: triggerAction('rotate'); break;
+                case 40: triggerAction('drop'); break;
+            }
+        });
+
+        // Initial draw
+        draw();
+    </script>
+</body>
+</html>

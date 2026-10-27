@@ -1,0 +1,2188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Android Screen Mirroring System - Mobile ↔ TV</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0a1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1a1a3e, #2d1b69);
+            padding: 20px 40px;
+            text-align: center;
+            border-bottom: 3px solid #6c63ff;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(108, 99, 255, 0.1) 0%, transparent 70%);
+            animation: pulse 4s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .header h1 {
+            font-size: 2.2em;
+            background: linear-gradient(90deg, #6c63ff, #00d4ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header p {
+            color: #8888aa;
+            margin-top: 8px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .architecture-diagram {
+            background: #12122a;
+            border: 1px solid #2a2a4a;
+            border-radius: 16px;
+            padding: 30px;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .architecture-diagram h2 {
+            color: #6c63ff;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .arch-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin: 30px 0;
+        }
+
+        .arch-device {
+            background: #1a1a3e;
+            border: 2px solid #3a3a6a;
+            border-radius: 12px;
+            padding: 20px;
+            width: 280px;
+            text-align: center;
+            position: relative;
+            transition: all 0.3s;
+        }
+
+        .arch-device:hover {
+            border-color: #6c63ff;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(108, 99, 255, 0.2);
+        }
+
+        .arch-device .device-icon {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+
+        .arch-device h3 {
+            color: #00d4ff;
+            margin-bottom: 10px;
+        }
+
+        .arch-device .specs {
+            font-size: 0.85em;
+            color: #8888aa;
+            line-height: 1.6;
+        }
+
+        .arch-device .cpu-bar {
+            width: 100%;
+            height: 8px;
+            background: #2a2a4a;
+            border-radius: 4px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .arch-device .cpu-bar .fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 1s ease;
+        }
+
+        .arch-device.mobile .cpu-bar .fill {
+            background: linear-gradient(90deg, #6c63ff, #00d4ff);
+            width: 92%;
+        }
+
+        .arch-device.tv .cpu-bar .fill {
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            width: 5%;
+        }
+
+        .arch-connection {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .arch-connection .line {
+            width: 120px;
+            height: 3px;
+            background: linear-gradient(90deg, #6c63ff, #00d4ff);
+            position: relative;
+            animation: dataFlow 2s linear infinite;
+        }
+
+        @keyframes dataFlow {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 100% 50%; }
+        }
+
+        .arch-connection .label {
+            font-size: 0.75em;
+            color: #00d4ff;
+            background: #1a1a3e;
+            padding: 4px 12px;
+            border-radius: 12px;
+            border: 1px solid #3a3a6a;
+        }
+
+        .arch-connection .protocol {
+            font-size: 0.7em;
+            color: #666688;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: #1a1a3e;
+            border: 1px solid #2a2a4a;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: #8888aa;
+            font-size: 0.9em;
+        }
+
+        .tab:hover {
+            background: #2a2a4a;
+            color: #e0e0e0;
+        }
+
+        .tab.active {
+            background: #6c63ff;
+            color: white;
+            border-color: #6c63ff;
+        }
+
+        .tab-content {
+            display: none;
+            background: #12122a;
+            border: 1px solid #2a2a4a;
+            border-radius: 16px;
+            padding: 30px;
+            margin: 20px 0;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .tab-content h2 {
+            color: #6c63ff;
+            margin-bottom: 20px;
+            font-size: 1.4em;
+        }
+
+        .code-block {
+            background: #0a0a1a;
+            border: 1px solid #2a2a4a;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block pre {
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 0.85em;
+            line-height: 1.6;
+            color: #c0c0e0;
+            white-space: pre;
+        }
+
+        .code-block .keyword { color: #6c63ff; }
+        .code-block .string { color: #00d4ff; }
+        .code-block .comment { color: #666688; }
+        .code-block .type { color: #00ff88; }
+        .code-block .number { color: #ff6b6b; }
+        .code-block .annotation { color: #ffaa00; }
+
+        .code-block .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #2a2a4a;
+            border: 1px solid #3a3a6a;
+            color: #8888aa;
+            padding: 5px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8em;
+            transition: all 0.3s;
+        }
+
+        .code-block .copy-btn:hover {
+            background: #6c63ff;
+            color: white;
+        }
+
+        .simulation-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin: 20px 0;
+        }
+
+        @media (max-width: 900px) {
+            .simulation-panel {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .sim-device {
+            background: #12122a;
+            border: 2px solid #2a2a4a;
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .sim-device h3 {
+            color: #6c63ff;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .sim-screen {
+            width: 100%;
+            max-width: 350px;
+            height: 200px;
+            background: #0a0a1a;
+            border: 2px solid #3a3a6a;
+            border-radius: 8px;
+            margin: 0 auto 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sim-screen .screen-content {
+            font-size: 0.9em;
+            color: #8888aa;
+        }
+
+        .sim-screen.streaming {
+            border-color: #00d4ff;
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+        }
+
+        .sim-screen.streaming .screen-content {
+            color: #00d4ff;
+        }
+
+        .sim-screen.off {
+            background: #000;
+            border-color: #333;
+        }
+
+        .sim-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .sim-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+
+        .sim-btn.connect {
+            background: linear-gradient(135deg, #6c63ff, #00d4ff);
+            color: white;
+        }
+
+        .sim-btn.connect:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(108, 99, 255, 0.3);
+        }
+
+        .sim-btn.disconnect {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .sim-btn.screen-off {
+            background: #ffaa00;
+            color: #000;
+        }
+
+        .sim-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 10px 0;
+            padding: 8px 12px;
+            background: #1a1a3e;
+            border-radius: 8px;
+            font-size: 0.85em;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ff6b6b;
+        }
+
+        .status-dot.connected {
+            background: #00ff88;
+            animation: blink 2s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .cpu-monitor {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 15px 0;
+        }
+
+        .cpu-item {
+            background: #1a1a3e;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .cpu-item label {
+            font-size: 0.8em;
+            color: #8888aa;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .cpu-item .value {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .cpu-item .value.mobile-cpu { color: #6c63ff; }
+        .cpu-item .value.tv-cpu { color: #00d4ff; }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #2a2a4a;
+            border-radius: 3px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+
+        .progress-bar .fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+
+        .progress-bar .fill.mobile { background: #6c63ff; }
+        .progress-bar .fill.tv { background: #00d4ff; }
+
+        .feature-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .feature-card {
+            background: #1a1a3e;
+            border: 1px solid #2a2a4a;
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            border-color: #6c63ff;
+            transform: translateY(-3px);
+        }
+
+        .feature-card .icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .feature-card h4 {
+            color: #00d4ff;
+            margin-bottom: 8px;
+        }
+
+        .feature-card p {
+            font-size: 0.85em;
+            color: #8888aa;
+            line-height: 1.5;
+        }
+
+        .network-diagram {
+            background: #12122a;
+            border: 1px solid #2a2a4a;
+            border-radius: 16px;
+            padding: 30px;
+            margin: 20px 0;
+        }
+
+        .network-diagram h2 {
+            color: #6c63ff;
+            margin-bottom: 20px;
+        }
+
+        .network-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+
+        .network-node {
+            background: #1a1a3e;
+            border: 2px solid #3a3a6a;
+            border-radius: 12px;
+            padding: 15px 20px;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        .network-node .node-icon {
+            font-size: 1.5em;
+            margin-bottom: 5px;
+        }
+
+        .network-node .node-label {
+            font-size: 0.8em;
+            color: #8888aa;
+        }
+
+        .network-arrow {
+            color: #6c63ff;
+            font-size: 1.5em;
+            animation: arrowPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes arrowPulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        .log-panel {
+            background: #0a0a1a;
+            border: 1px solid #2a2a4a;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.8em;
+        }
+
+        .log-entry {
+            padding: 3px 0;
+            border-bottom: 1px solid #1a1a3e;
+        }
+
+        .log-entry .timestamp {
+            color: #666688;
+        }
+
+        .log-entry .info { color: #00d4ff; }
+        .log-entry .success { color: #00ff88; }
+        .log-entry .error { color: #ff6b6b; }
+        .log-entry .warning { color: #ffaa00; }
+
+        .xml-block {
+            background: #0a0a1a;
+            border: 1px solid #2a2a4a;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+
+        .xml-block pre {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.8em;
+            line-height: 1.5;
+            color: #c0c0e0;
+        }
+
+        .xml-tag { color: #ff6b6b; }
+        .xml-attr { color: #ffaa00; }
+        .xml-value { color: #00d4ff; }
+        .xml-comment { color: #666688; }
+
+        .step-list {
+            list-style: none;
+            counter-reset: step;
+        }
+
+        .step-list li {
+            counter-increment: step;
+            padding: 15px 15px 15px 50px;
+            margin: 10px 0;
+            background: #1a1a3e;
+            border-radius: 8px;
+            position: relative;
+            border-left: 3px solid #6c63ff;
+        }
+
+        .step-list li::before {
+            content: counter(step);
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 24px;
+            height: 24px;
+            background: #6c63ff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            font-weight: bold;
+            color: white;
+        }
+
+        .step-list li h4 {
+            color: #00d4ff;
+            margin-bottom: 5px;
+        }
+
+        .step-list li p {
+            font-size: 0.85em;
+            color: #8888aa;
+            line-height: 1.5;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: #666688;
+            font-size: 0.85em;
+            border-top: 1px solid #2a2a4a;
+            margin-top: 40px;
+        }
+
+        .scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .scrollbar::-webkit-scrollbar-track {
+            background: #1a1a3e;
+        }
+
+        .scrollbar::-webkit-scrollbar-thumb {
+            background: #3a3a6a;
+            border-radius: 3px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.7em;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+
+        .badge.kotlin { background: #6c63ff; color: white; }
+        .badge.xml { background: #ffaa00; color: #000; }
+        .badge.java { background: #ff6b6b; color: white; }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+            .arch-flow {
+                flex-direction: column;
+            }
+            .arch-connection .line {
+                width: 3px;
+                height: 60px;
+            }
+        }
+
+        .tooltip {
+            position: relative;
+            cursor: help;
+        }
+
+        .tooltip::after {
+            content: attr(data-tip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2a2a4a;
+            color: #e0e0e0;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .tooltip:hover::after {
+            opacity: 1;
+        }
+
+        .connection-status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #1a1a3e;
+            border: 1px solid #2a2a4a;
+            border-radius: 8px;
+            padding: 10px 20px;
+            margin: 15px 0;
+        }
+
+        .connection-status-bar .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .connection-status-bar .latency {
+            font-size: 0.85em;
+            color: #8888aa;
+        }
+
+        .connection-status-bar .latency span {
+            color: #00ff88;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📱 Android Screen Mirroring System</h1>
+        <p>High-Performance Remote Desktop | Mobile ↔ Android TV | Low-Latency Architecture</p>
+    </div>
+
+    <div class="container">
+        <!-- Architecture Diagram -->
+        <div class="architecture-diagram">
+            <h2>🏗️ System Architecture</h2>
+            <div class="arch-flow">
+                <div class="arch-device mobile">
+                    <div class="device-icon">📱</div>
+                    <h3>Mobile Device</h3>
+                    <div class="specs">
+                        <strong>Heavy Lifter (90-95% CPU)</strong><br>
+                        • Screen Capture (MediaProjection)<br>
+                        • H.264/H.265 Hardware Encoding<br>
+                        • Accessibility Service Control<br>
+                        • Input Event Generation<br>
+                        • Socket Server (TCP/UDP)
+                    </div>
+                    <div class="cpu-bar">
+                        <div class="fill"></div>
+                    </div>
+                    <small style="color: #8888aa; margin-top: 5px; display: block;">CPU Load: ~92%</small>
+                </div>
+
+                <div class="arch-connection">
+                    <div class="label">📡 Local Network</div>
+                    <div class="line"></div>
+                    <div class="protocol">TCP: 8080 | UDP: 8081</div>
+                    <div class="label">🔒 WPA2 Encrypted</div>
+                    <div class="line"></div>
+                    <div class="label">📶 Hotspot ↔ Wi-Fi</div>
+                </div>
+
+                <div class="arch-device tv">
+                    <div class="device-icon">📺</div>
+                    <h3>Android TV</h3>
+                    <div class="specs">
+                        <strong>Thin Client (4-5% CPU)</strong><br>
+                        • H.264/H.265 Hardware Decoding<br>
+                        • Video Surface Rendering<br>
+                        • Input Relay (Remote/Mouse/KB)<br>
+                        • Socket Client (TCP/UDP)<br>
+                        • Low-Power Display
+                    </div>
+                    <div class="cpu-bar">
+                        <div class="fill"></div>
+                    </div>
+                    <small style="color: #8888aa; margin-top: 5px; display: block;">CPU Load: ~5%</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('mobile-app')">📱 Mobile App (Kotlin)</div>
+            <div class="tab" onclick="switchTab('tv-app')">📺 TV App (Kotlin)</div>
+            <div class="tab" onclick="switchTab('layouts')">📐 XML Layouts</div>
+            <div class="tab" onclick="switchTab('simulation')">🎮 Live Simulation</div>
+            <div class="tab" onclick="switchTab('network')">🌐 Network Protocol</div>
+            <div class="tab" onclick="switchTab('setup')">⚙️ Setup Guide</div>
+        </div>
+
+        <!-- Mobile App Tab -->
+        <div class="tab-content active" id="mobile-app">
+            <h2>📱 Mobile App - Core Source Code <span class="badge kotlin">KOTLIN</span></h2>
+
+            <h3 style="color: #00d4ff; margin: 20px 0 10px;">1. MainActivity.kt - Main Entry Point</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                <pre><span class="annotation">@OptIn(ExperimentalStdlibApi::class)</span>
+<span class="keyword">class</span> <span class="type">MainActivity</span> : <span class="type">AppCompatActivity</span>() {
+
+    <span class="keyword">private</span> <span class="keyword">lateinit var</span> serverSocket: <span class="type">ServerSocket</span>
+    <span class="keyword">private</span> <span class="keyword">lateinit var</span> udpSocket: <span class="type">DatagramSocket</span>
+    <span class="keyword">private</span> <span class="keyword">var</span> clientSocket: <span class="type">Socket</span>? = <span class="keyword">null</span>
+    <span class="keyword">private</span> <span class="keyword">var</span> isStreaming = <span class="keyword">false</span>
+    <span class="keyword">private</span> <span class="keyword">var</span> screenOffMode = <span class="keyword">false</span>
+    
+    <span class="keyword">private</span> <span class="keyword">lateinit var</span> mediaProjectionManager: <span class="type">MediaProjectionManager</span>
+    <span class="keyword">private</span> <span class="keyword">var</span> mediaProjection: <span class="type">MediaProjection</span>? = <span class="keyword">null</span>
+    <span class="keyword">private</span> <span class="keyword">lateinit var</span> virtualDisplay: <span class="type">VirtualDisplay</span>
+    
+    <span class="keyword">private</span> <span class="keyword">lateinit var</span> mediaCodec: <span class="type">MediaCodec</span>
+    <span class="keyword">private</span> <span class="keyword">lateinit var</span> mediaExtractor: <span class="type">MediaExtractor</span>
+    
+    <span class="comment">// Handler for UI updates</span>
+    <span class="keyword">private</span> <span class="keyword">val</span> handler = <span class="type">Handler</span>(<span class="type">Looper</span>.getMainLooper())
+    <span class="keyword">private</span> <span class="keyword">val</span> cpuMonitorRunnable = <span class="keyword">object</span> : <span class="type">Runnable</span> {
+        <span class="keyword">override</span> <span class="keyword">fun</span> <span class="type">run</span>() {
+            <span class="keyword">val</span> cpuUsage = <span class="type">getCpuUsage</span>()
+            <span class="type">updateCpuDisplay</span>(cpuUsage, <span class="string">"mobile"</span>)
+            handler.<span class="type">postDelayed</span>(<span class="keyword">this</span>, <span class="number">1000</span>)
+        }
+    }
+
+    <span class="keyword">override</span> <span class="keyword">fun</span> <span class="type">onCreate</span>(savedInstanceState: <span class="type">Bundle</span>?) {
+        <span class="keyword">super</span>.<span class="type">onCreate</span>(savedInstanceState)
+        <span class="type">setContentView</span>(R.layout.<span class="type">activity_main</span>)
+        
+        mediaProjectionManager = 
+            <span class="type">getSystemService</span>(<span class="type">MediaProjectionManager</span>.<span class="type">CLASS</span>) 
+            <span class="keyword">as</span> <span class="type">MediaProjectionManager</span>
+        
+        <span class="type">setupUI</span>()
+        <span class="type">startCpuMonitor</span>()
+    }
+
+    <span class="keyword">fun</span> <span class="type">startServer</span>(<span class="type">view</span>: <span class="type">View</span>) {
+        <span class="keyword">thread</span>(name = <span class="string">"ServerThread"</span>) {
+            <span class="keyword">try</span> {
+                serverSocket = <span class="type">ServerSocket</span>(<span class="number">8080</span>)
+                udpSocket = <span class="type">DatagramSocket</span>(<span class="number">8081</span>)
+                
+                <span class="type">updateStatus</span>(<span class="string">"Server started on port 8080"</span>)
+                
+                <span class="keyword">while</span> (<span class="keyword">true</span>) {
+                    clientSocket = serverSocket.<span class="type">accept</span>()
+                    <span class="type">updateStatus</span>(<span class="string">"TV Client connected"</span>)
+                    <span class="type">startScreenCapture</span>()
+                    <span class="type">startInputListener</span>()
+                }
+            } <span class="keyword">catch</span> (e: <span class="type">IOException</span>) {
+                <span class="type">updateStatus</span>(<span class="string">"Server error: </span>${e.message}<span class="string">"</span>)
+            }
+        }.<span class="type">start</span>()
+    }</pre>
+            </div>
+
+            <h3 style="color: #00d4ff; margin: 20px 0 10px;">2. ScreenCaptureService.kt - Screen Capture & Encoding</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                <pre><span class="keyword">class</span> <span class="type">ScreenCaptureService</span> : <span class="type">Service</span>() {
+
+    <span class="keyword">private</span> <span class="keyword">var</span> mediaCodec: <span class="type">MediaCodec</span>? = <span class="keyword">null</span>
+    <span class="keyword">private</span> <span class="keyword">var</span> virtualDisplay: <span class="type">VirtualDisplay</span>? = <span class="keyword">null</span>
+    <span class="keyword">private</span> <span class="keyword">var</span> outputSurface: <span class="type">Surface</span>? = <span class="keyword">null</span>
+    <span class="keyword">private</span> <span class="keyword">var</span> isRunning = <span class="keyword">false</span>
+    
+    <span class="comment">// Hardware encoding configuration</span>
+    <span class="keyword">private</span> <span class="keyword">companion</span> <span class="keyword">object</span> {
+        <span class="keyword">const val</span> BIT_RATE = <span class="number">8000000</span>       <span class="comment">// 8 Mbps</span>
+        <span class="keyword">const val</span> FRAME_RATE = <span class="number">60</span>         <span class="comment">// 60 FPS</span>
+        <span class="keyword">const val</span> I_FRAME_INTERVAL = <span class="number">10</span>   <span class="comment">// I-frame every 10s</span>
+        <span class="keyword">const val</span> COLOR_FORMAT = 
+            <span class="type">MediaCodecInfo</span>.<span class="type">CodecCapabilities</span>.<span class="type">COLOR_FormatSurface</span>
+        <span class="keyword">const val</span> MIME_TYPE = <span class="string">"video/avc"</span>   <span class="comment">// H.264</span>
+    }
+
+    <span class="keyword">fun</span> <span class="type">startCapture</span>(
+        <span class="type">mediaProjection</span>: <span class="type">MediaProjection</span>,
+        <span class="type">width</span>: <span class="type">Int</span> = <span class="number">1920</span>,
+        <span class="type">height</span>: <span class="type">Int</span> = <span class="number">1080</span>,
+        <span class="type">dpi</span>: <span class="type">Int</span> = <span class="number">420</span>
+    ) {
+        <span class="type">initializeEncoder</span>(width, height)
+        
+        virtualDisplay = mediaProjection.<span class="type">createVirtualDisplay</span>(
+            <span class="string">"ScreenMirror"</span>,
+            width, height, dpi,
+            <span class="type">DisplayManager</span>.<span class="type">VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR</span>,
+            outputSurface,
+            <span class="keyword">null</span>, <span class="keyword">null</span>
+        )
+        
+        isRunning = <span class="keyword">true</span>
+        <span class="type">startEncodingLoop</span>()
+    }
+
+    <span class="keyword">private</span> <span class="keyword">fun</span> <span class="type">initializeEncoder</span>(width: <span class="type">Int</span>, height: <span class="type">Int</span>) {
+        mediaCodec = <span class="type">MediaCodec</span>.<span class="type">createEncoderByType</span>(MIME_TYPE)
+        <span class="keyword">val</span> format = <span class="type">MediaFormat</span>.<span class="type">createVideoFormat</span>(MIME_TYPE, width, height).<span class="keyword">apply</span> {
+            <span class="type">setInteger</span>(<span class="type">MediaFormat</span>.KEY_COLOR_FORMAT, COLOR_FORMAT)
+            <span class="type">setInteger</span>(<span class="type">MediaFormat</span>.KEY_BIT_RATE, BIT_RATE)
+            <span class="type">setInteger</span>(<span class="type">MediaFormat</span>.KEY_FRAME_RATE, FRAME_RATE)
+            <span class="type">setInteger</span>(<span class="type">MediaFormat</span>.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL)
+            <span class="type">setInteger</span>(<span class="type">MediaFormat</span>.KEY_BITRATE_MODE, 
+                <span class="type">MediaCodecInfo</span>.<span class="type">EncoderCapabilities</span>.BITRATE_MODE_CBR)
+        }
+        
+        mediaCodec?.<span class="type">configure</span>(format, <span class="keyword">null</span>, <span class="keyword">null</span>, 
+            <span class="type">MediaCodec</span>.CONFIGURE_FLAG_ENCODE)
+        
+        outputSurface = mediaCodec?.<span class="type">createInputSurface</span>()
+        mediaCodec?.<span class="type">start</span>()
+    }
+
+    <span class="keyword">private</span> <span class="keyword">fun</span> <span class="type">startEncodingLoop</span>() {
+        <span class="keyword">thread</span>(name = <span class="string">"EncodingThread"</span>) {
+            <span class="keyword">val</span> codec = mediaCodec ?: <span class="keyword">return</span>@thread
+            <span class="keyword">val</span> timeoutUs = <span class="number">10000</span>L
+            
+            <span class="keyword">while</span> (isRunning) {
+                <span class="keyword">val</span> inputBufIndex = codec.<span class="type">dequeueInputBuffer</span>(timeoutUs)
+                <span class="keyword">if</span> (inputBufIndex >= <span class="number">0</span>) {
+                    <span class="comment">// Buffer is ready, virtualDisplay fills it</span>
+                    codec.<span class="type">queueInputBuffer</span>(
+                        inputBufIndex, <span class="number">0</span>, <span class="number">0</span>, 
+                        <span class="type">System</span>.<span class="type">currentTimeMillis</span>() * <span class="number">1000</span>, <span class="number">0</span>
+                    )
+                }
+                
+                <span class="keyword">val</span> outputBufIndex = codec.<span class="type">dequeueOutputBuffer</span>(
+                    <span class="type">bufferInfo</span>, timeoutUs
+                )
+                
+                <span class="keyword">when</span> (outputBufIndex) {
+                    <span class="type">MediaCodec</span>.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        <span class="type">handleFormatChanged</span>(codec.<span class="type">outputFormat</span>)
+                    }
+                    <span class="type">MediaCodec</span>.INFO_TRY_AGAIN_LATER -> {
+                        <span class="comment">// No output available</span>
+                    }
+                    <span class="keyword">else</span> -> {
+                        <span class="type">sendEncodedFrame</span>(codec, outputBufIndex)
+                        codec.<span class="type">releaseOutputBuffer</span>(outputBufIndex, <span class="keyword">false</span>)
+                    }
+                }
+            }
+        }
+    }
+
+    <span class="keyword">private</span> <span class="keyword">fun</span> <span class="type">sendEncodedFrame</span>(
+        <span class="type">codec</span>: <span class="type">MediaCodec</span>, 
+        <span class="type">index</span>: <span class="type">Int</span>
+    ) {
+        <span class="keyword">val</span> buffer = codec.<span class="type">getOutputBuffer</span>(index) ?: <span class="keyword">return</span>
+        <span class="keyword">val</span> info = <span class="type">bufferInfo</span>
+        
+        <span class="comment">// Send via TCP socket</span>
+        clientSocket?.<span class="type">outputStream</span>.<span class="type">write</span>(<span class="keyword">byteArrayOf</span>(
+            <span class="number">0xAA</span>.<span class="type">toByte</span>(), <span class="number">0x55</span>.<span class="type">toByte</span>() <span class="comment">// Frame header</span>
+        ))
+        clientSocket?.<span class="type">outputStream</span>.<span class="type">write</span>(
+            info.size.<span class="type">toByteArray</span>()
+        )
+        clientSocket?.<span class="type">outputStream</span>.<span class="type">write</span>(buffer)
+        clientSocket?.<span class="type">outputStream</span>.<span class="type">flush</span>()
+    }</pre>
+            </div>
+
+            <h3 style="color: #00d4ff; margin: 20px 0 10px;">3. InputRelayService.kt - Reverse Control (Accessibility)</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                <pre><span class="annotation">@AccessibilityService</span>
+<span class="keyword">class</span> <span class="type">InputRelayService</span> : <span class="type">AccessibilityService</span>() {
+
+    <span class="keyword">private</span> <span class="keyword">var</span> clientSocket: <span class="type">Socket</span>? = <span class="keyword">null</span>
+    
+    <span class="comment">// Input event types mapping</span>
+    <span class="keyword">enum class</span> <span class="type">InputType</span> {
+        TOUCH, SWIPE, KEY_EVENT, SCROLL, NAVIGATION
+    }
+
+    <span class="keyword">override</span> <span class="keyword">fun</span> <span class="type">onAccessibilityEvent</span>(event: <span class="type">AccessibilityEvent</span>?) {
+        <span class="comment">// Forward accessibility events to TV if needed</span>
+    }
+
+    <span class="keyword">override</span> <span class="keyword">fun</span> <span class="type">onInterrupt</span>() {
+        <span class="comment">// Handle interruption</span>
+    }
+
+    <span class="comment">// Handle incoming input commands from TV</span>
+    <span class="keyword">fun</span> <span class="type">handleInputCommand</span>(<span class="type">command</span>: <span class="type">ByteArray</span>) {
+        <span class="keyword">val</span> reader = <span class="type">DataInputStream</span>(
+            <span class="type">ByteArrayInputStream</span>(command)
+        )
+        
+        <span class="keyword">try</span> {
+            <span class="keyword">val</span> type = reader.<span class="type">readInt</span>()
+            <span class="keyword">val</span> x = reader.<span class="type">readInt</span>()
+            <span class="keyword">val</span> y = reader.<span class="type">readInt</span>()
+            <span class="keyword">val</span> action = reader.<span class="type">readInt</span>()
+            
+            <span class="keyword">when</span> (type) {
+                <span class="type">InputType</span>.TOUCH.<span class="type">ordinal</span> -> {
+                    <span class="type">performTouchInput</span>(x, y, action)
+                }
+                <span class="type">InputType</span>.KEY_EVENT.<span class="type">ordinal</span> -> {
+                    <span class="type">performKeyEvent</span>(x, action)
+                }
+                <span class="type">InputType</span>.SWIPE.<span class="type">ordinal</span> -> {
+                    <span class="type">performSwipe</span>(x, y, reader.<span class="type">readInt</span>())
+                }
+            }
+        } <span class="keyword">catch</span> (e: <span class="type">IOException</span>) {
+            <span class="type">Log</span>.<span class="type">e</span>(<span class="string">"InputRelay"</span>, <span class="string">"Error processing input"</span>, e)
+        }
+    }
+
+    <span class="keyword">private</span> <span class="keyword">fun</span> <span class="type">performTouchInput</span>(
+        <span class="type">x</span>: <span class="type">Int</span>, <span class="type">y</span>: <span class="type">Int</span>, <span class="type">action</span>: <span class="type">Int</span>
+    ) {
+        <span class="keyword">val</span> movementEvent = <span class="type">MotionEvent</span>.<span class="type">obtain</span>(
+            <span class="type">System</span>.<span class="type">uptimeMillis</span>(),
+            <span class="type">System</span>.<span class="type">uptimeMillis</span>(),
+            action, <span class="type">x</span>.<span class="type">toFloat</span>(), <span class="type">y</span>.<span class="type">toFloat</span>(), <span class="number">0</span>
+        )
+        
+        <span class="comment">// Dispatch to current focused window</span>
+        <span class="keyword">val</span> window = <span class="type">getCurrentWindow</span>()
+        window?.<span class="type">decorView</span>?.<span class="type">dispatchTouchEvent</span>(movementEvent)
+        
+        movementEvent.<span class="type">recycle</span>()
+    }
+
+    <span class="keyword">private</span> <span class="keyword">fun</span> <span class="type">performKeyEvent</span>(
+        <span class="type">keyCode</span>: <span class="type">Int</span>, <span class="type">action</span>: <span class="type">Int</span>
+    ) {
+        <span class="keyword">val</span> keyEvent = <span class="type">KeyEvent</span>.<span class="type">obtain</span>(
+            <span class="type">System</span>.<span class="type">uptimeMillis</span>(),
+            <span class="type">System</span>.<span class="type">uptimeMillis</span>(),
+            action, keyCode, <span class="number">0</span>,
+            <span class="type">KeyEvent</span>.<span class="type">META_OFF</span>
+        )
+        
+        <span class="keyword">val</span> window = <span class="type">getCurrentWindow</span>()
+        window?.<span class="type">decorView</span>?.<span class="type">dispatchKeyEvent</span>(keyEvent)
+        
+        keyEvent.<span class="type">recycle</span>()
+    }
+
+    <span class="keyword">private</span> <span class="keyword">fun</span> <span class="type">performSwipe</span>(
+        <span class="type">startX</span>: <span class="type">Int</span>, <span class="type">startY</span>: <span class="type">Int</span>, <span class="type">endX</span>: <span class="type">Int</span>
+    ) {
+        <span class="keyword">val</span> endY = <span class="type">startY</span>
+        <span class="keyword">val</span> duration = <span class="number">300</span>L
+        
+        <span class="keyword">val</span> downEvent = <span class="type">MotionEvent</span>.<span class="type">obtain</span>(
+            <span class="type">System</span>.<span class="type">uptimeMillis</span>(), 
+            <span class="type">System</span>.<span class="type">uptimeMillis</span>(),
+            <span class="type">MotionEvent</span>.<span class="type">ACTION_DOWN</span>,
+            <span class="type">startX</span>.<span class="type">toFloat</span>(), <span class="type">startY</span>.<span class="type">toFloat</span>(), <span class="number">0</span>
+        )
+        
+        <span class="keyword">val</span> upEvent = <span class="type">MotionEvent</span>.<span class="type">obtain</span>(
+            <span class="type">System</span>.<span class="type">uptimeMillis</span>() + duration,
+            <span class="type">System</span>.<span class="type">uptimeMillis</span>() + duration,
+            <span class="type">MotionEvent</span>.<span class="type">ACTION_UP</span>,
+            <span class="type">endX</span>.<span class="type">toFloat</span>(), <span class="type">endY</span>.<span class="type">toFloat</span>(), <span class="number">0</span>
+        )
+        
+        <span class="type">getCurrentWindow</span>()?.<span class="type">decorView</span>?.<span class="type">dispatchTouchEvent</span>(downEvent)
+        <span class="type">getCurrentWindow</span>()?.<span class="type">decorView</span>?.<span class="type">dispatchTouchEvent</span>(upEvent)
+        
+        downEvent.<span class="type">recycle</span>()
+        upEvent.<span class="type">recycle</span>()
+    }</pre>
+            </div>
+
+            <h3 style="color: #00d4ff; margin: 20px 0 10px;">4. ScreenOffManager.kt - Screen Off While Streaming</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                <pre><span class="keyword">class</span> <span class="type">ScreenOffManager</span> <span class="keyword">private</span>(<span class="keyword">val</span> context: <span class="type">Context</span>) {
+
+    <span class="keyword">private</span> <span class="keyword">var</span> powerManager: <span class="type">PowerManager</span>? = <span class="keyword">null</span>
+    <span class="keyword">private</span> <span class="keyword">var</span> wakeLock: <span class="type">PowerManager</span>.<span class="type">WakeLock</span>? = <span class="keyword">null</span>
+    <span class="keyword">private</span> <span class="keyword">var</span> windowManager: <span class="type">WindowManager</span>? = <span class="keyword">null</span>
+    <span class="keyword">private</span> <span class="keyword">var</span> isScreenOff = <span class="keyword">false</span>
+
+    <span class="keyword">fun</span> <span class="type">initialize</span>() {
+        powerManager = context.<span class="type">getSystemService</span>(
+            <span class="type">Context</span>.POWER_SERVICE
+        ) <span class="keyword">as</span> <span class="type">PowerManager</span>
+        
+        windowManager = context.<span class="type">getSystemService</span>(
+            <span class="type">Context</span>.WINDOW_SERVICE
+        ) <span class="keyword">as</span> <span class="type">WindowManager</span>
+    }
+
+    <span class="keyword">fun</span> <span class="type">turnScreenOff</span>() {
+        <span class="comment">// Keep CPU running but turn off display</span>
+        wakeLock = powerManager?.<span class="type">newWakeLock</span>(
+            <span class="type">PowerManager</span>.<span class="type">PARTIAL_WAKE_LOCK</span>,
+            <span class="string">"ScreenMirror::WakeLock"</span>
+        ).<span class="type">apply</span> {
+            <span class="type">acquire</span>(<span class="number">30</span> * <span class="number">60</span> * <span class="number">1000</span>L) <span class="comment">// 30 min timeout</span>
+        }
+
+        <span class="comment">// Hide status bar and navigation bar</span>
+        <span class="keyword">val</span> activity = context <span class="keyword">as</span> <span class="type">Activity</span>
+        activity.<span class="type">window</span>.<span class="type">addFlags</span>(
+            <span class="type">WindowManager</span>.<span class="type">LayoutParams</span>.<span class="type">FLAG_KEEP_SCREEN_ON</span> or
+            <span class="type">WindowManager</span>.<span class="type">LayoutParams</span>.<span class="type">FLAG_FULLSCREEN</span> or
+            <span class="type">WindowManager</span>.<span class="type">LayoutParams</span>.<span class="type">FLAG_LAYOUT_NO_LIMITS</span>
+        )
+
+        <span class="comment">// Create a transparent overlay to prevent screen from turning on</span>
+        <span class="keyword">val</span> params = <span class="type">WindowManager</span>.<span class="type">LayoutParams</span>().<span class="keyword">apply</span> {
+            width = <span class="type">WindowManager</span>.<span class="type">LayoutParams</span>.<span class="type">MATCH_PARENT</span>
+            height = <span class="type">WindowManager</span>.<span class="type">LayoutParams</span>.<span class="type">MATCH_PARENT</span>
+            type = <span class="type">WindowManager</span>.<span class="type">LayoutParams</span>.<span class="type">TYPE_APPLICATION_OVERLAY</span>
+            flags = <span class="type">WindowManager</span>.<span class="type">LayoutParams</span>.<span class="type">FLAG_NOT_TOUCHABLE</span> or
+                    <span class="type">WindowManager</span>.<span class="type">LayoutParams</span>.<span class="type">FLAG_LAYOUT_IN_SCREEN</span>
+            format = <span class="type">PixelFormat</span>.<span class="type">TRANSLUCENT</span>
+        }
+
+        <span class="keyword">val</span> overlayView = <span class="type">View</span>(context).<span class="keyword">apply</span> {
+            <span class="type">alpha</span> = <span class="number">0.01f</span> <span class="comment">// Nearly invisible</span>
+            <span class="type">background</span> = <span class="type">Color</span>.<span class="type">TRANSPARENT</span>.<span class="type">getDrawable</span>()
+        }
+
+        windowManager?.<span class="type">addView</span>(overlayView, params)
+        isScreenOff = <span class="keyword">true</span>
+    }
+
+    <span class="keyword">fun</span> <span class="type">turnScreenOn</span>() {
+        wakeLock?.<span class="type">release</span>()
+        isScreenOff = <span class="keyword">false</span>
+        
+        <span class="keyword">val</span> activity = context <span class="keyword">as</span> <span class="type">Activity</span>
+        activity.<span class="type">window</span>.<span class="type">clearFlags</span>(
+            <span class="type">WindowManager</span>.<span class="type">LayoutParams</span>.<span class="type">FLAG_KEEP_SCREEN_ON</span> or
+            <span class="type">WindowManager</span>.<span class="type">LayoutParams</span>.<span class="type">FLAG_FULLSCREEN</span>
+        )
+    }
+
+    <span class="keyword">fun</span> <span class="type">isScreenOff</span>(): <span class="type">Boolean</span> = isScreenOff
+}</pre>
+            </div>
+        </div>
+
+        <!-- TV App Tab -->
+        <div class="tab-content" id="tv-app">
+            <h2>📺 TV App - Thin Client Source Code <span class="badge kotlin">KOTLIN</span></h2>
+
+            <h3 style="color: #00d4ff; margin: 20px 0 10px;">1. TVMainActivity.kt - TV Main Activity</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                <pre><span class="keyword">class</span> <span class="type">TVMainActivity</span> : <span class="type">LeanbackActivity</span>() {
+
+    <span class="keyword">private</span> <span class="keyword">lateinit var</span> tcpSocket: <span class="type">Socket</span>
+    <span class="keyword">private</span> <span class="keyword">lateinit var</span> udpSocket: <span class="type">DatagramSocket</span>
+    <span class="keyword">private</span> <span class="keyword">var</span> isConnected = <span class="keyword">false</span>
+    
+    <span class="comment">// Hardware decoder</span>
+    <span class="keyword">private</span> <span class="keyword">lateinit var</span> mediaCodec: <span class="type">MediaCodec</span>
+    <span class="keyword">private</span> <span class="keyword">lateinit var</span> surfaceView: <span class="type">SurfaceView</span>
+    <span class="keyword">private</span> <span class="keyword">lateinit var</span> surface: <span class="type">Surface</span>
+    
+    <span class="comment">// Input relay</span>
+    <span class="keyword">private</span> <span class="keyword">lateinit var</span> inputSender: <span class="type">InputSender</span>
+    
+    <span class="comment">// CPU monitor</span>
+    <span class="keyword">private</span> <span class="keyword">val</span> cpuMonitorRunnable = <span class="keyword">object</span> : <span class="type">Runnable</span> {
+        <span class="keyword">override</span> <span class="keyword">fun</span> <span class="type">run</span>() {
+            <span class="keyword">val</span> cpuUsage = <span class="type">getTVCpuUsage</span>()
+            <span class="type">updateCpuDisplay</span>(cpuUsage, <span class="string">"tv"</span>)
+            <span class="type">handler</span>.<span class="type">postDelayed</span>(<span class="keyword">this</span>, <span class="number">1000</span>)
+        }
+    }
+
+    <span class="keyword">override</span> <span class="keyword">fun</span> <span class="type">onCreate</span>(savedInstanceState: <span class="type">Bundle</span>?) {
+        <span class="keyword">super</span>.<span class="type">onCreate</span>(savedInstanceState)
+        <span class="type">setContentView</span>(R.layout.<span class="type">activity_tv_main</span>)
+        
+        surfaceView = <span class="type">findViewById</span>(R.id.<span class="type">surfaceView</span>)
+        surface = surfaceView.<span class="type">surfaceHolder</span>.<span class="type">addCallback</span>(
+            <span class="keyword">object</span> : <span class="type">SurfaceHolder</span>.<span class="type">Callback</span> {
+                <span class="keyword">override</span> <span class="keyword">fun</span> <span class="type">surfaceCreated</span>(holder: <span class="type">SurfaceHolder</span>) {
+                    surface = holder.<span class="type">surface</span>
+                    <span class="type">initializeDecoder</span>()
+                }
+            }
+        )
+        
+        <span class="type">startCpuMonitor</span>()
+        <span class="type">setupInputListeners</span>()
+    }
+
+    <span class="keyword">fun</span> <span class="type">connectToMobile</span>(<span class="type">view</span>: <span class="type">View</span>) {
+        <span class="keyword">thread</span>(name = <span class="string">"ConnectThread"</span>) {
+            <span class="keyword">try</span> {
+                <span class="comment">// Connect to mobile's hotspot IP</span>
+                tcpSocket = <span class="type">Socket</span>(<span class="string">"192.168.43.1"</span>, <span class="number">8080</span>)
+                udpSocket = <span class="type">DatagramSocket</span>()
+                
+                <span class="type">updateStatus</span>(<span class="string">"Connected to Mobile"</span>)
+                isConnected = <span class="keyword">true</span>
+                
+                <span class="type">startVideoDecoder</span>()
+                <span class="type">startInputRelay</span>()
+                
+            } <span class="keyword">catch</span> (e: <span class="type">IOException</span>) {
+                <span class="type">updateStatus</span>(<span class="string">"Connection failed: </span>${e.message}<span class="string">"</span>)
+            }
+        }
+    }
+
+    <span class="keyword">private</span> <span class="keyword">fun</span> <span class="type">initializeDecoder</span>() {
+        <span class="keyword">val</span> format = <span class="type">MediaFormat</span>.<span class="type">createVideoFormat</span>(
+            <span class="string">"video/avc"</span>, <span class="number">1920</span>, <span class="number">1080</span>
+        ).<span class="keyword">apply</span> {
+            <span class="type">setInteger</span>(<span class="type">MediaFormat</span>.KEY_COLOR_FORMAT,
+                <span class="type">MediaCodecInfo</span>.<span class="type">CodecCapabilities</span>.<span class="type">COLOR_FormatSurface</span>)
+        }
+        
+        mediaCodec = <span class="type">MediaCodec</span>.<span class="type">createDecoderByType</span>(<span class="string">"video/avc"</span>)
+        mediaCodec.<span class="type">configure</span>(format, surface, <span class="keyword">null</span>, <span class="number">0</span>)
+        mediaCodec.<span class="type">start</span>()
+    }
+
+    <span class="keyword">private</span> <span class="keyword">fun</span> <span class="type">startVideoDecoder</span>() {
+        <span class="keyword">thread</span>(name = <span class="string">"DecoderThread"</span>) {
+            <span class="keyword">val</span> inputStream = tcpSocket.<span class="type">inputStream</span>
+            <span class="keyword">val</span> buffer = <span class="type">ByteArray</span>(<span class="number">8192</span>)
+            <span class="keyword">val</span> codec = mediaCodec
+            
+            <span class="keyword">while</span> (isConnected) {
+                <span class="keyword">val</span> bytesRead = inputStream.<span class="type">read</span>(buffer)
+                <span class="keyword">if</span> (bytesRead > <span class="number">0</span>) {
+                    <span class="type">decodeFrame</span>(buffer, bytesRead)
+                }
+            }
+        }
+    }
+
+    <span class="keyword">private</span> <span class="keyword">fun</span> <span class="type">decodeFrame</span>(
+        <span class="type">data</span>: <span class="type">ByteArray</span>, <span class="type">length</span>: <span class="type">Int</span>
+    ) {
+        <span class="keyword">val</span> codec = mediaCodec
+        <span class="keyword">val</span> inputBufIndex = codec.<span class="type">dequeueInputBuffer</span>(<span class="number">10000</span>L)
+        
+        <span class="keyword">if</span> (inputBufIndex >= <span class="number">0</span>) {
+            <span class="keyword">val</span> inputBuffer = codec.<span class="type">getInputBuffer</span>(inputBufIndex)
+            inputBuffer?.<span class="type">put</span>(data, <span class="number">0</span>, length)
+            
+            codec.<span class="type">queueInputBuffer</span>(
+                inputBufIndex, <span class="number">0</span>, length,
+                <span class="type">System</span>.<span class="type">currentTimeMillis</span>() * <span class="number">1000</span>, <span class="number">0</span>
+            )
+        }
+        
+        <span class="keyword">val</span> outputBufIndex = codec.<span class="type">dequeueOutputBuffer</span>(
+            <span class="type">bufferInfo</span>, <span class="number">10000</span>L
+        )
+        
+        <span class="keyword">if</span> (outputBufIndex >= <span class="number">0</span>) {
+            codec.<span class="type">releaseOutputBuffer</span>(outputBufIndex, <span class="keyword">true</span>)
+        }
+    }
+
+    <span class="keyword">private</span> <span class="keyword">fun</span> <span class="type">setupInputListeners</span>() {
+        <span class="comment">// Handle TV remote input</span>
+        <span class="type">findViewById</span>&lt;<span class="type">View</span>&gt;(R.id.<span class="type">surfaceView</span>)
+            .<span class="type">setOnKeyListener</span> { <span class="type">v</span>, <span class="type">keyCode</span>, <span class="type">event</span> ->
+                <span class="keyword">if</span> (event.<span class="type">action</span> == <span class="type">MotionEvent</span>.<span class="type">ACTION_DOWN</span>) {
+                    <span class="type">sendInputToMobile</span>(
+                        <span class="type">InputType</span>.KEY_EVENT, 
+                        keyCode, <span class="number">0</span>, 
+                        <span class="type">event</span>.<span class="type">action</span>
+                    )
+                    <span class="keyword">true</span>
+                } <span class="keyword">else</span> {
+                    <span class="keyword">false</span>
+                }
+            }
+        
+        <span class="comment">// Handle touch/mouse input</span>
+        <span class="type">findViewById</span>&lt;<span class="type">View</span>&gt;(R.id.<span class="type">surfaceView</span>)
+            .<span class="type">setOnTouchListener</span> { <span class="type">v</span>, <span class="type">event</span> ->
+                <span class="type">sendInputToMobile</span>(
+                    <span class="type">InputType</span>.TOUCH,
+                    event.<span class="type">x</span>.<span class="type">toInt</span>(),
+                    event.<span class="type">y</span>.<span class="type">toInt</span>(),
+                    event.<span class="type">action</span>
+                )
+                <span class="keyword">true</span>
+            }
+    }
+
+    <span class="keyword">private</span> <span class="keyword">fun</span> <span class="type">sendInputToMobile</span>(
+        <span class="type">type</span>: <span class="type">InputType</span>,
+        <span class="type">x</span>: <span class="type">Int</span>,
+        <span class="type">y</span>: <span class="type">Int</span>,
+        <span class="type">action</span>: <span class="type">Int</span>
+    ) {
+        <span class="keyword">val</span> outputStream = tcpSocket.<span class="type">outputStream</span>
+        <span class="keyword">val</span> data = <span class="type">ByteArray</span>(<span class="number">16</span>).<span class="keyword">apply</span> {
+            <span class="type">putInt</span>(<span class="number">0</span>, type.<span class="type">ordinal</span>)
+            <span class="type">putInt</span>(<span class="number">4</span>, x)
+            <span class="type">putInt</span>(<span class="number">8</span>, y)
+            <span class="type">putInt</span>(<span class="number">12</span>, action)
+        }
+        outputStream.<span class="type">write</span>(data)
+        outputStream.<span class="type">flush</span>()
+    }
+}</pre>
+            </div>
+
+            <h3 style="color: #00d4ff; margin: 20px 0 10px;">2. InputSender.kt - Input Relay Handler</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                <pre><span class="keyword">class</span> <span class="type">InputSender</span> <span class="keyword">private</span>(<span class="keyword">val</span> socket: <span class="type">Socket</span>) {
+
+    <span class="keyword">enum class</span> <span class="type">InputType</span> {
+        TOUCH, SWIPE, KEY_EVENT, SCROLL, NAVIGATION
+    }
+
+    <span class="keyword">fun</span> <span class="type">sendTouchEvent</span>(
+        <span class="type">x</span>: <span class="type">Float</span>, <span class="type">y</span>: <span class="type">Float</span>, <span class="type">action</span>: <span class="type">Int</span>
+    ) {
+        <span class="keyword">val</span> data = <span class="type">ByteArray</span>(<span class="number">20</span>).<span class="keyword">apply</span> {
+            <span class="type">putInt</span>(<span class="number">0</span>, <span class="type">InputType</span>.TOUCH.<span class="type">ordinal</span>)
+            <span class="type">putInt</span>(<span class="number">4</span>, x.<span class="type">toInt</span>())
+            <span class="type">putInt</span>(<span class="number">8</span>, y.<span class="type">toInt</span>())
+            <span class="type">putInt</span>(<span class="number">12</span>, action)
+            <span class="type">putFloat</span>(<span class="number">16</span>, <span class="type">pressure</span>)
+        }
+        <span class="type">send</span>(data)
+    }
+
+    <span class="keyword">fun</span> <span class="type">sendKeyEvent</span>(
+        <span class="type">keyCode</span>: <span class="type">Int</span>, <span class="type">action</span>: <span class="type">Int</span>
+    ) {
+        <span class="keyword">val</span> data = <span class="type">ByteArray</span>(<span class="number">16</span>).<span class="keyword">apply</span> {
+            <span class="type">putInt</span>(<span class="number">0</span>, <span class="type">InputType</span>.KEY_EVENT.<span class="type">ordinal</span>)
+            <span class="type">putInt</span>(<span class="number">4</span>, keyCode)
+            <span class="type">putInt</span>(<span class="number">8</span>, action)
+        }
+        <span class="type">send</span>(data)
+    }
+
+    <span class="keyword">fun</span> <span class="type">sendSwipeEvent</span>(
+        <span class="type">startX</span>: <span class="type">Float</span>, <span class="type">startY</span>: <span class="type">Float</span>,
+        <span class="type">endX</span>: <span class="type">Float</span>, <span class="type">endY</span>: <span class="type">Float</span>
+    ) {
+        <span class="keyword">val</span> data = <span class="type">ByteArray</span>(<span class="number">24</span>).<span class="keyword">apply</span> {
+            <span class="type">putInt</span>(<span class="number">0</span>, <span class="type">InputType</span>.SWIPE.<span class="type">ordinal</span>)
+            <span class="type">putInt</span>(<span class="number">4</span>, startX.<span class="type">toInt</span>())
+            <span class="type">putInt</span>(<span class="number">8</span>, startY.<span class="type">toInt</span>())
+            <span class="type">putInt</span>(<span class="number">12</span>, endX.<span class="type">toInt</span>())
+            <span class="type">putInt</span>(<span class="number">16</span>, endY.<span class="type">toInt</span>())
+        }
+        <span class="type">send</span>(data)
+    }
+
+    <span class="keyword">private</span> <span class="keyword">fun</span> <span class="type">send</span>(<span class="type">data</span>: <span class="type">ByteArray</span>) {
+        <span class="keyword">try</span> {
+            socket.<span class="type">outputStream</span>.<span class="type">write</span>(data)
+            socket.<span class="type">outputStream</span>.<span class="type">flush</span>()
+        } <span class="keyword">catch</span> (e: <span class="type">IOException</span>) {
+            <span class="type">Log</span>.<span class="type">e</span>(<span class="string">"InputSender"</span>, <span class="string">"Failed to send input"</span>, e)
+        }
+    }
+}</pre>
+            </div>
+        </div>
+
+        <!-- XML Layouts Tab -->
+        <div class="tab-content" id="layouts">
+            <h2>📐 XML Layout Files</h2>
+
+            <h3 style="color: #00d4ff; margin: 20px 0 10px;">Mobile: activity_main.xml <span class="badge xml">XML</span></h3>
+            <div class="xml-block">
+                <pre><span class="xml-comment">&lt;!-- Mobile App Main Layout --&gt;</span>
+<span class="xml-tag">&lt;LinearLayout</span>
+    <span class="xml-attr">xmlns:android</span>=<span class="xml-value">"http://schemas.android.com/apk/res/android"</span>
+    <span class="xml-attr">xmlns:app</span>=<span class="xml-value">"http://schemas.android.com/apk/res-auto"</span>
+    <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"match_parent"</span>
+    <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"match_parent"</span>
+    <span class="xml-attr">android:orientation</span>=<span class="xml-value">"vertical"</span>
+    <span class="xml-attr">android:background</span>=<span class="xml-value">"#0a0a1a"</span><span class="xml-tag">&gt;</span>
+
+    <span class="xml-comment">&lt;!-- Header --&gt;</span>
+    <span class="xml-tag">&lt;TextView</span>
+        <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"match_parent"</span>
+        <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"wrap_content"</span>
+        <span class="xml-attr">android:text</span>=<span class="xml-value">"📱 Screen Mirror - Mobile"</span>
+        <span class="xml-attr">android:textSize</span>=<span class="xml-value">"24sp"</span>
+        <span class="xml-attr">android:textColor</span>=<span class="xml-value">"#6c63ff"</span>
+        <span class="xml-attr">android:padding</span>=<span class="xml-value">"16dp"</span>
+        <span class="xml-attr">android:gravity</span>=<span class="xml-value">"center"</span><span class="xml-tag">/&gt;</span>
+
+    <span class="xml-comment">&lt;!-- Connection Status --&gt;</span>
+    <span class="xml-tag">&lt;LinearLayout</span>
+        <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"match_parent"</span>
+        <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"wrap_content"</span>
+        <span class="xml-attr">android:orientation</span>=<span class="xml-value">"horizontal"</span>
+        <span class="xml-attr">android:padding</span>=<span class="xml-value">"16dp"</span>
+        <span class="xml-attr">android:background</span>=<span class="xml-value">"#1a1a3e"</span>
+        <span class="xml-attr">android:layout_margin</span>=<span class="xml-value">"8dp"</span>
+        <span class="xml-attr">android:gravity</span>=<span class="xml-value">"center_vertical"</span><span class="xml-tag">&gt;</span>
+
+        <span class="xml-tag">&lt;ImageView</span>
+            <span class="xml-attr">android:id</span>=<span class="xml-value">"@+id/statusDot"</span>
+            <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"12dp"</span>
+            <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"12dp"</span>
+            <span class="xml-attr">android:background</span>=<span class="xml-value">"#ff6b6b"</span>
+            <span class="xml-attr">android:layout_marginEnd</span>=<span class="xml-value">"8dp"</span><span class="xml-tag">/&gt;</span>
+
+        <span class="xml-tag">&lt;TextView</span>
+            <span class="xml-attr">android:id</span>=<span class="xml-value">"@+id/statusText"</span>
+            <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"wrap_content"</span>
+            <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"wrap_content"</span>
+            <span class="xml-attr">android:text</span>=<span class="xml-value">"Disconnected"</span>
+            <span class="xml-attr">android:textColor</span>=<span class="xml-value">"#8888aa"</span><span class="xml-tag">/&gt;</span>
+
+    <span class="xml-tag">&lt;/LinearLayout&gt;</span>
+
+    <span class="xml-comment">&lt;!-- CPU Usage Monitor --&gt;</span>
+    <span class="xml-tag">&lt;LinearLayout</span>
+        <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"match_parent"</span>
+        <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"wrap_content"</span>
+        <span class="xml-attr">android:orientation</span>=<span class="xml-value">"vertical"</span>
+        <span class="xml-attr">android:padding</span>=<span class="xml-value">"16dp"</span>
+        <span class="xml-attr">android:background</span>=<span class="xml-value">"#1a1a3e"</span>
+        <span class="xml-attr">android:layout_margin</span>=<span class="xml-value">"8dp"</span><span class="xml-tag">&gt;</span>
+
+        <span class="xml-tag">&lt;TextView</span>
+            <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"wrap_content"</span>
+            <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"wrap_content"</span>
+            <span class="xml-attr">android:text</span>=<span class="xml-value">"📊 Mobile CPU Usage"</span>
+            <span class="xml-attr">android:textColor</span>=<span class="xml-value">"#00d4ff"</span>
+            <span class="xml-attr">android:textSize</span>=<span class="xml-value">"14sp"</span><span class="xml-tag">/&gt;</span>
+
+        <span class="xml-tag">&lt;ProgressBar</span>
+            <span class="xml-attr">android:id</span>=<span class="xml-value">"@+id/cpuProgressBar"</span>
+            <span class="xml-attr">style</span>=<span class="xml-value">"?android:attr/progressBarStyleHorizontal"</span>
+            <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"match_parent"</span>
+            <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"8dp"</span>
+            <span class="xml-attr">android:layout_marginTop</span>=<span class="xml-value">"8dp"</span>
+            <span class="xml-attr">android:max</span>=<span class="xml-value">"100"</span>
+            <span class="xml-attr">android:progress</span>=<span class="xml-value">"92"</span>
+            <span class="xml-attr">android:progressTint</span>=<span class="xml-value">"#6c63ff"</span><span class="xml-tag">/&gt;</span>
+
+        <span class="xml-tag">&lt;TextView</span>
+            <span class="xml-attr">android:id</span>=<span class="xml-value">"@+id/cpuValue"</span>
+            <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"wrap_content"</span>
+            <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"wrap_content"</span>
+            <span class="xml-attr">android:text</span>=<span class="xml-value">"92%"</span>
+            <span class="xml-attr">android:textColor</span>=<span class="xml-value">"#6c63ff"</span>
+            <span class="xml-attr">android:textSize</span>=<span class="xml-value">"18sp"</span>
+            <span class="xml-attr">android:textStyle</span>=<span class="xml-value">"bold"</span>
+            <span class="xml-attr">android:layout_marginTop</span>=<span class="xml-value">"4dp"</span><span class="xml-tag">/&gt;</span>
+
+    <span class="xml-tag">&lt;/LinearLayout&gt;</span>
+
+    <span class="xml-comment">&lt;!-- Control Buttons --&gt;</span>
+    <span class="xml-tag">&lt;LinearLayout</span>
+        <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"match_parent"</span>
+        <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"wrap_content"</span>
+        <span class="xml-attr">android:orientation</span>=<span class="xml-value">"horizontal"</span>
+        <span class="xml-attr">android:padding</span>=<span class="xml-value">"16dp"</span>
+        <span class="xml-attr">android:gravity</span>=<span class="xml-value">"center"</span>
+        <span class="xml-attr">android:layout_marginTop</span>=<span class="xml-value">"16dp"</span><span class="xml-tag">&gt;</span>
+
+        <span class="xml-tag">&lt;Button</span>
+            <span class="xml-attr">android:id</span>=<span class="xml-value">"@+id/btnStart"</span>
+            <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"0dp"</span>
+            <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"wrap_content"</span>
+            <span class="xml-attr">android:layout_weight</span>=<span class="xml-value">"1"</span>
+            <span class="xml-attr">android:layout_marginEnd</span>=<span class="xml-value">"8dp"</span>
+            <span class="xml-attr">android:text</span>=<span class="xml-value">"🟢 Start Server"</span>
+            <span class="xml-attr">android:backgroundTint</span>=<span class="xml-value">"#6c63ff"</span>
+            <span class="xml-attr">android:textColor</span>=<span class="xml-value">"#ffffff"</span><span class="xml-tag">/&gt;</span>
+
+        <span class="xml-tag">&lt;Button</span>
+            <span class="xml-attr">android:id</span>=<span class="xml-value">"@+id/btnStop"</span>
+            <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"0dp"</span>
+            <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"wrap_content"</span>
+            <span class="xml-attr">android:layout_weight</span>=<span class="xml-value">"1"</span>
+            <span class="xml-attr">android:layout_marginStart</span>=<span class="xml-value">"8dp"</span>
+            <span class="xml-attr">android:text</span>=<span class="xml-value">"🔴 Stop"</span>
+            <span class="xml-attr">android:backgroundTint</span>=<span class="xml-value">"#ff6b6b"</span>
+            <span class="xml-attr">android:textColor</span>=<span class="xml-value">"#ffffff"</span><span class="xml-tag">/&gt;</span>
+
+    <span class="xml-tag">&lt;/LinearLayout&gt;</span>
+
+    <span class="xml-comment">&lt;!-- Screen Off Toggle --&gt;</span>
+    <span class="xml-tag">&lt;LinearLayout</span>
+        <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"match_parent"</span>
+        <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"wrap_content"</span>
+        <span class="xml-attr">android:orientation</span>=<span class="xml-value">"horizontal"</span>
+        <span class="xml-attr">android:padding</span>=<span class="xml-value">"16dp"</span>
+        <span class="xml-attr">android:gravity</span>=<span class="xml-value">"center_vertical"</span>
+        <span class="xml-attr">android:layout_marginTop</span>=<span class="xml-value">"16dp"</span><span class="xml-tag">&gt;</span>
+
+        <span class="xml-tag">&lt;TextView</span>
+            <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"0dp"</span>
+            <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"wrap_content"</span>
+            <span class="xml-attr">android:layout_weight</span>=<span class="xml-value">"1"</span>
+            <span class="xml-attr">android:text</span>=<span class="xml-value">"🔋 Screen Off Mode"</span>
+            <span class="xml-attr">android:textColor</span>=<span class="xml-value">"#ffaa00"</span><span class="xml-tag">/&gt;</span>
+
+        <span class="xml-tag">&lt;Switch</span>
+            <span class="xml-attr">android:id</span>=<span class="xml-value">"@+id/screenOffSwitch"</span>
+            <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"wrap_content"</span>
+            <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"wrap_content"</span><span class="xml-tag">/&gt;</span>
+
+    <span class="xml-tag">&lt;/LinearLayout&gt;</span>
+
+<span class="xml-tag">&lt;/LinearLayout&gt;</span></pre>
+            </div>
+
+            <h3 style="color: #00d4ff; margin: 20px 0 10px;">TV: activity_tv_main.xml <span class="badge xml">XML</span></h3>
+            <div class="xml-block">
+                <pre><span class="xml-comment">&lt;!-- Android TV Main Layout --&gt;</span>
+<span class="xml-tag">&lt;LinearLayout</span>
+    <span class="xml-attr">xmlns:android</span>=<span class="xml-value">"http://schemas.android.com/apk/res/android"</span>
+    <span class="xml-attr">xmlns:leanback</span>=<span class="xml-value">"http://schemas.android.com/apk/res-auto"</span>
+    <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"match_parent"</span>
+    <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"match_parent"</span>
+    <span class="xml-attr">android:orientation</span>=<span class="xml-value">"vertical"</span>
+    <span class="xml-attr">android:background</span>=<span class="xml-value">"#000000"</span><span class="xml-tag">&gt;</span>
+
+    <span class="xml-comment">&lt;!-- Video Surface --&gt;</span>
+    <span class="xml-tag">&lt;SurfaceView</span>
+        <span class="xml-attr">android:id</span>=<span class="xml-value">"@+id/surfaceView"</span>
+        <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"match_parent"</span>
+        <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"0dp"</span>
+        <span class="xml-attr">android:layout_weight</span>=<span class="xml-value">"1"</span>
+        <span class="xml-attr">android:layout_gravity</span>=<span class="xml-value">"center"</span><span class="xml-tag">/&gt;</span>
+
+    <span class="xml-comment">&lt;!-- Overlay Controls --&gt;</span>
+    <span class="xml-tag">&lt;LinearLayout</span>
+        <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"match_parent"</span>
+        <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"wrap_content"</span>
+        <span class="xml-attr">android:orientation</span>=<span class="xml-value">"horizontal"</span>
+        <span class="xml-attr">android:padding</span>=<span class="xml-value">"16dp"</span>
+        <span class="xml-attr">android:background</span>=<span class="xml-value">"#80000000"</span>
+        <span class="xml-attr">android:gravity</span>=<span class="xml-value">"center"</span><span class="xml-tag">&gt;</span>
+
+        <span class="xml-tag">&lt;TextView</span>
+            <span class="xml-attr">android:id</span>=<span class="xml-value">"@+id/tvStatus"</span>
+            <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"wrap_content"</span>
+            <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"wrap_content"</span>
+            <span class="xml-attr">android:text</span>=<span class="xml-value">"📺 TV - Connecting..."</span>
+            <span class="xml-attr">android:textColor</span>=<span class="xml-value">"#00d4ff"</span>
+            <span class="xml-attr">android:textSize</span>=<span class="xml-value">"16sp"</span><span class="xml-tag">/&gt;</span>
+
+        <span class="xml-tag">&lt;TextView</span>
+            <span class="xml-attr">android:id</span>=<span class="xml-value">"@+id/tvLatency"</span>
+            <span class="xml-attr">android:layout_width</span>=<span class="xml-value">"wrap_content"</span>
+            <span class="xml-attr">android:layout_height</span>=<span class="xml-value">"wrap_content"</span>
+            <span class="xml-attr">android:text</span>=<span class="xml-value">"Latency: 15ms"</span>
+            <span class="xml-attr">android:textColor</span>=<span class="xml-value">"#00ff88"</span>
+            <span class="xml-attr">android:textSize</span>=<span class="xml-value">"14sp"</span>
+            <span class="xml-attr">android:layout_marginStart</span>=<span class="xml-value">"16dp"</span><span class="xml-tag">/&gt;</span>
+
+    <span class="xml-tag">&lt;/LinearLayout&gt;</span>
+
+<span class="xml-tag">&lt;/LinearLayout&gt;</span></pre>
+            </div>
+
+            <h3 style="color: #00d4ff; margin: 20px 0 10px;">AndroidManifest.xml <span class="badge xml">XML</span></h3>
+            <div class="xml-block">
+                <pre><span class="xml-comment">&lt;!-- Mobile App Manifest --&gt;</span>
+<span class="xml-tag">&lt;manifest</span> <span class="xml-attr">xmlns:android</span>=<span class="xml-value">"http://schemas.android.com/apk/res/android"</span><span class="xml-tag">&gt;</span>
+
+    <span class="xml-tag">&lt;uses-permission</span> <span class="xml-attr">android:name</span>=<span class="xml-value">"android.permission.INTERNET"</span> <span class="xml-tag">/&gt;</span>
+    <span class="xml-tag">&lt;uses-permission</span> <span class="xml-attr">android:name</span>=<span class="xml-value">"android.permission.ACCESS_NETWORK_STATE"</span> <span class="xml-tag">/&gt;</span>
+    <span class="xml-tag">&lt;uses-permission</span> <span class="xml-attr">android:name</span>=<span class="xml-value">"android.permission.ACCESS_WIFI_STATE"</span> <span class="xml-tag">/&gt;</span>
+    <span class="xml-tag">&lt;uses-permission</span> <span class="xml-attr">android:name</span>=<span class="xml-value">"android.permission.CHANGE_WIFI_STATE"</span> <span class="xml-tag">/&gt;</span>
+    <span class="xml-tag">&lt;uses-permission</span> <span class="xml-attr">android:name</span>=<span class="xml-value">"android.permission.WAKE_LOCK"</span> <span class="xml-tag">/&gt;</span>
+    <span class="xml-tag">&lt;uses-permission</span> <span class="xml-attr">android:name</span>=<span class="xml-value">"android.permission.SYSTEM_ALERT_WINDOW"</span> <span class="xml-tag">/&gt;</span>
+    <span class="xml-tag">&lt;uses-permission</span> <span class="xml-attr">android:name</span>=<span class="xml-value">"android.permission.FOREGROUND_SERVICE"</span> <span class="xml-tag">/&gt;</span>
+    <span class="xml-tag">&lt;uses-permission</span> <span class="xml-attr">android:name</span>=<span class="xml-value">"android.permission.WRITE_EXTERNAL_STORAGE"</span> <span class="xml-tag">/&gt;</span>
+
+    <span class="xml-tag">&lt;application</span>
+        <span class="xml-attr">android:allowBackup</span>=<span class="xml-value">"true"</span>
+        <span class="xml-attr">android:icon</span>=<span class="xml-value">"@mipmap/ic_launcher"</span>
+        <span class="xml-attr">android:label</span>=<span class="xml-value">"@string/app_name"</span>
+        <span class="xml-attr">android:theme</span>=<span class="xml-value">"@style/AppTheme"</span><span class="xml-tag">&gt;</span>
+
+        <span class="xml-tag">&lt;activity</span>
+            <span class="xml-attr">android:name</span>=<span class="xml-value">".MainActivity"</span>
+            <span class="xml-attr">android:exported</span>=<span class="xml-value">"true"</span><span class="xml-tag">&gt;</span>
+            <span class="xml-tag">&lt;intent-filter&gt;</span>
+                <span class="xml-tag">&lt;action</span> <span class="xml-attr">android:name</span>=<span class="xml-value">"android.intent.action.MAIN"</span> <span class="xml-tag">/&gt;</span>
+                <span class="xml-tag">&lt;category</span> <span class="xml-attr">android:name</span>=<span class="xml-value">"android.intent.category.LAUNCHER"</span> <span class="xml-tag">/&gt;</span>
+            <span class="xml-tag">&lt;/intent-filter&gt;</span>
+        <span class="xml-tag">&lt;/activity&gt;</span>
+
+        <span class="xml-tag">&lt;service</span>
+            <span class="xml-attr">android:name</span>=<span class="xml-value">".ScreenCaptureService"</span>
+            <span class="xml-attr">android:enabled</span>=<span class="xml-value">"true"</span>
+            <span class="xml-attr">android:exported</span>=<span class="xml-value">"false"</span>
+            <span class="xml-attr">android:foregroundServiceType</span>=<span class="xml-value">"mediaProjection"</span><span class="xml-tag">/&gt;</span>
+
+        <span class="xml-tag">&lt;service</span>
+            <span class="xml-attr">android:name</span>=<span class="xml-value">".InputRelayService"</span>
+            <span class="xml-attr">android:enabled</span>=<span class="xml-value">"true"</span>
+            <span class="xml-attr">android:exported</span>=<span class="xml-value">"false"</span>
+            <span class="xml-attr">android:permission</span>=<span class="xml-value">"android.permission.BIND_ACCESSIBILITY_SERVICE"</span><span class="xml-tag">&gt;</span>
+            <span class="xml-tag">&lt;intent-filter&gt;</span>
+                <span class="xml-tag">&lt;action</span> <span class="xml-attr">android:name</span>=<span class="xml-value">"android.accessibilityservice.AccessibilityService"</span> <span class="xml-tag">/&gt;</span>
+            <span class="xml-tag">&lt;/intent-filter&gt;</span>
+            <span class="xml-tag">&lt;meta-data</span>
+                <span class="xml-attr">android:name</span>=<span class="xml-value">"android.accessibilityservice"</span>
+                <span class="xml-attr">android:resource</span>=<span class="xml-value">"@xml/accessibility_config"</span> <span class="xml-tag">/&gt;</span>
+        <span class="xml-tag">&lt;/service&gt;</span>
+
+    <span class="xml-tag">&lt;/application&gt;</span>
+<span class="xml-tag">&lt;/manifest&gt;</span></pre>
+            </div>
+        </div>
+
+        <!-- Simulation Tab -->
+        <div class="tab-content" id="simulation">
+            <h2>🎮 Live System Simulation</h2>
+            <p style="color: #8888aa; margin-bottom: 20px;">Interact with the simulation to see how the Mobile ↔ TV connection works in real-time.</p>
+
+            <div class="simulation-panel">
+                <!-- Mobile Device -->
+                <div class="sim-device">
+                    <h3>📱 Mobile Device</h3>
+                    <div class="sim-screen" id="mobileScreen">
+                        <div class="screen-content" id="mobileScreenContent">
+                            📱 Mobile Screen<br>
+                            <small>Tap "Start Server" to begin</small>
+                        </div>
+                    </div>
+                    <div class="sim-controls">
+                        <button class="sim-btn connect" id="mobileStartBtn" onclick="startMobileServer()">
+                            🟢 Start Server
+                        </button>
+                        <button class="sim-btn disconnect" id="mobileStopBtn" onclick="stopMobileServer()" disabled>
+                            🔴 Stop Server
+                        </button>
+                        <button class="sim-btn screen-off" id="screenOffBtn" onclick="toggleScreenOff()" disabled>
+                            🔋 Screen Off Mode
+                        </button>
+                    </div>
+                    <div class="status-indicator">
+                        <div class="status-dot" id="mobileStatusDot"></div>
+                        <span id="mobileStatusText">Disconnected</span>
+                    </div>
+                    <div class="cpu-monitor">
+                        <div class="cpu-item">
+                            <label>CPU Usage</label>
+                            <div class="value mobile-cpu" id="mobileCpuValue">0%</div>
+                            <div class="progress-bar">
+                                <div class="fill mobile" id="mobileCpuBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="cpu-item">
+                            <label>Encoding</label>
+                            <div class="value" style="color: #00ff88;" id="mobileEncoding">H.264</div>
+                            <div class="progress-bar">
+                                <div class="fill mobile" id="mobileEncodingBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TV Device -->
+                <div class="sim-device">
+                    <h3>📺 Android TV</h3>
+                    <div class="sim-screen" id="tvScreen">
+                        <div class="screen-content" id="tvScreenContent">
+                            📺 TV Screen<br>
+                            <small>Waiting for connection...</small>
+                        </div>
+                    </div>
+                    <div class="sim-controls">
+                        <button class="sim-btn connect" id="tvConnectBtn" onclick="connectTV()">
+                            🔗 Connect to Mobile
+                        </button>
+                        <button class="sim-btn disconnect" id="tvDisconnectBtn" onclick="disconnectTV()" disabled>
+                            ❌ Disconnect
+                        </button>
+                    </div>
+                    <div class="status-indicator">
+                        <div class="status-dot" id="tvStatusDot"></div>
+                        <span id="tvStatusText">Not Connected</span>
+                    </div>
+                    <div class="cpu-monitor">
+                        <div class="cpu-item">
+                            <label>CPU Usage</label>
+                            <div class="value tv-cpu" id="tvCpuValue">0%</div>
+                            <div class="progress-bar">
+                                <div class="fill tv" id="tvCpuBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="cpu-item">
+                            <label>Decoding</label>
+                            <div class="value" style="color: #00ff88;" id="tvDecoding">H.264</div>
+                            <div class="progress-bar">
+                                <div class="fill tv" id="tvDecodingBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Connection Log -->
+            <div class="connection-status-bar">
+                <div class="status">
+                    <div class="status-dot" id="connectionDot"></div>
+                    <span id="connectionStatus">No Connection</span>
+                </div>
+                <div class="latency">
+                    Latency: <span id="latencyValue">--</span>ms | 
+                    Bitrate: <span id="bitrateValue">--</span> Mbps |
+                    FPS: <span id="fpsValue">--</span>
+                </div>
+            </div>
+
+            <div class="log-panel scrollbar" id="logPanel">
+                <div class="log-entry">
+                    <span class="timestamp">[00:00:00]</span>
+                    <span class="info">System initialized. Ready to connect.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Network Protocol Tab -->
+        <div class="tab-content" id="network">
+            <h2>🌐 Network Protocol & Communication</h2>
+
+            <div class="network-diagram">
+                <h3>Data Flow Architecture</h3>
+                <div class="network-flow">
+                    <div class="network-node">
+                        <div class="node-icon">📱</div>
+                        <div class="node-label">Mobile<br>Screen Capture</div>
+                    </div>
+                    <div class="network-arrow">→</div>
+                    <div class="network-node">
+                        <div class="node-icon">🔧</div>
+                        <div class="node-label">H.264<br>Encoder</div>
+                    </div>
+                    <div class="network-arrow">→</div>
+                    <div class="network-node">
+                        <div class="node-icon">📡</div>
+                        <div class="node-label">TCP Socket<br>Port 8080</div>
+                    </div>
+                    <div class="network-arrow">→</div>
+                    <div class="network-node">
+                        <div class="node-icon">📺</div>
+                        <div class="node-label">Android TV<br>Decoder</div>
+                    </div>
+                    <div class="network-arrow">→</div>
+                    <div class="network-node">
+                        <div class="node-icon">🖥️</div>
+                        <div class="node-label">Surface<br>Renderer</div>
+                    </div>
+                </div>
+            </div>
+
+            <h3 style="color: #00d4ff; margin: 20px 0 10px;">Protocol Specification</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">📋 Copy</button>
+                <pre><span class="comment">/*
+ * ============================================
+ * SCREEN MIRRORING PROTOCOL SPECIFICATION
+ * ============================================
+ * 
+ * Transport: TCP (video) + UDP (input/controls)
+ * Video Codec: H.264 (AVC) / H.265 (HEVC)
+ * Frame Rate: 30-60 FPS
+ * Resolution: Up to 1920x1080
+ * Bitrate: 4-16 Mbps (adaptive)
+ * Latency Target: &lt; 50ms
+ */</span>
+
+<span class="comment">// === TCP Protocol (Video Stream) ===</span>
+
+<span class="comment">// Frame Header Structure (16 bytes)</span>
+<span class="keyword">struct</span> <span class="type">FrameHeader</span> {
+    <span class="type">uint32</span>  magic;        <span class="comment">// 0xAA55AA55</span>
+    <span class="type">uint32</span>  frameNumber;  <span class="comment">// Sequential frame counter</span>
+    <span class="type">uint32</span>  dataSize;     <span class="comment">// Size of payload in bytes</span>
+    <span class="type">uint32</span>  timestamp;    <span class="comment">// Unix timestamp in microseconds</span>
+}
+
+<span class="comment">// Video Frame Payload</span>
+<span class="keyword">struct</span> <span class="type">VideoFrame</span> {
+    <span class="type">FrameHeader</span> header;
+    <span class="type">byte[]</span>      payload;  <span class="comment">// Encoded H.264 NAL units</span>
+}
+
+<span class="comment">// === UDP Protocol (Input Commands) ===</span>
+
+<span class="comment">// Input Command Structure (32 bytes)</span>
+<span class="keyword">struct</span> <span class="type">InputCommand</span> {
+    <span class="type">uint8</span>   type;         <span class="comment">// 0=TOUCH, 1=KEY, 2=SWIPE, 3=SCROLL</span>
+    <span class="type">uint8</span>   action;       <span class="comment">// DOWN, UP, MOVE</span>
+    <span class="type">int16</span>   x;            <span class="comment">// X coordinate</span>
+    <span class="type">int16</span>   y;            <span class="comment">// Y coordinate</span>
+    <span class="type">uint32</span>  keyCode;      <span class="comment">// For KEY events</span>
+    <span class="type">uint32</span>  timestamp;    <span class="comment">// Timestamp in microseconds</span>
+    <span class="type">uint16</span>  padding;      <span class="comment">// Alignment padding</span>
+}
+
+<span class="comment">// === Control Messages (TCP) ===</span>
+
+<span class="keyword">enum</span> <span class="type">ControlMessage</span> : <span class="type">uint8</span> {
+    CONNECT_REQUEST = <span class="number">0x01</span>,
+    CONNECT_RESPONSE = <span class="number">0x02</span>,
+    DISCONNECT = <span class="number">0x03</span>,
+    SCREEN_OFF = <span class="number">0x04</span>,
+    SCREEN_ON = <span class="number">0x05</span>,
+    HEARTBEAT = <span class="number">0x06</span>,
+    QUALITY_CHANGE = <span class="number">0x07</span>,
+    DEVICE_INFO = <span class="number">0x08</span>,
+}
+
+<span class="comment">// === Connection Handshake ===</span>
+
+<span class="comment">// 1. Mobile starts TCP server on port 8080</span>
+<span class="comment">// 2. TV connects to Mobile's IP:8080</span>
+<span class="comment">// 3. TV sends CONNECT_REQUEST with device info</span>
+<span class="comment">// 4. Mobile responds with CONNECT_RESPONSE + capabilities</span>
+<span class="comment">// 5. Video stream begins</span>
+
+<span class="comment">// === Heartbeat (every 5 seconds) ===</span>
+<span class="keyword">struct</span> <span class="type">Heartbeat</span> {
+    <span class="type">uint8</span>   type = HEARTBEAT;
+    <span class="type">uint32</span>  mobileCpu;    <span class="comment">// Mobile CPU usage %</span>
+    <span class="type">uint32</span>  tvCpu;        <span class="comment">// TV CPU usage %</span>
+    <span class="type">uint32</span>  latency;      <span class="comment">// Round-trip latency in ms</span>
+    <span class="type">uint32</span>  bitrate;      <span class="comment">// Current bitrate in kbps</span>
+}
+
+<span class="comment">// === Quality Adaptation ===</span>
+<span class="comment">// If latency &gt; 100ms for 3+ seconds:</span>
+<span class="comment">//   → Reduce bitrate by 25%</span>
+<span class="comment">//   → Reduce frame rate to 30 FPS</span>
+<span class="comment">// If latency &lt; 30ms for 5+ seconds:</span>
+<span class="comment">//   → Increase bitrate by 25%</span>
+<span class="comment">//   → Increase frame rate to 60 FPS</span></pre>
+            </div>
+
+            <h3 style="color: #00d4ff; margin: 20px 0 10px;">Network Configuration</h3>
+            <div class="feature-list">
+                <div class="feature-card">
+                    <div class="icon">📶</div>
+                    <h4>Mobile Hotspot</h4>
+                    <p>Mobile creates a Wi-Fi hotspot (192.168.43.1/24). TV connects to this hotspot for direct low-latency communication.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🔌</div>
+                    <h4>TCP Port 8080</h4>
+                    <p>Primary video stream channel. Reliable delivery for encoded video frames with proper sequencing.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">⚡</div>
+                    <h4>UDP Port 8081</h4>
+                    <p>Input commands and control messages. Low-latency delivery for touch/keyboard events.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🔒</div>
+                    <h4>Encryption</h4>
+                    <p>TLS 1.3 overlay for secure communication. AES-256 encryption for all data in transit.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Setup Guide Tab -->
+        <div class="tab-content" id="setup">
+            <h2>⚙️ Step-by-Step Setup Guide</h2>
+
+            <h3 style="color: #00d4ff; margin: 20px 0 10px;">Prerequisites</h3>
+            <ul class="step-list">
+                <li>
+                    <h4>Android Mobile Device</h4>
+                    <p>Android 8.0 (API 26) or higher. Must support MediaProjection API. Recommended: Android 12+ for best H.265 support.</p>
+                </li>
+                <li>
+                    <h4>Android TV Device</h4>
+                    <p>Android TV 9.0 (API 28) or higher. Must support hardware H.264/H.265 decoding. Android TV Emulator or physical TV box.</p>
+                </li>
+                <li>
+                    <h4>Development Environment</h4>
+                    <p>Android Studio Hedgehog or later. Kotlin 1.9+. Minimum SDK 26. Target SDK 34.</p>
+                </li>
+            </ul>
+
+            <h3 style="color: #00d4ff; margin: 20px 0 10px;">Installation Steps</h3>
+            <ul class="step-list">
+                <li>
+                    <h4>Step 1: Clone & Build Mobile App</h4>
+                    <p>Open the mobile app project in Android Studio. Sync Gradle files. Ensure all dependencies are installed. Build and install the APK on your mobile device.</p>
+                </li>
+                <li>
+                    <h4>Step 2: Clone & Build TV App</h4>
+                    <p>Open the TV app project in Android Studio. Sync Gradle files. Build and install the APK on your Android TV device or emulator.</p>
+                </li>
+                <li>
+                    <h4>Step 3: Enable Accessibility Service</h4>
+                    <p>On the mobile device, go to Settings → Accessibility → Installed Services → Enable "Screen Mirror Input Relay". Grant the required permissions.</p>
+                </li>
+                <li>
+                    <h4>Step 4: Configure Network</h4>
+                    <p>On the mobile device, enable Personal Hotspot. Note the hotspot IP address (typically 192.168.43.1). Connect the Android TV to this hotspot via Wi-Fi.</p>
+                </li>
+                <li>
+                    <h4>Step 5: Start Mirroring</h4>
+                    <p>Open the mobile app and tap "Start Server". On the TV app, tap "Connect to Mobile". The mobile screen should now appear on the TV with reverse control enabled.</p>
+                </li>
+                <li>
+                    <h4>Step 6: Enable Screen Off Mode (Optional)</h4>
+                    <p>Toggle "Screen Off Mode" on the mobile app to save battery. The screen will turn off but streaming and processing continue in the background.</p>
+                </li>
+            </ul>
+
+            <h3 style="color: #00d4ff; margin: 20px 0 10px;">Troubleshooting</h3>
+            <div class="feature-list">
+                <div class="feature-card">
+                    <div class="icon">❌</div>
+                    <h4>Connection Failed</h4>
+                    <p>Ensure both devices are on the same network. Check firewall settings. Verify the mobile hotspot is active and TV is connected to it.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🐌</div>
+                    <h4>High Latency</h4>
+                    <p>Reduce video bitrate in settings. Ensure strong Wi-Fi signal. Close other network-intensive apps on both devices.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">📺</div>
+                    <h4>Black Screen on TV</h4>
+                    <p>Check if MediaProjection permission is granted. Ensure the mobile screen is not locked. Try restarting both apps.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🎮</div>
+                    <h4>Input Not Working</h4>
+                    <p>Verify Accessibility Service is enabled. Check UDP port 8081 is not blocked. Ensure TV remote/mouse input is properly mapped.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>📱 Android Screen Mirroring System | High-Performance Remote Desktop</p>
+        <p style="margin-top: 5px;">Mobile ↔ Android TV | Low-Latency | H.264/H.265 Hardware Encoding</p>
+    </div>
+
+    <script>
+        // Tab switching
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Copy code function
+        function copyCode(btn) {
+            const codeBlock = btn.parentElement;
+            const pre = codeBlock.querySelector('pre');
+            const text = pre.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                btn.textContent = '✅ Copied!';
+                setTimeout(() => {
+                    btn.textContent = '📋 Copy';
+                }, 2000);
+            });
+        }
+
+        // Simulation state
+        let simulationState = {
+            mobileServerRunning: false,
+            tvConnected: false,
+            screenOff: false,
+            mobileCpu: 0,
+            tvCpu: 0,
+            latency: 0,
+            bitrate: 0,
+            fps: 0,
+            animationInterval: null
+        };
+
+        function addLog(message, type = 'info') {
+            const logPanel = document.getElementById('logPanel');
+            const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="timestamp">[${timestamp}]</span> <span class="${type}">${message}</span>`;
+            logPanel.appendChild(entry);
+            logPanel.scrollTop = logPanel.scrollHeight;
+        }
+
+        function startMobileServer() {
+            simulationState.mobileServerRunning = true;
+            document.getElementById('mobileStartBtn').disabled = true;
+            document.getElementById('mobileStopBtn').disabled = false;
+            document.getElementById('screenOffBtn').disabled = false;
+            
+            const mobileScreen = document.getElementById('mobileScreen');
+            mobileScreen.classList.add('streaming');
+            document.getElementById('mobileScreenContent').innerHTML = '📱 Mobile Screen<br><small>Streaming to TV...</small>';
+            
+            document.getElementById('mobileStatusDot').classList.add('connected');
+            document.getElementById('mobileStatusText').textContent = 'Server Running';
+            
+            simulationState.mobileCpu = 92;
+            updateCpuDisplay('mobile', 92);
+            
+            addLog('Mobile server started on port 8080', 'success');
+            addLog('MediaProjection API initialized', 'info');
+            addLog('H.264 hardware encoder activated', 'info');
+            addLog('Waiting for TV connection...', 'warning');
+        }
+
+        function stopMobileServer() {
+            simulationState.mobileServerRunning = false;
+            document.getElementById('mobileStartBtn').disabled = false;
+            document.getElementById('mobileStopBtn').disabled = true;
+            document.getElementById('screenOffBtn').disabled = true;
+            
+            const mobileScreen = document.getElementById('mobileScreen');
+            mobileScreen.classList.remove('streaming');
+            document.getElementById('mobileScreenContent').innerHTML = '📱 Mobile Screen<br><small>Server stopped</small>';
+            
+            document.getElementById('mobileStatusDot').classList.remove('connected');
+            document.getElementById('mobileStatusText').textContent = 'Disconnected';
+            
+            simulationState.mobileCpu = 0;
+            updateCpuDisplay('mobile', 0);
+            
+            if (simulationState.tvConnected) {
+                disconnectTV();
+            }
+            
+            addLog('Mobile server stopped', 'error');
+        }
+
+        function connectTV() {
+            if (!simulationState.mobileServerRunning) {
+                addLog('Error: Mobile server must be running first!', 'error');
+                return;
+            }
+            
+            simulationState.tvConnected = true;
+            document.getElementById('tvConnectBtn').disabled = true;
+            document.getElementById('tvDisconnectBtn').disabled = false;
+            
+            const tvScreen = document.getElementById('tvScreen');
+            tvScreen.classList.add('streaming');
+            document.getElementById('tvScreenContent').innerHTML = '📺 TV Screen<br><small>Receiving stream...</small>';
+            
+            document.getElementById('tvStatusDot').classList.add('connected');
+            document.getElementById('tvStatusText').textContent = 'Connected to Mobile';
+            
+            simulationState.tvCpu = 5;
+            updateCpuDisplay('tv', 5);
+            
+            // Start simulation animation
+            startSimulation();
+            
+            addLog('TV connected to mobile via TCP:8080', 'success');
+            addLog('H.264 hardware decoder initialized', 'info');
+            addLog('Video stream started at 1080p/60fps', 'success');
+            addLog('Input relay channel established (UDP:8081)', 'info');
+        }
+
+        function disconnectTV() {
+            simulationState.tvConnected = false;
+            document.getElementById('tvConnectBtn').disabled = false;
+            document.getElementById('tvDisconnectBtn').disabled = true;
+            
+            const tvScreen = document.getElementById('tvScreen');
+            tvScreen.classList.remove('streaming');
+            document.getElementById('tvScreenContent').innerHTML = '📺 TV Screen<br><small>Disconnected</small>';
+            
+            document.getElementById('tvStatusDot').classList.remove('connected');
+            document.getElementById('tvStatusText').textContent = 'Not Connected';
+            
+            simulationState.tvCpu = 0;
+            updateCpuDisplay('tv', 0);
+            
+            stopSimulation();
+            
+            addLog('TV disconnected from mobile', 'error');
+        }
+
+        function toggleScreenOff() {
+            simulationState.screenOff = !simulationState.screenOff;
+            const btn = document.getElementById('screenOffBtn');
+            
+            if (simulationState.screenOff) {
+                btn.textContent = '🔋 Screen On Mode';
+                btn.style.background = '#00ff88';
+                document.getElementById('mobileScreen').classList.add('off');
+                document.getElementById('mobileScreenContent').innerHTML = '📱 Screen OFF<br><small>Streaming continues...</small>';
+                addLog('Screen turned OFF - Streaming continues', 'warning');
+            } else {
+                btn.textContent = '🔋 Screen Off Mode';
+                btn.style.background = '#ffaa00';
+                document.getElementById('mobileScreen').classList.remove('off');
+                document.getElementById('mobileScreenContent').innerHTML = '📱 Mobile Screen<br><small>Streaming to TV...</small>';
+                addLog('Screen turned ON', 'info');
+            }
+        }
+
+        function updateCpuDisplay(device, value) {
+            if (device === 'mobile') {
+                document.getElementById('mobileCpuValue').textContent = value + '%';
+                document.getElementById('mobileCpuBar').style.width = value + '%';
+                document.getElementById('mobileEncodingBar').style.width = (simulationState.mobileServerRunning ? 85 : 0) + '%';
+            } else {
+                document.getElementById('tvCpuValue').textContent = value + '%';
+                document.getElementById('tvCpuBar').style.width = value + '%';
+                document.getElementById('tvDecodingBar').style.width = (simulationState.tvConnected ? 70 : 0) + '%';
+            }
+        }
+
+        function startSimulation() {
+            if (simulationState.animationInterval) return;
+            
+            simulationState.animationInterval = setInterval(() => {
+                // Simulate CPU fluctuation
+                simulationState.mobileCpu = 88 + Math.random() * 8;
+                simulationState.tvCpu = 3 + Math.random() * 4;
+                simulationState.latency = 12 + Math.random() * 20;
+                simulationState.bitrate = 7 + Math.random() * 2;
+                simulationState.fps = 58 + Math.floor(Math.random() * 4);
+                
+                updateCpuDisplay('mobile', Math.round(simulationState.mobileCpu));
+                updateCpuDisplay('tv', Math.round(simulationState.tvCpu));
+                
+                document.getElementById('latencyValue').textContent = Math.round(simulationState.latency);
+                document.getElementById('bitrateValue').textContent = simulationState.bitrate.toFixed(1);
+                document.getElementById('fpsValue').textContent = simulationState.fps;
+                
+                // Update connection status
+                document.getElementById('connectionDot').classList.add('connected');
+                document.getElementById('connectionStatus').textContent = 'Connected - Streaming';
+            }, 1000);
+        }
+
+        function stopSimulation() {
+            if (simulationState.animationInterval) {
+                clearInterval(simulationState.animationInterval);
+                simulationState.animationInterval = null;
+            }
+            
+            document.getElementById('latencyValue').textContent = '--';
+            document.getElementById('bitrateValue').textContent = '--';
+            document.getElementById('fpsValue').textContent = '--';
+            document.getElementById('connectionDot').classList.remove('connected');
+            document.getElementById('connectionStatus').textContent = 'No Connection';
+        }
+
+        // Initialize
+        addLog('System ready. Configure both apps and start mirroring.', 'info');
+    </script>
+</body>
+</html>

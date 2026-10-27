@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Dodger 3D - by Noor Alam</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none;
+        }
+        #game-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .interactive {
+            pointer-events: auto;
+        }
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #fff;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 0 0 10px #0ff;
+            z-index: 5;
+        }
+        .owner-badge {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            z-index: 5;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            border: 1px solid #0ff;
+        }
+        button {
+            transition: all 0.2s;
+        }
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px #0ff;
+        }
+        #touch-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 50%;
+            z-index: 2;
+            display: flex;
+        }
+        .touch-zone {
+            flex: 1;
+            height: 100%;
+        }
+    </style>
+    <!-- Import maps polyfill -->
+    <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="score-hud" class="hud hidden">Score: <span id="score-val">0</span></div>
+    
+    <div class="owner-badge">Game Owner: <strong>Noor Alam</strong></div>
+
+    <div id="start-screen" class="ui-layer bg-black bg-opacity-80 backdrop-blur-sm">
+        <h1 class="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600 mb-4 tracking-tighter" style="text-shadow: 0 0 20px rgba(0,255,255,0.5);">NEON DODGER</h1>
+        <p class="text-gray-300 mb-8 text-xl">Created by Noor Alam</p>
+        <p class="text-gray-400 mb-8 max-w-md text-center">Use Left/Right arrows or tap screen sides to dodge obstacles. Survive as long as you can!</p>
+        <button id="start-btn" class="interactive px-8 py-4 bg-cyan-600 text-white font-bold rounded-lg text-xl uppercase tracking-widest border border-cyan-400">Play Now</button>
+    </div>
+
+    <div id="game-over-screen" class="ui-layer bg-red-900 bg-opacity-90 backdrop-blur-md hidden">
+        <h1 class="text-6xl font-black text-white mb-2" style="text-shadow: 0 0 20px #f00;">SYSTEM FAILURE</h1>
+        <p class="text-3xl text-gray-200 mb-8">Final Score: <span id="final-score" class="text-cyan-400 font-bold">0</span></p>
+        <button id="restart-btn" class="interactive px-8 py-4 bg-white text-red-900 font-bold rounded-lg text-xl uppercase tracking-widest border border-red-400 hover:bg-gray-200">Reboot</button>
+    </div>
+
+    <div id="touch-controls" class="hidden interactive">
+        <div id="touch-left" class="touch-zone"></div>
+        <div id="touch-right" class="touch-zone"></div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- Game State ---
+        let gameState = 'start'; // start, playing, gameover
+        let score = 0;
+        let speedMultiplier = 1;
+        let baseSpeed = 0.4;
+        
+        // --- DOM Elements ---
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const scoreHud = document.getElementById('score-hud');
+        const scoreVal = document.getElementById('score-val');
+        const finalScoreVal = document.getElementById('final-score');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const touchControls = document.getElementById('touch-controls');
+
+        // --- Three.js Setup ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x000000, 0.02);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 5, 12);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.body.appendChild(renderer.domElement);
+
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(ambientLight);
+        
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
+
+        // --- Environment ---
+        const gridHelper = new THREE.GridHelper(100, 50, 0x00ffff, 0x002222);
+        gridHelper.position.y = -0.5;
+        scene.add(gridHelper);
+
+        // --- Player ---
+        const playerGeo = new THREE.BoxGeometry(1, 1, 1);
+        const playerMat = new THREE.MeshPhongMaterial({ 
+            color: 0x00ffff, 
+            emissive: 0x008888,
+            shininess: 100
+        });
+        const player = new THREE.Mesh(playerGeo, playerMat);
+        player.position.set(0, 0, 5);
+        scene.add(player);
+
+        // --- Obstacles ---
+        const obstacles = [];
+        const obstacleGeo = new THREE.BoxGeometry(1, 1, 1);
+        const obstacleMat = new THREE.MeshPhongMaterial({ 
+            color: 0xff0044,
+            emissive: 0x880022
+        });
+
+        const spawnZ = -50;
+        const despawnZ = 15;
+        const laneWidth = 1.5;
+        const numLanes = 5;
+
+        // --- Input Handling ---
+        const keys = { left: false, right: false };
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+        });
+
+        // Touch controls
+        const touchLeft = document.getElementById('touch-left');
+        const touchRight = document.getElementById('touch-right');
+
+        touchLeft.addEventListener('touchstart', (e) => { e.preventDefault(); keys.left = true; });
+        touchLeft.addEventListener('touchend', (e) => { e.preventDefault(); keys.left = false; });
+        touchRight.addEventListener('touchstart', (e) => { e.preventDefault(); keys.right = true; });
+        touchRight.addEventListener('touchend', (e) => { e.preventDefault(); keys.right = false; });
+
+        // --- Audio Context (Simple synthesized sounds) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'score') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'crash') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(10, audioCtx.currentTime + 0.5);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.5);
+            }
+        }
+
+        // --- Game Logic Functions ---
+        function spawnObstacle() {
+            const obs = new THREE.Mesh(obstacleGeo, obstacleMat);
+            // Pick a random lane
+            const laneIndex = Math.floor(Math.random() * numLanes) - Math.floor(numLanes/2);
+            obs.position.set(laneIndex * laneWidth, 0, spawnZ);
+            
+            // Random scaling for variety
+            obs.scale.x = 1 + Math.random();
+            obs.scale.y = 1 + Math.random();
+
+            scene.add(obs);
+            obstacles.push(obs);
+        }
+
+        function startGame() {
+            gameState = 'playing';
+            score = 0;
+            speedMultiplier = 1;
+            player.position.x = 0;
+            keys.left = false;
+            keys.right = false;
+            
+            // Clear old obstacles
+            obstacles.forEach(obs => scene.remove(obs));
+            obstacles.length = 0;
+
+            // UI
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            scoreHud.classList.remove('hidden');
+            touchControls.classList.remove('hidden');
+            scoreVal.innerText = score;
+            
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function gameOver() {
+            gameState = 'gameover';
+            playSound('crash');
+            
+            scoreHud.classList.add('hidden');
+            touchControls.classList.add('hidden');
+            gameOverScreen.classList.remove('hidden');
+            finalScoreVal.innerText = score;
+        }
+
+        // --- Event Listeners UI ---
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', startGame);
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- Main Game Loop ---
+        let lastTime = 0;
+        let spawnTimer = 0;
+
+        function animate(time) {
+            requestAnimationFrame(animate);
+
+            const delta = (time - lastTime) / 1000;
+            lastTime = time;
+
+            if (gameState === 'playing') {
+                // Player Movement
+                const moveSpeed = 10 * delta;
+                if (keys.left) player.position.x -= moveSpeed;
+                if (keys.right) player.position.x += moveSpeed;
+
+                // Clamp player position
+                const maxPos = Math.floor(numLanes/2) * laneWidth;
+                player.position.x = Math.max(-maxPos, Math.min(maxPos, player.position.x));
+
+                // Tilt effect
+                player.rotation.z = THREE.MathUtils.lerp(player.rotation.z, (keys.right ? -0.2 : (keys.left ? 0.2 : 0)), 0.1);
+                
+                // Grid animation
+                gridHelper.position.z += (baseSpeed * speedMultiplier) * 60 * delta;
+                if(gridHelper.position.z > 10) gridHelper.position.z = 0;
+
+                // Spawning
+                spawnTimer += delta;
+                const spawnInterval = Math.max(0.2, 1.0 - (speedMultiplier * 0.1)); // Gets faster
+                if (spawnTimer > spawnInterval) {
+                    spawnObstacle();
+                    // Maybe spawn a second one for difficulty
+                    if(Math.random() > 0.7) spawnObstacle(); 
+                    spawnTimer = 0;
+                }
+
+                // Obstacle Movement & Collision
+                for (let i = obstacles.length - 1; i >= 0; i--) {
+                    const obs = obstacles[i];
+                    obs.position.z += (baseSpeed * speedMultiplier) * 60 * delta;
+                    
+                    // Simple Box Collision
+                    const distX = Math.abs(player.position.x - obs.position.x);
+                    const distZ = Math.abs(player.position.z - obs.position.z);
+                    
+                    // Box bounds roughly based on scale
+                    const hitDistX = (1 + obs.scale.x)/2;
+                    const hitDistZ = (1 + obs.scale.z)/2;
+
+                    if (distX < hitDistX && distZ < hitDistZ) {
+                        gameOver();
+                        break;
+                    }
+
+                    // Despawn & Score
+                    if (obs.position.z > despawnZ) {
+                        scene.remove(obs);
+                        obstacles.splice(i, 1);
+                        score += 10;
+                        scoreVal.innerText = score;
+                        if(score % 100 === 0) playSound('score');
+                        
+                        // Increase difficulty
+                        speedMultiplier += 0.02;
+                    }
+                }
+            } else if (gameState === 'start') {
+                // Idle animation
+                player.rotation.x += 0.01;
+                player.rotation.y += 0.01;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Start loop
+        requestAnimationFrame(animate);
+
+    </script>
+</body>
+</html>

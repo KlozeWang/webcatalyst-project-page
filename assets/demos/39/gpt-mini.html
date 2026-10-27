@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Black Reliquary</title>
+<style>
+  :root{
+    --bg:#0a0a0f;
+    --panel:#12131a;
+    --panel2:#1a1c25;
+    --ink:#e7e1d4;
+    --muted:#a59c8f;
+    --accent:#8e5cfe;
+    --accent2:#c24c6a;
+    --good:#7ee081;
+    --bad:#e06d6d;
+    --gold:#d8b35a;
+    --shadow: rgba(0,0,0,.55);
+  }
+  html,body{margin:0;height:100%;background:
+    radial-gradient(circle at 50% 15%, #141726 0%, #0b0b11 40%, #050507 100%);
+    color:var(--ink); font-family: Georgia, "Times New Roman", serif; overflow:hidden;
+  }
+  canvas{display:block; width:100vw; height:100vh; image-rendering:auto;}
+  #ui{
+    position:fixed; inset:0; pointer-events:none;
+    display:flex; flex-direction:column;
+  }
+  .topbar{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding:12px 14px 0 14px; gap:10px;
+  }
+  .panel{
+    background:linear-gradient(180deg, rgba(26,28,37,.92), rgba(12,13,18,.86));
+    border:1px solid rgba(255,255,255,.07);
+    box-shadow:0 12px 30px var(--shadow), inset 0 1px 0 rgba(255,255,255,.04);
+    border-radius:14px;
+    pointer-events:auto;
+  }
+  .stats{
+    min-width:280px; padding:10px 12px;
+  }
+  .stats h1{font-size:20px; margin:0 0 6px 0; letter-spacing:.5px; color:#f2eee5;}
+  .row{display:flex; align-items:center; gap:10px; margin:4px 0; flex-wrap:wrap;}
+  .chip{
+    padding:4px 8px; border-radius:999px; background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.05); font-size:13px; color:var(--ink);
+  }
+  .chip b{color:#fff}
+  .bar{
+    height:14px; background:#2b1d20; border-radius:999px; overflow:hidden; border:1px solid rgba(255,255,255,.06);
+    box-shadow: inset 0 2px 8px rgba(0,0,0,.45);
+    min-width:180px;
+  }
+  .fill{height:100%; width:50%; background:linear-gradient(90deg, #8d2c35, #d95c6b);}
+  .fill.block{background:linear-gradient(90deg, #4a5b7f, #84a0d2);}
+  .fill.energy{background:linear-gradient(90deg, #5c2f94, #a46cff);}
+  .fill.enemies{background:linear-gradient(90deg, #7c1f2b, #4d1018);}
+  #log{
+    min-width:320px; max-width:460px; padding:10px 12px; font-size:14px; line-height:1.35;
+    color:#ddd3c0;
+  }
+  #log .entry{opacity:.95; margin:2px 0;}
+  #mapPanel{
+    padding:10px 12px; min-width:250px;
+  }
+  .map{
+    display:flex; align-items:center; justify-content:center; gap:6px; flex-wrap:wrap;
+  }
+  .node{
+    width:26px; height:26px; border-radius:50%;
+    border:2px solid rgba(255,255,255,.12);
+    background:rgba(255,255,255,.04); box-shadow:0 0 0 2px rgba(0,0,0,.2) inset;
+    position:relative;
+  }
+  .node::after{
+    content:''; position:absolute; inset:6px; border-radius:50%;
+    background:rgba(255,255,255,.12);
+  }
+  .node.current{border-color:#fff; box-shadow:0 0 0 2px rgba(255,255,255,.25), 0 0 18px rgba(142,92,254,.4);}
+  .node.cleared{background:rgba(126,224,129,.18); border-color:rgba(126,224,129,.5);}
+  .node.cleared::after{background:rgba(126,224,129,.8);}
+  .node.rest{background:rgba(78,132,212,.16); border-color:rgba(132,160,210,.5);}
+  .node.rest::after{background:rgba(132,160,210,.8);}
+  .node.elite{background:rgba(194,76,106,.16); border-color:rgba(194,76,106,.5);}
+  .node.elite::after{background:rgba(194,76,106,.8);}
+  .node.boss{background:rgba(216,179,90,.16); border-color:rgba(216,179,90,.55);}
+  .node.boss::after{background:rgba(216,179,90,.9);}
+  .connections{
+    position:absolute; inset:0; pointer-events:none;
+  }
+  #hand{
+    position:fixed; left:0; right:0; bottom:0; height:230px;
+    display:flex; align-items:flex-end; justify-content:center; gap:10px;
+    padding:10px 18px 16px;
+    pointer-events:auto;
+  }
+  .card{
+    width:126px; height:176px; border-radius:16px;
+    background:linear-gradient(180deg, rgba(32,35,46,.96), rgba(15,16,22,.96));
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow:0 18px 24px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.05);
+    color:var(--ink); position:relative; cursor:pointer;
+    transform-origin:50% 100%;
+    transition:transform .12s ease, box-shadow .12s ease, border-color .12s;
+    user-select:none;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .card:hover{transform:translateY(-10px) scale(1.04); box-shadow:0 24px 30px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.08) inset;}
+  .card.disabled{filter:grayscale(.8) brightness(.65); cursor:default;}
+  .card .cost{
+    position:absolute; top:8px; left:8px; width:28px; height:28px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-weight:bold; color:#f3e8ff;
+    background:radial-gradient(circle at 30% 30%, #b58eff, #5d2e96 75%);
+    border:1px solid rgba(255,255,255,.14);
+    box-shadow:0 0 14px rgba(164,108,255,.2);
+  }
+  .card .type{
+    position:absolute; top:10px; right:8px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:1px;
+  }
+  .card .name{
+    padding:42px 10px 0; text-align:center; font-size:16px; font-weight:700; line-height:1.1; min-height:44px;
+    color:#f4efe7;
+  }
+  .card .art{
+    margin:8px 16px 4px; height:54px; border-radius:10px; background:
+      radial-gradient(circle at 50% 20%, rgba(255,255,255,.1), transparent 38%),
+      linear-gradient(180deg, rgba(142,92,254,.18), rgba(194,76,106,.08));
+    border:1px solid rgba(255,255,255,.06);
+    position:relative;
+    overflow:hidden;
+  }
+  .card .art::before{
+    content:''; position:absolute; inset:0;
+    background:
+      radial-gradient(circle at 30% 60%, rgba(255,255,255,.08) 0 9%, transparent 10%),
+      radial-gradient(circle at 70% 40%, rgba(255,255,255,.06) 0 8%, transparent 9%);
+    mix-blend-mode:screen;
+  }
+  .card .text{
+    padding:4px 10px 10px; font-size:13px; line-height:1.2; color:#ddd2c1; flex:1;
+  }
+  .card .tag{
+    position:absolute; bottom:8px; left:10px; font-size:11px; color:#a99f91; text-transform:uppercase; letter-spacing:.8px;
+  }
+  .center-overlay{
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    pointer-events:none;
+  }
+  .modal{
+    max-width:760px; width:min(92vw, 760px); padding:18px; text-align:center;
+  }
+  .modal h2{margin:0 0 10px 0; font-size:36px; color:#f2ede6; letter-spacing:1px;}
+  .modal p{margin:10px 0; color:#d1c8b7; font-size:16px; line-height:1.45;}
+  .btnrow{display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:14px;}
+  button{
+    pointer-events:auto; cursor:pointer;
+    border:none; border-radius:12px; padding:12px 16px; color:white;
+    background:linear-gradient(180deg, #5a477f, #39284e);
+    box-shadow:0 10px 18px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.08);
+    font:inherit; font-weight:700;
+  }
+  button:hover{filter:brightness(1.08)}
+  .small{font-size:13px;color:var(--muted)}
+  #enemyArea{
+    position:fixed; left:0; right:0; top:84px; bottom:235px;
+    display:flex; align-items:center; justify-content:center; pointer-events:none;
+  }
+  .enemyCard{
+    width:270px; padding:18px; border-radius:18px; background:linear-gradient(180deg, rgba(35,16,24,.9), rgba(14,10,14,.95));
+    border:1px solid rgba(255,255,255,.07);
+    box-shadow:0 22px 50px rgba(0,0,0,.5);
+    text-align:center;
+  }
+  .enemyCard h3{margin:0 0 6px 0; font-size:28px; color:#f5e5e8}
+  .enemyCard .hp{font-size:16px; color:#e3c8ce; margin-top:8px;}
+  .enemyCard .intent{margin-top:10px; font-size:15px; color:#d8b35a;}
+  .enemyCard .mini{
+    margin-top:12px; display:flex; justify-content:center; gap:8px; flex-wrap:wrap;
+  }
+  .badge{
+    padding:4px 8px; border-radius:999px; font-size:12px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.06); color:#ddd;
+  }
+  .hidden{display:none !important;}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui">
+  <div class="topbar">
+    <div id="stats" class="panel stats">
+      <h1>Black Reliquary</h1>
+      <div class="row">
+        <span class="chip">HP <b id="hpTxt">0/0</b></span>
+        <span class="chip">Gold <b id="goldTxt">0</b></span>
+        <span class="chip">Floor <b id="floorTxt">1</b></span>
+      </div>
+      <div class="row">
+        <span class="chip" style="min-width:100%">Health</span>
+        <div class="bar" style="flex:1"><div id="hpFill" class="fill"></div></div>
+      </div>
+      <div class="row">
+        <span class="chip" style="min-width:100%">Block</span>
+        <div class="bar" style="flex:1"><div id="blockFill" class="fill block"></div></div>
+      </div>
+      <div class="row">
+        <span class="chip" style="min-width:100%">Energy</span>
+        <div class="bar" style="flex:1"><div id="energyFill" class="fill energy"></div></div>
+      </div>
+      <div class="row">
+        <span class="chip">Deck <b id="deckTxt">0</b></span>
+        <span class="chip">Discard <b id="discardTxt">0</b></span>
+        <span class="chip">Draw <b id="drawTxt">0</b></span>
+      </div>
+    </div>
+    <div id="mapPanel" class="panel">
+      <div class="row" style="justify-content:space-between">
+        <span class="chip">Map</span>
+        <span class="chip" id="actTxt">Wastes</span>
+      </div>
+      <div id="map" class="map"></div>
+      <div class="small" style="margin-top:8px">Choose a path, survive encounters, and reach the relic.</div>
+    </div>
+    <div id="log" class="panel">
+      <div class="entry">A dusk wind crawls over broken altars.</div>
+      <div class="entry">Draft cards after battles. Every path is a wound.</div>
+    </div>
+  </div>
+
+  <div id="enemyArea" class="hidden">
+    <div class="enemyCard">
+      <h3 id="enemyName">Enemy</h3>
+      <div class="hp">HP: <span id="enemyHP">0</span>/<span id="enemyMaxHP">0</span></div>
+      <div class="intent" id="enemyIntent">Intent</div>
+      <div class="mini">
+        <span class="badge" id="enemyArmor">Armor: 0</span>
+        <span class="badge" id="enemyStatus">None</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="hand"></div>
+
+  <div class="center-overlay hidden" id="overlay">
+    <div class="panel modal" id="overlayContent"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  let W=0,H=0,dpr=1;
+  function resize(){dpr=Math.max(1,Math.min(2,devicePixelRatio||1)); W=canvas.width=Math.floor(innerWidth*dpr); H=canvas.height=Math.floor(innerHeight*dpr); canvas.style.width=innerWidth+'px'; canvas.style.height=innerHeight+'px';}
+  addEventListener('resize', resize); resize();
+
+  const ui = {
+    hpTxt:hpTxt, goldTxt:goldTxt, floorTxt:floorTxt, hpFill:hpFill, blockFill:blockFill, energyFill:energyFill,
+    deckTxt:deckTxt, discardTxt:discardTxt, drawTxt:drawTxt, hand:hand, log:log, overlay:overlay, overlayContent:overlayContent,
+    enemyArea:enemyArea, enemyName:enemyName, enemyHP:enemyHP, enemyMaxHP:enemyMaxHP, enemyIntent:enemyIntent, enemyArmor:enemyArmor, enemyStatus:enemyStatus,
+    map:map, actTxt:actTxt
+  };
+
+  const rand=(a,b)=>Math.random()*(b-a)+a, randi=(a,b)=>Math.floor(rand(a,b+1));
+  const pick=a=>a[(Math.random()*a.length)|0];
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const shuffle=a=>{for(let i=a.length-1;i>0;i--){let j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]];} return a;}
+  const deepCopy=o=>JSON.parse(JSON.stringify(o));
+
+  const CARD_POOL = [
+    {id:'strike', name:'Strike', cost:1, type:'Attack', text:'Deal 6 damage.', color:'#c24c6a', play(s,t){t.hp-=6+s.strength; s.log('You slash for '+(6+s.strength)+'.');}},
+    {id:'guard', name:'Guard', cost:1, type:'Skill', text:'Gain 5 Block.', color:'#84a0d2', play(s){s.block+=5; s.log('You raise 5 Block.');}},
+    {id:'cinder', name:'Cinder Bolt', cost:1, type:'Attack', text:'Deal 4 damage twice.', color:'#d8874f', play(s,t){let d=4+s.strength; t.hp-=d; t.hp-=d; s.log('Cinder scorches twice for '+(d*2)+'.');}},
+    {id:'drain', name:'Drain', cost:1, type:'Attack', text:'Deal 5 damage. Heal 2.', color:'#8e5cfe', play(s,t){let d=5+s.strength; t.hp-=d; s.hp=Math.min(s.maxHp,s.hp+2); s.log('Drain deals '+d+' and mends 2.');}},
+    {id:'shatter', name:'Shatter', cost:2, type:'Attack', text:'Deal 10 damage. Apply 3 Vulnerable.', color:'#e06d6d', play(s,t){let d=10+s.strength; t.hp-=d; t.vulnerable=(t.vulnerable||0)+3; s.log('Shatter rends for '+d+'.');}},
+    {id:'ward', name:'Ward', cost:1, type:'Skill', text:'Gain 8 Block.', color:'#6f8fff', play(s){s.block+=8; s.log('Ward grants 8 Block.');}},
+    {id:'parry', name:'Parry', cost:1, type:'Skill', text:'Gain 4 Block. Draw 1.', color:'#98b7ff', play(s){s.block+=4; s.draw(1); s.log('Parry and draw.');}},
+    {id:'feast', name:'Feast', cost:2, type:'Skill', text:'Heal 7. Gain 2 Strength this combat.', color:'#c26a4a', play(s){s.hp=Math.min(s.maxHp,s.hp+7); s.strength+=2; s.log('Feast restores 7 and empowers your blade.');}},
+    {id:'hex', name:'Hex', cost:1, type:'Skill', text:'Apply 2 Weak and 2 Vulnerable.', color:'#7f5fb8', play(s,t){t.weak=(t.weak||0)+2; t.vulnerable=(t.vulnerable||0)+2; s.log('Hex curses the foe.');}},
+    {id:'reap', name:'Reap', cost:2, type:'Attack', text:'Deal 12 damage if enemy is Vulnerable.', color:'#d0b06a', play(s,t){let d=t.vulnerable>0?12:7; t.hp-=d+s.strength; s.log('Reap strikes for '+(d+s.strength)+'.');}},
+  ];
+
+  const ENEMY_POOL = [
+    ()=>({name:'Gutter Wretch', hp:22, maxHp:22, armor:0, intent:'Slash for 5', turn(s){let dmg=5; if(s.block>0) s.block-=Math.min(s.block,dmg), dmg=Math.max(0,dmg-Math.min(s.block,dmg)); s.hp-=dmg;}, attack:5}),
+    ()=>({name:'Ash Hound', hp:18, maxHp:18, armor:0, intent:'Bite for 4 x2', turn(s){for(let i=0;i<2;i++){let dmg=4; let abs=Math.min(s.block,dmg); s.block-=abs; s.hp-=dmg-abs;}} , attack:8}),
+    ()=>({name:'Grave Cultist', hp:26, maxHp:26, armor:0, intent:'Hex and strike 6', turn(s){s.weak=(s.weak||0)+1; let dmg=6; let abs=Math.min(s.block,dmg); s.block-=abs; s.hp-=dmg-abs;}, attack:6}),
+    ()=>({name:'Bone Sentinel', hp:30, maxHp:30, armor:6, intent:'Smash for 8', turn(s){let dmg=8; let abs=Math.min(s.block,dmg); s.block-=abs; s.hp-=dmg-abs;}, attack:8}),
+  ];
+
+  const ELITE_POOL = [
+    ()=>({name:'The Pallid Knight', hp:48, maxHp:48, armor:8, intent:'Cleave for 10', turn(s){let dmg=10; let abs=Math.min(s.block,dmg); s.block-=abs; s.hp-=dmg-abs;}, attack:10}),
+  ];
+  const BOSS = ()=>({name:'Thorn Crown', hp:72, maxHp:72, armor:10, intent:'Ruin for 12', turn(s){let dmg=12; let abs=Math.min(s.block,dmg); s.block-=abs; s.hp-=dmg-abs; s.vulnerable=(s.vulnerable||0)+1;}, attack:12});
+
+  const state = {
+    hp:70,maxHp:70, gold:80, floor:1, act:'Wastes',
+    strength:0, block:0, energy:3, energyMax:3,
+    drawPile:[], hand:[], discard:[], exhaust:[],
+    enemy:null, playerTurn:true, selectedCard:null, inBattle:false,
+    mapNodes:[], currentNode:0, draftChoices:[], awaitingDraft:false, awaitingMap:true,
+    statusMsg:'', shake:0, particles:[], relics:[],
+    log(msg){addLog(msg);}
+  };
+
+  function addLog(msg){
+    const div=document.createElement('div'); div.className='entry'; div.textContent=msg;
+    ui.log.prepend(div); while(ui.log.children.length>6) ui.log.removeChild(ui.log.lastChild);
+  }
+
+  function makeDeck(){
+    const deck=[];
+    for(let i=0;i<5;i++) deck.push('strike');
+    for(let i=0;i<5;i++) deck.push('guard');
+    deck.push('drain','parry');
+    return shuffle(deck).map(id=>deepCopy(CARD_POOL.find(c=>c.id===id)));
+  }
+
+  function draw(n=1){
+    for(let i=0;i<n;i++){
+      if(state.drawPile.length===0){
+        if(state.discard.length===0) return;
+        state.drawPile = shuffle(state.discard.splice(0).map(c=>c));
+      }
+      state.hand.push(state.drawPile.shift());
+    }
+    renderHand();
+  }
+
+  function startBattle(kind='normal'){
+    state.inBattle=true; state.awaitingMap=false; state.awaitingDraft=false;
+    state.selectedCard=null; state.block=0; state.energy=state.energyMax; state.hand=[]; state.discard=[]; state.drawPile=state.drawPile.length?state.drawPile:makeDeck();
+    const enemy = kind==='elite' ? pick(ELITE_POOL)() : kind==='boss' ? BOSS() : pick(ENEMY_POOL)();
+    if(kind==='boss') state.act='Catacombs';
+    state.enemy=enemy; state.playerTurn=true;
+    ui.enemyArea.classList.remove('hidden'); updateUI();
+    draw(5);
+    addLog('An enemy emerges: '+enemy.name+'.');
+    if(kind==='boss') addLog('The relic chamber breathes cold.');
+  }
+
+  function endBattle(victory=true){
+    state.inBattle=false; state.enemy=null; state.hand=[]; state.discard=[]; state.drawPile=makeDeck();
+    ui.enemyArea.classList.add('hidden');
+    if(victory){
+      const gain = randi(10,18) + state.floor*2;
+      state.gold += gain;
+      state.floor++;
+      addLog('Victory. You recover spoils: '+gain+' gold.');
+      if(state.floor % 3 === 0) showDraft();
+      else if(state.floor >= 7) showWin();
+      else chooseMap();
+    } else {
+      showGameOver();
+    }
+    updateUI(); renderHand();
+  }
+
+  function showDraft(){
+    state.awaitingDraft=true;
+    const options = [];
+    while(options.length<3){
+      const c = deepCopy(pick(CARD_POOL));
+      if(!options.find(o=>o.id===c.id)) options.push(c);
+    }
+    state.draftChoices = options;
+    ui.overlay.classList.remove('hidden');
+    ui.overlayContent.innerHTML = '<h2>Card Draft</h2><p>Choose one gift from the ruin.</p><div class="btnrow" id="draftBtns"></div>';
+    const row = ui.overlayContent.querySelector('#draftBtns');
+    options.forEach(card=>{
+      const b=document.createElement('button');
+      b.innerHTML = `${card.name}<br><span class="small">${card.type} — Cost ${card.cost}<br>${card.text}</span>`;
+      b.onclick=()=>{state.drawPile.push(card); state.awaitingDraft=false; ui.overlay.classList.add('hidden'); addLog('Drafted '+card.name+'.'); chooseMap();};
+      row.appendChild(b);
+    });
+  }
+
+  function chooseMap(){
+    state.awaitingMap=true;
+    buildMap();
+    ui.overlay.classList.add('hidden');
+    addLog('Choose your path.');
+  }
+
+  function buildMap(){
+    state.mapNodes = [];
+    const floors = 6;
+    for(let i=0;i<floors;i++){
+      const type = i===floors-1 ? 'boss' : (i===2 || i===4 ? (Math.random()<.5?'elite':'rest') : (Math.random()<.2?'rest':'normal'));
+      state.mapNodes.push({id:i, type, cleared:i<state.floor-1, current:i===state.floor-1});
+    }
+    renderMap();
+  }
+
+  function renderMap(){
+    ui.map.innerHTML='';
+    state.mapNodes.forEach(n=>{
+      const d=document.createElement('div');
+      d.className='node '+n.type+(n.cleared?' cleared':'')+(n.current?' current':'');
+      d.title=n.type;
+      d.onclick=()=>{
+        if(!state.awaitingMap || state.inBattle) return;
+        if(!n.current && !n.cleared && n.id===state.floor-1) return;
+        if(n.current && !n.cleared){
+          state.awaitingMap=false;
+          if(n.type==='normal') startBattle('normal');
+          else if(n.type==='elite') startBattle('elite');
+          else if(n.type==='rest') openRest();
+          else startBattle('boss');
+        }
+      };
+      ui.map.appendChild(d);
+    });
+  }
+
+  function openRest(){
+    ui.overlay.classList.remove('hidden');
+    ui.overlayContent.innerHTML = `
+      <h2>Hollow Fire</h2>
+      <p>Rest among the ashes or fortify your soul.</p>
+      <div class="btnrow">
+        <button id="restHeal">Rest: Heal 20</button>
+        <button id="restSmith">Smith: +2 Max HP</button>
+      </div>
+    `;
+    ui.overlayContent.querySelector('#restHeal').onclick=()=>{state.hp=Math.min(state.maxHp,state.hp+20); closeRest(); addLog('You rest and heal 20.');};
+    ui.overlayContent.querySelector('#restSmith').onclick=()=>{state.maxHp+=2; state.hp+=2; closeRest(); addLog('You harden your bloodline.');};
+  }
+  function closeRest(){ui.overlay.classList.add('hidden'); chooseMap();}
+
+  function showGameOver(){
+    ui.overlay.classList.remove('hidden');
+    ui.overlayContent.innerHTML = `<h2>Defeated</h2><p>The dark consumes the reliquary. Your tale ends in frost and iron.</p><div class="btnrow"><button id="retry">Begin Again</button></div>`;
+    ui.overlayContent.querySelector('#retry').onclick=restart;
+  }
+  function showWin(){
+    ui.overlay.classList.remove('hidden');
+    ui.overlayContent.innerHTML = `<h2>Relic Claimed</h2><p>You seize the black reliquary. The dusk recoils. For now.</p><div class="btnrow"><button id="retry">Play Again</button></div>`;
+    ui.overlayContent.querySelector('#retry').onclick=restart;
+  }
+
+  function restart(){
+    state.hp=70; state.maxHp=70; state.gold=80; state.floor=1; state.strength=0; state.block=0; state.energy=3; state.energyMax=3;
+    state.drawPile=makeDeck(); state.discard=[]; state.hand=[]; state.inBattle=false; state.enemy=null; state.relics=[];
+    ui.overlay.classList.add('hidden'); ui.enemyArea.classList.add('hidden');
+    ui.log.innerHTML=''; addLog('A dusk wind crawls over broken altars.'); addLog('Draft cards after battles. Every path is a wound.');
+    chooseMap();
+    updateUI(); renderHand();
+  }
+
+  function playCard(index){
+    const card = state.hand[index];
+    if(!state.inBattle || !state.playerTurn || !card || card.cost>state.energy) return;
+    state.energy -= card.cost;
+    const target = state.enemy;
+    card.play(state, target);
+    state.discard.push(card);
+    state.hand.splice(index,1);
+    if(target.hp<=0){ target.hp=0; updateUI(); renderHand(); setTimeout(()=>endBattle(true), 450); return; }
+    if(state.energy<=0 || state.hand.length===0){
+      endPlayerTurn();
+    }
+    updateUI(); renderHand();
+  }
+
+  function endPlayerTurn(){
+    state.playerTurn=false;
+    if(state.enemy){
+      let e=state.enemy;
+      let armor = e.armor||0;
+      if(armor>0){
+        const use = Math.min(armor, Math.max(1, randi(2,4)));
+        e.armor = Math.max(0, armor-use);
+        addLog(e.name+' loses '+use+' armor.');
+      }
+      setTimeout(()=>{
+        let dmg = e.attack||0;
+        if(state.enemy.name==='Grave Cultist') state.block += 0;
+        if(state.vulnerable>0){ dmg = Math.ceil(dmg*1.25); state.vulnerable = Math.max(0,(state.vulnerable||0)-1); }
+        if(state.weak>0){ dmg = Math.floor(dmg*0.75); state.weak = Math.max(0,(state.weak||0)-1); }
+        let abs = Math.min(state.block,dmg);
+        state.block -= abs;
+        state.hp -= (dmg-abs);
+        addLog(e.name+' attacks for '+(dmg-abs)+'.');
+        if(state.hp<=0){ state.hp=0; updateUI(); showGameOver(); return; }
+        state.playerTurn=true; state.energy=state.energyMax; draw(5);
+        updateUI(); renderHand();
+        if(state.enemy){
+          state.enemy.intent = state.enemy.name.includes('Hound') ? 'Bite again' : state.enemy.intent;
+          if(state.floor%3===0 && state.enemy.hp<state.enemy.maxHp/2 && state.enemy.name!=='Thorn Crown') state.enemy.intent='Desperation';
+        }
+      }, 500);
+    }
+  }
+
+  function renderHand(){
+    ui.hand.innerHTML='';
+    state.hand.forEach((c,i)=>{
+      const div=document.createElement('div');
+      div.className='card'+(c.cost>state.energy||!state.playerTurn?' disabled':'');
+      div.innerHTML = `<div class="cost">${c.cost}</div><div class="type">${c.type}</div><div class="name">${c.name}</div><div class="art"></div><div class="text">${c.text}</div><div class="tag">${state.playerTurn?'Playable':'Enemy Turn'}</div>`;
+      div.onclick=()=>playCard(i);
+      ui.hand.appendChild(div);
+    });
+  }
+
+  function updateUI(){
+    ui.hpTxt.textContent = `${state.hp}/${state.maxHp}`;
+    ui.goldTxt.textContent = state.gold;
+    ui.floorTxt.textContent = state.floor;
+    ui.deckTxt.textContent = state.drawPile.length;
+    ui.discardTxt.textContent = state.discard.length;
+    ui.drawTxt.textContent = state.hand.length;
+    ui.hpFill.style.width = `${clamp((state.hp/state.maxHp)*100,0,100)}%`;
+    ui.blockFill.style.width = `${clamp((state.block/30)*100,0,100)}%`;
+    ui.energyFill.style.width = `${clamp((state.energy/state.energyMax)*100,0,100)}%`;
+    ui.actTxt.textContent = state.act;
+    if(state.enemy){
+      ui.enemyName.textContent = state.enemy.name;
+      ui.enemyHP.textContent = state.enemy.hp;
+      ui.enemyMaxHP.textContent = state.enemy.maxHp;
+      ui.enemyIntent.textContent = state.enemy.intent;
+      ui.enemyArmor.textContent = 'Armor: '+(state.enemy.armor||0);
+      ui.enemyStatus.textContent = (state.enemy.vulnerable?'Vuln '+state.enemy.vulnerable:'') + ((state.enemy.weak?' Weak '+state.enemy.weak:'') || 'None');
+    }
+    renderMap();
+  }
+
+  function drawBackground(t){
+    ctx.clearRect(0,0,W,H);
+    const g=ctx.createRadialGradient(W*.5,H*.45,80*dpr,W*.5,H*.45,Math.max(W,H)*.7);
+    g.addColorStop(0,'rgba(20,24,38,1)');
+    g.addColorStop(1,'rgba(4,4,6,1)');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    for(let i=0;i<90;i++){
+      const x=(i*97+t*0.02)%W, y=(Math.sin(i*12.7+t*0.001+i)*0.5+0.5)*H;
+      ctx.fillStyle=`rgba(220,210,190,${0.04+((i%7)/300)})`;
+      ctx.fillRect(x,y,1.5*dpr,1.5*dpr);
+    }
+    ctx.save();
+    ctx.globalAlpha=.2;
+    ctx.strokeStyle='rgba(142,92,254,.35)';
+    for(let i=0;i<8;i++){
+      ctx.beginPath();
+      ctx.moveTo(0,H*.25+i*24*dpr);
+      ctx.quadraticCurveTo(W*.5,H*.18+i*20*dpr,W,H*.28+i*24*dpr);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  let last=0;
+  function loop(ts){
+    const t=ts||0; drawBackground(t);
+    updateUI();
+    requestAnimationFrame(loop);
+  }
+
+  state.drawPile = makeDeck();
+  chooseMap();
+  updateUI();
+  renderHand();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

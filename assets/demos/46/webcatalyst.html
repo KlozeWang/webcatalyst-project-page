@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>FIFA Card Duel</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { 
+  background: #0a0a1a; 
+  font-family: 'Segoe UI', system-ui, sans-serif; 
+  overflow: hidden; 
+  touch-action: none;
+  user-select: none;
+  color: #fff;
+}
+#game-container {
+  width: 100vw; height: 100vh;
+  max-width: 480px; margin: 0 auto;
+  position: relative; overflow: hidden;
+  background: linear-gradient(180deg, #0d1b2a 0%, #1b2838 50%, #0d1b2a 100%);
+}
+.screen { display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+.screen.active { display: flex; flex-direction: column; }
+
+/* Main Menu */
+#menu-screen { justify-content: center; align-items: center; background: linear-gradient(135deg, #0d1b2a, #1a1a2e, #16213e); }
+.logo { font-size: 2.5em; font-weight: 900; background: linear-gradient(135deg, #ffd700, #ff6b35); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: none; margin-bottom: 5px; letter-spacing: 2px; }
+.logo-sub { font-size: 0.9em; color: #8899aa; margin-bottom: 40px; letter-spacing: 4px; }
+.menu-btn {
+  width: 260px; padding: 14px; margin: 8px;
+  background: linear-gradient(135deg, #1e3a5f, #2a4a7f);
+  border: 1px solid #3a5a8f; border-radius: 12px;
+  color: #fff; font-size: 1.1em; font-weight: 600;
+  cursor: pointer; transition: all 0.3s; text-align: center;
+}
+.menu-btn:hover { background: linear-gradient(135deg, #2a4a7f, #3a6abf); transform: scale(1.05); }
+.menu-btn.primary { background: linear-gradient(135deg, #ffd700, #ff6b35); color: #000; border: none; }
+.menu-btn.secondary { background: linear-gradient(135deg, #2d5a2d, #4a8a4a); }
+
+/* Stats Bar */
+.stats-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 15px; background: rgba(0,0,0,0.6);
+  border-bottom: 1px solid #2a3a4a; z-index: 10;
+}
+.stat-item { display: flex; align-items: center; gap: 5px; font-size: 0.85em; }
+.stat-icon { font-size: 1.2em; }
+.energy-bar { width: 80px; height: 8px; background: #1a2a3a; border-radius: 4px; overflow: hidden; }
+.energy-fill { height: 100%; background: linear-gradient(90deg, #ffd700, #ff6b35); border-radius: 4px; transition: width 0.3s; }
+
+/* Field */
+.field-container {
+  flex: 1; display: flex; flex-direction: column;
+  padding: 10px; position: relative;
+}
+.field {
+  flex: 1; display: flex; flex-direction: column;
+  background: linear-gradient(180deg, #1a4a1a, #2a6a2a, #1a4a1a);
+  border-radius: 12px; border: 2px solid #3a7a3a;
+  position: relative; overflow: hidden;
+}
+.field-zone {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  position: relative; cursor: pointer; transition: all 0.2s;
+}
+.field-zone:last-child { border-bottom: none; }
+.field-zone:hover { background: rgba(255,255,255,0.05); }
+.field-zone.highlight { background: rgba(255,215,0,0.2); border: 2px solid #ffd700; }
+.field-zone.attack-target { background: rgba(255,0,0,0.2); border: 2px solid #ff4444; }
+.zone-label {
+  position: absolute; top: 5px; left: 8px;
+  font-size: 0.65em; color: rgba(255,255,255,0.5); text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.zone-card {
+  width: 60px; height: 80px; border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 0.7em; font-weight: 700; position: relative;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+  transition: transform 0.2s;
+}
+.zone-card.player-card { background: linear-gradient(135deg, #2a4a7f, #1a3a6f); border: 2px solid #4a6aaf; }
+.zone-card.gold { background: linear-gradient(135deg, #ffd700, #ffaa00); color: #000; border: 2px solid #ffd700; }
+.zone-card.silver { background: linear-gradient(135deg, #c0c0c0, #a0a0a0); color: #000; border: 2px solid #c0c0c0; }
+.zone-card.bronze { background: linear-gradient(135deg, #cd7f32, #a06020); color: #fff; border: 2px solid #cd7f32; }
+.zone-card.special { background: linear-gradient(135deg, #ff00ff, #8800ff); border: 2px solid #ff00ff; }
+.zone-card .card-rating { font-size: 1.4em; font-weight: 900; }
+.zone-card .card-name { font-size: 0.7em; margin-top: 2px; text-align: center; }
+.zone-card .card-pos { position: absolute; top: 3px; right: 5px; font-size: 0.6em; opacity: 0.7; }
+.zone-card .stars { color: #ffd700; font-size: 0.6em; }
+
+/* Team labels */
+.team-label {
+  text-align: center; padding: 5px; font-size: 0.8em;
+  font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+}
+.team-label.opponent { color: #ff6b6b; }
+.team-label.player { color: #6bffb8; }
+
+/* Hand */
+.hand-container {
+  padding: 10px; background: rgba(0,0,0,0.8);
+  border-top: 1px solid #2a3a4a;
+}
+.hand-label { font-size: 0.7em; color: #8899aa; margin-bottom: 5px; text-align: center; }
+.hand {
+  display: flex; gap: 8px; overflow-x: auto;
+  padding: 5px; scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.hand::-webkit-scrollbar { display: none; }
+.hand-card {
+  min-width: 70px; height: 95px; border-radius: 10px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s; scroll-snap-align: center;
+  position: relative; flex-shrink: 0;
+}
+.hand-card:hover { transform: translateY(-10px); }
+.hand-card.selected { transform: translateY(-15px); box-shadow: 0 0 20px rgba(255,215,0,0.5); }
+.hand-card .card-rating { font-size: 1.3em; font-weight: 900; }
+.hand-card .card-name { font-size: 0.6em; margin-top: 2px; text-align: center; max-width: 65px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hand-card .card-pos { position: absolute; top: 3px; right: 5px; font-size: 0.55em; opacity: 0.7; }
+.hand-card .stars { color: #ffd700; font-size: 0.55em; }
+.hand-card .card-stats { display: flex; gap: 3px; margin-top: 3px; }
+.hand-card .stat { font-size: 0.5em; background: rgba(0,0,0,0.3); padding: 1px 3px; border-radius: 3px; }
+
+/* Card Detail Modal */
+.modal-overlay {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.8); z-index: 100;
+  justify-content: center; align-items: center;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: linear-gradient(135deg, #1a2a3a, #2a3a4a);
+  border-radius: 16px; padding: 20px; max-width: 320px; width: 90%;
+  border: 1px solid #3a5a7a; position: relative;
+}
+.modal-close {
+  position: absolute; top: 10px; right: 15px;
+  font-size: 1.5em; cursor: pointer; color: #8899aa;
+}
+.modal-card {
+  width: 120px; height: 160px; margin: 0 auto 15px;
+  border-radius: 12px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  font-weight: 900; font-size: 2em;
+}
+.modal-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 15px 0; }
+.modal-stat {
+  background: rgba(0,0,0,0.3); padding: 8px; border-radius: 8px;
+  text-align: center;
+}
+.modal-stat .stat-label { font-size: 0.7em; color: #8899aa; }
+.modal-stat .stat-value { font-size: 1.2em; font-weight: 700; color: #ffd700; }
+
+/* Turn Indicator */
+.turn-indicator {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.9); padding: 15px 30px; border-radius: 12px;
+  border: 2px solid #ffd700; z-index: 50; text-align: center;
+  display: none;
+}
+.turn-indicator.active { display: block; animation: fadeInOut 2s forwards; }
+@keyframes fadeInOut { 0% { opacity: 0; } 20% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+.turn-text { font-size: 1.5em; font-weight: 900; color: #ffd700; }
+.turn-sub { font-size: 0.8em; color: #8899aa; margin-top: 5px; }
+
+/* Combat Animation */
+.combat-flash {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(255,255,255,0.3); z-index: 60;
+  display: none; pointer-events: none;
+}
+.combat-flash.active { display: block; animation: flash 0.5s forwards; }
+@keyframes flash { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+.score-popup {
+  position: absolute; font-size: 2em; font-weight: 900;
+  z-index: 70; pointer-events: none; animation: scoreFloat 1.5s forwards;
+}
+@keyframes scoreFloat { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-50px); } }
+
+/* Deck Screen */
+.deck-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  padding: 10px; overflow-y: auto; flex: 1;
+}
+.deck-card {
+  aspect-ratio: 3/4; border-radius: 8px; display: flex;
+  flex-direction: column; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s; position: relative;
+  font-size: 0.7em;
+}
+.deck-card:hover { transform: scale(1.05); }
+.deck-card.selected { border: 2px solid #ffd700; box-shadow: 0 0 15px rgba(255,215,0,0.3); }
+.deck-card .remove-btn {
+  position: absolute; top: -5px; right: -5px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #ff4444; color: #fff; font-size: 0.8em;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+
+/* Draft Screen */
+.draft-cards { display: flex; gap: 10px; justify-content: center; padding: 20px; flex: 1; align-items: center; }
+.draft-card {
+  width: 120px; height: 160px; border-radius: 12px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.3s; border: 2px solid transparent;
+}
+.draft-card:hover { transform: scale(1.1); border-color: #ffd700; }
+
+/* Timer */
+.timer {
+  position: absolute; top: 10px; right: 10px;
+  background: rgba(0,0,0,0.7); padding: 5px 12px;
+  border-radius: 20px; font-size: 0.9em; font-weight: 700;
+  z-index: 20;
+}
+.timer.warning { color: #ff4444; animation: pulse 1s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* Score Display */
+.score-display {
+  display: flex; justify-content: center; align-items: center;
+  gap: 20px; padding: 10px; font-size: 1.5em; font-weight: 900;
+}
+.score-display .score { color: #ffd700; }
+.score-display .vs { color: #8899aa; font-size: 0.7em; }
+
+/* Navigation */
+.nav-bar {
+  display: flex; justify-content: space-around; padding: 10px;
+  background: rgba(0,0,0,0.8); border-top: 1px solid #2a3a4a;
+}
+.nav-item {
+  display: flex; flex-direction: column; align-items: center;
+  cursor: pointer; color: #8899aa; font-size: 0.7em; transition: color 0.2s;
+}
+.nav-item.active { color: #ffd700; }
+.nav-item .nav-icon { font-size: 1.5em; margin-bottom: 2px; }
+
+/* Battle Log */
+.battle-log {
+  position: absolute; bottom: 120px; left: 10px; right: 10px;
+  max-height: 100px; overflow-y: auto; background: rgba(0,0,0,0.7);
+  border-radius: 8px; padding: 8px; font-size: 0.7em;
+  z-index: 15;
+}
+.log-entry { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.log-entry.goal { color: #ffd700; font-weight: 700; }
+.log-entry.attack { color: #ff6b6b; }
+.log-entry.defend { color: #6bffb8; }
+
+/* Settings */
+.settings-panel { padding: 20px; overflow-y: auto; flex: 1; }
+.setting-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 0; border-bottom: 1px solid #2a3a4a;
+}
+.setting-label { font-size: 0.9em; }
+.toggle {
+  width: 50px; height: 26px; background: #3a4a5a; border-radius: 13px;
+  position: relative; cursor: pointer; transition: background 0.3s;
+}
+.toggle.active { background: #4a8a4a; }
+.toggle::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 20px; height: 20px; background: #fff; border-radius: 50%;
+  transition: left 0.3s;
+}
+.toggle.active::after { left: 27px; }
+
+/* Loading */
+.loading {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  flex: 1;
+}
+.spinner {
+  width: 50px; height: 50px; border: 3px solid #2a3a4a;
+  border-top: 3px solid #ffd700; border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+
+/* Result Screen */
+.result-screen { justify-content: center; align-items: center; text-align: center; }
+.result-title { font-size: 2.5em; font-weight: 900; margin-bottom: 10px; }
+.result-title.win { color: #ffd700; }
+.result-title.lose { color: #ff4444; }
+.result-title.draw { color: #8899aa; }
+.result-stats { margin: 20px 0; }
+.result-stat { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #2a3a4a; }
+
+/* Chemistry indicator */
+.chemistry-badge {
+  position: absolute; top: -5px; left: -5px;
+  background: #4a8a4a; color: #fff; font-size: 0.5em;
+  padding: 2px 5px; border-radius: 10px; font-weight: 700;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #3a5a7a; border-radius: 2px; }
+
+/* Animations */
+.card-enter { animation: cardEnter 0.3s ease-out; }
+@keyframes cardEnter { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+.shake { animation: shake 0.5s; }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+
+.glow { animation: glow 1s infinite alternate; }
+@keyframes glow { from { box-shadow: 0 0 5px #ffd700; } to { box-shadow: 0 0 20px #ffd700; } }
+
+/* Rank badges */
+.rank-badge {
+  display: inline-block; padding: 3px 8px; border-radius: 12px;
+  font-size: 0.7em; font-weight: 700;
+}
+.rank-bronze { background: #cd7f32; color: #fff; }
+.rank-silver { background: #c0c0c0; color: #000; }
+.rank-gold { background: #ffd700; color: #000; }
+.rank-special { background: linear-gradient(135deg, #ff00ff, #8800ff); color: #fff; }
+
+/* Energy popup */
+.energy-popup {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.95); padding: 30px; border-radius: 16px;
+  border: 2px solid #ffd700; text-align: center; z-index: 200;
+  display: none;
+}
+.energy-popup.active { display: block; }
+.energy-popup h3 { color: #ffd700; margin-bottom: 10px; }
+.energy-popup p { color: #8899aa; margin-bottom: 20px; font-size: 0.9em; }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <!-- Main Menu -->
+  <div id="menu-screen" class="screen active">
+    <div class="logo">FIFA CARD DUEL</div>
+    <div class="logo-sub">TURN-BASED STRATEGY</div>
+    <button class="menu-btn primary" onclick="Game.startQuickMatch()">⚡ Quick Match</button>
+    <button class="menu-btn secondary" onclick="Game.startRanked()">🏆 Ranked</button>
+    <button class="menu-btn" onclick="Game.startDraft()">🎴 Draft Mode</button>
+    <button class="menu-btn" onclick="Game.showDeck()">📚 My Deck</button>
+    <button class="menu-btn" onclick="Game.showCollection()">🃏 Collection</button>
+    <button class="menu-btn" onclick="Game.showSettings()">⚙️ Settings</button>
+    <div style="margin-top: 20px; font-size: 0.7em; color: #556677;">v1.0 | Energy: <span id="menu-energy">10</span>/10</div>
+  </div>
+
+  <!-- Game Screen -->
+  <div id="game-screen" class="screen">
+    <div class="stats-bar">
+      <div class="stat-item"><span class="stat-icon">⚡</span><span id="game-energy">10</span></div>
+      <div class="stat-item"><span class="stat-icon">🏆</span><span id="game-rank">Bronze III</span></div>
+      <div class="stat-item"><span class="stat-icon">📊</span><span id="game-wins">0</span>W <span id="game-losses">0</span>L</div>
+    </div>
+    <div class="score-display">
+      <span class="score" id="player-score">0</span>
+      <span class="vs">VS</span>
+      <span class="score" id="opponent-score">0</span>
+    </div>
+    <div class="timer" id="turn-timer">90</div>
+    <div class="field-container">
+      <div class="team-label opponent">🔴 OPPONENT</div>
+      <div class="field" id="opponent-field">
+        <div class="field-zone" data-zone="4" data-side="opponent" onclick="Game.onZoneClick(4, 'opponent')">
+          <span class="zone-label">GK</span>
+        </div>
+        <div class="field-zone" data-zone="3" data-side="opponent" onclick="Game.onZoneClick(3, 'opponent')">
+          <span class="zone-label">DEF</span>
+        </div>
+        <div class="field-zone" data-zone="2" data-side="opponent" onclick="Game.onZoneClick(2, 'opponent')">
+          <span class="zone-label">MID</span>
+        </div>
+        <div class="field-zone" data-zone="1" data-side="opponent" onclick="Game.onZoneClick(1, 'opponent')">
+          <span class="zone-label">ATT</span>
+        </div>
+        <div class="field-zone" data-zone="0" data-side="opponent" onclick="Game.onZoneClick(0, 'opponent')">
+          <span class="zone-label">ATT</span>
+        </div>
+      </div>
+      <div class="team-label player">🟢 YOUR TEAM</div>
+      <div class="field" id="player-field">
+        <div class="field-zone" data-zone="4" data-side="player" onclick="Game.onZoneClick(4, 'player')">
+          <span class="zone-label">GK</span>
+        </div>
+        <div class="field-zone" data-zone="3" data-side="player" onclick="Game.onZoneClick(3, 'player')">
+          <span class="zone-label">DEF</span>
+        </div>
+        <div class="field-zone" data-zone="2" data-side="player" onclick="Game.onZoneClick(2, 'player')">
+          <span class="zone-label">MID</span>
+        </div>
+        <div class="field-zone" data-zone="1" data-side="player" onclick="Game.onZoneClick(1, 'player')">
+          <span class="zone-label">ATT</span>
+        </div>
+        <div class="field-zone" data-zone="0" data-side="player" onclick="Game.onZoneClick(0, 'player')">
+          <span class="zone-label">ATT</span>
+        </div>
+      </div>
+    </div>
+    <div class="battle-log" id="battle-log"></div>
+    <div class="hand-container">
+      <div class="hand-label">YOUR HAND - Tap to select, tap field to place</div>
+      <div class="hand" id="player-hand"></div>
+    </div>
+    <div class="turn-indicator" id="turn-indicator">
+      <div class="turn-text" id="turn-text">YOUR TURN</div>
+      <div class="turn-sub" id="turn-sub">Place your cards</div>
+    </div>
+    <div class="combat-flash" id="combat-flash"></div>
+  </div>
+
+  <!-- Deck Screen -->
+  <div id="deck-screen" class="screen">
+    <div class="stats-bar">
+      <div class="stat-item"><span class="stat-icon">📚</span>Deck Builder</div>
+      <div class="stat-item"><span id="deck-count">0</span>/40 cards</div>
+      <div class="stat-item" style="cursor:pointer" onclick="Game.showMenu()">✕</div>
+    </div>
+    <div style="padding: 10px; text-align: center;">
+      <button class="menu-btn" style="width: 200px; margin: 5px;" onclick="Game.autoBuildDeck()">🤖 Auto Build</button>
+      <button class="menu-btn" style="width: 200px; margin: 5px;" onclick="Game.saveDeck()">💾 Save Deck</button>
+    </div>
+    <div class="deck-grid" id="deck-grid"></div>
+  </div>
+
+  <!-- Collection Screen -->
+  <div id="collection-screen" class="screen">
+    <div class="stats-bar">
+      <div class="stat-item"><span class="stat-icon">🃏</span>Collection</div>
+      <div class="stat-item"><span id="collection-count">0</span> cards</div>
+      <div class="stat-item" style="cursor:pointer" onclick="Game.showMenu()">✕</div>
+    </div>
+    <div style="padding: 10px; display: flex; gap: 5px; justify-content: center; flex-wrap: wrap;">
+      <button class="menu-btn" style="width: auto; padding: 5px 15px; font-size: 0.8em;" onclick="Game.filterCollection('all')">All</button>
+      <button class="menu-btn" style="width: auto; padding: 5px 15px; font-size: 0.8em;" onclick="Game.filterCollection('player')">Players</button>
+      <button class="menu-btn" style="width: auto; padding: 5px 15px; font-size: 0.8em;" onclick="Game.filterCollection('tactics')">Tactics</button>
+      <button class="menu-btn" style="width: auto; padding: 5px 15px; font-size: 0.8em;" onclick="Game.filterCollection('reaction')">Reactions</button>
+    </div>
+    <div class="deck-grid" id="collection-grid"></div>
+  </div>
+
+  <!-- Draft Screen -->
+  <div id="draft-screen" class="screen">
+    <div class="stats-bar">
+      <div class="stat-item"><span class="stat-icon">🎴</span>Draft Mode</div>
+      <div class="stat-item">Round <span id="draft-round">1</span>/5</div>
+      <div class="stat-item">Wins: <span id="draft-wins">0</span></div>
+    </div>
+    <div style="padding: 10px; text-align: center;">
+      <p style="color: #8899aa; font-size: 0.8em;">Choose 1 card to add to your draft deck</p>
+    </div>
+    <div class="draft-cards" id="draft-cards"></div>
+    <div style="padding: 10px; text-align: center;">
+      <button class="menu-btn" style="width: 200px;" onclick="Game.endDraft()">✅ Finish Draft</button>
+    </div>
+  </div>
+
+  <!-- Result Screen -->
+  <div id="result-screen" class="screen result-screen">
+    <div class="result-title" id="result-title">VICTORY!</div>
+    <div class="result-stats" id="result-stats"></div>
+    <button class="menu-btn primary" style="margin-top: 20px;" onclick="Game.showMenu()">🏠 Main Menu</button>
+    <button class="menu-btn" style="margin-top: 10px;" onclick="Game.playAgain()">🔄 Play Again</button>
+  </div>
+
+  <!-- Settings Screen -->
+  <div id="settings-screen" class="screen">
+    <div class="stats-bar">
+      <div class="stat-item"><span class="stat-icon">⚙️</span>Settings</div>
+      <div class="stat-item" style="cursor:pointer" onclick="Game.showMenu()">✕</div>
+    </div>
+    <div class="settings-panel">
+      <div class="setting-row">
+        <span class="setting-label">Sound Effects</span>
+        <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Music</span>
+        <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Animations</span>
+        <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Vibration</span>
+        <div class="toggle" onclick="this.classList.toggle('active')"></div>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Clear Local Data</span>
+        <button class="menu-btn" style="width: auto; padding: 5px 15px; font-size: 0.8em;" onclick="Game.clearData()">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Energy Popup -->
+  <div class="energy-popup" id="energy-popup">
+    <h3>⚡ No Energy!</h3>
+    <p>You need energy to play matches. Wait for it to regenerate or watch an ad.</p>
+    <button class="menu-btn primary" style="width: 200px;" onclick="Game.closeEnergyPopup()">Wait (10 min)</button>
+    <button class="menu-btn" style="width: 200px; margin-top: 10px;" onclick="Game.closeEnergyPopup()">Cancel</button>
+  </div>
+
+  <!-- Card Detail Modal -->
+  <div class="modal-overlay" id="card-modal">
+    <div class="modal">
+      <span class="modal-close" onclick="Game.closeModal()">✕</span>
+      <div class="modal-card" id="modal-card"></div>
+      <h3 style="text-align: center; margin-bottom: 5px;" id="modal-name"></h3>
+      <p style="text-align: center; color: #8899aa; font-size: 0.8em;" id="modal-type"></p>
+      <div class="modal-stats" id="modal-stats"></div>
+      <div style="text-align: center; margin-top: 10px;">
+        <span id="modal-chemistry" style="color: #4a8a4a; font-size: 0.8em;"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== CARD DATABASE ====================
+const CARD_DATABASE = [
+  // Players - Gold
+  {id:1,name:"Messi",pos:"FWD",rating:94,pace:85,shooting:93,passing:91,dribbling:95,defending:38,physical:65,club:"PSG",nation:"Argentina",rarity:"Gold",stars:5,type:"player"},
+  {id:2,name:"Ronaldo",pos:"FWD",rating:93,pace:80,shooting:95,passing:82,dribbling:88,defending:35,physical:78,club:"Al Nassr",nation:"Portugal",rarity:"Gold",stars:5,type:"player"},
+  {id:3,name:"Mbappé",pos:"FWD",rating:93,pace:97,shooting:89,passing:80,dribbling:92,defending:36,physical:77,club:"PSG",nation:"France",rarity:"Gold",stars:5,type:"player"},
+  {id:4,name:"Haaland",pos:"FWD",rating:91,pace:89,shooting:93,passing:65,dribbling:80,defending:45,physical:88,club:"Man City",nation:"Norway",rarity:"Gold",stars:5,type:"player"},
+  {id:5,name:"De Bruyne",pos:"MID",rating:91,pace:76,shooting:86,passing:94,dribbling:88,defending:64,physical:78,club:"Man City",nation:"Belgium",rarity:"Gold",stars:5,type:"player"},
+  {id:6,name:"Modric",pos:"MID",rating:89,pace:72,shooting:76,passing:92,dribbling:89,defending:72,physical:68,club:"Real Madrid",nation:"Croatia",rarity:"Gold",stars:4,type:"player"},
+  {id:7,name:"Van Dijk",pos:"DEF",rating:90,pace:74,shooting:45,passing:70,dribbling:72,defending:92,physical:85,club:"Liverpool",nation:"Netherlands",rarity:"Gold",stars:5,type:"player"},
+  {id:8,name:"Salah",pos:"FWD",rating:89,pace:90,shooting:88,passing:81,dribbling:87,defending:45,physical:78,club:"Liverpool",nation:"Egypt",rarity:"Gold",stars:4,type:"player"},
+  {id:9,name:"Benzema",pos:"FWD",rating:89,pace:78,shooting:90,passing:85,dribbling:86,defending:38,physical:76,club:"Al Ittihad",nation:"France",rarity:"Gold",stars:4,type:"player"},
+  {id:10,name:"Neymar",pos:"FWD",rating:89,pace:85,shooting:85,passing:90,dribbling:94,defending:40,physical:66,club:"Al Hilal",nation:"Brazil",rarity:"Gold",stars:4,type:"player"},
+  {id:11,name:"Kanté",pos:"MID",rating:88,pace:74,shooting:65,passing:82,dribbling:80,defending:88,physical:82,club:"Al Ittihad",nation:"France",rarity:"Gold",stars:4,type:"player"},
+  {id:12,name:"Alisson",pos:"GK",rating:90,pace:55,shooting:40,passing:65,dribbling:55,defending:85,physical:78,club:"Liverpool",nation:"Brazil",rarity:"Gold",stars:5,type:"player"},
+  {id:13,name:"Courtois",pos:"GK",rating:91,pace:50,shooting:35,passing:60,dribbling:50,defending:88,physical:85,club:"Real Madrid",nation:"Belgium",rarity:"Gold",stars:5,type:"player"},
+  {id:14,name:"Silva",pos:"MID",rating:87,pace:70,shooting:78,passing:90,dribbling:88,defending:65,physical:62,club:"Man City",nation:"Spain",rarity:"Gold",stars:4,type:"player"},
+  {id:15,name:"Kane",pos:"FWD",rating:90,pace:72,shooting:92,passing:86,dribbling:82,defending:55,physical:82,club:"Bayern",nation:"England",rarity:"Gold",stars:5,type:"player"},
+  // Players - Silver
+  {id:16,name:"Pedri",pos:"MID",rating:84,pace:72,shooting:74,passing:86,dribbling:85,defending:62,physical:60,club:"Barcelona",nation:"Spain",rarity:"Silver",stars:3,type:"player"},
+  {id:17,name:"Gavi",pos:"MID",rating:83,pace:74,shooting:70,passing:82,dribbling:83,defending:68,physical:62,club:"Barcelona",nation:"Spain",rarity:"Silver",stars:3,type:"player"},
+  {id:18,name:"Vinicius Jr",pos:"FWD",rating:87,pace:94,shooting:82,passing:76,dribbling:90,defending:35,physical:68,club:"Real Madrid",nation:"Brazil",rarity:"Silver",stars:4,type:"player"},
+  {id:19,name:"Bellingham",pos:"MID",rating:86,pace:76,shooting:80,passing:82,dribbling:84,defending:70,physical:78,club:"Real Madrid",nation:"England",rarity:"Silver",stars:4,type:"player"},
+  {id:20,name:"Foden",pos:"MID",rating:85,pace:80,shooting:82,passing:84,dribbling:86,defending:58,physical:65,club:"Man City",nation:"England",rarity:"Silver",stars:3,type:"player"},
+  {id:21,name:"Rice",pos:"MID",rating:84,pace:68,shooting:72,passing:80,dribbling:76,defending:84,physical:80,club:"Arsenal",nation:"England",rarity:"Silver",stars:3,type:"player"},
+  {id:22,name:"Havertz",pos:"FWD",rating:83,pace:76,shooting:78,passing:78,dribbling:80,defending:55,physical:76,club:"Arsenal",nation:"Germany",rarity:"Silver",stars:3,type:"player"},
+  {id:23,name:"Palmer",pos:"MID",rating:82,pace:72,shooting:80,passing:82,dribbling:82,defending:52,physical:68,club:"Chelsea",nation:"England",rarity:"Silver",stars:3,type:"player"},
+  {id:24,name:"Saka",pos:"FWD",rating:85,pace:86,shooting:82,passing:80,dribbling:86,defending:50,physical:72,club:"Arsenal",nation:"England",rarity:"Silver",stars:4,type:"player"},
+  {id:25,name:"Watkins",pos:"FWD",rating:82,pace:84,shooting:80,passing:72,dribbling:78,defending:48,physical:76,club:"Aston Villa",nation:"England",rarity:"Silver",stars:3,type:"player"},
+  // Players - Bronze
+  {id:26,name:"Isak",pos:"FWD",rating:80,pace:84,shooting:78,passing:68,dribbling:76,defending:42,physical:78,club:"Newcastle",nation:"Sweden",rarity:"Bronze",stars:2,type:"player"},
+  {id:27,name:"Solanke",pos:"FWD",rating:78,pace:80,shooting:76,passing:66,dribbling:72,defending:40,physical:76,club:"Bournemouth",nation:"England",rarity:"Bronze",stars:2,type:"player"},
+  {id:28,name:"Eze",pos:"MID",rating:79,pace:76,shooting:74,passing:78,dribbling:80,defending:52,physical:66,club:"Crystal Palace",nation:"England",rarity:"Bronze",stars:2,type:"player"},
+  {id:29,name:"Madson",pos:"MID",rating:77,pace:78,shooting:72,passing:74,dribbling:76,defending:50,physical:70,club:"Fulham",nation:"Brazil",rarity:"Bronze",stars:2,type:"player"},
+  {id:30,name:"Ainsley",pos:"MID",rating:76,pace:82,shooting:68,passing:72,dribbling:78,defending:48,physical:64,club:"Newcastle",nation:"England",rarity:"Bronze",stars:2,type:"player"},
+  // Tactics
+  {id:31,name:"4-3-3 Attack",pos:"TAC",rating:82,pace:0,shooting:0,passing:85,dribbling:0,defending:70,physical:0,club:"Tactics",nation:"Universal",rarity:"Gold",stars:4,type:"tactics",effect:"attack"},
+  {id:32,name:"4-4-2 Classic",pos:"TAC",rating:80,pace:0,shooting:0,passing:78,dribbling:0,defending:82,physical:0,club:"Tactics",nation:"Universal",rarity:"Silver",stars:3,type:"tactics",effect:"balanced"},
+  {id:33,name:"3-5-2 Wing",pos:"TAC",rating:81,pace:0,shooting:0,passing:80,dribbling:0,defending:75,physical:0,club:"Tactics",nation:"Universal",rarity:"Gold",stars:4,type:"tactics",effect:"wing"},
+  {id:34,name:"5-3-2 Defense",pos:"TAC",rating:79,pace:0,shooting:0,passing:72,dribbling:0,defending:88,physical:0,club:"Tactics",nation:"Universal",rarity:"Silver",stars:3,type:"tactics",effect:"defense"},
+  {id:35,name:"4-2-3-1 Modern",pos:"TAC",rating:83,pace:0,shooting:0,passing:82,dribbling:0,defending:78,physical:0,club:"Tactics",nation:"Universal",rarity:"Gold",stars:4,type:"tactics",effect:"modern"},
+  // Reactions
+  {id:36,name:"Counter Attack",pos:"RXN",rating:85,pace:0,shooting:0,passing:0,dribbling:0,defending:0,physical:0,club:"Reaction",nation:"Universal",rarity:"Gold",stars:4,type:"reaction",effect:"counter"},
+  {id:37,name:"High Press",pos:"RXN",rating:83,pace:0,shooting:0,passing:0,dribbling:0,defending:0,physical:0,club:"Reaction",nation:"Universal",rarity:"Silver",stars:3,type:"reaction",effect:"press"},
+  {id:38,name:"Park the Bus",pos:"RXN",rating:80,pace:0,shooting:0,passing:0,dribbling:0,defending:0,physical:0,club:"Reaction",nation:"Universal",rarity:"Bronze",stars:2,type:"reaction",effect:"defend"},
+  {id:39,name:"Quick Pass",pos:"RXN",rating:82,pace:0,shooting:0,passing:0,dribbling:0,defending:0,physical:0,club:"Reaction",nation:"Universal",rarity:"Silver",stars:3,type:"reaction",effect:"pass"},
+  {id:40,name:"Long Ball",pos:"RXN",rating:81,pace:0,shooting:0,passing:0,dribbling:0,defending:0,physical:0,club:"Reaction",nation:"Universal",rarity:"Bronze",stars:2,type:"reaction",effect:"longball"},
+  // Special Cards
+  {id:41,name:"Messi ICON",pos:"FWD",rating:96,pace:82,shooting:96,passing:94,dribbling:97,defending:35,physical:62,club:"Inter Miami",nation:"Argentina",rarity:"Special",stars:5,type:"player"},
+  {id:42,name:"Ronaldo ICON",pos:"FWD",rating:95,pace:78,shooting:97,passing:80,dribbling:85,defending:32,physical:80,club:"Al Nassr",nation:"Portugal",rarity:"Special",stars:5,type:"player"},
+  {id:43,name:"Xavi ICON",pos:"MID",rating:94,pace:65,shooting:78,passing:97,dribbling:90,defending:75,physical:60,club:"Barcelona",nation:"Spain",rarity:"Special",stars:5,type:"player"},
+  {id:44,name:" Maldini ICON",pos:"DEF",rating:95,pace:70,shooting:40,passing:75,dribbling:70,defending:96,physical:82,club:"Milan",nation:"Italy",rarity:"Special",stars:5,type:"player"},
+  {id:45,name:"Yashin ICON",pos:"GK",rating:96,pace:50,shooting:30,passing:60,dribbling:45,defending:97,physical:80,club:"Dynamo Moscow",nation:"Russia",rarity:"Special",stars:5,type:"player"},
+  // More players for variety
+  {id:46,name:"Saliba",pos:"DEF",rating:84,pace:76,shooting:40,passing:68,dribbling:70,defending:86,physical:82,club:"Arsenal",nation:"France",rarity:"Silver",stars:3,type:"player"},
+  {id:47,name:"Rüdiger",pos:"DEF",rating:83,pace:78,shooting:42,passing:65,dribbling:68,defending:84,physical:86,club:"Real Madrid",nation:"Germany",rarity:"Silver",stars:3,type:"player"},
+  {id:48,name:"Van de Beek",pos:"MID",rating:78,pace:70,shooting:72,passing:76,dribbling:74,defending:62,physical:72,club:"Man United",nation:"Netherlands",rarity:"Bronze",stars:2,type:"player"},
+  {id:49,name:"Mount",pos:"MID",rating:80,pace:74,shooting:74,passing:78,dribbling:78,defending:60,physical:68,club:"Man United",nation:"England",rarity:"Bronze",stars:2,type:"player"},
+  {id:50,name:"Fernandes",pos:"MID",rating:84,pace:72,shooting:82,passing:84,dribbling:80,defending:58,physical:70,club:"Man United",nation:"Portugal",rarity:"Silver",stars:3,type:"player"}
+];
+
+// ==================== GAME STATE ====================
+const Game = {
+  state: {
+    screen: 'menu',
+    energy: 10,
+    maxEnergy: 10,
+    energyRegenTime: 600000, // 10 minutes
+    lastEnergyUpdate: Date.now(),
+    deck: [],
+    collection: [],
+    hand: [],
+    playerField: [null, null, null, null, null],
+    opponentField: [null, null, null, null, null],
+    playerScore: 0,
+    opponentScore: 0,
+    turn: 'player',
+    turnTimer: 90,
+    turnTimerInterval: null,
+    selectedCard: null,
+    phase: 'draw', // draw, place, attack, end
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    rank: 'Bronze III',
+    rankPoints: 0,
+    draftMode: false,
+    draftDeck: [],
+    draftRound: 0,
+    draftWins: 0,
+    gameMode: 'quick',
+    aiType: 'balanced',
+    chemistryBonus: 0,
+    battleLog: []
+  },
+
+  // ==================== INITIALIZATION ====================
+  init() {
+    this.loadState();
+    this.updateEnergy();
+    this.renderMenu();
+    setInterval(() => this.updateEnergy(), 60000);
+  },
+
+  loadState() {
+    try {
+      const saved = localStorage.getItem('fifaCardDuel');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        Object.assign(this.state, parsed);
+      }
+    } catch(e) { console.log('No saved state'); }
+    
+    // Ensure collection has cards
+    if (this.state.collection.length === 0) {
+      // Give starter pack
+      const starterCards = CARD_DATABASE.filter(c => c.rarity === 'Bronze' || c.rarity === 'Silver').slice(0, 20);
+      this.state.collection = starterCards.map(c => ({...c, uid: Date.now() + Math.random()}));
+      this.state.deck = this.state.collection.slice(0, 20);
+    }
+  },
+
+  saveState() {
+    try {
+      localStorage.setItem('fifaCardDuel', JSON.stringify(this.state));
+    } catch(e) { console.log('Save failed'); }
+  },
+
+  // ==================== ENERGY SYSTEM ====================
+  updateEnergy() {
+    const now = Date.now();
+    const elapsed = now - this.state.lastEnergyUpdate;
+    const regenerated = Math.floor(elapsed / this.state.energyRegenTime);
+    if (regenerated > 0 && this.state.energy < this.state.maxEnergy) {
+      this.state.energy = Math.min(this.state.maxEnergy, this.state.energy + regenerated);
+      this.state.lastEnergyUpdate = now;
+      this.saveState();
+    }
+    this.updateEnergyUI();
+  },
+
+  updateEnergyUI() {
+    const el = document.getElementById('menu-energy');
+    if (el) el.textContent = this.state.energy;
+    const el2 = document.getElementById('game-energy');
+    if (el2) el2.textContent = this.state.energy;
+  },
+
+  useEnergy() {
+    if (this.state.energy <= 0) {
+      document.getElementById('energy-popup').classList.add('active');
+      return false;
+    }
+    this.state.energy--;
+    this.state.lastEnergyUpdate = Date.now();
+    this.saveState();
+    this.updateEnergyUI();
+    return true;
+  },
+
+  closeEnergyPopup() {
+    document.getElementById('energy-popup').classList.remove('active');
+  },
+
+  // ==================== SCREEN MANAGEMENT ====================
+  showScreen(screenId) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(screenId).classList.add('active');
+    this.state.screen = screenId;
+  },
+
+  showMenu() {
+    this.showScreen('menu-screen');
+    this.renderMenu();
+  },
+
+  renderMenu() {
+    document.getElementById('menu-energy').textContent = this.state.energy;
+    document.getElementById('game-wins').textContent = this.state.wins;
+    document.getElementById('game-losses').textContent = this.state.losses;
+    document.getElementById('game-rank').textContent = this.state.rank;
+  },
+
+  // ==================== GAME MODES ====================
+  startQuickMatch() {
+    if (!this.useEnergy()) return;
+    this.state.gameMode = 'quick';
+    this.state.draftMode = false;
+    this.state.aiType = 'balanced';
+    this.startMatch();
+  },
+
+  startRanked() {
+    if (!this.useEnergy()) return;
+    this.state.gameMode = 'ranked';
+    this.state.draftMode = false;
+    this.state.aiType = 'balanced';
+    this.startMatch();
+  },
+
+  startDraft() {
+    this.state.draftMode = true;
+    this.state.draftDeck = [];
+    this.state.draftRound = 0;
+    this.state.draftWins = 0;
+    this.showScreen('draft-screen');
+    this.nextDraftRound();
+  },
+
+  nextDraftRound() {
+    if (this.state.draftRound >= 5) {
+      this.endDraft();
+      return;
+    }
+    this.state.draftRound++;
+    document.getElementById('draft-round').textContent = this.state.draftRound;
+    document.getElementById('draft-wins').textContent = this.state.draftWins;
+    
+    // Show 3 random cards to draft
+    const container = document.getElementById('draft-cards');
+    container.innerHTML = '';
+    const shuffled = [...CARD_DATABASE].sort(() => Math.random() - 0.5).slice(0, 3);
+    shuffled.forEach(card => {
+      const div = document.createElement('div');
+      div.className = `draft-card ${card.rarity.toLowerCase()}`;
+      div.innerHTML = `
+        <div style="font-size:1.5em;font-weight:900;">${card.rating}</div>
+        <div style="font-size:0.7em;margin-top:5px;">${card.name}</div>
+        <div style="font-size:0.6em;color:#8899aa;">${card.pos}</div>
+        <div style="font-size:0.6em;color:#ffd700;">${'⭐'.repeat(card.stars)}</div>
+      `;
+      div.onclick = () => this.selectDraftCard(card);
+      container.appendChild(div);
+    });
+  },
+
+  selectDraftCard(card) {
+    this.state.draftDeck.push({...card, uid: Date.now() + Math.random()});
+    this.nextDraftRound();
+  },
+
+  endDraft() {
+    if (this.state.draftDeck.length < 11) {
+      alert('You need at least 11 cards for a team!');
+      return;
+    }
+    this.state.deck = this.state.draftDeck;
+    this.startMatch();
+  },
+
+  // ==================== MATCH MANAGEMENT ====================
+  startMatch() {
+    this.showScreen('game-screen');
+    this.state.playerField = [null, null, null, null, null];
+    this.state.opponentField = [null, null, null, null, null];
+    this.state.playerScore = 0;
+    this.state.opponentScore = 0;
+    this.state.turn = 'player';
+    this.state.turnTimer = 90;
+    this.state.selectedCard = null;
+    this.state.phase = 'draw';
+    this.state.battleLog = [];
+    
+    // Draw initial hand (7 cards)
+    this.state.hand = this.state.deck.sort(() => Math.random() - 0.5).slice(0, 7);
+    
+    // Generate opponent team
+    this.generateOpponent();
+    
+    this.updateScoreUI();
+    this.renderField();
+    this.renderHand();
+    this.startTurnTimer();
+    this.showTurnIndicator('YOUR TURN', 'Place your cards');
+    this.addLog('Match started! Good luck!', 'goal');
+  },
+
+  generateOpponent() {
+    const aiCards = CARD_DATABASE.sort(() => Math.random() - 0.5).slice(0, 11);
+    // Place some cards on opponent field
+    const zones = [4, 3, 2, 1, 0];
+    zones.forEach((zone, i) => {
+      if (i < aiCards.length) {
+        this.state.opponentField[zone] = {...aiCards[i], uid: Date.now() + Math.random()};
+      }
+    });
+  },
+
+  startTurnTimer() {
+    if (this.state.turnTimerInterval) clearInterval(this.state.turnTimerInterval);
+    this.state.turnTimer = 90;
+    this.updateTimerUI();
+    this.state.turnTimerInterval = setInterval(() => {
+      this.state.turnTimer--;
+      this.updateTimerUI();
+      if (this.state.turnTimer <= 0) {
+        this.endTurn();
+      }
+    }, 1000);
+  },
+
+  updateTimerUI() {
+    const el = document.getElementById('turn-timer');
+    el.textContent = this.state.turnTimer;
+    if (this.state.turnTimer <= 15) {
+      el.classList.add('warning');
+    } else {
+      el.classList.remove('warning');
+    }
+  },
+
+  endTurn() {
+    clearInterval(this.state.turnTimerInterval);
+    // Switch turns
+    if (this.state.turn === 'player') {
+      this.state.turn = 'opponent';
+      this.showTurnIndicator('OPPONENT TURN', 'AI is thinking...');
+      setTimeout(() => this.aiTurn(), 1500);
+    } else {
+      this.state.turn = 'player';
+      this.state.hand = this.state.deck.sort(() => Math.random() - 0.5).slice(0, 7);
+      this.renderHand();
+      this.startTurnTimer();
+      this.showTurnIndicator('YOUR TURN', 'Place your cards');
+    }
+  },
+
+  aiTurn() {
+    // AI places cards based on archetype
+    const emptyZones = this.state.playerField.map((c, i) => c === null ? i : -1).filter(i => i >= 0);
+    if (emptyZones.length > 0) {
+      const zone = emptyZones[Math.floor(Math.random() * emptyZones.length)];
+      const aiCard = CARD_DATABASE.sort(() => Math.random() - 0.5)[0];
+      this.state.playerField[zone] = {...aiCard, uid: Date.now() + Math.random()};
+      this.renderField();
+      this.addLog(`Opponent placed a card in ${['ATT','ATT','MID','DEF','GK'][zone]}`, 'attack');
+    }
+    
+    // AI attacks
+    setTimeout(() => this.aiAttack(), 1000);
+  },
+
+  aiAttack() {
+    // Find AI cards that can attack
+    const aiCards = this.state.opponentField.filter(c => c !== null);
+    if (aiCards.length === 0) {
+      this.endTurn();
+      return;
+    }
+    
+    const attacker = aiCards[Math.floor(Math.random() * aiCards.length)];
+    const playerZones = this.state.playerField.map((c, i) => c !== null ? i : -1).filter(i => i >= 0);
+    
+    if (playerZones.length === 0) {
+      // No defenders, goal!
+      this.state.opponentScore++;
+      this.updateScoreUI();
+      this.addLog(`Opponent scores! ${attacker.name} beats the defense!`, 'goal');
+      this.showScorePopup('+1', 'opponent');
+    } else {
+      const targetZone = playerZones[Math.floor(Math.random() * playerZones.length)];
+      const defender = this.state.playerField[targetZone];
+      if (defender) {
+        const combat = this.resolveCombat(attacker, defender);
+        if (combat.winner === 'opponent') {
+          this.state.opponentScore++;
+          this.updateScoreUI();
+          this.addLog(`${attacker.name} defeats ${defender.name}! Goal!`, 'goal');
+          this.showScorePopup('+1', 'opponent');
+        } else {
+          this.addLog(`${defender.name} defends against ${attacker.name}!`, 'defend');
+        }
+      }
+    }
+    
+    this.renderField();
+    setTimeout(() => this.endTurn(), 1000);
+  },
+
+  // ==================== COMBAT SYSTEM ====================
+  resolveCombat(attacker, defender) {
+    let atkStat = attacker.rating;
+    let defStat = defender.rating;
+    
+    // Position bonuses
+    if (attacker.pos === 'FWD') atkStat += 5;
+    if (defender.pos === 'DEF') defStat += 5;
+    if (defender.pos === 'GK') defStat += 10;
+    
+    // Chemistry bonus
+    atkStat += this.state.chemistryBonus;
+    
+    // Random variance
+    atkStat += Math.floor(Math.random() * 10) - 5;
+    defStat += Math.floor(Math.random() * 10) - 5;
+    
+    const flash = document.getElementById('combat-flash');
+    flash.classList.add('active');
+    setTimeout(() => flash.classList.remove('active'), 500);
+    
+    return {
+      winner: atkStat > defStat ? 'attacker' : 'defender',
+      atkStat,
+      defStat,
+      margin: atkStat - defStat
+    };
+  },
+
+  // ==================== PLAYER ACTIONS ====================
+  onZoneClick(zone, side) {
+    if (this.state.turn !== 'player') return;
+    
+    if (side === 'player') {
+      // Place card
+      if (this.state.selectedCard !== null && this.state.playerField[zone] === null) {
+        this.state.playerField[zone] = this.state.hand[this.state.selectedCard];
+        this.state.hand.splice(this.state.selectedCard, 1);
+        this.state.selectedCard = null;
+        this.renderField();
+        this.renderHand();
+        this.addLog(`Placed card in ${['ATT','ATT','MID','DEF','GK'][zone]}`, 'defend');
+        
+        // Check if all zones filled, then attack
+        if (this.state.playerField.every(c => c !== null)) {
+          setTimeout(() => this.playerAttack(), 500);
+        }
+      }
+    } else if (side === 'opponent') {
+      // Attack opponent
+      if (this.state.selectedCard !== null) {
+        const attacker = this.state.hand[this.state.selectedCard];
+        const defender = this.state.opponentField[zone];
+        
+        if (defender) {
+          const combat = this.resolveCombat(attacker, defender);
+          if (combat.winner === 'attacker') {
+            this.state.playerScore++;
+            this.updateScoreUI();
+            this.addLog(`${attacker.name} defeats ${defender.name}! Goal!`, 'goal');
+            this.showScorePopup('+1', 'player');
+            this.state.opponentField[zone] = null;
+          } else {
+            this.addLog(`${attacker.name} failed to beat ${defender.name}`, 'attack');
+          }
+        } else {
+          // Empty zone - place card there
+          this.state.opponentField[zone] = attacker;
+          this.state.hand.splice(this.state.selectedCard, 1);
+          this.state.selectedCard = null;
+          this.addLog(`Placed ${attacker.name} in ${['ATT','ATT','MID','DEF','GK'][zone]}`, 'defend');
+        }
+        
+        this.renderField();
+        this.renderHand();
+      }
+    }
+  },
+
+  playerAttack() {
+    // Attack with all placed cards
+    this.state.playerField.forEach((card, zone) => {
+      if (card) {
+        const defender = this.state.opponentField[zone];
+        if (defender) {
+          const combat = this.resolveCombat(card, defender);
+          if (combat.winner === 'attacker') {
+            this.state.playerScore++;
+            this.updateScoreUI();
+            this.addLog(`${card.name} scores against ${defender.name}!`, 'goal');
+            this.showScorePopup('+1', 'player');
+            this.state.opponentField[zone] = null;
+          } else {
+            this.addLog(`${card.name} blocked by ${defender.name}`, 'defend');
+          }
+        } else {
+          this.state.playerScore++;
+          this.updateScoreUI();
+          this.addLog(`${card.name} scores! Empty net!`, 'goal');
+          this.showScorePopup('+1', 'player');
+        }
+      }
+    });
+    
+    this.renderField();
+    setTimeout(() => this.endTurn(), 1000);
+  },
+
+  selectCard(index) {
+    if (this.state.selectedCard === index) {
+      this.state.selectedCard = null;
+    } else {
+      this.state.selectedCard = index;
+    }
+    this.renderHand();
+  },
+
+  // ==================== UI RENDERING ====================
+  renderField() {
+    ['player', 'opponent'].forEach(side => {
+      const field = document.getElementById(`${side}-field`);
+      const zones = field.querySelectorAll('.field-zone');
+      const fieldData = side === 'player' ? this.state.playerField : this.state.opponentField;
+      
+      zones.forEach((zoneEl, i) => {
+        const card = fieldData[i];
+        // Keep existing zone label
+        const label = zoneEl.querySelector('.zone-label');
+        zoneEl.innerHTML = '';
+        zoneEl.appendChild(label);
+        
+        if (card) {
+          const cardEl = document.createElement('div');
+          cardEl.className = `zone-card ${card.rarity.toLowerCase()} card-enter`;
+          cardEl.innerHTML = `
+            <span class="card-rating">${card.rating}</span>
+            <span class="card-name">${card.name}</span>
+            <span class="card-pos">${card.pos}</span>
+            <span class="stars">${'⭐'.repeat(card.stars)}</span>
+          `;
+          zoneEl.appendChild(cardEl);
+        }
+      });
+    });
+  },
+
+  renderHand() {
+    const hand = document.getElementById('player-hand');
+    hand.innerHTML = '';
+    
+    this.state.hand.forEach((card, index) => {
+      const cardEl = document.createElement('div');
+      cardEl.className = `hand-card ${card.rarity.toLowerCase()} ${this.state.selectedCard === index ? 'selected' : ''}`;
+      cardEl.innerHTML = `
+        <span class="card-rating">${card.rating}</span>
+        <span class="card-name">${card.name}</span>
+        <span class="card-pos">${card.pos}</span>
+        <span class="stars">${'⭐'.repeat(card.stars)}</span>
+        <div class="card-stats">
+          <span class="stat">PAC${card.pace}</span>
+          <span class="stat">SHO${card.shooting}</span>
+          <span class="stat">PAS${card.passing}</span>
+        </div>
+      `;
+      cardEl.onclick = () => this.selectCard(index);
+      cardEl.ondblclick = () => this.showCardModal(card);
+      hand.appendChild(cardEl);
+    });
+  },
+
+  updateScoreUI() {
+    document.getElementById('player-score').textContent = this.state.playerScore;
+    document.getElementById('opponent-score').textContent = this.state.opponentScore;
+  },
+
+  showTurnIndicator(text, sub) {
+    const indicator = document.getElementById('turn-indicator');
+    document.getElementById('turn-text').textContent = text;
+    document.getElementById('turn-sub').textContent = sub;
+    indicator.classList.add('active');
+    setTimeout(() => indicator.classList.remove('active'), 2000);
+  },
+
+  showScorePopup(text, side) {
+    const popup = document.createElement('div');
+    popup.className = 'score-popup';
+    popup.textContent = text;
+    popup.style.color = side === 'player' ? '#6bffb8' : '#ff6b6b';
+    popup.style.left = side === 'player' ? '30%' : '70%';
+    popup.style.top = '50%';
+    document.getElementById('game-container').appendChild(popup);
+    setTimeout(() => popup.remove(), 1500);
+  },
+
+  addLog(text, type) {
+    this.state.battleLog.push({text, type});
+    const log = document.getElementById('battle-log');
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+    entry.textContent = text;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+  },
+
+  // ==================== CARD MODAL ====================
+  showCardModal(card) {
+    const modal = document.getElementById('card-modal');
+    const cardEl = document.getElementById('modal-card');
+    cardEl.className = `modal-card ${card.rarity.toLowerCase()}`;
+    cardEl.textContent = card.rating;
+    
+    document.getElementById('modal-name').textContent = card.name;
+    document.getElementById('modal-type').textContent = `${card.pos} | ${card.club} | ${card.nation} | ${card.rarity}`;
+    
+    const statsEl = document.getElementById('modal-stats');
+    statsEl.innerHTML = `
+      <div class="modal-stat"><div class="stat-label">PAC</div><div class="stat-value">${card.pace}</div></div>
+      <div class="modal-stat"><div class="stat-label">SHO</div><div class="stat-value">${card.shooting}</div></div>
+      <div class="modal-stat"><div class="stat-label">PAS</div><div class="stat-value">${card.passing}</div></div>
+      <div class="modal-stat"><div class="stat-label">DRI</div><div class="stat-value">${card.dribbling}</div></div>
+      <div class="modal-stat"><div class="stat-label">DEF</div><div class="stat-value">${card.defending}</div></div>
+      <div class="modal-stat"><div class="stat-label">PHY</div><div class="stat-value">${card.physical}</div></div>
+    `;
+    
+    // Calculate chemistry
+    const chemistry = this.calculateChemistry(card);
+    document.getElementById('modal-chemistry').textContent = `Chemistry: ${chemistry}/100`;
+    
+    modal.classList.add('active');
+  },
+
+  closeModal() {
+    document.getElementById('card-modal').classList.remove('active');
+  },
+
+  calculateChemistry(card) {
+    // Simple chemistry: same club/nation bonuses
+    let chemistry = 50;
+    const teamCards = this.state.playerField.filter(c => c !== null);
+    teamCards.forEach(tc => {
+      if (tc.club === card.club) chemistry += 10;
+      if (tc.nation === card.nation) chemistry += 10;
+    });
+    return Math.min(100, chemistry);
+  },
+
+  // ==================== DECK MANAGEMENT ====================
+  showDeck() {
+    this.showScreen('deck-screen');
+    this.renderDeck();
+  },
+
+  renderDeck() {
+    const grid = document.getElementById('deck-grid');
+    grid.innerHTML = '';
+    document.getElementById('deck-count').textContent = this.state.deck.length;
+    
+    this.state.deck.forEach((card, index) => {
+      const div = document.createElement('div');
+      div.className = `deck-card ${card.rarity.toLowerCase()}`;
+      div.innerHTML = `
+        <div style="font-size:1.2em;font-weight:900;">${card.rating}</div>
+        <div style="font-size:0.6em;margin-top:3px;">${card.name}</div>
+        <div style="font-size:0.5em;color:#8899aa;">${card.pos}</div>
+      `;
+      div.onclick = () => {
+        // Toggle selection
+        div.classList.toggle('selected');
+      };
+      grid.appendChild(div);
+    });
+  },
+
+  autoBuildDeck() {
+    // Auto build with best cards from collection
+    const sorted = [...this.state.collection].sort((a, b) => b.rating - a.rating);
+    this.state.deck = sorted.slice(0, 40);
+    this.renderDeck();
+    this.addLog('Auto-built deck with best cards', 'goal');
+  },
+
+  saveDeck() {
+    this.saveState();
+    alert('Deck saved!');
+  },
+
+  // ==================== COLLECTION ====================
+  showCollection() {
+    this.showScreen('collection-screen');
+    this.renderCollection('all');
+  },
+
+  renderCollection(filter) {
+    const grid = document.getElementById('collection-grid');
+    grid.innerHTML = '';
+    document.getElementById('collection-count').textContent = this.state.collection.length;
+    
+    const cards = filter === 'all' ? this.state.collection : 
+                  this.state.collection.filter(c => c.type === filter);
+    
+    cards.forEach(card => {
+      const div = document.createElement('div');
+      div.className = `deck-card ${card.rarity.toLowerCase()}`;
+      div.innerHTML = `
+        <div style="font-size:1.2em;font-weight:900;">${card.rating}</div>
+        <div style="font-size:0.6em;margin-top:3px;">${card.name}</div>
+        <div style="font-size:0.5em;color:#8899aa;">${card.pos}</div>
+        <div style="font-size:0.5em;color:#ffd700;">${'⭐'.repeat(card.stars)}</div>
+      `;
+      div.onclick = () => this.showCardModal(card);
+      grid.appendChild(div);
+    });
+  },
+
+  filterCollection(filter) {
+    this.renderCollection(filter);
+  },
+
+  // ==================== RESULTS ====================
+  endMatch() {
+    clearInterval(this.state.turnTimerInterval);
+    this.showScreen('result-screen');
+    
+    const title = document.getElementById('result-title');
+    if (this.state.playerScore > this.state.opponentScore) {
+      title.textContent = 'VICTORY!';
+      title.className = 'result-title win';
+      this.state.wins++;
+      this.state.rankPoints += 10;
+    } else if (this.state.playerScore < this.state.opponentScore) {
+      title.textContent = 'DEFEAT';
+      title.className = 'result-title lose';
+      this.state.losses++;
+      this.state.rankPoints -= 5;
+    } else {
+      title.textContent = 'DRAW';
+      title.className = 'result-title draw';
+      this.state.draws++;
+      this.state.rankPoints += 3;
+    }
+    
+    // Update rank
+    this.updateRank();
+    
+    const stats = document.getElementById('result-stats');
+    stats.innerHTML = `
+      <div class="result-stat"><span>Score</span><span>${this.state.playerScore} - ${this.state.opponentScore}</span></div>
+      <div class="result-stat"><span>Wins</span><span>${this.state.wins}</span></div>
+      <div class="result-stat"><span>Losses</span><span>${this.state.losses}</span></div>
+      <div class="result-stat"><span>Rank Points</span><span>${this.state.rankPoints}</span></div>
+      <div class="result-stat"><span>Rank</span><span>${this.state.rank}</span></div>
+    `;
+    
+    this.saveState();
+  },
+
+  updateRank() {
+    const ranks = ['Bronze III', 'Bronze II', 'Bronze I', 'Silver III', 'Silver II', 'Silver I', 'Gold III', 'Gold II', 'Gold I', 'Special'];
+    const index = Math.floor(Math.max(0, Math.min(ranks.length - 1, this.state.rankPoints / 20)));
+    this.state.rank = ranks[index];
+  },
+
+  playAgain() {
+    if (this.state.draftMode) {
+      this.startDraft();
+    } else {
+      this.startQuickMatch();
+    }
+  },
+
+  // ==================== SETTINGS ====================
+  showSettings() {
+    this.showScreen('settings-screen');
+  },
+
+  clearData() {
+    if (confirm('Are you sure? This will delete all progress.')) {
+      localStorage.removeItem('fifaCardDuel');
+      location.reload();
+    }
+  }
+};
+
+// ==================== INITIALIZATION ====================
+document.addEventListener('DOMContentLoaded', () => {
+  Game.init();
+});
+
+// Prevent default touch behaviors
+document.addEventListener('touchmove', (e) => {
+  if (e.target.closest('.hand')) return;
+  e.preventDefault();
+}, { passive: false });
+</script>
+</body>
+</html>

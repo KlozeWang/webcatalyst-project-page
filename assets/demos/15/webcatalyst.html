@@ -1,0 +1,1628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eldoria: The Sacred Crystals</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a12;
+    color: #e0d5c1;
+    font-family: 'Crimson Text', serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  #game-container {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Title Screen */
+  #title-screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, #0a0a1a 0%, #1a0a2e 50%, #0a0a1a 100%);
+    z-index: 100;
+    transition: opacity 1s;
+  }
+
+  #title-screen.hidden { opacity: 0; pointer-events: none; }
+
+  .title-logo {
+    font-family: 'Cinzel', serif;
+    font-size: 4rem;
+    font-weight: 900;
+    background: linear-gradient(180deg, #ffd700, #ff8c00, #ffd700);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: none;
+    filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.5));
+    margin-bottom: 10px;
+    animation: titleGlow 3s ease-in-out infinite;
+  }
+
+  @keyframes titleGlow {
+    0%, 100% { filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.5)); }
+    50% { filter: drop-shadow(0 0 40px rgba(255, 215, 0, 0.8)); }
+  }
+
+  .title-subtitle {
+    font-family: 'Cinzel', serif;
+    font-size: 1.3rem;
+    color: #8a7a6a;
+    margin-bottom: 40px;
+    letter-spacing: 3px;
+  }
+
+  .title-story {
+    max-width: 600px;
+    text-align: center;
+    font-size: 1.1rem;
+    line-height: 1.8;
+    color: #9a8a7a;
+    margin-bottom: 40px;
+    padding: 0 20px;
+  }
+
+  .btn-start {
+    font-family: 'Cinzel', serif;
+    font-size: 1.2rem;
+    padding: 15px 50px;
+    background: linear-gradient(180deg, #2a1a3a, #1a0a2a);
+    border: 2px solid #ffd700;
+    color: #ffd700;
+    cursor: pointer;
+    letter-spacing: 3px;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-start:hover {
+    background: linear-gradient(180deg, #3a2a4a, #2a1a3a);
+    box-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+    transform: scale(1.05);
+  }
+
+  .btn-start::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(45deg, transparent, rgba(255,215,0,0.1), transparent);
+    transform: rotate(45deg);
+    animation: btnShine 3s infinite;
+  }
+
+  @keyframes btnShine {
+    0% { left: -200%; }
+    100% { left: 200%; }
+  }
+
+  /* Game Screen */
+  #game-screen {
+    display: none;
+    width: 100%;
+    height: 100%;
+    position: relative;
+  }
+
+  #game-screen.active { display: flex; }
+
+  /* Left Panel - Map */
+  #map-panel {
+    width: 320px;
+    min-width: 320px;
+    background: linear-gradient(180deg, #12121e, #0a0a14);
+    border-right: 2px solid #2a2a3a;
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+  }
+
+  .panel-header {
+    font-family: 'Cinzel', serif;
+    font-size: 1.1rem;
+    padding: 15px 20px;
+    background: linear-gradient(180deg, #1a1a2e, #12121e);
+    border-bottom: 1px solid #2a2a3a;
+    color: #ffd700;
+    letter-spacing: 2px;
+    text-align: center;
+  }
+
+  #map-container {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+  }
+
+  .location-node {
+    background: linear-gradient(135deg, #1a1a2e, #151525);
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    padding: 12px 15px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .location-node:hover {
+    border-color: #ffd700;
+    transform: translateX(5px);
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+  }
+
+  .location-node.current {
+    border-color: #00ff88;
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
+  }
+
+  .location-node.completed {
+    border-color: #4a4a6a;
+    opacity: 0.7;
+  }
+
+  .location-node.locked {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .location-name {
+    font-family: 'Cinzel', serif;
+    font-size: 0.95rem;
+    color: #e0d5c1;
+    margin-bottom: 4px;
+  }
+
+  .location-desc {
+    font-size: 0.85rem;
+    color: #7a7a8a;
+    line-height: 1.4;
+  }
+
+  .location-icon {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.5rem;
+  }
+
+  .crystal-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ffd700;
+    margin-right: 8px;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* Center Panel - Main View */
+  #main-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  #scene-view {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #scene-background {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    transition: background 1s;
+  }
+
+  #scene-overlay {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.7) 100%);
+  }
+
+  #scene-content {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 30px;
+  }
+
+  #scene-title {
+    font-family: 'Cinzel', serif;
+    font-size: 2rem;
+    color: #ffd700;
+    margin-bottom: 10px;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+  }
+
+  #scene-description {
+    font-size: 1.1rem;
+    line-height: 1.8;
+    color: #c0b5a1;
+    max-width: 700px;
+    margin-bottom: 20px;
+  }
+
+  #scene-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .action-btn {
+    font-family: 'Cinzel', serif;
+    padding: 10px 25px;
+    background: linear-gradient(180deg, #2a1a3a, #1a0a2a);
+    border: 1px solid #4a3a5a;
+    color: #e0d5c1;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.3s;
+    border-radius: 4px;
+  }
+
+  .action-btn:hover {
+    border-color: #ffd700;
+    color: #ffd700;
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+  }
+
+  .action-btn.primary {
+    border-color: #ffd700;
+    color: #ffd700;
+  }
+
+  .action-btn.danger {
+    border-color: #ff4444;
+    color: #ff4444;
+  }
+
+  .action-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Right Panel - Stats & Inventory */
+  #stats-panel {
+    width: 280px;
+    min-width: 280px;
+    background: linear-gradient(180deg, #12121e, #0a0a14);
+    border-left: 2px solid #2a2a3a;
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+  }
+
+  #stats-container {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+  }
+
+  .stat-section {
+    margin-bottom: 25px;
+  }
+
+  .stat-section-title {
+    font-family: 'Cinzel', serif;
+    font-size: 0.9rem;
+    color: #ffd700;
+    letter-spacing: 2px;
+    margin-bottom: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #2a2a3a;
+  }
+
+  .stat-bar {
+    margin-bottom: 10px;
+  }
+
+  .stat-bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+    color: #9a8a7a;
+  }
+
+  .stat-bar-fill {
+    height: 8px;
+    background: #1a1a2e;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid #2a2a3a;
+  }
+
+  .stat-bar-inner {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s;
+  }
+
+  .hp-bar { background: linear-gradient(90deg, #ff4444, #ff6666); }
+  .mp-bar { background: linear-gradient(90deg, #4444ff, #6666ff); }
+  .xp-bar { background: linear-gradient(90deg, #44ff44, #66ff66); }
+
+  #crystal-inventory {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .crystal-slot {
+    aspect-ratio: 1;
+    background: #1a1a2e;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    transition: all 0.3s;
+    position: relative;
+  }
+
+  .crystal-slot.filled {
+    border-color: #ffd700;
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+    animation: crystalGlow 2s infinite;
+  }
+
+  @keyframes crystalGlow {
+    0%, 100% { box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
+    50% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.6); }
+  }
+
+  .crystal-slot .crystal-label {
+    position: absolute;
+    bottom: 2px;
+    font-size: 0.6rem;
+    color: #7a7a8a;
+    font-family: 'Cinzel', serif;
+  }
+
+  /* Dialogue Box */
+  #dialogue-box {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(180deg, transparent, rgba(10, 10, 20, 0.95) 20%);
+    padding: 40px 30px 20px;
+    display: none;
+  }
+
+  #dialogue-box.active { display: block; }
+
+  #dialogue-text {
+    font-size: 1.1rem;
+    line-height: 1.8;
+    color: #e0d5c1;
+    max-width: 800px;
+    margin: 0 auto 15px;
+  }
+
+  #dialogue-speaker {
+    font-family: 'Cinzel', serif;
+    font-size: 0.9rem;
+    color: #ffd700;
+    margin-bottom: 8px;
+    letter-spacing: 2px;
+  }
+
+  #dialogue-continue {
+    text-align: right;
+    font-size: 0.8rem;
+    color: #5a5a6a;
+    animation: blink 1.5s infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* Combat Screen */
+  #combat-screen {
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 10, 20, 0.95);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+
+  #combat-screen.active { display: flex; }
+
+  .combat-arena {
+    width: 80%;
+    max-width: 800px;
+    text-align: center;
+  }
+
+  .combat-title {
+    font-family: 'Cinzel', serif;
+    font-size: 1.8rem;
+    color: #ff4444;
+    margin-bottom: 30px;
+    text-shadow: 0 0 20px rgba(255, 68, 68, 0.5);
+  }
+
+  .combatants {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    margin-bottom: 30px;
+  }
+
+  .combatant {
+    text-align: center;
+  }
+
+  .combatant-sprite {
+    width: 120px;
+    height: 120px;
+    background: #1a1a2e;
+    border: 2px solid #2a2a3a;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    margin: 0 auto 10px;
+    transition: all 0.3s;
+  }
+
+  .combatant-sprite.hit {
+    animation: hitShake 0.5s;
+    border-color: #ff4444;
+  }
+
+  @keyframes hitShake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-10px); }
+    75% { transform: translateX(10px); }
+  }
+
+  .combatant-name {
+    font-family: 'Cinzel', serif;
+    font-size: 1rem;
+    color: #e0d5c1;
+    margin-bottom: 5px;
+  }
+
+  .combatant-hp {
+    width: 120px;
+    height: 6px;
+    background: #1a1a2e;
+    border-radius: 3px;
+    margin: 0 auto;
+    overflow: hidden;
+  }
+
+  .combatant-hp-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #ff4444, #ff6666);
+    transition: width 0.5s;
+    border-radius: 3px;
+  }
+
+  .combat-log {
+    background: #1a1a2e;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+    max-height: 120px;
+    overflow-y: auto;
+    text-align: left;
+    font-size: 0.9rem;
+    color: #9a8a7a;
+  }
+
+  .combat-log-entry {
+    margin-bottom: 5px;
+    padding: 3px 0;
+    border-bottom: 1px solid #1a1a2e;
+  }
+
+  .combat-log-entry.player-action { color: #44ff44; }
+  .combat-log-entry.enemy-action { color: #ff4444; }
+  .combat-log-entry.system { color: #ffd700; }
+
+  .combat-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* Event Overlay */
+  #event-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 60;
+  }
+
+  #event-overlay.active { display: flex; }
+
+  .event-card {
+    background: linear-gradient(135deg, #1a1a2e, #12121e);
+    border: 2px solid #ffd700;
+    border-radius: 12px;
+    padding: 40px;
+    max-width: 500px;
+    text-align: center;
+    animation: eventAppear 0.5s;
+  }
+
+  @keyframes eventAppear {
+    from { transform: scale(0.8); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  .event-icon {
+    font-size: 4rem;
+    margin-bottom: 15px;
+  }
+
+  .event-title {
+    font-family: 'Cinzel', serif;
+    font-size: 1.5rem;
+    color: #ffd700;
+    margin-bottom: 10px;
+  }
+
+  .event-description {
+    font-size: 1rem;
+    color: #9a8a7a;
+    line-height: 1.6;
+    margin-bottom: 20px;
+  }
+
+  /* Particles */
+  .particle {
+    position: absolute;
+    pointer-events: none;
+    border-radius: 50%;
+    animation: particleFloat 3s infinite;
+  }
+
+  @keyframes particleFloat {
+    0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(-100px) rotate(360deg); opacity: 0; }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #0a0a14; }
+  ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+
+  /* Responsive */
+  @media (max-width: 1200px) {
+    #map-panel { width: 260px; min-width: 260px; }
+    #stats-panel { width: 240px; min-width: 240px; }
+  }
+
+  @media (max-width: 900px) {
+    #game-screen { flex-direction: column; }
+    #map-panel {
+      width: 100%;
+      min-width: 100%;
+      height: 200px;
+      flex-direction: row;
+      border-right: none;
+      border-bottom: 2px solid #2a2a3a;
+    }
+    #map-container { display: flex; gap: 10px; overflow-x: auto; padding: 10px; }
+    .location-node { min-width: 200px; margin-bottom: 0; }
+    #stats-panel {
+      width: 100%;
+      min-width: 100%;
+      height: 150px;
+      border-left: none;
+      border-top: 2px solid #2a2a3a;
+    }
+  }
+
+  /* Victory Screen */
+  #victory-screen {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.9);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+
+  #victory-screen.active { display: flex; }
+
+  .victory-title {
+    font-family: 'Cinzel', serif;
+    font-size: 3rem;
+    background: linear-gradient(180deg, #ffd700, #ff8c00);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 20px;
+    animation: titleGlow 3s infinite;
+  }
+
+  .victory-text {
+    max-width: 600px;
+    text-align: center;
+    font-size: 1.1rem;
+    line-height: 1.8;
+    color: #9a8a7a;
+    margin-bottom: 30px;
+  }
+
+  /* Loading animation */
+  .loading-dots::after {
+    content: '';
+    animation: dots 1.5s infinite;
+  }
+
+  @keyframes dots {
+    0% { content: ''; }
+    25% { content: '.'; }
+    50% { content: '..'; }
+    75% { content: '...'; }
+  }
+
+  /* Scene transitions */
+  .scene-fade {
+    animation: sceneFade 1s;
+  }
+
+  @keyframes sceneFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Floating crystals animation */
+  .floating-crystal {
+    position: absolute;
+    font-size: 2rem;
+    animation: floatCrystal 4s ease-in-out infinite;
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  @keyframes floatCrystal {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-20px) rotate(10deg); }
+  }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <!-- Title Screen -->
+  <div id="title-screen">
+    <div class="title-logo">ELDORIA</div>
+    <div class="title-subtitle">THE SACRED CRYSTALS</div>
+    <div class="title-story">
+      Long ago, there was a peaceful kingdom called Eldoria. The people lived in harmony, 
+      and the land was full of life. One dark night, an evil sorcerer known as <strong style="color:#ff4444;">Dark Lord Vexar</strong> 
+      attacked the kingdom using forbidden magic. The king was killed, the land was destroyed, 
+      and darkness spread everywhere.<br><br>
+      Before the kingdom fell, the ancient guardians hid <strong style="color:#ffd700;">five Sacred Crystals</strong> 
+      across the world. These crystals are the only hope to restore Eldoria.
+    </div>
+    <button class="btn-start" onclick="startGame()">BEGIN QUEST</button>
+  </div>
+
+  <!-- Game Screen -->
+  <div id="game-screen">
+    <!-- Left Panel - Map -->
+    <div id="map-panel">
+      <div class="panel-header">🗺️ WORLD MAP</div>
+      <div id="map-container"></div>
+    </div>
+
+    <!-- Center Panel - Main View -->
+    <div id="main-panel">
+      <div id="scene-view">
+        <div id="scene-background"></div>
+        <div id="scene-overlay"></div>
+        <div id="scene-content">
+          <div id="scene-title"></div>
+          <div id="scene-description"></div>
+          <div id="scene-actions"></div>
+        </div>
+      </div>
+
+      <!-- Dialogue Box -->
+      <div id="dialogue-box">
+        <div id="dialogue-speaker"></div>
+        <div id="dialogue-text"></div>
+        <div id="dialogue-continue">[Click to continue]</div>
+      </div>
+
+      <!-- Combat Screen -->
+      <div id="combat-screen">
+        <div class="combat-arena">
+          <div class="combat-title">⚔️ COMBAT ⚔️</div>
+          <div class="combatants">
+            <div class="combatant">
+              <div class="combatant-sprite" id="player-sprite">🧙</div>
+              <div class="combatant-name">Hero</div>
+              <div class="combatant-hp">
+                <div class="combatant-hp-fill" id="player-combat-hp" style="width:100%"></div>
+              </div>
+            </div>
+            <div style="font-size:2rem;color:#ffd700;">⚡</div>
+            <div class="combatant">
+              <div class="combatant-sprite" id="enemy-sprite">👹</div>
+              <div class="combatant-name" id="enemy-name">Enemy</div>
+              <div class="combatant-hp">
+                <div class="combatant-hp-fill" id="enemy-combat-hp" style="width:100%"></div>
+              </div>
+            </div>
+          </div>
+          <div class="combat-log" id="combat-log"></div>
+          <div class="combat-actions" id="combat-actions"></div>
+        </div>
+      </div>
+
+      <!-- Event Overlay -->
+      <div id="event-overlay">
+        <div class="event-card">
+          <div class="event-icon" id="event-icon">💎</div>
+          <div class="event-title" id="event-title">Crystal Found!</div>
+          <div class="event-description" id="event-description"></div>
+          <button class="btn-start" onclick="closeEvent()">CONTINUE</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Panel - Stats -->
+    <div id="stats-panel">
+      <div class="panel-header">📊 HERO STATUS</div>
+      <div id="stats-container">
+        <div class="stat-section">
+          <div class="stat-section-title">STATS</div>
+          <div class="stat-bar">
+            <div class="stat-bar-label">
+              <span>HP</span>
+              <span id="hp-text">100/100</span>
+            </div>
+            <div class="stat-bar-fill">
+              <div class="stat-bar-inner hp-bar" id="hp-bar" style="width:100%"></div>
+            </div>
+          </div>
+          <div class="stat-bar">
+            <div class="stat-bar-label">
+              <span>MP</span>
+              <span id="mp-text">50/50</span>
+            </div>
+            <div class="stat-bar-fill">
+              <div class="stat-bar-inner mp-bar" id="mp-bar" style="width:100%"></div>
+            </div>
+          </div>
+          <div class="stat-bar">
+            <div class="stat-bar-label">
+              <span>XP</span>
+              <span id="xp-text">0/100</span>
+            </div>
+            <div class="stat-bar-fill">
+              <div class="stat-bar-inner xp-bar" id="xp-bar" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-section">
+          <div class="stat-section-title">SACRED CRYSTALS</div>
+          <div id="crystal-inventory">
+            <div class="crystal-slot" id="crystal-0" title="Crystal of Fire">🔥<span class="crystal-label">Fire</span></div>
+            <div class="crystal-slot" id="crystal-1" title="Crystal of Water">💧<span class="crystal-label">Water</span></div>
+            <div class="crystal-slot" id="crystal-2" title="Crystal of Earth">🌍<span class="crystal-label">Earth</span></div>
+            <div class="crystal-slot" id="crystal-3" title="Crystal of Wind">🌪️<span class="crystal-label">Wind</span></div>
+            <div class="crystal-slot" id="crystal-4" title="Crystal of Light">✨<span class="crystal-label">Light</span></div>
+          </div>
+        </div>
+
+        <div class="stat-section">
+          <div class="stat-section-title">INVENTORY</div>
+          <div id="inventory-list" style="font-size:0.9rem;color:#7a7a8a;">
+            Empty
+          </div>
+        </div>
+
+        <div class="stat-section">
+          <div class="stat-section-title">QUEST LOG</div>
+          <div id="quest-log" style="font-size:0.85rem;color:#7a7a8a;line-height:1.6;">
+            Find the 5 Sacred Crystals to defeat Dark Lord Vexar.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Victory Screen -->
+  <div id="victory-screen">
+    <div class="victory-title">✨ VICTORY ✨</div>
+    <div class="victory-text" id="victory-text"></div>
+    <button class="btn-start" onclick="location.reload()">PLAY AGAIN</button>
+  </div>
+</div>
+
+<script>
+// Game State
+const gameState = {
+  currentLocation: 'royal ruins',
+  player: {
+    hp: 100,
+    maxHp: 100,
+    mp: 50,
+    maxMp: 50,
+    xp: 0,
+    maxXp: 100,
+    level: 1,
+    attack: 15,
+    defense: 10,
+    inventory: []
+  },
+  crystals: [false, false, false, false, false],
+  crystalsFound: 0,
+  locationsVisited: new Set(),
+  questsCompleted: [],
+  combatActive: false,
+  enemy: null,
+  dialogueQueue: [],
+  dialogueActive: false
+};
+
+// Location Data
+const locations = {
+  'royal ruins': {
+    name: 'Royal Ruins',
+    icon: '🏰',
+    desc: 'The shattered remains of Eldoria\'s once-mighty castle. Dark energy still lingers among the broken stones.',
+    bg: 'linear-gradient(180deg, #1a0a2e 0%, #2a1a3e 50%, #0a0a1a 100%)',
+    connections: ['dark forest', 'crystal cave'],
+    events: {
+      enter: () => {
+        showDialogue('Ancient Spirit', 'Welcome, brave hero. The ruins hold memories of a glorious past. Be careful - dark creatures lurk here.');
+      }
+    },
+    actions: [
+      { text: '🔍 Search the ruins', action: 'searchRuins' },
+      { text: '⚔️ Explore deeper', action: 'exploreDeep' },
+      { text: '🧘 Rest and recover', action: 'rest' }
+    ]
+  },
+  'dark forest': {
+    name: 'Dark Forest',
+    icon: '🌲',
+    desc: 'A foreboding forest where trees twist into monstrous shapes. The Crystal of Fire is said to be hidden deep within.',
+    bg: 'linear-gradient(180deg, #0a1a0a 0%, #1a2a1a 50%, #0a0a1a 100%)',
+    connections: ['royal ruins', 'crystal cave', 'storm peak'],
+    events: {
+      enter: () => {
+        if (!gameState.locationsVisited.has('dark forest')) {
+          showDialogue('Mysterious Voice', 'The Crystal of Fire burns within this forest. But beware - the Fire Guardian protects it fiercely.');
+          gameState.locationsVisited.add('dark forest');
+        }
+      }
+    },
+    actions: [
+      { text: '🔍 Search the forest', action: 'searchForest' },
+      { text: '⚔️ Face the Guardian', action: 'fightGuardian', condition: () => !gameState.crystals[0] },
+      { text: '🧘 Rest by campfire', action: 'rest' }
+    ]
+  },
+  'crystal cave': {
+    name: 'Crystal Cave',
+    icon: '💎',
+    desc: 'A cavern filled with glowing crystals. The Crystal of Water rests in the deepest chamber.',
+    bg: 'linear-gradient(180deg, #0a0a2e 0%, #1a1a3e 50%, #0a0a1a 100%)',
+    connections: ['royal ruins', 'dark forest', 'sacred temple'],
+    events: {
+      enter: () => {
+        if (!gameState.locationsVisited.has('crystal cave')) {
+          showDialogue('Cave Echo', 'The waters of ancient power flow through these crystals. The Water Guardian awaits...');
+          gameState.locationsVisited.add('crystal cave');
+        }
+      }
+    },
+    actions: [
+      { text: '🔍 Search the cave', action: 'searchCave' },
+      { text: '⚔️ Face the Guardian', action: 'fightGuardian', condition: () => !gameState.crystals[1] },
+      { text: '🧘 Rest in crystal glow', action: 'rest' }
+    ]
+  },
+  'storm peak': {
+    name: 'Storm Peak',
+    icon: '⛰️',
+    desc: 'A towering mountain peak surrounded by eternal storms. The Crystal of Wind hides among the clouds.',
+    bg: 'linear-gradient(180deg, #1a1a2e 0%, #2a2a4e 50%, #0a0a1a 100%)',
+    connections: ['dark forest', 'shadow marsh'],
+    events: {
+      enter: () => {
+        if (!gameState.locationsVisited.has('storm peak')) {
+          showDialogue('Wind Spirit', 'The storms here are no natural phenomenon. Vexar\'s magic fuels them. The Wind Crystal is yours to claim.');
+          gameState.locationsVisited.add('storm peak');
+        }
+      }
+    },
+    actions: [
+      { text: '🔍 Search the peak', action: 'searchPeak' },
+      { text: '⚔️ Face the Guardian', action: 'fightGuardian', condition: () => !gameState.crystals[3] },
+      { text: '🧘 Rest in shelter', action: 'rest' }
+    ]
+  },
+  'shadow marsh': {
+    name: 'Shadow Marsh',
+    icon: '🌿',
+    desc: 'A swamp shrouded in perpetual darkness. The Crystal of Earth lies buried beneath the murky waters.',
+    bg: 'linear-gradient(180deg, #0a1a0a 0%, #1a2a1a 50%, #0a0a1a 100%)',
+    connections: ['storm peak', 'sacred temple'],
+    events: {
+      enter: () => {
+        if (!gameState.locationsVisited.has('shadow marsh')) {
+          showDialogue('Marsh Whisper', 'The earth itself mourns what was lost. The Earth Crystal sleeps beneath these shadows...');
+          gameState.locationsVisited.add('shadow marsh');
+        }
+      }
+    },
+    actions: [
+      { text: '🔍 Search the marsh', action: 'searchMarsh' },
+      { text: '⚔️ Face the Guardian', action: 'fightGuardian', condition: () => !gameState.crystals[2] },
+      { text: '🧘 Rest on dry ground', action: 'rest' }
+    ]
+  },
+  'sacred temple': {
+    name: 'Sacred Temple',
+    icon: '🏛️',
+    desc: 'An ancient temple where the last Sacred Crystal of Light awaits. This is where your quest will culminate.',
+    bg: 'linear-gradient(180deg, #2a1a0a 0%, #3a2a1a 50%, #0a0a1a 100%)',
+    connections: ['crystal cave', 'shadow marsh'],
+    events: {
+      enter: () => {
+        if (!gameState.locationsVisited.has('sacred temple')) {
+          showDialogue('Temple Guardian', 'You have come far, hero. The final crystal awaits. But know this - Vexar himself guards it now.');
+          gameState.locationsVisited.add('sacred temple');
+        }
+      }
+    },
+    actions: [
+      { text: '🔍 Search the temple', action: 'searchTemple' },
+      { text: '⚔️ Challenge Vexar', action: 'fightVexar', condition: () => gameState.crystalsFound >= 4 },
+      { text: '🧘 Meditate', action: 'rest' }
+    ]
+  }
+};
+
+// Enemy Data
+const enemies = {
+  'fire guardian': { name: 'Fire Guardian', sprite: '🔥', hp: 80, maxHp: 80, attack: 12, defense: 8, xp: 30, crystal: 0 },
+  'water guardian': { name: 'Water Guardian', sprite: '💧', hp: 90, maxHp: 90, attack: 10, defense: 12, xp: 35, crystal: 1 },
+  'earth guardian': { name: 'Earth Guardian', sprite: '🌍', hp: 100, maxHp: 100, attack: 14, defense: 15, xp: 40, crystal: 2 },
+  'wind guardian': { name: 'Wind Guardian', sprite: '🌪️', hp: 70, maxHp: 70, attack: 16, defense: 6, xp: 35, crystal: 3 },
+  'vexar': { name: 'Dark Lord Vexar', sprite: '👹', hp: 150, maxHp: 150, attack: 20, defense: 15, xp: 100, crystal: -1 }
+};
+
+// Initialize Game
+function startGame() {
+  document.getElementById('title-screen').classList.add('hidden');
+  setTimeout(() => {
+    document.getElementById('title-screen').style.display = 'none';
+    document.getElementById('game-screen').classList.add('active');
+    renderMap();
+    renderScene();
+    updateStats();
+  }, 1000);
+}
+
+// Render Map
+function renderMap() {
+  const container = document.getElementById('map-container');
+  container.innerHTML = '';
+
+  for (const [id, loc] of Object.entries(locations)) {
+    const node = document.createElement('div');
+    node.className = 'location-node';
+    if (id === gameState.currentLocation) node.classList.add('current');
+    if (gameState.locationsVisited.has(id)) node.classList.add('completed');
+
+    const isUnlocked = loc.connections.includes(gameState.currentLocation) || id === gameState.currentLocation;
+    if (!isUnlocked) node.classList.add('locked');
+
+    node.innerHTML = `
+      <div class="location-name">${loc.icon} ${loc.name}</div>
+      <div class="location-desc">${loc.desc.substring(0, 60)}...</div>
+      <div class="location-icon">${isUnlocked ? '→' : '🔒'}</div>
+    `;
+
+    if (isUnlocked) {
+      node.onclick = () => travelTo(id);
+    }
+
+    container.appendChild(node);
+  }
+}
+
+// Travel to Location
+function travelTo(locationId) {
+  const loc = locations[locationId];
+  if (!loc) return;
+
+  gameState.currentLocation = locationId;
+  gameState.locationsVisited.add(locationId);
+
+  renderMap();
+  renderScene();
+
+  if (loc.events && loc.events.enter) {
+    loc.events.enter();
+  }
+}
+
+// Render Scene
+function renderScene() {
+  const loc = locations[gameState.currentLocation];
+  const bg = document.getElementById('scene-background');
+  const title = document.getElementById('scene-title');
+  const desc = document.getElementById('scene-description');
+  const actions = document.getElementById('scene-actions');
+
+  bg.style.background = loc.bg;
+  title.textContent = `${loc.icon} ${loc.name}`;
+  desc.textContent = loc.desc;
+  actions.innerHTML = '';
+
+  // Add action buttons
+  loc.actions.forEach(action => {
+    if (action.condition && !action.condition()) return;
+
+    const btn = document.createElement('button');
+    btn.className = 'action-btn';
+    btn.textContent = action.text;
+    btn.onclick = () => executeAction(action.action);
+    actions.appendChild(btn);
+  });
+
+  // Add travel buttons for connections
+  loc.connections.forEach(connId => {
+    if (connId === gameState.currentLocation) return;
+    const connLoc = locations[connId];
+    const btn = document.createElement('button');
+    btn.className = 'action-btn';
+    btn.textContent = `🗺️ Travel to ${connLoc.name}`;
+    btn.onclick = () => travelTo(connId);
+    actions.appendChild(btn);
+  });
+
+  // Add scene fade animation
+  const content = document.getElementById('scene-content');
+  content.classList.remove('scene-fade');
+  void content.offsetWidth;
+  content.classList.add('scene-fade');
+}
+
+// Execute Action
+function executeAction(action) {
+  switch (action) {
+    case 'searchRuins':
+      searchLocation('ruins');
+      break;
+    case 'searchForest':
+      searchLocation('forest');
+      break;
+    case 'searchCave':
+      searchLocation('cave');
+      break;
+    case 'searchPeak':
+      searchLocation('peak');
+      break;
+    case 'searchMarsh':
+      searchLocation('marsh');
+      break;
+    case 'searchTemple':
+      searchLocation('temple');
+      break;
+    case 'exploreDeep':
+      exploreDeep();
+      break;
+    case 'fightGuardian':
+      fightGuardian();
+      break;
+    case 'fightVexar':
+      fightVexar();
+      break;
+    case 'rest':
+      rest();
+      break;
+  }
+}
+
+// Search Location
+function searchLocation(type) {
+  const discoveries = {
+    ruins: [
+      { text: 'You found an old sword! +5 Attack', effect: () => { gameState.player.attack += 5; } },
+      { text: 'You discovered a health potion! +20 HP', effect: () => { gameState.player.hp = Math.min(gameState.player.hp + 20, gameState.player.maxHp); } },
+      { text: 'You found a mana crystal! +10 MP', effect: () => { gameState.player.mp = Math.min(gameState.player.mp + 10, gameState.player.maxMp); } },
+      { text: 'You found ancient gold! +20 XP', effect: () => { gainXP(20); } }
+    ],
+    forest: [
+      { text: 'You found a fire herb! +10 HP', effect: () => { gameState.player.hp = Math.min(gameState.player.hp + 10, gameState.player.maxHp); } },
+      { text: 'You discovered a magical scroll! +15 MP', effect: () => { gameState.player.mp = Math.min(gameState.player.mp + 15, gameState.player.maxMp); } },
+      { text: 'You found monster remnants! +25 XP', effect: () => { gainXP(25); } }
+    ],
+    cave: [
+      { text: 'You found a water crystal! +15 MP', effect: () => { gameState.player.mp = Math.min(gameState.player.mp + 15, gameState.player.maxMp); } },
+      { text: 'You discovered rare gems! +30 XP', effect: () => { gainXP(30); } },
+      { text: 'You found a healing spring! +25 HP', effect: () => { gameState.player.hp = Math.min(gameState.player.hp + 25, gameState.player.maxHp); } }
+    ],
+    peak: [
+      { text: 'You found a wind charm! +5 Defense', effect: () => { gameState.player.defense += 5; } },
+      { text: 'You discovered storm energy! +20 XP', effect: () => { gainXP(20); } },
+      { text: 'You found an eagle feather! +10 HP', effect: () => { gameState.player.hp = Math.min(gameState.player.hp + 10, gameState.player.maxHp); } }
+    ],
+    marsh: [
+      { text: 'You found earth herbs! +20 HP', effect: () => { gameState.player.hp = Math.min(gameState.player.hp + 20, gameState.player.maxHp); } },
+      { text: 'You discovered ancient runes! +15 MP', effect: () => { gameState.player.mp = Math.min(gameState.player.mp + 15, gameState.player.maxMp); } },
+      { text: 'You found marsh pearls! +25 XP', effect: () => { gainXP(25); } }
+    ],
+    temple: [
+      { text: 'You found a sacred relic! +10 Attack', effect: () => { gameState.player.attack += 10; } },
+      { text: 'You discovered divine energy! +30 MP', effect: () => { gameState.player.mp = Math.min(gameState.player.mp + 30, gameState.player.maxMp); } },
+      { text: 'You found temple offerings! +40 XP', effect: () => { gainXP(40); } }
+    ]
+  };
+
+  const discoveriesList = discoveries[type] || discoveries.ruins;
+  const discovery = discoveriesList[Math.floor(Math.random() * discoveriesList.length)];
+
+  discovery.effect();
+  showEvent('🔍', 'Discovery!', discovery.text);
+  updateStats();
+}
+
+// Explore Deep
+function exploreDeep() {
+  const events = [
+    { text: 'You found a hidden chamber with ancient treasures! +30 XP', effect: () => { gainXP(30); } },
+    { text: 'You encountered a dark creature! Combat!', effect: () => { startCombat('dark creature'); } },
+    { text: 'You discovered a secret passage! +20 XP', effect: () => { gainXP(20); } },
+    { text: 'You found a healing fountain! +30 HP', effect: () => { gameState.player.hp = Math.min(gameState.player.hp + 30, gameState.player.maxHp); } }
+  ];
+
+  const event = events[Math.floor(Math.random() * events.length)];
+  event.effect();
+
+  if (event.text.includes('Combat!')) {
+    return;
+  }
+
+  showEvent('⚡', 'Deep Exploration', event.text);
+  updateStats();
+}
+
+// Rest
+function rest() {
+  const hpRestore = Math.floor(gameState.player.maxHp * 0.3);
+  const mpRestore = Math.floor(gameState.player.maxMp * 0.3);
+
+  gameState.player.hp = Math.min(gameState.player.hp + hpRestore, gameState.player.maxHp);
+  gameState.player.mp = Math.min(gameState.player.mp + mpRestore, gameState.player.maxMp);
+
+  showEvent('🧘', 'Rest', `You rest and recover. +${hpRestore} HP, +${mpRestore} MP`);
+  updateStats();
+}
+
+// Gain XP
+function gainXP(amount) {
+  gameState.player.xp += amount;
+
+  while (gameState.player.xp >= gameState.player.maxXp) {
+    gameState.player.xp -= gameState.player.maxXp;
+    gameState.player.level++;
+    gameState.player.maxXp = Math.floor(gameState.player.maxXp * 1.5);
+    gameState.player.maxHp += 10;
+    gameState.player.maxMp += 5;
+    gameState.player.attack += 3;
+    gameState.player.defense += 2;
+    gameState.player.hp = gameState.player.maxHp;
+    gameState.player.mp = gameState.player.maxMp;
+
+    showEvent('⬆️', 'Level Up!', `You reached level ${gameState.player.level}! All stats increased!`);
+  }
+}
+
+// Fight Guardian
+function fightGuardian() {
+  const crystalIndex = gameState.currentLocation === 'dark forest' ? 0 :
+                       gameState.currentLocation === 'crystal cave' ? 1 :
+                       gameState.currentLocation === 'storm peak' ? 3 : 2;
+
+  const enemyKey = ['fire guardian', 'water guardian', 'earth guardian', 'wind guardian'][crystalIndex];
+  const enemy = { ...enemies[enemyKey] };
+
+  startCombat(enemy);
+}
+
+// Fight Vexar
+function fightVexar() {
+  const enemy = { ...enemies['vexar'] };
+  startCombat(enemy);
+}
+
+// Start Combat
+function startCombat(enemy) {
+  gameState.combatActive = true;
+  gameState.enemy = { ...enemy };
+
+  const combatScreen = document.getElementById('combat-screen');
+  combatScreen.classList.add('active');
+
+  document.getElementById('player-sprite').textContent = '🧙';
+  document.getElementById('enemy-sprite').textContent = enemy.sprite;
+  document.getElementById('enemy-name').textContent = enemy.name;
+
+  updateCombatHP();
+  clearCombatLog();
+  addCombatLog(`A wild ${enemy.name} appears!`, 'system');
+
+  renderCombatActions();
+}
+
+// Render Combat Actions
+function renderCombatActions() {
+  const actions = document.getElementById('combat-actions');
+  actions.innerHTML = '';
+
+  const attackBtn = document.createElement('button');
+  attackBtn.className = 'action-btn primary';
+  attackBtn.textContent = '⚔️ Attack';
+  attackBtn.onclick = () => playerAttack();
+  actions.appendChild(attackBtn);
+
+  const specialBtn = document.createElement('button');
+  specialBtn.className = 'action-btn';
+  specialBtn.textContent = '✨ Special (10 MP)';
+  specialBtn.disabled = gameState.player.mp < 10;
+  specialBtn.onclick = () => playerSpecial();
+  actions.appendChild(specialBtn);
+
+  const defendBtn = document.createElement('button');
+  defendBtn.className = 'action-btn';
+  defendBtn.textContent = '🛡️ Defend';
+  defendBtn.onclick = () => playerDefend();
+  actions.appendChild(defendBtn);
+
+  const fleeBtn = document.createElement('button');
+  fleeBtn.className = 'action-btn danger';
+  fleeBtn.textContent = '🏃 Flee';
+  fleeBtn.onclick = () => playerFlee();
+  actions.appendChild(fleeBtn);
+}
+
+// Player Attack
+function playerAttack() {
+  if (!gameState.combatActive) return;
+
+  const damage = Math.max(1, gameState.player.attack - gameState.enemy.defense + Math.floor(Math.random() * 5));
+  gameState.enemy.hp -= damage;
+
+  addCombatLog(`You attack ${gameState.enemy.name} for ${damage} damage!`, 'player-action');
+  document.getElementById('enemy-sprite').classList.add('hit');
+  setTimeout(() => document.getElementById('enemy-sprite').classList.remove('hit'), 500);
+
+  updateCombatHP();
+
+  if (gameState.enemy.hp <= 0) {
+    enemyDefeated();
+  } else {
+    setTimeout(() => enemyTurn(), 800);
+  }
+}
+
+// Player Special
+function playerSpecial() {
+  if (!gameState.combatActive || gameState.player.mp < 10) return;
+
+  gameState.player.mp -= 10;
+  const damage = Math.max(1, Math.floor(gameState.player.attack * 1.5) - gameState.enemy.defense + Math.floor(Math.random() * 10));
+  gameState.enemy.hp -= damage;
+
+  addCombatLog(`You unleash a special attack for ${damage} damage!`, 'player-action');
+  document.getElementById('enemy-sprite').classList.add('hit');
+  setTimeout(() => document.getElementById('enemy-sprite').classList.remove('hit'), 500);
+
+  updateCombatHP();
+  updateStats();
+
+  if (gameState.enemy.hp <= 0) {
+    enemyDefeated();
+  } else {
+    setTimeout(() => enemyTurn(), 800);
+  }
+}
+
+// Player Defend
+function playerDefend() {
+  if (!gameState.combatActive) return;
+
+  addCombatLog('You take a defensive stance!', 'player-action');
+  setTimeout(() => enemyTurn(), 800);
+}
+
+// Player Flee
+function playerFlee() {
+  if (!gameState.combatActive) return;
+
+  if (Math.random() > 0.5) {
+    addCombatLog('You successfully fled!', 'system');
+    setTimeout(() => {
+      gameState.combatActive = false;
+      document.getElementById('combat-screen').classList.remove('active');
+    }, 1000);
+  } else {
+    addCombatLog('Failed to flee!', 'system');
+    setTimeout(() => enemyTurn(), 800);
+  }
+}
+
+// Enemy Turn
+function enemyTurn() {
+  if (!gameState.combatActive) return;
+
+  const damage = Math.max(1, gameState.enemy.attack - gameState.player.defense + Math.floor(Math.random() * 5));
+  gameState.player.hp -= damage;
+
+  addCombatLog(`${gameState.enemy.name} attacks you for ${damage} damage!`, 'enemy-action');
+  document.getElementById('player-sprite').classList.add('hit');
+  setTimeout(() => document.getElementById('player-sprite').classList.remove('hit'), 500);
+
+  updateCombatHP();
+  updateStats();
+
+  if (gameState.player.hp <= 0) {
+    playerDefeated();
+  }
+}
+
+// Update Combat HP
+function updateCombatHP() {
+  const playerPercent = Math.max(0, (gameState.player.hp / gameState.player.maxHp) * 100);
+  const enemyPercent = Math.max(0, (gameState.enemy.hp / gameState.enemy.maxHp) * 100);
+
+  document.getElementById('player-combat-hp').style.width = playerPercent + '%';
+  document.getElementById('enemy-combat-hp').style.width = enemyPercent + '%';
+}
+
+// Clear Combat Log
+function clearCombatLog() {
+  document.getElementById('combat-log').innerHTML = '';
+}
+
+// Add Combat Log Entry
+function addCombatLog(text, type) {
+  const log = document.getElementById('combat-log');
+  const entry = document.createElement('div');
+  entry.className = `combat-log-entry ${type}`;
+  entry.textContent = text;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+}
+
+// Enemy Defeated
+function enemyDefeated() {
+  gameState.combatActive = false;
+
+  const xpGain = gameState.enemy.xp;
+  gainXP(xpGain);
+
+  addCombatLog(`${gameState.enemy.name} has been defeated! +${xpGain} XP`, 'system');
+
+  // Check if crystal was dropped
+  if (gameState.enemy.crystal >= 0 && !gameState.crystals[gameState.enemy.crystal]) {
+    gameState.crystals[gameState.enemy.crystal] = true;
+    gameState.crystalsFound++;
+
+    setTimeout(() => {
+      document.getElementById('combat-screen').classList.remove('active');
+
+      const crystalNames = ['Fire', 'Water', 'Earth', 'Wind', 'Light'];
+      const crystalIcons = ['🔥', '💧', '🌍', '🌪️', '✨'];
+      const idx = gameState.enemy.crystal;
+
+      showEvent(crystalIcons[idx], 'Crystal Acquired!', `You obtained the Sacred Crystal of ${crystalNames[idx]}! (${gameState.crystalsFound}/5)`);
+      updateStats();
+      renderMap();
+    }, 1500);
+  } else {
+    setTimeout(() => {
+      document.getElementById('combat-screen').classList.remove('active');
+    }, 1500);
+  }
+}
+
+// Player Defeated
+function playerDefeated() {
+  gameState.combatActive = false;
+
+  addCombatLog('You have been defeated...', 'system');
+
+  setTimeout(() => {
+    document.getElementById('combat-screen').classList.remove('active');
+    gameState.player.hp = gameState.player.maxHp;
+    gameState.player.mp = gameState.player.maxMp;
+    gameState.currentLocation = 'royal ruins';
+    renderMap();
+    renderScene();
+    updateStats();
+    showEvent('💀', 'Defeated', 'You have been defeated. You respawn at the Royal Ruins with full health.');
+  }, 1500);
+}
+
+// Show Event
+function showEvent(icon, title, description) {
+  document.getElementById('event-icon').textContent = icon;
+  document.getElementById('event-title').textContent = title;
+  document.getElementById('event-description').textContent = description;
+  document.getElementById('event-overlay').classList.add('active');
+}
+
+// Close Event
+function closeEvent() {
+  document.getElementById('event-overlay').classList.remove('active');
+}
+
+// Show Dialogue
+function showDialogue(speaker, text) {
+  gameState.dialogueQueue.push({ speaker, text });
+  if (!gameState.dialogueActive) {
+    nextDialogue();
+  }
+}
+
+function nextDialogue() {
+  if (gameState.dialogueQueue.length === 0) {
+    gameState.dialogueActive = false;
+    document.getElementById('dialogue-box').classList.remove('active');
+    return;
+  }
+
+  gameState.dialogueActive = true;
+  const { speaker, text } = gameState.dialogueQueue.shift();
+
+  document.getElementById('dialogue-speaker').textContent = speaker;
+  document.getElementById('dialogue-text').textContent = text;
+  document.getElementById('dialogue-box').classList.add('active');
+
+  document.getElementById('dialogue-box').onclick = () => {
+    nextDialogue();
+  };
+}
+
+// Update Stats
+function updateStats() {
+  const p = gameState.player;
+
+  document.getElementById('hp-text').textContent = `${p.hp}/${p.maxHp}`;
+  document.getElementById('hp-bar').style.width = `${(p.hp / p.maxHp) * 100}%`;
+
+  document.getElementById('mp-text').textContent = `${p.mp}/${p.maxMp}`;
+  document.getElementById('mp-bar').style.width = `${(p.mp / p.maxMp) * 100}%`;
+
+  document.getElementById('xp-text').textContent = `${p.xp}/${p.maxXp}`;
+  document.getElementById('xp-bar').style.width = `${(p.xp / p.maxXp) * 100}%`;
+
+  // Update crystals
+  for (let i = 0; i < 5; i++) {
+    const slot = document.getElementById(`crystal-${i}`);
+    if (gameState.crystals[i]) {
+      slot.classList.add('filled');
+    } else {
+      slot.classList.remove('filled');
+    }
+  }
+
+  // Update inventory
+  const invList = document.getElementById('inventory-list');
+  if (p.inventory.length === 0) {
+    invList.textContent = 'Empty';
+  } else {
+    invList.textContent = p.inventory.join(', ');
+  }
+
+  // Update quest log
+  const questLog = document.getElementById('quest-log');
+  questLog.innerHTML = `
+    <div>📍 Current: ${locations[gameState.currentLocation].name}</div>
+    <div>💎 Crystals: ${gameState.crystalsFound}/5</div>
+    <div>⚔️ Level: ${p.level}</div>
+    <div>🗡️ Attack: ${p.attack} | 🛡️ Defense: ${p.defense}</div>
+  `;
+
+  // Check victory
+  if (gameState.crystalsFound >= 5) {
+    checkVictory();
+  }
+}
+
+// Check Victory
+function checkVictory() {
+  if (gameState.crystalsFound >= 5 && !gameState.questsCompleted.includes('victory')) {
+    gameState.questsCompleted.push('victory');
+
+    setTimeout(() => {
+      document.getElementById('victory-text').innerHTML = `
+        With all five Sacred Crystals united, you channel their combined power 
+        against Dark Lord Vexar. The crystals erupt in a blinding light, 
+        dispelling the darkness that has consumed Eldoria.<br><br>
+        Vexar screams as his forbidden magic is shattered. The kingdom 
+        begins to rebuild, flowers bloom once more, and the people emerge 
+        from their shelters to witness the restoration of their homeland.<br><br>
+        <strong style="color:#ffd700;">Eldoria is saved!</strong><br><br>
+        You are hailed as the greatest hero in the kingdom's history. 
+        The Sacred Crystals are placed in the rebuilt temple, where they 
+        will shine eternally as a symbol of hope and courage.
+      `;
+      document.getElementById('victory-screen').classList.add('active');
+    }, 2000);
+  }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  // Add ambient particles to title screen
+  const titleScreen = document.getElementById('title-screen');
+  for (let i = 0; i < 20; i++) {
+    const particle = document.createElement('div');
+    particle.className = 'particle';
+    particle.style.left = Math.random() * 100 + '%';
+    particle.style.top = Math.random() * 100 + '%';
+    particle.style.width = Math.random() * 4 + 2 + 'px';
+    particle.style.height = particle.style.width;
+    particle.style.background = `rgba(255, 215, 0, ${Math.random() * 0.5 + 0.2})`;
+    particle.style.animationDelay = Math.random() * 3 + 's';
+    particle.style.animationDuration = Math.random() * 3 + 2 + 's';
+    titleScreen.appendChild(particle);
+  }
+});
+</script>
+</body>
+</html>

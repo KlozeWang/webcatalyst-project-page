@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brainrot Empire: Base Defense & Racing</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1a1a2e; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
+canvas { display: block; }
+
+#ui-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 10;
+}
+
+#ui-overlay > * { pointer-events: auto; }
+
+#top-bar {
+  position: absolute; top: 0; left: 0; right: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 100%);
+  padding: 10px 20px; display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 2px solid #ff6b35;
+}
+
+.stat-box {
+  background: rgba(255,255,255,0.1); border-radius: 10px; padding: 8px 16px;
+  display: flex; align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,0.2);
+}
+
+.stat-box .icon { font-size: 20px; }
+.stat-box .value { color: #fff; font-size: 16px; font-weight: bold; }
+.stat-box .label { color: #aaa; font-size: 11px; }
+
+#aura-display { color: #ffd700; }
+#brainrot-display { color: #ff6b35; }
+#base-display { color: #00ff88; }
+
+#main-menu {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+  border-radius: 20px; padding: 40px; text-align: center;
+  border: 3px solid #ff6b35; box-shadow: 0 0 40px rgba(255,107,53,0.3);
+  min-width: 400px;
+}
+
+#main-menu h1 {
+  color: #ff6b35; font-size: 36px; margin-bottom: 10px;
+  text-shadow: 0 0 20px rgba(255,107,53,0.5);
+}
+
+#main-menu h2 { color: #fff; font-size: 18px; margin-bottom: 30px; opacity: 0.8; }
+
+.menu-btn {
+  display: block; width: 100%; padding: 15px 30px; margin: 10px 0;
+  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  border: none; border-radius: 12px; color: #fff; font-size: 18px;
+  font-weight: bold; cursor: pointer; transition: all 0.3s;
+  text-transform: uppercase; letter-spacing: 1px;
+}
+
+.menu-btn:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(255,107,53,0.5); }
+.menu-btn.secondary { background: linear-gradient(135deg, #4a4a8a, #6a6aaa); }
+.menu-btn.secondary:hover { box-shadow: 0 0 20px rgba(106,106,170,0.5); }
+
+#shop-panel {
+  position: absolute; right: -400px; top: 60px; width: 380px;
+  background: linear-gradient(180deg, #16213e, #1a1a3e);
+  border-radius: 0 0 0 20px; padding: 20px;
+  border: 2px solid #ff6b35; border-right: none;
+  transition: right 0.3s; max-height: calc(100vh - 80px); overflow-y: auto;
+}
+
+#shop-panel.open { right: 0; }
+
+#shop-panel h3 { color: #ff6b35; font-size: 22px; margin-bottom: 15px; text-align: center; }
+
+.shop-item {
+  background: rgba(255,255,255,0.05); border-radius: 12px; padding: 15px;
+  margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.1);
+  display: flex; justify-content: space-between; align-items: center;
+  transition: all 0.2s;
+}
+
+.shop-item:hover { background: rgba(255,255,255,0.1); border-color: #ff6b35; }
+
+.shop-item .item-info { flex: 1; }
+.shop-item .item-name { color: #fff; font-weight: bold; font-size: 14px; }
+.shop-item .item-desc { color: #aaa; font-size: 11px; margin-top: 4px; }
+.shop-item .item-cost { color: #ffd700; font-weight: bold; font-size: 13px; }
+
+.buy-btn {
+  padding: 8px 16px; background: linear-gradient(135deg, #ff6b35, #f7931e);
+  border: none; border-radius: 8px; color: #fff; font-weight: bold;
+  cursor: pointer; font-size: 12px; transition: all 0.2s;
+}
+
+.buy-btn:hover { transform: scale(1.1); }
+.buy-btn:disabled { background: #555; cursor: not-allowed; transform: none; }
+
+#base-panel {
+  position: absolute; left: -400px; top: 60px; width: 380px;
+  background: linear-gradient(180deg, #16213e, #1a1a3e);
+  border-radius: 0 0 20px 0; padding: 20px;
+  border: 2px solid #00ff88; border-left: none;
+  transition: left 0.3s; max-height: calc(100vh - 80px); overflow-y: auto;
+}
+
+#base-panel.open { left: 0; }
+
+#base-panel h3 { color: #00ff88; font-size: 22px; margin-bottom: 15px; text-align: center; }
+
+#pet-panel {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  background: linear-gradient(135deg, #16213e, #0f3460);
+  border-radius: 20px; padding: 30px; text-align: center;
+  border: 3px solid #ff6b35; display: none; min-width: 400px;
+}
+
+#pet-panel h3 { color: #ff6b35; font-size: 24px; margin-bottom: 20px; }
+
+.pet-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px 0; }
+
+.pet-card {
+  background: rgba(255,255,255,0.05); border-radius: 12px; padding: 15px;
+  border: 2px solid rgba(255,255,255,0.1); cursor: pointer; transition: all 0.2s;
+}
+
+.pet-card:hover { border-color: #ff6b35; transform: scale(1.05); }
+.pet-card .pet-emoji { font-size: 40px; }
+.pet-card .pet-name { color: #fff; font-size: 12px; margin-top: 8px; font-weight: bold; }
+.pet-card .pet-buff { color: #00ff88; font-size: 10px; margin-top: 4px; }
+
+#notification {
+  position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.8); color: #fff; padding: 12px 24px;
+  border-radius: 10px; font-size: 14px; opacity: 0; transition: opacity 0.3s;
+  border: 1px solid #ff6b35; white-space: nowrap;
+}
+
+#notification.show { opacity: 1; }
+
+#controls-hint {
+  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.7); color: #aaa; padding: 10px 20px;
+  border-radius: 10px; font-size: 12px; text-align: center;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+#minimap {
+  position: absolute; bottom: 20px; right: 20px;
+  width: 180px; height: 180px; background: rgba(0,0,0,0.7);
+  border-radius: 10px; border: 2px solid #ff6b35;
+}
+
+#aura-clicker {
+  position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%);
+  width: 120px; height: 120px; border-radius: 50%;
+  background: radial-gradient(circle, #ffd700, #ff6b35);
+  border: 3px solid #fff; cursor: pointer; display: flex;
+  align-items: center; justify-content: center;
+  font-size: 40px; transition: transform 0.1s;
+  box-shadow: 0 0 30px rgba(255,215,0,0.5);
+}
+
+#aura-clicker:active { transform: translateX(-50%) scale(0.9); }
+
+#vehicle-indicator {
+  position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.8); color: #fff; padding: 8px 16px;
+  border-radius: 8px; font-size: 13px; display: none;
+  border: 1px solid #ff6b35;
+}
+
+.tab-buttons {
+  display: flex; gap: 5px; margin-bottom: 15px;
+}
+
+.tab-btn {
+  flex: 1; padding: 8px; background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 8px;
+  color: #fff; cursor: pointer; font-size: 12px; text-align: center;
+  transition: all 0.2s;
+}
+
+.tab-btn.active { background: #ff6b35; border-color: #ff6b35; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: #ff6b35; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui-overlay">
+  <div id="top-bar">
+    <div class="stat-box">
+      <span class="icon">💰</span>
+      <div>
+        <div class="value" id="aura-display">0</div>
+        <div class="label">Aura</div>
+      </div>
+    </div>
+    <div class="stat-box">
+      <span class="icon">🧠</span>
+      <div>
+        <div class="value" id="brainrot-display">0</div>
+        <div class="label">Brainrot Items</div>
+      </div>
+    </div>
+    <div class="stat-box">
+      <span class="icon">🏠</span>
+      <div>
+        <div class="value" id="base-display">Lv.1</div>
+        <div class="label">Base Level</div>
+      </div>
+    </div>
+    <div class="stat-box">
+      <span class="icon">🐾</span>
+      <div>
+        <div class="value" id="pet-display">0</div>
+        <div class="label">Pets</div>
+      </div>
+    </div>
+    <div class="stat-box">
+      <span class="icon">🚗</span>
+      <div>
+        <div class="value" id="vehicle-display">None</div>
+        <div class="label">Vehicle</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="main-menu">
+    <h1>🧠 BRAINROT EMPIRE</h1>
+    <h2>Base Defense & Open-World Racing</h2>
+    <button class="menu-btn" onclick="startGame()">🎮 PLAY NOW</button>
+    <button class="menu-btn secondary" onclick="openShop()">🛒 VEHICLE SHOP</button>
+    <button class="menu-btn secondary" onclick="openBasePanel()">🏠 BASE UPGRADES</button>
+    <button class="menu-btn secondary" onclick="openPetPanel()">🐾 HATCH PETS</button>
+  </div>
+
+  <div id="shop-panel">
+    <h3>🛒 Vehicle Shop</h3>
+    <div class="tab-buttons">
+      <div class="tab-btn active" onclick="switchTab('vehicles')">🚗 Vehicles</div>
+      <div class="tab-btn" onclick="switchTab('custom')">🎨 Custom</div>
+      <div class="tab-btn" onclick="switchTab('parts')">⚙️ Parts</div>
+    </div>
+    <div id="shop-items"></div>
+    <button class="menu-btn secondary" style="margin-top:15px;" onclick="closeShop()">✕ Close</button>
+  </div>
+
+  <div id="base-panel">
+    <h3>🏠 Base Upgrades</h3>
+    <div id="base-upgrades"></div>
+    <button class="menu-btn secondary" style="margin-top:15px;" onclick="closeBasePanel()">✕ Close</button>
+  </div>
+
+  <div id="pet-panel">
+    <h3>🐾 Pet Hatchery</h3>
+    <p style="color:#aaa;margin-bottom:15px;">Cost: 500 Aura per hatch</p>
+    <div class="pet-grid" id="pet-grid"></div>
+    <button class="menu-btn" onclick="hatchPet()">🥚 HATCH EGG (500 💰)</button>
+    <button class="menu-btn secondary" style="margin-top:10px;" onclick="closePetPanel()">✕ Close</button>
+  </div>
+
+  <div id="notification"></div>
+
+  <div id="controls-hint">
+    WASD: Move | E: Pick Up/Drop Items | F: Enter/Exit Vehicle | CLICK: Generate Aura | SPACE: Boost
+  </div>
+
+  <div id="aura-clicker" onclick="clickAura()">💰</div>
+
+  <div id="vehicle-indicator">🚗 In Vehicle - Press F to exit</div>
+
+  <canvas id="minimap"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const minimapCanvas = document.getElementById('minimap');
+const minimapCtx = minimapCanvas.getContext('2d');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+minimapCanvas.width = 180;
+minimapCanvas.height = 180;
+
+window.addEventListener('resize', () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+});
+
+// Game State
+const game = {
+  running: false,
+  aura: 1000,
+  brainrotItems: 0,
+  baseLevel: 1,
+  baseDefense: 10,
+  auraMultiplier: 1,
+  pets: [],
+  vehicles: [],
+  currentVehicle: null,
+  inVehicle: false,
+  brainrotRate: 1,
+  stealCooldown: 0,
+  particles: [],
+  notifications: [],
+  time: 0,
+  worldSize: 4000,
+  camera: { x: 0, y: 0 },
+  keys: {},
+  mouse: { x: 0, y: 0 },
+  clickPower: 1,
+  boostEnergy: 100,
+  boosting: false,
+  brainrotSpawnTimer: 0,
+  aiPlayers: [],
+  stolenItems: 0,
+  defenseHits: 0
+};
+
+// Player
+const player = {
+  x: 2000, y: 2000,
+  speed: 4,
+  size: 20,
+  color: '#ff6b35',
+  carrying: 0,
+  maxCarry: 5,
+  angle: 0,
+  vx: 0, vy: 0,
+  invincible: 0
+};
+
+// Brainrot Items
+let brainrotItems = [];
+const brainrotTypes = [
+  { emoji: '🧠', name: 'Brainrot', value: 10, color: '#ff6b35' },
+  { emoji: '💀', name: 'Skull', value: 25, color: '#888' },
+  { emoji: '👁️', name: 'Third Eye', value: 50, color: '#ff00ff' },
+  { emoji: '🔮', name: 'Crystal', value: 100, color: '#00ffff' },
+  { emoji: '⚡', name: 'Lightning', value: 200, color: '#ffff00' },
+  { emoji: '🌟', name: 'Star', value: 500, color: '#ffd700' }
+];
+
+// AI Players
+const aiNames = ['NoobMaster', 'ProGamer', 'BrainrotKing', 'StealthNinja', 'SpeedDemon', 'CryptoLord', 'PetMaster', 'BaseBuilder'];
+const aiColors = ['#ff4444', '#44ff44', '#4444ff', '#ffff44', '#ff44ff', '#44ffff', '#ff8800', '#88ff00'];
+
+function initAIPlayers() {
+  game.aiPlayers = [];
+  for (let i = 0; i < 6; i++) {
+    game.aiPlayers.push({
+      x: 1000 + Math.random() * 2000,
+      y: 1000 + Math.random() * 2000,
+      speed: 2 + Math.random() * 2,
+      size: 20,
+      color: aiColors[i],
+      name: aiNames[i],
+      carrying: 0,
+      maxCarry: 3 + Math.floor(Math.random() * 4),
+      angle: Math.random() * Math.PI * 2,
+      targetX: 0, targetY: 0,
+      state: 'collect', // collect, flee, return
+      stealCooldown: 0,
+      inVehicle: false,
+      vehicleType: null,
+      vx: 0, vy: 0
+    });
+  }
+}
+
+// Vehicles
+const vehicleTypes = [
+  { id: 'sedan', name: 'Sedan', speed: 6, capacity: 10, cost: 500, color: '#4488ff', emoji: '🚗' },
+  { id: 'sports', name: 'Sports Car', speed: 10, capacity: 8, cost: 1500, color: '#ff4444', emoji: '🏎️' },
+  { id: 'truck', name: 'Truck', speed: 4, capacity: 20, cost: 2000, color: '#888888', emoji: '🚛' },
+  { id: 'super', name: 'Supercar', speed: 14, capacity: 6, cost: 5000, color: '#ff00ff', emoji: '🏎️' },
+  { id: 'tank', name: 'Battle Tank', speed: 3, capacity: 30, cost: 10000, color: '#444444', emoji: '🛡️' },
+  { id: 'rocket', name: 'Rocket Car', speed: 20, capacity: 5, cost: 25000, color: '#ffd700', emoji: '🚀' }
+];
+
+const customColors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ff8800', '#8800ff', '#ffffff', '#000000'];
+
+const partTypes = [
+  { id: 'engine', name: 'Turbo Engine', desc: '+2 Speed', cost: 1000, effect: 'speed', value: 2 },
+  { id: 'armor', name: 'Armor Plating', desc: '+5 Defense', cost: 1500, effect: 'defense', value: 5 },
+  { id: 'cargo', name: 'Extra Cargo', desc: '+10 Capacity', cost: 800, effect: 'capacity', value: 10 },
+  { id: 'nitro', name: 'Nitro Boost', desc: '+5 Boost', cost: 2000, effect: 'boost', value: 5 }
+];
+
+// Base Upgrades
+const baseUpgrades = [
+  { id: 'wall', name: 'Reinforced Walls', desc: '+10 Defense', cost: 300, level: 0, maxLevel: 10, effect: 'defense', value: 10 },
+  { id: 'turret', name: 'Auto Turret', desc: '+5 Defense/sec', cost: 800, level: 0, maxLevel: 5, effect: 'defenseRate', value: 5 },
+  { id: 'vault', name: 'Secure Vault', desc: '+5 Max Carry', cost: 500, level: 0, maxLevel: 5, effect: 'capacity', value: 5 },
+  { id: 'generator', name: 'Aura Generator', desc: '+0.5 Aura/sec', cost: 1000, level: 0, maxLevel: 10, effect: 'auraGen', value: 0.5 },
+  { id: 'scanner', name: 'Brainrot Scanner', desc: '+1 Spawn Rate', cost: 600, level: 0, maxLevel: 5, effect: 'spawnRate', value: 1 },
+  { id: 'shield', name: 'Energy Shield', desc: 'Brief invincibility', cost: 2000, level: 0, maxLevel: 3, effect: 'shield', value: 1 }
+];
+
+// Pets
+const petTypes = [
+  { id: 'dog', name: 'Brainrot Dog', emoji: '🐕', buff: 'steal', value: 0.1, desc: '+10% Steal Chance' },
+  { id: 'cat', name: 'Mystic Cat', emoji: '🐱', buff: 'speed', value: 0.15, desc: '+15% Speed' },
+  { id: 'dragon', name: 'Baby Dragon', emoji: '🐉', buff: 'defense', value: 0.2, desc: '+20% Defense' },
+  { id: 'fox', name: 'Shadow Fox', emoji: '🦊', buff: 'carry', value: 3, desc: '+3 Carry Capacity' },
+  { id: 'owl', name: 'Wisdom Owl', emoji: '🦉', buff: 'aura', value: 0.25, desc: '+25% Aura Multiplier' },
+  { id: 'wolf', name: 'Alpha Wolf', emoji: '🐺', buff: 'race', value: 0.2, desc: '+20% Racing Speed' },
+  { id: 'eagle', name: 'Golden Eagle', emoji: '🦅', buff: 'spawn', value: 0.3, desc: '+30% Brainrot Spawn' },
+  { id: 'bear', name: 'Iron Bear', emoji: '🐻', buff: 'armor', value: 0.3, desc: '+30% Damage Reduction' },
+  { id: 'rabbit', name: 'Speed Rabbit', emoji: '🐰', buff: 'boost', value: 0.4, desc: '+40% Boost Duration' }
+];
+
+function startGame() {
+  document.getElementById('main-menu').style.display = 'none';
+  game.running = true;
+  initAIPlayers();
+  spawnBrainrotItems(20);
+  game.vehicles = [...vehicleTypes];
+  updateUI();
+  gameLoop();
+}
+
+function spawnBrainrotItems(count) {
+  for (let i = 0; i < count; i++) {
+    const type = brainrotTypes[Math.floor(Math.random() * Math.min(brainrotTypes.length, 2 + game.baseLevel))];
+    brainrotItems.push({
+      x: 1800 + Math.random() * 400,
+      y: 1800 + Math.random() * 400,
+      type: type,
+      size: 15,
+      pulse: Math.random() * Math.PI * 2,
+      collected: false
+    });
+  }
+}
+
+function clickAura() {
+  const amount = Math.floor(game.clickPower * game.auraMultiplier);
+  game.aura += amount;
+  game.clickPower = Math.min(game.clickPower + 0.1, 10);
+  addParticle(player.x, player.y - 30, `+${amount} 💰`, '#ffd700');
+  updateUI();
+}
+
+function addParticle(x, y, text, color) {
+  game.particles.push({
+    x, y, text, color,
+    life: 60,
+    vy: -2,
+    vx: (Math.random() - 0.5) * 2
+  });
+}
+
+function showNotification(text) {
+  const notif = document.getElementById('notification');
+  notif.textContent = text;
+  notif.classList.add('show');
+  setTimeout(() => notif.classList.remove('show'), 3000);
+}
+
+function openShop() {
+  document.getElementById('shop-panel').classList.add('open');
+  renderShopItems('vehicles');
+}
+
+function closeShop() {
+  document.getElementById('shop-panel').classList.remove('open');
+}
+
+function openBasePanel() {
+  document.getElementById('base-panel').classList.add('open');
+  renderBaseUpgrades();
+}
+
+function closeBasePanel() {
+  document.getElementById('base-panel').classList.remove('open');
+}
+
+function openPetPanel() {
+  document.getElementById('pet-panel').style.display = 'block';
+  renderPetGrid();
+}
+
+function closePetPanel() {
+  document.getElementById('pet-panel').style.display = 'none';
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  if (tab === 'vehicles') renderShopItems('vehicles');
+  else if (tab === 'custom') renderShopItems('custom');
+  else if (tab === 'parts') renderShopItems('parts');
+}
+
+function renderShopItems(tab) {
+  const container = document.getElementById('shop-items');
+  container.innerHTML = '';
+
+  if (tab === 'vehicles') {
+    vehicleTypes.forEach(v => {
+      const owned = game.vehicles.find(ov => ov.id === v.id && ov.owned);
+      const item = document.createElement('div');
+      item.className = 'shop-item';
+      item.innerHTML = `
+        <div class="item-info">
+          <div class="item-name">${v.emoji} ${v.name}</div>
+          <div class="item-desc">Speed: ${v.speed} | Capacity: ${v.capacity}</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="item-cost">${v.cost} 💰</div>
+          <button class="buy-btn" ${owned ? 'disabled' : ''} onclick="buyVehicle('${v.id}')">
+            ${owned ? 'Owned' : 'Buy'}
+          </button>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  } else if (tab === 'custom') {
+    customColors.forEach(color => {
+      const item = document.createElement('div');
+      item.className = 'shop-item';
+      item.innerHTML = `
+        <div class="item-info">
+          <div class="item-name" style="display:flex;align-items:center;gap:8px;">
+            <div style="width:20px;height:20px;border-radius:50%;background:${color};border:2px solid #fff;"></div>
+            Custom Color
+          </div>
+          <div class="item-desc">Change vehicle color</div>
+        </div>
+        <button class="buy-btn" onclick="applyColor('${color}')">Apply</button>
+      `;
+      container.appendChild(item);
+    });
+  } else if (tab === 'parts') {
+    partTypes.forEach(p => {
+      const item = document.createElement('div');
+      item.className = 'shop-item';
+      item.innerHTML = `
+        <div class="item-info">
+          <div class="item-name">⚙️ ${p.name}</div>
+          <div class="item-desc">${p.desc}</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="item-cost">${p.cost} 💰</div>
+          <button class="buy-btn" onclick="buyPart('${p.id}')">Buy</button>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+  }
+}
+
+function buyVehicle(id) {
+  const vehicle = vehicleTypes.find(v => v.id === id);
+  if (!vehicle || game.aura < vehicle.cost) {
+    showNotification('Not enough Aura!');
+    return;
+  }
+  game.aura -= vehicle.cost;
+  const ownedVehicle = { ...vehicle, owned: true, color: vehicle.color, parts: [] };
+  game.vehicles.push(ownedVehicle);
+  showNotification(`Bought ${vehicle.name}!`);
+  updateUI();
+  renderShopItems('vehicles');
+}
+
+function applyColor(color) {
+  if (game.currentVehicle) {
+    game.currentVehicle.color = color;
+    showNotification(`Color applied!`);
+  } else {
+    showNotification('Enter a vehicle first!');
+  }
+}
+
+function buyPart(id) {
+  const part = partTypes.find(p => p.id === id);
+  if (!part || game.aura < part.cost) {
+    showNotification('Not enough Aura!');
+    return;
+  }
+  game.aura -= part.cost;
+  if (game.currentVehicle) {
+    game.currentVehicle.parts.push({ ...part });
+    applyPartEffects(game.currentVehicle, part);
+    showNotification(`Installed ${part.name}!`);
+  } else {
+    showNotification('Enter a vehicle first!');
+  }
+  updateUI();
+}
+
+function applyPartEffects(vehicle, part) {
+  if (part.effect === 'speed') vehicle.speed += part.value;
+  if (part.effect === 'defense') game.baseDefense += part.value;
+  if (part.effect === 'capacity') vehicle.capacity += part.value;
+  if (part.effect === 'boost') game.boostEnergy += part.value * 10;
+}
+
+function renderBaseUpgrades() {
+  const container = document.getElementById('base-upgrades');
+  container.innerHTML = '';
+  baseUpgrades.forEach(upgrade => {
+    const maxed = upgrade.level >= upgrade.maxLevel;
+    const item = document.createElement('div');
+    item.className = 'shop-item';
+    item.innerHTML = `
+      <div class="item-info">
+        <div class="item-name">🏠 ${upgrade.name} (Lv.${upgrade.level})</div>
+        <div class="item-desc">${upgrade.desc}</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="item-cost">${upgrade.cost} 💰</div>
+        <button class="buy-btn" ${maxed || game.aura < upgrade.cost ? 'disabled' : ''} onclick="upgradeBase('${upgrade.id}')">
+          ${maxed ? 'MAX' : 'Upgrade'}
+        </button>
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+function upgradeBase(id) {
+  const upgrade = baseUpgrades.find(u => u.id === id);
+  if (!upgrade || upgrade.level >= upgrade.maxLevel || game.aura < upgrade.cost) {
+    showNotification('Cannot upgrade!');
+    return;
+  }
+  game.aura -= upgrade.cost;
+  upgrade.level++;
+  game.baseLevel++;
+
+  if (upgrade.effect === 'defense') game.baseDefense += upgrade.value;
+  if (upgrade.effect === 'capacity') player.maxCarry += upgrade.value;
+  if (upgrade.effect === 'spawnRate') game.brainrotRate += upgrade.value;
+
+  showNotification(`Upgraded ${upgrade.name} to Lv.${upgrade.level}!`);
+  updateUI();
+  renderBaseUpgrades();
+}
+
+function renderPetGrid() {
+  const container = document.getElementById('pet-grid');
+  container.innerHTML = '';
+  petTypes.forEach(pet => {
+    const owned = game.pets.find(p => p.id === pet.id);
+    const card = document.createElement('div');
+    card.className = 'pet-card';
+    card.innerHTML = `
+      <div class="pet-emoji">${pet.emoji}</div>
+      <div class="pet-name">${pet.name}</div>
+      <div class="pet-buff">${pet.desc}</div>
+      ${owned ? '<div style="color:#00ff88;font-size:10px;margin-top:4px;">✓ Owned</div>' : ''}
+    `;
+    container.appendChild(card);
+  });
+}
+
+function hatchPet() {
+  if (game.aura < 500) {
+    showNotification('Not enough Aura!');
+    return;
+  }
+  game.aura -= 500;
+  const pet = petTypes[Math.floor(Math.random() * petTypes.length)];
+  if (game.pets.find(p => p.id === pet.id)) {
+    showNotification('Already have this pet!');
+    return;
+  }
+  game.pets.push({ ...pet });
+  applyPetBuff(pet);
+  showNotification(`Hatched ${pet.name}! ${pet.desc}`);
+  updateUI();
+  renderPetGrid();
+}
+
+function applyPetBuff(pet) {
+  if (pet.buff === 'steal') game.stealCooldown = Math.max(0, game.stealCooldown - pet.value);
+  if (pet.buff === 'speed') player.speed += pet.value * 2;
+  if (pet.buff === 'defense') game.baseDefense += pet.value * 5;
+  if (pet.buff === 'carry') player.maxCarry += pet.value;
+  if (pet.buff === 'aura') game.auraMultiplier += pet.value;
+  if (pet.buff === 'race') game.boostEnergy += pet.value * 20;
+  if (pet.buff === 'spawn') game.brainrotRate += pet.value;
+}
+
+function updateUI() {
+  document.getElementById('aura-display').textContent = Math.floor(game.aura);
+  document.getElementById('brainrot-display').textContent = game.brainrotItems;
+  document.getElementById('base-display').textContent = `Lv.${game.baseLevel}`;
+  document.getElementById('pet-display').textContent = game.pets.length;
+  document.getElementById('vehicle-display').textContent = game.currentVehicle ? game.currentVehicle.name : 'None';
+}
+
+function handleInput() {
+  game.keys = game.keys || {};
+  // Movement
+  let dx = 0, dy = 0;
+  if (game.keys['w'] || game.keys['arrowup']) dy = -1;
+  if (game.keys['s'] || game.keys['arrowdown']) dy = 1;
+  if (game.keys['a'] || game.keys['arrowleft']) dx = -1;
+  if (game.keys['d'] || game.keys['arrowright']) dx = 1;
+
+  if (dx !== 0 || dy !== 0) {
+    const len = Math.sqrt(dx * dx + dy * dy);
+    dx /= len; dy /= len;
+
+    let speed = player.speed;
+    if (game.inVehicle && game.currentVehicle) {
+      speed = game.currentVehicle.speed;
+    }
+    if (game.boosting && game.boostEnergy > 0) {
+      speed *= 2;
+      game.boostEnergy -= 0.5;
+    }
+
+    // Penalty for carrying items
+    if (player.carrying > 0) {
+      speed *= 0.7;
+    }
+
+    // Pet speed buff
+    const speedPet = game.pets.find(p => p.buff === 'speed');
+    if (speedPet) speed *= (1 + speedPet.value);
+
+    player.vx = dx * speed;
+    player.vy = dy * speed;
+    player.angle = Math.atan2(dy, dx);
+  } else {
+    player.vx *= 0.8;
+    player.vy *= 0.8;
+  }
+
+  player.x += player.vx;
+  player.y += player.vy;
+
+  // World bounds
+  player.x = Math.max(50, Math.min(game.worldSize - 50, player.x));
+  player.y = Math.max(50, Math.min(game.worldSize - 50, player.y));
+
+  // Boost
+  if (game.keys[' '] && game.boostEnergy > 0) {
+    game.boosting = true;
+  } else {
+    game.boosting = false;
+    game.boostEnergy = Math.min(game.boostEnergy + 0.2, 100);
+  }
+
+  // Pick up items
+  if (game.keys['e']) {
+    game.keys['e'] = false;
+    pickUpItem();
+  }
+
+  // Enter/exit vehicle
+  if (game.keys['f']) {
+    game.keys['f'] = false;
+    toggleVehicle();
+  }
+}
+
+function pickUpItem() {
+  if (player.carrying >= player.maxCarry) {
+    showNotification('Carry capacity full!');
+    return;
+  }
+
+  for (let i = brainrotItems.length - 1; i >= 0; i--) {
+    const item = brainrotItems[i];
+    const dist = Math.hypot(item.x - player.x, item.y - player.y);
+    if (dist < 40) {
+      player.carrying++;
+      brainrotItems.splice(i, 1);
+      addParticle(player.x, player.y - 20, `+1 ${item.type.emoji}`, item.type.color);
+      showNotification(`Picked up ${item.type.name}!`);
+      updateUI();
+      return;
+    }
+  }
+}
+
+function toggleVehicle() {
+  if (game.inVehicle) {
+    // Exit vehicle
+    game.inVehicle = false;
+    player.x = game.currentVehicle.x + 40;
+    player.y = game.currentVehicle.y;
+    game.currentVehicle = null;
+    document.getElementById('vehicle-indicator').style.display = 'none';
+    showNotification('Exited vehicle');
+  } else {
+    // Enter nearest vehicle
+    let nearest = null;
+    let nearestDist = 100;
+    game.vehicles.forEach(v => {
+      if (v.owned) {
+        const dist = Math.hypot(v.x - player.x, v.y - player.y);
+        if (dist < nearestDist) {
+          nearest = v;
+          nearestDist = dist;
+        }
+      }
+    });
+
+    if (nearest) {
+      game.inVehicle = true;
+      game.currentVehicle = nearest;
+      player.x = nearest.x;
+      player.y = nearest.y;
+      document.getElementById('vehicle-indicator').style.display = 'block';
+      showNotification(`Entered ${nearest.name}!`);
+    } else {
+      showNotification('No vehicles nearby!');
+    }
+  }
+}
+
+function updateAI() {
+  game.aiPlayers.forEach(ai => {
+    // AI behavior
+    if (ai.state === 'collect') {
+      // Find nearest brainrot item
+      let nearestItem = null;
+      let nearestDist = Infinity;
+      brainrotItems.forEach(item => {
+        const dist = Math.hypot(item.x - ai.x, item.y - ai.y);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestItem = item;
+        }
+      });
+
+      if (nearestItem && nearestDist < 500) {
+        ai.targetX = nearestItem.x;
+        ai.targetY = nearestItem.y;
+      } else {
+        // Return to base zone
+        ai.targetX = 2000;
+        ai.targetY = 2000;
+      }
+
+      // Move towards target
+      const dx = ai.targetX - ai.x;
+      const dy = ai.targetY - ai.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 10) {
+        ai.x += (dx / dist) * ai.speed;
+        ai.y += (dy / dist) * ai.speed;
+        ai.angle = Math.atan2(dy, dx);
+      }
+
+      // Pick up item
+      if (nearestItem && nearestDist < 30) {
+        if (ai.carrying < ai.maxCarry) {
+          ai.carrying++;
+          const idx = brainrotItems.indexOf(nearestItem);
+          if (idx > -1) brainrotItems.splice(idx, 1);
+        }
+      }
+
+      // Steal from player
+      if (ai.carrying > 0) {
+        const distToPlayer = Math.hypot(ai.x - player.x, ai.y - player.y);
+        if (distToPlayer < 50 && player.carrying > 0 && ai.stealCooldown <= 0) {
+          const stolen = Math.min(1, player.carrying);
+          player.carrying -= stolen;
+          ai.carrying += stolen;
+          ai.stealCooldown = 120;
+          game.stolenItems += stolen;
+          addParticle(player.x, player.y - 30, `-${stolen} 🧠`, '#ff0000');
+          showNotification(`${ai.name} stole ${stolen} brainrot items!`);
+        }
+      }
+
+      // Change state if carrying enough
+      if (ai.carrying >= ai.maxCarry * 0.8) {
+        ai.state = 'return';
+      }
+    } else if (ai.state === 'return') {
+      ai.targetX = 2000;
+      ai.targetY = 2000;
+
+      const dx = ai.targetX - ai.x;
+      const dy = ai.targetY - ai.y;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist > 50) {
+        ai.x += (dx / dist) * ai.speed;
+        ai.y += (dy / dist) * ai.speed;
+      } else {
+        // Deposit items
+        game.aura += ai.carrying * 10;
+        addParticle(ai.x, ai.y - 30, `+${ai.carrying * 10} 💰`, '#ffd700');
+        ai.carrying = 0;
+        ai.state = 'collect';
+      }
+    }
+
+    if (ai.stealCooldown > 0) ai.stealCooldown--;
+
+    // Keep in bounds
+    ai.x = Math.max(50, Math.min(game.worldSize - 50, ai.x));
+    ai.y = Math.max(50, Math.min(game.worldSize - 50, ai.y));
+  });
+}
+
+function updateBrainrotSpawning() {
+  game.brainrotSpawnTimer++;
+  const spawnRate = Math.max(30, 120 - game.brainrotRate * 10);
+
+  if (game.brainrotSpawnTimer >= spawnRate && brainrotItems.length < 50) {
+    game.brainrotSpawnTimer = 0;
+    spawnBrainrotItems(1);
+  }
+}
+
+function updateParticles() {
+  for (let i = game.particles.length - 1; i >= 0; i--) {
+    const p = game.particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+    if (p.life <= 0) {
+      game.particles.splice(i, 1);
+    }
+  }
+}
+
+function updateCamera() {
+  game.camera.x = player.x - canvas.width / 2;
+  game.camera.y = player.y - canvas.height / 2;
+}
+
+function drawWorld() {
+  // Background
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.save();
+  ctx.translate(-game.camera.x, -game.camera.y);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  const gridSize = 100;
+  const startX = Math.floor(game.camera.x / gridSize) * gridSize;
+  const startY = Math.floor(game.camera.y / gridSize) * gridSize;
+
+  for (let x = startX; x < game.camera.x + canvas.width + gridSize; x += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(x, game.camera.y);
+    ctx.lineTo(x, game.camera.y + canvas.height);
+    ctx.stroke();
+  }
+  for (let y = startY; y < game.camera.y + canvas.height + gridSize; y += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(game.camera.x, y);
+    ctx.lineTo(game.camera.x + canvas.width, y);
+    ctx.stroke();
+  }
+
+  // World border
+  ctx.strokeStyle = '#ff6b35';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(0, 0, game.worldSize, game.worldSize);
+
+  // Central zone (Brainrot collection zone)
+  const zoneX = 2000, zoneY = 2000, zoneSize = 300;
+  const gradient = ctx.createRadialGradient(zoneX, zoneY, 0, zoneX, zoneY, zoneSize);
+  gradient.addColorStop(0, 'rgba(255,107,53,0.3)');
+  gradient.addColorStop(1, 'rgba(255,107,53,0)');
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(zoneX, zoneY, zoneSize, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255,107,53,0.5)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([10, 5]);
+  ctx.beginPath();
+  ctx.arc(zoneX, zoneY, zoneSize, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Zone label
+  ctx.fillStyle = '#ff6b35';
+  ctx.font = 'bold 16px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('🧠 BRAINROT ZONE', zoneX, zoneY - zoneSize - 10);
+
+  // Base
+  const baseX = 1800, baseY = 1800;
+  ctx.fillStyle = 'rgba(0,255,136,0.2)';
+  ctx.fillRect(baseX - 50, baseY - 50, 100, 100);
+  ctx.strokeStyle = '#00ff88';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(baseX - 50, baseY - 50, 100, 100);
+  ctx.fillStyle = '#00ff88';
+  ctx.font = 'bold 14px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(`🏠 BASE Lv.${game.baseLevel}`, baseX, baseY + 5);
+
+  // Draw brainrot items
+  brainrotItems.forEach(item => {
+    item.pulse += 0.05;
+    const pulseSize = item.size + Math.sin(item.pulse) * 3;
+
+    // Glow
+    ctx.fillStyle = item.type.color + '33';
+    ctx.beginPath();
+    ctx.arc(item.x, item.y, pulseSize + 10, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Item
+    ctx.font = `${pulseSize * 2}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(item.type.emoji, item.x, item.y);
+
+    // Value label
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px Arial';
+    ctx.fillText(`${item.type.value}💰`, item.x, item.y + pulseSize + 10);
+  });
+
+  // Draw AI players
+  game.aiPlayers.forEach(ai => {
+    // Body
+    ctx.fillStyle = ai.color;
+    ctx.beginPath();
+    ctx.arc(ai.x, ai.y, ai.size, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Outline
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Name
+    ctx.fillStyle = '#fff';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(ai.name, ai.x, ai.y - ai.size - 10);
+
+    // Carrying indicator
+    if (ai.carrying > 0) {
+      ctx.fillStyle = '#ff6b35';
+      ctx.font = '12px Arial';
+      ctx.fillText(`🧠${ai.carrying}`, ai.x, ai.y + ai.size + 15);
+    }
+
+    // Direction indicator
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(
+      ai.x + Math.cos(ai.angle) * ai.size,
+      ai.y + Math.sin(ai.angle) * ai.size,
+      4, 0, Math.PI * 2
+    );
+    ctx.fill();
+  });
+
+  // Draw player
+  if (!game.inVehicle) {
+    // Player body
+    ctx.fillStyle = player.color;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Player outline
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Direction indicator
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(
+      player.x + Math.cos(player.angle) * player.size,
+      player.y + Math.sin(player.angle) * player.size,
+      5, 0, Math.PI * 2
+    );
+    ctx.fill();
+
+    // Carrying indicator
+    if (player.carrying > 0) {
+      ctx.fillStyle = '#ff6b35';
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(`🧠${player.carrying}/${player.maxCarry}`, player.x, player.y + player.size + 20);
+
+      // Vulnerability warning
+      if (player.carrying > 0) {
+        ctx.fillStyle = 'rgba(255,0,0,0.3)';
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.size + 15, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Name
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('YOU', player.x, player.y - player.size - 10);
+  } else {
+    // Draw vehicle
+    const v = game.currentVehicle;
+    ctx.save();
+    ctx.translate(v.x, v.y);
+
+    // Vehicle body
+    ctx.fillStyle = v.color;
+    ctx.fillRect(-25, -15, 50, 30);
+
+    // Vehicle outline
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-25, -15, 50, 30);
+
+    // Wheels
+    ctx.fillStyle = '#333';
+    ctx.fillRect(-20, -18, 10, 6);
+    ctx.fillRect(-20, 12, 10, 6);
+    ctx.fillRect(10, -18, 10, 6);
+    ctx.fillRect(10, 12, 10, 6);
+
+    // Windshield
+    ctx.fillStyle = 'rgba(100,200,255,0.5)';
+    ctx.fillRect(10, -12, 12, 24);
+
+    // Speed lines when moving
+    if (Math.abs(player.vx) > 1 || Math.abs(player.vy) > 1) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(-30 - i * 10, -10 + i * 10);
+        ctx.lineTo(-40 - i * 10, -10 + i * 10);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+
+    // Vehicle name
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${v.emoji} ${v.name}`, v.x, v.y - 25);
+
+    // Capacity
+    ctx.fillStyle = '#ffd700';
+    ctx.font = '11px Arial';
+    ctx.fillText(`🧠${player.carrying}/${v.capacity}`, v.x, v.y + 30);
+  }
+
+  // Draw particles
+  game.particles.forEach(p => {
+    ctx.globalAlpha = p.life / 60;
+    ctx.fillStyle = p.color;
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(p.text, p.x, p.y);
+    ctx.globalAlpha = 1;
+  });
+
+  ctx.restore();
+}
+
+function drawMinimap() {
+  minimapCtx.fillStyle = 'rgba(0,0,0,0.8)';
+  minimapCtx.fillRect(0, 0, 180, 180);
+
+  const scale = 180 / game.worldSize;
+
+  // Central zone
+  minimapCtx.fillStyle = 'rgba(255,107,53,0.3)';
+  minimapCtx.beginPath();
+  minimapCtx.arc(2000 * scale, 2000 * scale, 300 * scale, 0, Math.PI * 2);
+  minimapCtx.fill();
+
+  // Base
+  minimapCtx.fillStyle = 'rgba(0,255,136,0.5)';
+  minimapCtx.fillRect(1800 * scale - 5, 1800 * scale - 5, 10, 10);
+
+  // Brainrot items
+  brainrotItems.forEach(item => {
+    minimapCtx.fillStyle = item.type.color;
+    minimapCtx.fillRect(item.x * scale - 1, item.y * scale - 1, 2, 2);
+  });
+
+  // AI players
+  game.aiPlayers.forEach(ai => {
+    minimapCtx.fillStyle = ai.color;
+    minimapCtx.beginPath();
+    minimapCtx.arc(ai.x * scale, ai.y * scale, 3, 0, Math.PI * 2);
+    minimapCtx.fill();
+  });
+
+  // Player
+  minimapCtx.fillStyle = '#ff6b35';
+  minimapCtx.beginPath();
+  minimapCtx.arc(player.x * scale, player.y * scale, 4, 0, Math.PI * 2);
+  minimapCtx.fill();
+
+  // Camera view
+  minimapCtx.strokeStyle = 'rgba(255,255,255,0.5)';
+  minimapCtx.lineWidth = 1;
+  minimapCtx.strokeRect(
+    game.camera.x * scale,
+    game.camera.y * scale,
+    canvas.width * scale,
+    canvas.height * scale
+  );
+
+  // Border
+  minimapCtx.strokeStyle = '#ff6b35';
+  minimapCtx.lineWidth = 2;
+  minimapCtx.strokeRect(0, 0, 180, 180);
+}
+
+function drawHUD() {
+  // Boost bar
+  const barWidth = 200;
+  const barHeight = 10;
+  const barX = canvas.width / 2 - barWidth / 2;
+  const barY = canvas.height - 40;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(barX, barY, barWidth, barHeight);
+
+  const boostPercent = game.boostEnergy / 100;
+  const boostColor = game.boosting ? '#ff0000' : '#00ff88';
+  ctx.fillStyle = boostColor;
+  ctx.fillRect(barX, barY, barWidth * boostPercent, barHeight);
+
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+  ctx.fillStyle = '#fff';
+  ctx.font = '11px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('BOOST', canvas.width / 2, barY - 5);
+
+  // Carry capacity bar
+  if (player.carrying > 0) {
+    const capWidth = 150;
+    const capX = canvas.width / 2 - capWidth / 2;
+    const capY = canvas.height - 60;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(capX, capY, capWidth, 8);
+
+    const capPercent = player.carrying / player.maxCarry;
+    ctx.fillStyle = '#ff6b35';
+    ctx.fillRect(capX, capY, capWidth * capPercent, 8);
+
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(capX, capY, capWidth, 8);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`CARRYING: ${player.carrying}/${player.maxCarry}`, canvas.width / 2, capY - 3);
+  }
+
+  // Aura multiplier display
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 14px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Aura Multiplier: x${game.auraMultiplier.toFixed(1)}`, 20, canvas.height - 20);
+}
+
+function gameLoop() {
+  if (!game.running) return;
+
+  game.time++;
+
+  handleInput();
+  updateAI();
+  updateBrainrotSpawning();
+  updateParticles();
+  updateCamera();
+
+  // Passive income from carried items
+  if (player.carrying > 0) {
+    if (game.time % 60 === 0) {
+      const income = Math.floor(player.carrying * game.brainrotRate * game.auraMultiplier);
+      game.aura += income;
+      game.brainrotItems += player.carrying;
+      addParticle(player.x, player.y - 50, `+${income} 💰`, '#ffd700');
+    }
+  }
+
+  // Base passive aura generation
+  const generator = baseUpgrades.find(u => u.id === 'generator');
+  if (generator && generator.level > 0 && game.time % 60 === 0) {
+    const income = generator.level * generator.value;
+    game.aura += income;
+  }
+
+  // Defense auto-repair
+  const turret = baseUpgrades.find(u => u.id === 'turret');
+  if (turret && turret.level > 0 && game.time % 120 === 0) {
+    game.baseDefense += turret.level * turret.value;
+  }
+
+  drawWorld();
+  drawMinimap();
+  drawHUD();
+  updateUI();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// Input handlers
+window.addEventListener('keydown', (e) => {
+  game.keys[e.key.toLowerCase()] = true;
+  if (e.key === ' ') e.preventDefault();
+});
+
+window.addEventListener('keyup', (e) => {
+  game.keys[e.key.toLowerCase()] = false;
+});
+
+window.addEventListener('mousemove', (e) => {
+  game.mouse.x = e.clientX;
+  game.mouse.y = e.clientY;
+});
+
+// Prevent context menu
+window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// Initial UI setup
+updateUI();
+</script>
+</body>
+</html>

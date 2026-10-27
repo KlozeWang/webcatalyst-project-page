@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dance Scene Creator</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: linear-gradient(180deg, #ffd7e5 0%, #ffeecf 45%, #dff7ff 100%);
+    font-family: Arial, Helvetica, sans-serif;
+  }
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+  }
+  .ui {
+    position: fixed;
+    left: 16px;
+    top: 16px;
+    z-index: 10;
+    background: rgba(255,255,255,0.78);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.7);
+    border-radius: 16px;
+    padding: 14px 14px 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+    color: #333;
+    max-width: 360px;
+    user-select: none;
+  }
+  .ui h1 {
+    font-size: 18px;
+    margin: 0 0 8px;
+    color: #6a2c70;
+  }
+  .ui p {
+    margin: 6px 0;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  button {
+    border: 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #ff7eb6, #ff4f93);
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(255,79,147,0.28);
+  }
+  button.secondary {
+    background: linear-gradient(180deg, #6fd3ff, #3ba7ff);
+    box-shadow: 0 6px 18px rgba(59,167,255,0.28);
+  }
+  .hint {
+    font-size: 12px;
+    opacity: 0.85;
+  }
+</style>
+</head>
+<body>
+<div class="ui">
+  <h1>Dance Scene Creator</h1>
+  <p>Create a cute romantic dance scene in a beautiful place. Use the buttons to change the mood.</p>
+  <div class="row">
+    <button id="btnDay">Day</button>
+    <button id="btnSunset" class="secondary">Sunset</button>
+    <button id="btnNight" class="secondary">Night</button>
+  </div>
+  <p class="hint">Tip: Move your mouse or tap to make the scene feel alive.</p>
+</div>
+<canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H, dpr;
+function resize() {
+  dpr = Math.max(1, window.devicePixelRatio || 1);
+  W = canvas.width = Math.floor(innerWidth * dpr);
+  H = canvas.height = Math.floor(innerHeight * dpr);
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+}
+window.addEventListener('resize', resize);
+resize();
+
+let mode = 'day';
+let mouse = {x: 0.5, y: 0.5, active: false};
+addEventListener('mousemove', e => {
+  mouse.x = e.clientX / innerWidth;
+  mouse.y = e.clientY / innerHeight;
+  mouse.active = true;
+});
+addEventListener('touchstart', e => {
+  if (e.touches[0]) {
+    mouse.x = e.touches[0].clientX / innerWidth;
+    mouse.y = e.touches[0].clientY / innerHeight;
+    mouse.active = true;
+  }
+}, {passive:true});
+addEventListener('touchmove', e => {
+  if (e.touches[0]) {
+    mouse.x = e.touches[0].clientX / innerWidth;
+    mouse.y = e.touches[0].clientY / innerHeight;
+    mouse.active = true;
+  }
+}, {passive:true});
+
+document.getElementById('btnDay').onclick = () => mode = 'day';
+document.getElementById('btnSunset').onclick = () => mode = 'sunset';
+document.getElementById('btnNight').onclick = () => mode = 'night';
+
+const hearts = [];
+for (let i = 0; i < 24; i++) {
+  hearts.push({
+    x: Math.random(),
+    y: Math.random(),
+    r: 8 + Math.random() * 12,
+    v: 0.00025 + Math.random() * 0.00035,
+    drift: (Math.random() - 0.5) * 0.0005,
+    phase: Math.random() * Math.PI * 2
+  });
+}
+
+function bgGradient() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  if (mode === 'day') {
+    g.addColorStop(0, '#9fe8ff');
+    g.addColorStop(0.55, '#d8fbff');
+    g.addColorStop(1, '#fff3c9');
+  } else if (mode === 'sunset') {
+    g.addColorStop(0, '#ff8f7a');
+    g.addColorStop(0.55, '#ffceb0');
+    g.addColorStop(1, '#ffe9bf');
+  } else {
+    g.addColorStop(0, '#0c1233');
+    g.addColorStop(0.6, '#1b2d5a');
+    g.addColorStop(1, '#3d2c63');
+  }
+  return g;
+}
+
+function drawSunMoon(t) {
+  const x = W * (mode === 'night' ? 0.78 : 0.2);
+  const y = H * (mode === 'night' ? 0.18 : 0.17);
+  const r = Math.min(W, H) * 0.08;
+  ctx.save();
+  if (mode === 'night') {
+    const glow = ctx.createRadialGradient(x, y, r * 0.2, x, y, r * 3);
+    glow.addColorStop(0, 'rgba(255,255,220,0.9)');
+    glow.addColorStop(0.4, 'rgba(255,255,220,0.25)');
+    glow.addColorStop(1, 'rgba(255,255,220,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(x, y, r * 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff9dd';
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath(); ctx.arc(x + r * 0.35, y - r * 0.1, r * 0.92, 0, Math.PI * 2); ctx.fill();
+  } else {
+    const glow = ctx.createRadialGradient(x, y, r * 0.2, x, y, r * 3.2);
+    glow.addColorStop(0, mode === 'sunset' ? 'rgba(255,220,140,0.95)' : 'rgba(255,255,180,0.95)');
+    glow.addColorStop(0.4, 'rgba(255,220,140,0.25)');
+    glow.addColorStop(1, 'rgba(255,220,140,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(x, y, r * 3.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = mode === 'sunset' ? '#ffd36e' : '#fff08f';
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawStars(t) {
+  if (mode !== 'night') return;
+  ctx.save();
+  ctx.fillStyle = '#fff';
+  for (let i = 0; i < 100; i++) {
+    const x = (i * 97.13 % 1) * W;
+    const y = ((i * 53.77 % 1) * 0.5) * H;
+    const tw = 0.5 + 0.5 * Math.sin(t * 0.001 + i);
+    ctx.globalAlpha = 0.35 + 0.65 * tw;
+    ctx.fillRect(x, y, 2 * dpr, 2 * dpr);
+  }
+  ctx.restore();
+}
+
+function drawGround() {
+  const g = ctx.createLinearGradient(0, H * 0.72, 0, H);
+  if (mode === 'night') {
+    g.addColorStop(0, '#1c3f3a');
+    g.addColorStop(1, '#10241f');
+  } else if (mode === 'sunset') {
+    g.addColorStop(0, '#8fe0a5');
+    g.addColorStop(1, '#4fa06a');
+  } else {
+    g.addColorStop(0, '#92dd9a');
+    g.addColorStop(1, '#4d9b64');
+  }
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(0, H * 0.72);
+  ctx.bezierCurveTo(W * 0.25, H * 0.64, W * 0.75, H * 0.82, W, H * 0.72);
+  ctx.lineTo(W, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawPath() {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,248,230,0.9)';
+  ctx.lineWidth = 18 * dpr;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(W * 0.15, H * 0.86);
+  ctx.bezierCurveTo(W * 0.32, H * 0.75, W * 0.52, H * 0.80, W * 0.68, H * 0.70);
+  ctx.bezierCurveTo(W * 0.78, H * 0.63, W * 0.87, H * 0.58, W * 0.95, H * 0.52);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawTree(x, y, s) {
+  ctx.save();
+  ctx.fillStyle = '#7a4b2a';
+  ctx.fillRect(x - 8*s, y, 16*s, 70*s);
+  ctx.fillStyle = mode === 'night' ? '#24553c' : '#3c8b55';
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.arc(x, y - i * 22*s, 34*s - i * 2*s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function person(x, y, s, dress=false, phase=0, color='#ff5b8f') {
+  const sway = Math.sin(time * 0.004 + phase) * 6 * dpr;
+  const arm = Math.sin(time * 0.006 + phase) * 12 * dpr;
+  ctx.save();
+  ctx.translate(x + sway, y);
+  ctx.scale(s, s);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  ctx.fillStyle = '#f0c7a1';
+  ctx.beginPath(); ctx.arc(0, -58, 14, 0, Math.PI*2); ctx.fill();
+
+  ctx.strokeStyle = '#2a2a2a';
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(0, -44);
+  ctx.lineTo(0, -12);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#2a2a2a';
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.moveTo(0, -28);
+  ctx.lineTo(-18, -10 + arm*0.08);
+  ctx.moveTo(0, -28);
+  ctx.lineTo(18, -10 - arm*0.08);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#2a2a2a';
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.moveTo(0, -12);
+  ctx.lineTo(-14, 24);
+  ctx.moveTo(0, -12);
+  ctx.lineTo(14, 24);
+  ctx.stroke();
+
+  if (dress) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, -12);
+    ctx.quadraticCurveTo(-26, 8, -18, 36);
+    ctx.lineTo(18, 36);
+    ctx.quadraticCurveTo(26, 8, 0, -12);
+    ctx.fill();
+    ctx.fillStyle = '#ffd5e4';
+    ctx.fillRect(-5, -8, 10, 20);
+  } else {
+    ctx.fillStyle = color;
+    ctx.fillRect(-16, -10, 32, 28);
+    ctx.fillStyle = '#2b5c87';
+    ctx.fillRect(-14, 18, 12, 18);
+    ctx.fillRect(2, 18, 12, 18);
+  }
+  ctx.restore();
+}
+
+function drawScene(t) {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = bgGradient();
+  ctx.fillRect(0, 0, W, H);
+
+  drawStars(t);
+  drawSunMoon(t);
+
+  ctx.save();
+  ctx.fillStyle = mode === 'night' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.18)';
+  for (let i = 0; i < 7; i++) {
+    const bx = (i * 0.19 + 0.05) * W;
+    const by = H * (0.36 + 0.03 * Math.sin(t * 0.0006 + i));
+    ctx.beginPath();
+    ctx.ellipse(bx, by, 70*dpr, 24*dpr, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  drawTree(W * 0.14, H * 0.52, 1.2);
+  drawTree(W * 0.84, H * 0.48, 1.0);
+  drawGround();
+  drawPath();
+
+  const centerX = W * 0.5;
+  const centerY = H * 0.72;
+  const dance = Math.sin(t * 0.004);
+  const bob = Math.sin(t * 0.005) * 4 * dpr;
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+  ctx.lineWidth = 4 * dpr;
+  ctx.beginPath();
+  ctx.moveTo(centerX - 46*dpr, centerY - 55*dpr);
+  ctx.quadraticCurveTo(centerX - 10*dpr, centerY - 90*dpr, centerX + 22*dpr, centerY - 58*dpr);
+  ctx.stroke();
+  ctx.restore();
+
+  person(centerX - 34*dpr, centerY + bob, 1.2*dpr, false, 0.4, '#ffcc66');
+  person(centerX + 26*dpr, centerY + bob, 1.15*dpr, true, 1.8, '#ff5fa2');
+
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  for (let i = 0; i < hearts.length; i++) {
+    const h = hearts[i];
+    h.y -= h.v * (mode === 'night' ? 0.8 : 1.0) * (1 + Math.sin(t*0.001 + i) * 0.2);
+    h.x += h.drift + Math.sin(t*0.002 + h.phase) * 0.0001;
+    if (h.y < -0.1) { h.y = 1.05; h.x = Math.random(); }
+    const x = h.x * W;
+    const y = h.y * H;
+    const s = h.r * dpr * (1 + 0.15 * Math.sin(t*0.004 + h.phase));
+    ctx.fillStyle = mode === 'night' ? 'rgba(255,170,210,0.85)' : 'rgba(255,105,160,0.75)';
+    ctx.beginPath();
+    ctx.moveTo(x, y + s * 0.25);
+    ctx.bezierCurveTo(x - s, y - s * 0.6, x - s * 1.3, y + s * 0.4, x, y + s);
+    ctx.bezierCurveTo(x + s * 1.3, y + s * 0.4, x + s, y - s * 0.6, x, y + s * 0.25);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  if (mouse.active) {
+    ctx.save();
+    const gx = mouse.x * W;
+    const gy = mouse.y * H;
+    const glow = ctx.createRadialGradient(gx, gy, 0, gx, gy, 120*dpr);
+    glow.addColorStop(0, 'rgba(255,255,255,0.20)');
+    glow.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(gx, gy, 120*dpr, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.fillStyle = mode === 'night' ? 'rgba(255,255,255,0.85)' : 'rgba(90,50,80,0.7)';
+  ctx.font = `${18*dpr}px Arial`;
+  ctx.fillText('Cute dance scene', 20*dpr, H - 24*dpr);
+  ctx.restore();
+}
+
+let time = 0;
+function loop(ts) {
+  time = ts || 0;
+  drawScene(time);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

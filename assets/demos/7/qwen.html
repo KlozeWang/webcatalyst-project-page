@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deep Dig - Underground Mining Game</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+background: #1a1a2e;
+display: flex;
+justify-content: center;
+align-items: center;
+min-height: 100vh;
+font-family: 'Courier New', monospace;
+overflow: hidden;
+}
+#gameContainer {
+position: relative;
+}
+canvas {
+display: block;
+border: 3px solid #444;
+border-radius: 8px;
+image-rendering: pixelated;
+}
+#ui {
+position: absolute;
+top: 10px;
+left: 10px;
+right: 10px;
+display: flex;
+justify-content: space-between;
+pointer-events: none;
+z-index: 10;
+}
+.ui-panel {
+background: rgba(0,0,0,0.7);
+border: 2px solid #666;
+border-radius: 8px;
+padding: 8px 14px;
+color: #fff;
+font-size: 14px;
+text-shadow: 1px 1px 2px #000;
+}
+.ui-panel span { color: #ffd700; font-weight: bold; }
+#message {
+position: absolute;
+top: 50%;
+left: 50%;
+transform: translate(-50%, -50%);
+background: rgba(0,0,0,0.85);
+border: 3px solid #ffd700;
+border-radius: 12px;
+padding: 30px 40px;
+color: #fff;
+font-size: 20px;
+text-align: center;
+display: none;
+z-index: 20;
+}
+#message h2 { color: #ffd700; margin-bottom: 15px; font-size: 28px; }
+#message p { margin: 8px 0; font-size: 16px; color: #ccc; }
+#message button {
+margin-top: 20px;
+padding: 10px 30px;
+font-size: 18px;
+font-family: 'Courier New', monospace;
+background: #ffd700;
+color: #333;
+border: none;
+border-radius: 6px;
+cursor: pointer;
+font-weight: bold;
+pointer-events: all;
+}
+#message button:hover { background: #ffec80; }
+#controls {
+position: absolute;
+bottom: 10px;
+left: 50%;
+transform: translateX(-50%);
+color: #888;
+font-size: 12px;
+text-align: center;
+pointer-events: none;
+z-index: 10;
+}
+</style>
+</head>
+<body>
+<div id="gameContainer">
+<canvas id="gameCanvas"></canvas>
+<div id="ui">
+<div class="ui-panel">⛏️ <span id="scoreDisplay">0</span></div>
+<div class="ui-panel">📏 Depth: <span id="depthDisplay">0</span>m</div>
+<div class="ui-panel">💎 Gems: <span id="gemDisplay">0</span></div>
+<div class="ui-panel">🏆 Goal: <span id="goalDisplay">20</span></div>
+</div>
+<div id="message">
+<h2 id="msgTitle">⛏️ Deep Dig</h2>
+<p id="msgBody">Dig through the earth to find gems and treasure!</p>
+<p id="msgSub"></p>
+<button id="msgBtn" onclick="startGame()">Start Digging!</button>
+</div>
+<div id="controls">Arrow Keys / WASD to move & dig • Space to use pickaxe • Find 20 gems to win!</div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const TILE = 32;
+const WORLD_W = 40;
+const WORLD_H = 60;
+const VIEW_W = Math.min(25, window.innerWidth - 20);
+const VIEW_H = Math.min(18, window.innerHeight - 20);
+
+canvas.width = VIEW_W * TILE;
+canvas.height = VIEW_H * TILE;
+
+const BLOCK = {
+    AIR: 0,
+    DIRT: 1,
+    GRASS: 2,
+    STONE: 3,
+    GOLD: 4,
+    DIAMOND: 5,
+    COAL: 6,
+    BEDROCK: 7,
+    SAND: 8,
+    IRON: 9
+};
+
+const BLOCK_COLORS = {
+    [BLOCK.AIR]: null,
+    [BLOCK.DIRT]: '#8B6914',
+    [BLOCK.GRASS]: '#4a8c2a',
+    [BLOCK.STONE]: '#777',
+    [BLOCK.GOLD]: '#ffd700',
+    [BLOCK.DIAMOND]: '#00e5ff',
+    [BLOCK.COAL]: '#333',
+    [BLOCK.BEDROCK]: '#222',
+    [BLOCK.SAND]: '#e8d68e',
+    [BLOCK.IRON]: '#c8a87c'
+};
+
+const BLOCK_HARDNESS = {
+    [BLOCK.DIRT]: 1,
+    [BLOCK.GRASS]: 1,
+    [BLOCK.STONE]: 3,
+    [BLOCK.GOLD]: 2,
+    [BLOCK.DIAMOND]: 4,
+    [BLOCK.COAL]: 2,
+    [BLOCK.BEDROCK]: 999,
+    [BLOCK.SAND]: 1,
+    [BLOCK.IRON]: 3
+};
+
+const BLOCK_SCORE = {
+    [BLOCK.DIRT]: 1,
+    [BLOCK.GRASS]: 0,
+    [BLOCK.STONE]: 2,
+    [BLOCK.GOLD]: 15,
+    [BLOCK.DIAMOND]: 25,
+    [BLOCK.COAL]: 5,
+    [BLOCK.BEDROCK]: 0,
+    [BLOCK.SAND]: 1,
+    [BLOCK.IRON]: 10
+};
+
+let world = [];
+let player = { x: 20, y: 2, hp: 100, maxHp: 100, energy: 100, maxEnergy: 100 };
+let score = 0;
+let gems = 0;
+let totalGems = 0;
+let gameRunning = false;
+let gameOver = false;
+let particles = [];
+let shakeTimer = 0;
+let shakeIntensity = 0;
+let digProgress = {};
+let torches = [];
+let enemies = [];
+let cameraX = 0, cameraY = 0;
+let keys = {};
+let lastTime = 0;
+let energyRegenTimer = 0;
+let winScore = 20;
+let level = 1;
+
+function seededRandom(seed) {
+    let s = seed;
+    return function() {
+        s = (s * 16807 + 0) % 2147483647;
+        return (s - 1) / 2147483646;
+    };
+}
+
+function generateWorld() {
+    const rng = seededRandom(Date.now() % 100000);
+    world = [];
+    torches = [];
+    enemies = [];
+
+    for (let y = 0; y < WORLD_H; y++) {
+        world[y] = [];
+        for (let x = 0; x < WORLD_W; x++) {
+            if (y === 0) {
+                world[y][x] = BLOCK.GRASS;
+            } else if (y <= 3) {
+                world[y][x] = BLOCK.DIRT;
+            } else if (y >= WORLD_H - 2) {
+                world[y][x] = BLOCK.BEDROCK;
+            } else {
+                const depth = y / WORLD_H;
+                const r = rng();
+
+                if (r < 0.02 && depth > 0.3) {
+                    world[y][x] = BLOCK.DIAMOND;
+                } else if (r < 0.06 && depth > 0.15) {
+                    world[y][x] = BLOCK.GOLD;
+                } else if (r < 0.10 && depth > 0.1) {
+                    world[y][x] = BLOCK.IRON;
+                } else if (r < 0.16 && depth > 0.05) {
+                    world[y][x] = BLOCK.COAL;
+                } else if (r < 0.25) {
+                    world[y][x] = BLOCK.SAND;
+                } else {
+                    world[y][x] = BLOCK.STONE;
+                }
+
+                // Create some ore clusters
+                if (y > 5 && x > 0 && x < WORLD_W - 1 && rng() < 0.03) {
+                    const oreType = rng() < 0.3 ? BLOCK.GOLD : (rng() < 0.5 ? BLOCK.IRON : BLOCK.COAL);
+                    world[y][x] = oreType;
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            const ny = y + dy, nx = x + dx;
+                            if (ny >= 0 && ny < WORLD_H && nx >= 0 && nx < WORLD_W && rng() < 0.4) {
+                                if (world[ny][nx] === BLOCK.STONE || world[ny][nx] === BLOCK.DIRT) {
+                                    world[ny][nx] = oreType;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Create some tunnels
+    for (let t = 0; t < 8; t++) {
+        let tx = Math.floor(rng() * WORLD_W);
+        let ty = 5 + Math.floor(rng() * (WORLD_H - 15));
+        const len = 5 + Math.floor(rng() * 15);
+        for (let i = 0; i < len; i++) {
+            const w = 1 + Math.floor(rng() * 2);
+            for (let dy = -w; dy <= w; dy++) {
+                for (let dx = -w; dx <= w; dx++) {
+                    const ny = ty + dy, nx = tx + dx;
+                    if (ny >= 0 && ny < WORLD_H && nx >= 0 && nx < WORLD_W) {
+                        if (Math.abs(dx) + Math.abs(dy) <= w + 1 && world[ny][nx] !== BLOCK.BEDROCK) {
+                            world[ny][nx] = BLOCK.AIR;
+                        }
+                    }
+                }
+            }
+            tx += Math.floor(rng() * 3) - 1;
+            ty += Math.floor(rng() * 3) - 1;
+            tx = Math.max(1, Math.min(WORLD_W - 2, tx));
+            ty = Math.max(4, Math.min(WORLD_H - 4, ty));
+        }
+    }
+
+    // Place some torches in tunnels
+    for (let y = 0; y < WORLD_H; y++) {
+        for (let x = 0; x < WORLD_W; x++) {
+            if (world[y][x] === BLOCK.AIR && y > 5) {
+                let adjBlocks = 0;
+                for (let dy = -1; dy <= 1; dy++) {
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const ny = y + dy, nx = x + dx;
+                        if (ny >= 0 && ny < WORLD_H && nx >= 0 && nx < WORLD_W && world[ny][nx] !== BLOCK.AIR) {
+                            adjBlocks++;
+                        }
+                    }
+                }
+                if (adjBlocks >= 4 && rng() < 0.05) {
+                    torches.push({ x, y, timer: 0 });
+                }
+            }
+        }
+    }
+
+    // Place enemies
+    for (let i = 0; i < 5 + level * 2; i++) {
+        let ex, ey;
+        do {
+            ex = Math.floor(rng() * WORLD_W);
+            ey = 10 + Math.floor(rng() * (WORLD_H - 20));
+        } while (world[ey][ex] !== BLOCK.AIR || Math.abs(ex - player.x) < 5);
+        enemies.push({
+            x: ex, y: ey,
+            dir: rng() < 0.5 ? 1 : -1,
+            hp: 3,
+            moveTimer: 0,
+            type: rng() < 0.3 ? 'worm' : 'bat'
+        });
+    }
+}
+
+function getBlock(x, y) {
+    if (x < 0 || x >= WORLD_W || y < 0 || y >= WORLD_H) return BLOCK.BEDROCK;
+    return world[y][x];
+}
+
+function setBlock(x, y, type) {
+    if (x < 0 || x >= WORLD_W || y < 0 || y >= WORLD_H) return;
+    world[y][x] = type;
+}
+
+function isSolid(x, y) {
+    const b = getBlock(x, y);
+    return b !== BLOCK.AIR;
+}
+
+function spawnParticles(x, y, color, count, speed) {
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: x * TILE + TILE / 2,
+            y: y * TILE + TILE / 2,
+            vx: (Math.random() - 0.5) * speed,
+            vy: (Math.random() - 0.5) * speed - 1,
+            life: 30 + Math.random() * 30,
+            maxLife: 60,
+            color: color,
+            size: 2 + Math.random() * 3
+        });
+    }
+}
+
+function spawnDigParticles(x, y, blockType) {
+    const colors = {
+        [BLOCK.DIRT]: ['#8B6914', '#6B4F12', '#A07818'],
+        [BLOCK.STONE]: ['#888', '#666', '#999'],
+        [BLOCK.GOLD]: ['#ffd700', '#ffec80', '#daa520'],
+        [BLOCK.DIAMOND]: ['#00e5ff', '#80f0ff', '#00b8d4'],
+        [BLOCK.COAL]: ['#444', '#222', '#555'],
+        [BLOCK.SAND]: ['#e8d68e', '#d4c070', '#f0e0a0'],
+        [BLOCK.IRON]: ['#c8a87c', '#b09060', '#d8b88c'],
+        [BLOCK.GRASS]: ['#4a8c2a', '#3a7c1a', '#5a9c3a']
+    };
+    const c = colors[blockType] || ['#888'];
+    for (let i = 0; i < 8; i++) {
+        particles.push({
+            x: x * TILE + TILE / 2 + (Math.random() - 0.5) * 10,
+            y: y * TILE + TILE / 2 + (Math.random() - 0.5) * 10,
+            vx: (Math.random() - 0.5) * 4,
+            vy: (Math.random() - 0.5) * 4 - 2,
+            life: 20 + Math.random() * 20,
+            maxLife: 40,
+            color: c[Math.floor(Math.random() * c.length)],
+            size: 2 + Math.random() * 4
+        });
+    }
+}
+
+function digBlock(x, y) {
+    const block = getBlock(x, y);
+    if (block === BLOCK.AIR) return false;
+    if (block === BLOCK.BEDROCK) {
+        spawnParticles(x, y, '#ff0000', 3, 2);
+        return false;
+    }
+
+    const key = `${x},${y}`;
+    if (!digProgress[key]) digProgress[key] = 0;
+
+    const energyCost = 3;
+    if (player.energy < energyCost) return false;
+
+    digProgress[key] += 1;
+    player.energy -= energyCost;
+
+    const hardness = BLOCK_HARDNESS[block] || 1;
+    if (digProgress[key] >= hardness) {
+        const scoreVal = BLOCK_SCORE[block] || 1;
+        score += scoreVal;
+
+        if (block === BLOCK.DIAMOND) gems++;
+        if (block === BLOCK.GOLD) gems++;
+
+        spawnDigParticles(x, y, block);
+        shakeTimer = 5;
+        shakeIntensity = 3;
+
+        setBlock(x, y, BLOCK.AIR);
+        delete digProgress[key];
+
+        // Check for torches
+        for (let i = torches.length - 1; i >= 0; i--) {
+            if (torches[i].x === x && torches[i].y === y) {
+                torches.splice(i, 1);
+            }
+        }
+
+        updateUI();
+        return true;
+    }
+    return false;
+}
+
+function movePlayer(dx, dy) {
+    if (!gameRunning || gameOver) return;
+
+    const nx = player.x + dx;
+    const ny = player.y + dy;
+
+    // Check bounds
+    if (nx < 0 || nx >= WORLD_W || ny < 0 || ny >= WORLD_H) return;
+
+    const targetBlock = getBlock(nx, ny);
+
+    if (targetBlock === BLOCK.AIR) {
+        player.x = nx;
+        player.y = ny;
+    } else if (targetBlock !== BLOCK.BEDROCK) {
+        // Dig the block
+        digBlock(nx, ny);
+    }
+
+    // Check enemy collision
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        if (enemies[i].x === player.x && enemies[i].y === player.y) {
+            player.hp -= 10;
+            shakeTimer = 8;
+            shakeIntensity = 5;
+            spawnParticles(player.x, player.y, '#ff0000', 10, 3);
+            enemies.splice(i, 1);
+            if (player.hp <= 0) {
+                endGame(false);
+            }
+            updateUI();
+        }
+    }
+
+    // Check win condition
+    if (gems >= winScore) {
+        endGame(true);
+    }
+}
+
+function updateEnemies(dt) {
+    for (let e of enemies) {
+        e.moveTimer += dt;
+        if (e.moveTimer > 0.5) {
+            e.moveTimer = 0;
+            const dx = e.x + e.dir;
+            const dy = e.y;
+
+            if (dx >= 0 && dx < WORLD_W && getBlock(dx, dy) === BLOCK.AIR) {
+                e.x = dx;
+            } else {
+                e.dir *= -1;
+                // Try moving down
+                if (e.y + 1 < WORLD_H && getBlock(e.x, e.y + 1) === BLOCK.AIR) {
+                    e.y++;
+                }
+            }
+        }
+
+        // Chase player if close
+        const dist = Math.abs(e.x - player.x) + Math.abs(e.y - player.y);
+        if (dist < 5 && dist > 0) {
+            const chX = player.x > e.x ? 1 : -1;
+            const chY = player.y > e.y ? 1 : -1;
+            if (Math.random() < 0.3) {
+                if (Math.random() < 0.5) {
+                    const nx = e.x + chX;
+                    if (nx >= 0 && nx < WORLD_W && getBlock(nx, e.y) === BLOCK.AIR) {
+                        e.x = nx;
+                    }
+                } else {
+                    const ny = e.y + chY;
+                    if (ny >= 0 && ny < WORLD_H && getBlock(e.x, ny) === BLOCK.AIR) {
+                        e.y = ny;
+                    }
+                }
+            }
+        }
+    }
+}
+
+function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.15;
+        p.life--;
+        if (p.life <= 0) {
+            particles.splice(i, 1);
+        }
+    }
+}
+
+function updateUI() {
+    document.getElementById('scoreDisplay').textContent = score;
+    document.getElementById('depthDisplay').textContent = (player.y - 2) * 2;
+    document.getElementById('gemDisplay').textContent = gems;
+    document.getElementById('goalDisplay').textContent = winScore;
+}
+
+function drawBlock(x, y, blockType) {
+    const sx = x * TILE - cameraX;
+    const sy = y * TILE - cameraY;
+
+    if (sx < -TILE || sx > canvas.width || sy < -TILE || sy > canvas.height) return;
+
+    const color = BLOCK_COLORS[blockType];
+    if (!color) return;
+
+    ctx.fillStyle = color;
+    ctx.fillRect(sx, sy, TILE, TILE);
+
+    // Block texture details
+    if (blockType === BLOCK.DIRT) {
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        ctx.fillRect(sx + 4, sy + 8, 4, 4);
+        ctx.fillRect(sx + 18, sy + 20, 5, 3);
+        ctx.fillRect(sx + 10, sy + 4, 3, 3);
+        ctx.fillRect(sx + 22, sy + 14, 4, 4);
+    } else if (blockType === BLOCK.GRASS) {
+        ctx.fillStyle = '#5a3a1a';
+        ctx.fillRect(sx, sy + 8, TILE, TILE - 8);
+        ctx.fillStyle = '#3a7c1a';
+        for (let i = 0; i < 5; i++) {
+            ctx.fillRect(sx + 2 + i * 6, sy, 3, 6 + Math.sin(i * 2) * 3);
+        }
+    } else if (blockType === BLOCK.STONE) {
+        ctx.fillStyle = 'rgba(0,0,0,0.1)';
+        ctx.fillRect(sx + 2, sy + 2, 12, 6);
+        ctx.fillRect(sx + 16, sy + 14, 14, 8);
+        ctx.fillRect(sx + 4, sy + 22, 8, 6);
+    } else if (blockType === BLOCK.GOLD) {
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(sx + 8, sy + 8, 6, 6);
+        ctx.fillRect(sx + 18, sy + 16, 5, 5);
+        ctx.fillStyle = '#ffec80';
+        ctx.fillRect(sx + 14, sy + 6, 4, 4);
+        ctx.fillRect(sx + 6, sy + 20, 4, 4);
+    } else if (blockType === BLOCK.DIAMOND) {
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(sx + 10, sy + 10, 4, 4);
+        ctx.fillRect(sx + 20, sy + 18, 3, 3);
+        ctx.fillStyle = '#80f0ff';
+        ctx.fillRect(sx + 16, sy + 8, 3, 3);
+        ctx.fillRect(sx + 8, sy + 22, 3, 3);
+    } else if (blockType === BLOCK.COAL) {
+        ctx.fillStyle = '#111';
+        ctx.fillRect(sx + 6, sy + 6, 8, 8);
+        ctx.fillRect(sx + 18, sy + 16, 7, 6);
+    } else if (blockType === BLOCK.SAND) {
+        ctx.fillStyle = 'rgba(0,0,0,0.08)';
+        for (let i = 0; i < 6; i++) {
+            ctx.fillRect(sx + Math.random() * 28, sy + Math.random() * 28, 2, 2);
+        }
+    } else if (blockType === BLOCK.IRON) {
+        ctx.fillStyle = '#e8d0b0';
+        ctx.fillRect(sx + 6, sy + 10, 6, 5);
+        ctx.fillRect(sx + 18, sy + 6, 5, 4);
+        ctx.fillRect(sx + 10, sy + 20, 8, 4);
+    } else if (blockType === BLOCK.BEDROCK) {
+        ctx.fillStyle = 'rgba(255,0,0,0.15)';
+        ctx.fillRect(sx, sy, TILE, TILE);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(sx + 4, sy + 4, 8, 8);
+        ctx.fillRect(sx + 18, sy + 16, 10, 8);
+    }
+
+    // Dig progress indicator
+    const key = `${x},${y}`;
+    if (digProgress[key] && digProgress[key] > 0) {
+        const hardness = BLOCK_HARDNESS[blockType] || 1;
+        const progress = digProgress[key] / hardness;
+        ctx.fillStyle = `rgba(255, 255, 0, ${0.3 + progress * 0.4})`;
+        ctx.fillRect(sx + 2, sy + 2, (TILE - 4) * progress, TILE - 4);
+
+        // Cracks
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.lineWidth = 1;
+        const cracks = Math.floor(progress * 5);
+        for (let i = 0; i < cracks; i++) {
+            ctx.beginPath();
+            ctx.moveTo(sx + TILE / 2, sy + TILE / 2);
+            ctx.lineTo(sx + 4 + Math.random() * (TILE - 8), sy + 4 + Math.random() * (TILE - 8));
+            ctx.stroke();
+        }
+    }
+
+    // Block border
+    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(sx, sy, TILE, TILE);
+}
+
+function drawPlayer() {
+    const sx = player.x * TILE - cameraX;
+    const sy = player.y * TILE - cameraY;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(sx + TILE / 2, sy + TILE - 2, 10, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body
+    ctx.fillStyle = '#4488cc';
+    ctx.fillRect(sx + 8, sy + 10, 16, 14);
+
+    // Head
+    ctx.fillStyle = '#ffcc99';
+    ctx.fillRect(sx + 10, sy + 2, 12, 10);
+
+    // Helmet
+    ctx.fillStyle = '#888';
+    ctx.fillRect(sx + 8, sy, 16, 5);
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(sx + 13, sy + 1, 6, 3);
+
+    // Helmet light
+    ctx.fillStyle = '#ffff00';
+    ctx.fillRect(sx + 14, sy + 2, 4, 2);
+
+    // Eyes
+    ctx.fillStyle = '#222';
+    ctx.fillRect(sx + 12, sy + 6, 3, 3);
+    ctx.fillRect(sx + 18, sy + 6, 3, 3);
+
+    // Legs
+    ctx.fillStyle = '#555';
+    ctx.fillRect(sx + 9, sy + 24, 5, 6);
+    ctx.fillRect(sx + 18, sy + 24, 5, 6);
+
+    // Pickaxe
+    ctx.save();
+    ctx.translate(sx + 26, sy + 14);
+    ctx.rotate(0.3 + Math.sin(Date.now() / 200) * 0.1);
+    ctx.fillStyle = '#8B6914';
+    ctx.fillRect(0, 0, 3, 14);
+    ctx.fillStyle = '#aaa';
+    ctx.fillRect(-2, -2, 7, 5);
+    ctx.restore();
+
+    // Health bar
+    const hpPct = player.hp / player.maxHp;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(sx + 2, sy - 6, 28, 4);
+    ctx.fillStyle = hpPct > 0.5 ? '#4c4' : (hpPct > 0.25 ? '#cc4' : '#c44');
+    ctx.fillRect(sx + 2, sy - 6, 28 * hpPct, 4);
+
+    // Energy bar
+    const enPct = player.energy / player.maxEnergy;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(sx + 2, sy + TILE + 2, 28, 3);
+    ctx.fillStyle = '#48f';
+    ctx.fillRect(sx + 2, sy + TILE + 2, 28 * enPct, 3);
+}
+
+function drawEnemies() {
+    for (let e of enemies) {
+        const sx = e.x * TILE - cameraX;
+        const sy = e.y * TILE - cameraY;
+
+        if (sx < -TILE || sx > canvas.width + TILE || sy < -TILE || sy > canvas.height + TILE) continue;
+
+        if (e.type === 'bat') {
+            // Bat
+            ctx.fillStyle = '#663399';
+            ctx.fillRect(sx + 10, sy + 10, 12, 10);
+            // Wings
+            const wingFlap = Math.sin(Date.now() / 100) * 4;
+            ctx.fillStyle = '#7744aa';
+            ctx.fillRect(sx + 2, sy + 8 + wingFlap, 8, 6);
+            ctx.fillRect(sx + 22, sy + 8 + wingFlap, 8, 6);
+            // Eyes
+            ctx.fillStyle = '#ff0';
+            ctx.fillRect(sx + 12, sy + 12, 3, 3);
+            ctx.fillRect(sx + 18, sy + 12, 3, 3);
+        } else {
+            // Worm
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(sx + 6, sy + 8, 20, 16);
+            ctx.fillStyle = '#A0522D';
+            ctx.fillRect(sx + 8, sy + 10, 16, 12);
+            // Segments
+            ctx.fillStyle = '#6B3410';
+            ctx.fillRect(sx + 4, sy + 12, 4, 8);
+            ctx.fillRect(sx + 24, sy + 12, 4, 8);
+            // Eyes
+            ctx.fillStyle = '#ff0';
+            ctx.fillRect(sx + 12, sy + 12, 3, 3);
+            ctx.fillRect(sx + 18, sy + 12, 3, 3);
+        }
+    }
+}
+
+function drawTorches() {
+    for (let t of torches) {
+        const sx = t.x * TILE - cameraX;
+        const sy = t.y * TILE - cameraY;
+
+        if (sx < -TILE || sx > canvas.width + TILE || sy < -TILE || sy > canvas.height + TILE) continue;
+
+        // Torch glow
+        const glowR = 60 + Math.sin(Date.now() / 200) * 10;
+        const gradient = ctx.createRadialGradient(sx + TILE / 2, sy + TILE / 2, 2, sx + TILE / 2, sy + TILE / 2, glowR);
+        gradient.addColorStop(0, 'rgba(255, 200, 50, 0.3)');
+        gradient.addColorStop(1, 'rgba(255, 200, 50, 0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(sx - glowR / 2, sy - glowR / 2, glowR, glowR);
+
+        // Torch stick
+        ctx.fillStyle = '#8B6914';
+        ctx.fillRect(sx + 14, sy + 10, 4, 18);
+        // Flame
+        ctx.fillStyle = '#ff6600';
+        ctx.fillRect(sx + 13, sy + 4, 6, 8);
+        ctx.fillStyle = '#ffcc00';
+        ctx.fillRect(sx + 14, sy + 6, 4, 5);
+        ctx.fillStyle = '#ffff80';
+        ctx.fillRect(sx + 15, sy + 7, 2, 3);
+    }
+}
+
+function drawParticles() {
+    for (let p of particles) {
+        const alpha = p.life / p.maxLife;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - cameraX - p.size / 2, p.y - cameraY - p.size / 2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+}
+
+function drawBackground() {
+    // Sky gradient at top
+    const depthRatio = player.y / WORLD_H;
+    const darkness = Math.min(0.85, depthRatio * 0.9);
+
+    ctx.fillStyle = `rgba(10, 10, 30, ${darkness})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw visible blocks
+    const startX = Math.max(0, Math.floor(cameraX / TILE) - 1);
+    const startY = Math.max(0, Math.floor(cameraY / TILE) - 1);
+    const endX = Math.min(WORLD_W, Math.ceil((cameraX + canvas.width) / TILE) + 1);
+    const endY = Math.min(WORLD_H, Math.ceil((cameraY + canvas.height) / TILE) + 1);
+
+    for (let y = startY; y < endY; y++) {
+        for (let x = startX; x < endX; x++) {
+            drawBlock(x, y, world[y][x]);
+        }
+    }
+}
+
+function drawMinimap() {
+    const mmW = 80;
+    const mmH = 120;
+    const mmX = canvas.width - mmW - 10;
+    const mmY = 40;
+    const scaleX = mmW / WORLD_W;
+    const scaleY = mmH / WORLD_H;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(mmX - 2, mmY - 2, mmW + 4, mmH + 4);
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(mmX - 2, mmY - 2, mmW + 4, mmH + 4);
+
+    for (let y = 0; y < WORLD_H; y++) {
+        for (let x = 0; x < WORLD_W; x++) {
+            if (world[y][x] !== BLOCK.AIR) {
+                const c = BLOCK_COLORS[world[y][x]];
+                if (c) {
+                    ctx.fillStyle = c;
+                    ctx.fillRect(mmX + x * scaleX, mmY + y * scaleY, Math.ceil(scaleX), Math.ceil(scaleY));
+                }
+            }
+        }
+    }
+
+    // Player on minimap
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(mmX + player.x * scaleX - 1, mmY + player.y * scaleY - 1, 3, 3);
+
+    // View area
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.strokeRect(
+        mmX + (cameraX / TILE) * scaleX,
+        mmY + (cameraY / TILE) * scaleY,
+        (VIEW_W) * scaleX,
+        (VIEW_H) * scaleY
+    );
+}
+
+function updateCamera() {
+    const targetX = player.x * TILE - canvas.width / 2 + TILE / 2;
+    const targetY = player.y * TILE - canvas.height / 2 + TILE / 2;
+
+    cameraX += (targetX - cameraX) * 0.1;
+    cameraY += (targetY - cameraY) * 0.1;
+
+    cameraX = Math.max(0, Math.min(WORLD_W * TILE - canvas.width, cameraX));
+    cameraY = Math.max(0, Math.min(WORLD_H * TILE - canvas.height, cameraY));
+}
+
+function update(dt) {
+    if (!gameRunning || gameOver) return;
+
+    // Energy regen
+    energyRegenTimer += dt;
+    if (energyRegenTimer > 1) {
+        energyRegenTimer = 0;
+        player.energy = Math.min(player.maxEnergy, player.energy + 2);
+    }
+
+    // Movement
+    let moved = false;
+    if (keys['ArrowUp'] || keys['w'] || keys['W']) { movePlayer(0, -1); moved = true; }
+    if (keys['ArrowDown'] || keys['s'] || keys['S']) { movePlayer(0, 1); moved = true; }
+    if (keys['ArrowLeft'] || keys['a'] || keys['A']) { movePlayer(-1, 0); moved = true; }
+    if (keys['ArrowRight'] || keys['d'] || keys['D']) { movePlayer(1, 0); moved = true; }
+
+    // Space to dig in front
+    if (keys[' ']) {
+        let dx = 0, dy = 0;
+        if (keys['ArrowUp'] || keys['w'] || keys['W']) dy = -1;
+        else if (keys['ArrowDown'] || keys['s'] || keys['S']) dy = 1;
+        else if (keys['ArrowLeft'] || keys['a'] || keys['A']) dx = -1;
+        else if (keys['ArrowRight'] || keys['d'] || keys['D']) dx = 1;
+        else {
+            // Default: dig right if no direction
+            dx = 1;
+        }
+        digBlock(player.x + dx, player.y + dy);
+    }
+
+    updateEnemies(dt);
+    updateParticles();
+    updateCamera();
+
+    // Screen shake
+    if (shakeTimer > 0) shakeTimer--;
+}
+
+function render() {
+    ctx.save();
+
+    // Screen shake
+    if (shakeTimer > 0) {
+        const sx = (Math.random() - 0.5) * shakeIntensity;
+        const sy = (Math.random() - 0.5) * shakeIntensity;
+        ctx.translate(sx, sy);
+    }
+
+    drawBackground();
+    drawTorches();
+    drawEnemies();
+    drawPlayer();
+    drawParticles();
+    drawMinimap();
+
+    // Depth indicator
+    const depthMeters = (player.y - 2) * 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(10, canvas.height - 30, 150, 20);
+    ctx.fillStyle = '#aaa';
+    ctx.font = '12px Courier New';
+    ctx.fillText(`⬇ ${depthMeters}m deep`, 16, canvas.height - 15);
+
+    // HP and Energy display
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(10, canvas.height - 55, 150, 22);
+    ctx.fillStyle = '#4c4';
+    ctx.fillRect(14, canvas.height - 52, 142 * (player.hp / player.maxHp), 8);
+    ctx.fillStyle = '#48f';
+    ctx.fillRect(14, canvas.height - 42, 142 * (player.energy / player.maxEnergy), 8);
+    ctx.fillStyle = '#fff';
+    ctx.font = '9px Courier New';
+    ctx.fillText(`HP ${player.hp}/${player.maxHp}`, 14, canvas.height - 45);
+    ctx.fillText(`EN ${player.energy}/${player.maxEnergy}`, 14, canvas.height - 35);
+
+    ctx.restore();
+}
+
+function gameLoop(timestamp) {
+    const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+
+    update(dt);
+    render();
+
+    requestAnimationFrame(gameLoop);
+}
+
+function showMessage(title, body, sub, btnText, btnAction) {
+    document.getElementById('msgTitle').textContent = title;
+    document.getElementById('msgBody').textContent = body;
+    document.getElementById('msgSub').textContent = sub || '';
+    document.getElementById('msgBtn').textContent = btnText;
+    document.getElementById('msgBtn').onclick = btnAction;
+    document.getElementById('message').style.display = 'block';
+}
+
+function startGame() {
+    document.getElementById('message').style.display = 'none';
+    score = 0;
+    gems = 0;
+    player = { x: 20, y: 2, hp: 100, maxHp: 100, energy: 100, maxEnergy: 100 };
+    particles = [];
+    digProgress = {};
+    gameOver = false;
+    gameRunning = true;
+    cameraX = 0;
+    cameraY = 0;
+    generateWorld();
+    updateUI();
+}
+
+function endGame(won) {
+    gameOver = true;
+    gameRunning = false;
+    if (won) {
+        showMessage(
+            '🎉 Victory!',
+            `You found ${gems} gems and escaped!`,
+            `Total Score: ${score}`,
+            'Dig Again!',
+            () => {
+                level++;
+                winScore = 15 + level * 5;
+                startGame();
+            }
+        );
+    } else {
+        showMessage(
+            '💀 Game Over',
+            'You ran out of health!',
+            `Score: ${score} | Gems: ${gems}`,
+            'Try Again!',
+            () => startGame()
+        );
+    }
+}
+
+// Input handling
+document.addEventListener('keydown', (e) => {
+    keys[e.key] = true;
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+        e.preventDefault();
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    keys[e.key] = false;
+});
+
+// Touch controls for mobile
+let touchStartX = 0, touchStartY = 0;
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+});
+
+canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const dx = touch.clientX - touchStartX;
+    const dy = touch.clientY - touchStartY;
+
+    if (Math.abs(dx) > 20 || Math.abs(dy) > 20) {
+        if (Math.abs(dx) > Math.abs(dy)) {
+            movePlayer(dx > 0 ? 1 : -1, 0);
+        } else {
+            movePlayer(0, dy > 0 ? 1 : -1);
+        }
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+    }
+});
+
+canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    // Tap to dig
+    const touch = e.changedTouches[0];
+    const rect = canvas.getBoundingClientRect();
+    const tx = touch.clientX - rect.left;
+    const ty = touch.clientY - rect.top;
+
+    // Dig at tap position relative to camera
+    const worldX = Math.floor((tx + cameraX) / TILE);
+    const worldY = Math.floor((ty + cameraY) / TILE);
+
+    if (worldX >= 0 && worldX < WORLD_W && worldY >= 0 && worldY < WORLD_H) {
+        digBlock(worldX, worldY);
+    }
+});
+
+// Show start screen
+showMessage(
+    '⛏️ Deep Dig',
+    'Dig through earth and stone to find gems and treasure!',
+    'Collect ' + winScore + ' gems to win. Beware of underground creatures!',
+    'Start Digging!',
+    () => startGame()
+);
+
+// Start game loop
+lastTime = performance.now();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

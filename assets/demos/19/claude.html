@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Brainrot Empire: Steal & Race</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #0a0a1a;
+    color: #fff;
+    overflow: hidden;
+    user-select: none;
+  }
+  #game { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+  canvas { display: block; background: linear-gradient(135deg, #1a3d2e, #2d5a3d); }
+  
+  .hud {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(0,0,0,0.7);
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: 2px solid #ffd700;
+    font-size: 14px;
+    min-width: 220px;
+    backdrop-filter: blur(8px);
+  }
+  .hud div { margin: 4px 0; }
+  .hud .stat { display: flex; justify-content: space-between; }
+  .stat-val { color: #ffd700; font-weight: bold; }
+  
+  .panel {
+    position: absolute;
+    background: rgba(20,20,40,0.92);
+    border: 2px solid #6a5acd;
+    border-radius: 12px;
+    padding: 14px;
+    backdrop-filter: blur(8px);
+  }
+  
+  #shop { top: 10px; right: 10px; width: 260px; max-height: 90vh; overflow-y: auto; }
+  #aura-clicker { bottom: 10px; left: 10px; width: 220px; text-align: center; }
+  #pets-panel { bottom: 10px; right: 10px; width: 240px; }
+  
+  h3 { color: #ffd700; margin-bottom: 8px; font-size: 15px; border-bottom: 1px solid #444; padding-bottom: 4px; }
+  
+  button {
+    background: linear-gradient(135deg, #6a5acd, #4a3acd);
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    width: 100%;
+    margin: 3px 0;
+    font-size: 13px;
+    transition: transform 0.1s, box-shadow 0.2s;
+  }
+  button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(106,90,205,0.6); }
+  button:disabled { background: #333; cursor: not-allowed; transform: none; box-shadow: none; }
+  button.gold { background: linear-gradient(135deg, #ffd700, #ff9500); color: #000; }
+  
+  #aura-btn {
+    width: 130px; height: 130px; border-radius: 50%;
+    background: radial-gradient(circle, #ff00ff, #6a00ff);
+    font-size: 20px;
+    margin: 8px auto;
+    box-shadow: 0 0 20px #ff00ff;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 50% { box-shadow: 0 0 35px #ff00ff, 0 0 60px #6a00ff; } }
+  
+  .overlay {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; text-align: center;
+    z-index: 100;
+  }
+  .overlay h1 { font-size: 48px; color: #ffd700; text-shadow: 0 0 20px #ffd700; margin-bottom: 16px; }
+  .overlay p { font-size: 16px; max-width: 500px; margin-bottom: 20px; line-height: 1.5; }
+  .overlay button { width: 220px; padding: 14px; font-size: 18px; }
+  
+  .toast {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255,215,0,0.95);
+    color: #000;
+    padding: 12px 24px;
+    border-radius: 10px;
+    font-weight: bold;
+    font-size: 16px;
+    pointer-events: none;
+    animation: float 1.5s forwards;
+    z-index: 200;
+  }
+  @keyframes float {
+    0% { opacity:0; transform: translate(-50%, -30%); }
+    20% { opacity:1; transform: translate(-50%, -50%); }
+    100% { opacity:0; transform: translate(-50%, -80%); }
+  }
+  
+  .pet { display: inline-block; font-size: 22px; margin: 2px; padding: 4px 8px; background: #2a2a4a; border-radius: 6px; }
+  
+  #mobile-controls {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    display: none; gap: 10px; z-index: 50;
+  }
+  #mobile-controls button { width: 60px; height: 60px; border-radius: 50%; font-size: 22px; }
+  @media (max-width: 768px) {
+    #mobile-controls { display: flex; }
+    .hud, .panel { font-size: 11px; padding: 8px; }
+    #shop { width: 180px; }
+    #pets-panel { width: 170px; }
+    #aura-clicker { width: 160px; }
+    #aura-btn { width: 90px; height: 90px; font-size: 14px; }
+    .overlay h1 { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="canvas"></canvas>
+  
+  <div class="hud">
+    <div class="stat"><span>💰 Cash:</span><span class="stat-val" id="cash">0</span></div>
+    <div class="stat"><span>✨ Aura:</span><span class="stat-val" id="aura">1.0x</span></div>
+    <div class="stat"><span>🧠 Brainrots:</span><span class="stat-val" id="brainrots">0</span></div>
+    <div class="stat"><span>📈 Income/s:</span><span class="stat-val" id="income">0</span></div>
+    <div class="stat"><span>🛡️ Defense:</span><span class="stat-val" id="defense">1</span></div>
+    <div class="stat"><span>🚗 Speed:</span><span class="stat-val" id="speed">3</span></div>
+    <div class="stat"><span>💪 Carry:</span><span class="stat-val" id="carry">1</span></div>
+    <div style="margin-top:6px; font-size:11px; color:#aaa;">WASD/Arrows to move • Steal from red zone • Bring home (blue)</div>
+  </div>
+  
+  <div class="panel" id="shop">
+    <h3>🚗 Vehicle Shop</h3>
+    <button onclick="buyCar('sedan')" id="buy-sedan">Sedan - $200 (+1 spd)</button>
+    <button onclick="buyCar('sports')" id="buy-sports">Sports Car - $1000 (+3 spd)</button>
+    <button onclick="buyCar('super')" id="buy-super">Supercar - $5000 (+6 spd)</button>
+    <h3>🛡️ Base Defenses</h3>
+    <button onclick="upgradeDefense()" id="up-def">Upgrade Defense - $150</button>
+    <h3>💪 Carry Capacity</h3>
+    <button onclick="upgradeCarry()" id="up-carry">+1 Carry Slot - $300</button>
+    <h3>🎨 Customize</h3>
+    <button onclick="customize()" class="gold">Random Paint - $100</button>
+  </div>
+  
+  <div class="panel" id="aura-clicker">
+    <h3>✨ Aura Clicker</h3>
+    <button id="aura-btn" onclick="clickAura(event)">CLICK!<br>+0.01x</button>
+    <div style="font-size:11px; color:#aaa;">Aura multiplies all earnings</div>
+  </div>
+  
+  <div class="panel" id="pets-panel">
+    <h3>🥚 Pets</h3>
+    <div id="pet-list" style="min-height: 40px; font-size:12px;">No pets yet!</div>
+    <button onclick="hatchEgg()" id="hatch-btn" class="gold">🥚 Hatch Egg - $500</button>
+    <div style="font-size:11px; color:#aaa; margin-top:4px;">Pets boost stats!</div>
+  </div>
+  
+  <div id="mobile-controls">
+    <button ontouchstart="keys.ArrowLeft=true" ontouchend="keys.ArrowLeft=false">⬅️</button>
+    <button ontouchstart="keys.ArrowUp=true" ontouchend="keys.ArrowUp=false">⬆️</button>
+    <button ontouchstart="keys.ArrowDown=true" ontouchend="keys.ArrowDown=false">⬇️</button>
+    <button ontouchstart="keys.ArrowRight=true" ontouchend="keys.ArrowRight=false">➡️</button>
+  </div>
+  
+  <div class="overlay" id="start-screen">
+    <h1>🧠 BRAINROT EMPIRE 🧠</h1>
+    <p>Steal Brainrot items from the central zone (red), carry them back to your base (blue) to earn passive income. Avoid AI thieves! Buy faster cars, upgrade defenses, click for Aura multiplier, and hatch pets for buffs!</p>
+    <button onclick="startGame()" class="gold">START GAME</button>
+  </div>
+  
+  <div class="overlay" id="game-over" style="display:none;">
+    <h1>💀 BASE RAIDED!</h1>
+    <p id="final-stats"></p>
+    <button onclick="location.reload()" class="gold">PLAY AGAIN</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() { W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+resize(); addEventListener('resize', resize);
+
+const BRAINROTS = ['🍌','🌭','🍕','🍔','🎁','💎','🦴','🎩','👑','🚀'];
+const PET_TYPES = [
+  {emoji:'🐶', name:'Dog', boost:{speed:1}},
+  {emoji:'🐱', name:'Cat', boost:{carry:1}},
+  {emoji:'🐉', name:'Dragon', boost:{speed:2, carry:1}},
+  {emoji:'🦄', name:'Unicorn', boost:{aura:0.5}},
+  {emoji:'🦖', name:'Rex', boost:{defense:2}},
+  {emoji:'👻', name:'Ghost', boost:{speed:3}},
+];
+
+const state = {
+  running: false,
+  cash: 0,
+  aura: 1.0,
+  brainrotCount: 0,
+  defense: 1,
+  carryMax: 1,
+  carCost: { sedan: 200, sports: 1000, super: 5000 },
+  player: { x:0, y:0, r:18, color:'#00bfff', speedBase:3, carrying:[] },
+  base: { x:0, y:0, r:60 },
+  zone: { x:0, y:0, r:90 },
+  items: [],
+  thieves: [],
+  pets: [],
+  particles: [],
+  baseHP: 100,
+};
+
+const keys = {};
+addEventListener('keydown', e => { keys[e.key] = true; if(['w','a','s','d'].includes(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
+addEventListener('keyup', e => { keys[e.key] = false; if(['w','a','s','d'].includes(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
+
+function startGame() {
+  document.getElementById('start-screen').style.display = 'none';
+  state.running = true;
+  state.base.x = 150; state.base.y = H/2;
+  state.zone.x = W - 200; state.zone.y = H/2;
+  state.player.x = state.base.x; state.player.y = state.base.y;
+  for (let i=0; i<8; i++) spawnItem();
+  for (let i=0; i<2; i++) spawnThief();
+  loop();
+  setInterval(passiveIncome, 1000);
+  setInterval(() => { if (state.thieves.length < 4 + Math.floor(state.brainrotCount/5)) spawnThief(); }, 8000);
+}
+
+function spawnItem() {
+  const angle = Math.random() * Math.PI * 2;
+  const r = Math.random() * state.zone.r * 0.8;
+  state.items.push({
+    x: state.zone.x + Math.cos(angle)*r,
+    y: state.zone.y + Math.sin(angle)*r,
+    type: BRAINROTS[Math.floor(Math.random()*BRAINROTS.length)],
+    value: 5 + Math.floor(Math.random()*15),
+    income: 1 + Math.floor(Math.random()*3),
+  });
+}
+
+function spawnThief() {
+  const side = Math.random() < 0.5;
+  state.thieves.push({
+    x: side ? -20 : W+20,
+    y: Math.random()*H,
+    r: 16,
+    speed: 1.2 + Math.random()*0.8,
+    carrying: null,
+    target: null,
+    color: '#ff4444',
+  });
+}
+
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.getElementById('game').appendChild(t);
+  setTimeout(() => t.remove(), 1500);
+}
+
+function dist(a,b) { return Math.hypot(a.x-b.x, a.y-b.y); }
+
+function update() {
+  const p = state.player;
+  let sp = state.player.speedBase + getPetBoost('speed');
+  if (p.carrying.length > 0) sp *= 0.7;
+  let dx=0, dy=0;
+  if (keys.ArrowLeft || keys.a) dx -= 1;
+  if (keys.ArrowRight || keys.d) dx += 1;
+  if (keys.ArrowUp || keys.w) dy -= 1;
+  if (keys.ArrowDown || keys.s) dy += 1;
+  if (dx||dy) { const m=Math.hypot(dx,dy); p.x+=dx/m*sp; p.y+=dy/m*sp; }
+  p.x = Math.max(p.r, Math.min(W-p.r, p.x));
+  p.y = Math.max(p.r, Math.min(H-p.r, p.y));
+  
+  // pick up items
+  if (dist(p, state.zone) < state.zone.r) {
+    const cap = state.carryMax + getPetBoost('carry');
+    for (let i=state.items.length-1; i>=0; i--) {
+      if (p.carrying.length >= cap) break;
+      if (dist(p, state.items[i]) < 30) {
+        p.carrying.push(state.items[i]);
+        state.items.splice(i,1);
+        toast('+ ' + p.carrying[p.carrying.length-1].type);
+      }
+    }
+  }
+  
+  // deposit at base
+  if (dist(p, state.base) < state.base.r && p.carrying.length > 0) {
+    for (const it of p.carrying) {
+      state.cash += Math.floor(it.value * state.aura);
+      state.brainrotCount++;
+      state.baseItems = (state.baseItems || []);
+      state.baseItems.push(it);
+      addParticle(state.base.x, state.base.y, '#ffd700');
+    }
+    toast('+ $' + Math.floor(p.carrying.reduce((s,i)=>s+i.value,0) * state.aura));
+    p.carrying = [];
+  }
+  
+  // spawn more items
+  if (state.items.length < 8 && Math.random() < 0.02) spawnItem();
+  
+  // thieves AI
+  for (let i=state.thieves.length-1; i>=0; i--) {
+    const t = state.thieves[i];
+    if (!t.carrying) {
+      // go steal from base (if has items) or from player
+      if ((state.baseItems && state.baseItems.length > 0) && Math.random() < 0.7) {
+        t.target = state.base;
+      } else if (p.carrying.length > 0) {
+        t.target = p;
+      } else {
+        t.target = state.base;
+      }
+    } else {
+      // run off-screen
+      t.target = {x: t.x < W/2 ? -50 : W+50, y: t.y};
+    }
+    const ang = Math.atan2(t.target.y-t.y, t.target.x-t.x);
+    t.x += Math.cos(ang)*t.speed;
+    t.y += Math.sin(ang)*t.speed;
+    
+    // steal from base
+    if (!t.carrying && dist(t, state.base) < state.base.r + 5 && state.baseItems && state.baseItems.length > 0) {
+      // defense reduces chance
+      if (Math.random() > state.defense * 0.15) {
+        t.carrying = state.baseItems.pop();
+        toast('⚠️ Thief stole ' + t.carrying.type + '!');
+        state.brainrotCount = Math.max(0, state.brainrotCount-1);
+      } else {
+        // defense blocks
+        addParticle(t.x, t.y, '#00ff00');
+        state.thieves.splice(i,1);
+        state.cash += 20;
+        toast('🛡️ Defended! +$20');
+        continue;
+      }
+    }
+    // steal from player
+    if (!t.carrying && dist(t, p) < t.r + p.r && p.carrying.length > 0) {
+      t.carrying = p.carrying.pop();
+      toast('⚠️ Thief mugged you!');
+    }
+    // escaped
+    if (t.x < -40 || t.x > W+40) {
+      state.thieves.splice(i,1);
+    }
+    // hit base hp if no items
+    if (!t.carrying && dist(t, state.base) < state.base.r + 5 && (!state.baseItems || state.baseItems.length===0)) {
+      state.baseHP -= 0.3 / state.defense;
+      if (state.baseHP <= 0) gameOver();
+    }
+  }
+  
+  // particles
+  for (let i=state.particles.length-1; i>=0; i--) {
+    const pa = state.particles[i];
+    pa.x += pa.vx; pa.y += pa.vy; pa.life--;
+    if (pa.life <= 0) state.particles.splice(i,1);
+  }
+}
+
+function addParticle(x,y,color) {
+  for (let i=0; i<8; i++) state.particles.push({
+    x,y, vx:(Math.random()-0.5)*4, vy:(Math.random()-0.5)*4, life:30, color
+  });
+}
+
+function getPetBoost(stat) {
+  let total = 0;
+  for (const pet of state.pets) if (pet.boost[stat]) total += pet.boost[stat];
+  return total;
+}
+
+function passiveIncome() {
+  if (!state.running) return;
+  const inc = Math.floor(state.brainrotCount * state.aura * (1 + getPetBoost('aura')));
+  state.cash += inc;
+  updateHUD();
+}
+
+function draw() {
+  ctx.fillStyle = '#1a3d2e';
+  ctx.fillRect(0,0,W,H);
+  // road
+  ctx.strokeStyle = '#444'; ctx.lineWidth = 80;
+  ctx.beginPath(); ctx.moveTo(state.base.x, state.base.y); ctx.lineTo(state.zone.x, state.zone.y); ctx.stroke();
+  ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 2; ctx.setLineDash([15,15]);
+  ctx.beginPath(); ctx.moveTo(state.base.x, state.base.y); ctx.lineTo(state.zone.x, state.zone.y); ctx.stroke();
+  ctx.setLineDash([]);
+  
+  // base
+  ctx.fillStyle = 'rgba(0,150,255,0.25)';
+  ctx.beginPath(); ctx.arc(state.base.x, state.base.y, state.base.r, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#00bfff'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.font = '14px sans-serif'; ctx.textAlign='center';
+  ctx.fillText('🏠 BASE', state.base.x, state.base.y - state.base.r - 8);
+  // base HP bar
+  ctx.fillStyle = '#333'; ctx.fillRect(state.base.x-40, state.base.y+state.base.r+5, 80, 6);
+  ctx.fillStyle = state.baseHP > 30 ? '#0f0' : '#f00';
+  ctx.fillRect(state.base.x-40, state.base.y+state.base.r+5, 80*Math.max(0,state.baseHP)/100, 6);
+  // stored items
+  if (state.baseItems) {
+    state.baseItems.slice(0,6).forEach((it,i) => {
+      ctx.font = '18px sans-serif';
+      ctx.fillText(it.type, state.base.x - 30 + (i%3)*20, state.base.y + (Math.floor(i/3)*15));
+    });
+  }
+  
+  // zone
+  ctx.fillStyle = 'rgba(255,50,50,0.2)';
+  ctx.beginPath(); ctx.arc(state.zone.x, state.zone.y, state.zone.r, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#ff4444'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.fillText('🧠 BRAINROT ZONE', state.zone.x, state.zone.y - state.zone.r - 8);
+  
+  // items
+  for (const it of state.items) {
+    ctx.font = '22px sans-serif';
+    ctx.fillText(it.type, it.x, it.y+8);
+  }
+  
+  // thieves
+  for (const t of state.thieves) {
+    ctx.fillStyle = t.color;
+    ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.font='14px sans-serif'; ctx.fillText('😈', t.x, t.y+5);
+    if (t.carrying) { ctx.font='16px sans-serif'; ctx.fillText(t.carrying.type, t.x, t.y - 16); }
+  }
+  
+  // player (with car effect)
+  const p = state.player;
+  ctx.fillStyle = p.color;
+  ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.font='14px sans-serif'; ctx.fillText('🚗', p.x, p.y+5);
+  // carrying
+  p.carrying.forEach((it,i) => {
+    ctx.font='18px sans-serif';
+    ctx.fillText(it.type, p.x - 15 + i*15, p.y - 22);
+  });
+  
+  // pets follow player
+  state.pets.forEach((pet,i) => {
+    const ang = (Date.now()/500 + i*Math.PI*2/state.pets.length);
+    const px = p.x + Math.cos(ang)*32;
+    const py = p.y + Math.sin(ang)*32;
+    ctx.font='18px sans-serif';
+    ctx.fillText(pet.emoji, px, py+6);
+  });
+  
+  // particles
+  for (const pa of state.particles) {
+    ctx.fillStyle = pa.color;
+    ctx.globalAlpha = pa.life/30;
+    ctx.fillRect(pa.x-2, pa.y-2, 4, 4);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function loop() {
+  if (!state.running) return;
+  update(); draw(); updateHUD();
+  requestAnimationFrame(loop);
+}
+
+function updateHUD() {
+  document.getElementById('cash').textContent = '$' + state.cash;
+  document.getElementById('aura').textContent = state.aura.toFixed(2) + 'x';
+  document.getElementById('brainrots').textContent = state.brainrotCount;
+  document.getElementById('income').textContent = '$' + Math.floor(state.brainrotCount * state.aura);
+  document.getElementById('defense').textContent = state.defense;
+  document.getElementById('speed').textContent = (state.player.speedBase + getPetBoost('speed')).toFixed(1);
+  document.getElementById('carry').textContent = state.carryMax + getPetBoost('carry');
+}
+
+function clickAura(e) {
+  state.aura += 0.01;
+  const btn = e.target;
+  btn.style.transform = 'scale(0.95)';
+  setTimeout(()=>btn.style.transform='',100);
+  updateHUD();
+  // audio blip
+  beep(600 + Math.random()*200, 0.05);
+}
+
+function buyCar(type) {
+  const cost = state.carCost[type];
+  if (state.cash < cost) return toast('Not enough cash!');
+  state.cash -= cost;
+  const boosts = {sedan:1, sports:3, super:6};
+  state.player.speedBase += boosts[type];
+  state.carCost[type] = Math.floor(cost * 2.5);
+  document.getElementById('buy-'+type).textContent = 
+    type[0].toUpperCase()+type.slice(1) + ' - $' + state.carCost[type] + ' (+' + boosts[type] + ' spd)';
+  toast('🚗 New car!');
+  beep(440, 0.15);
+}
+
+let defCost = 150;
+function upgradeDefense() {
+  if (state.cash < defCost) return toast('Not enough!');
+  state.cash -= defCost;
+  state.defense++;
+  state.baseHP = Math.min(100, state.baseHP + 20);
+  defCost = Math.floor(defCost * 1.8);
+  document.getElementById('up-def').textContent = 'Upgrade Defense - $' + defCost;
+  toast('🛡️ Defense+');
+  beep(500, 0.1);
+}
+
+let carryCost = 300;
+function upgradeCarry() {
+  if (state.cash < carryCost) return toast('Not enough!');
+  state.cash -= carryCost;
+  state.carryMax++;
+  carryCost = Math.floor(carryCost * 2);
+  document.getElementById('up-carry').textContent = '+1 Carry Slot - $' + carryCost;
+  toast('💪 Carry+');
+  beep(550, 0.1);
+}
+
+function customize() {
+  if (state.cash < 100) return toast('Not enough!');
+  state.cash -= 100;
+  const colors = ['#00bfff','#ff00ff','#ffd700','#00ff88','#ff6600','#ff0066'];
+  state.player.color = colors[Math.floor(Math.random()*colors.length)];
+  toast('🎨 New paint!');
+}
+
+function hatchEgg() {
+  if (state.cash < 500) return toast('Not enough!');
+  state.cash -= 500;
+  const pet = PET_TYPES[Math.floor(Math.random()*PET_TYPES.length)];
+  state.pets.push({...pet});
+  renderPets();
+  toast('🥚 Hatched ' + pet.emoji + ' ' + pet.name + '!');
+  beep(700, 0.2);
+}
+
+function renderPets() {
+  const list = document.getElementById('pet-list');
+  if (state.pets.length === 0) { list.textContent = 'No pets yet!'; return; }
+  list.innerHTML = state.pets.map(p => `<span class="pet" title="${p.name}">${p.emoji}</span>`).join('');
+}
+
+function gameOver() {
+  state.running = false;
+  document.getElementById('final-stats').textContent = 
+    `Earnings: $${state.cash} • Brainrots Stolen: ${state.brainrotCount} • Aura: ${state.aura.toFixed(2)}x • Pets: ${state.pets.length}`;
+  document.getElementById('game-over').style.display = 'flex';
+}
+
+// Web Audio beep
+let actx;
+function beep(freq, dur) {
+  try {
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const o = actx.createOscillator(); const g = actx.createGain();
+    o.frequency.value = freq; o.type = 'square';
+    g.gain.value = 0.05;
+    o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + dur);
+  } catch(e){}
+}
+</script>
+</body>
+</html>

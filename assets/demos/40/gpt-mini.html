@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Temple Runner 3D</title>
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; width:100%; height:100%; background:#000; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+  canvas { display:block; }
+  #ui, #overlay, #menu, #gameover, #pauseMenu, #settingsMenu, #challengeMenu {
+    position:absolute; inset:0; pointer-events:none;
+  }
+  .panel {
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:min(92vw, 520px); background:rgba(10,12,18,.78); color:#fff;
+    border:1px solid rgba(255,255,255,.12); border-radius:18px; padding:24px;
+    box-shadow:0 20px 60px rgba(0,0,0,.45); backdrop-filter: blur(10px);
+    pointer-events:auto;
+  }
+  .title { font-size:40px; font-weight:800; letter-spacing:1px; margin:0 0 8px; text-align:center; }
+  .subtitle { text-align:center; color:#dbe7ff; opacity:.9; margin:0 0 18px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; margin-top:12px; }
+  button, select, input[type="range"] {
+    pointer-events:auto;
+  }
+  button {
+    appearance:none; border:none; border-radius:14px; padding:14px 18px; color:white;
+    background:linear-gradient(180deg, #ff9d2e, #e05f13);
+    font-weight:700; font-size:15px; cursor:pointer; min-width:140px;
+    box-shadow:0 8px 20px rgba(224,95,19,.35);
+  }
+  button.secondary { background:linear-gradient(180deg, #2c3b57, #182338); box-shadow:none; border:1px solid rgba(255,255,255,.12); }
+  button.danger { background:linear-gradient(180deg, #ff5772, #bf2246); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .hud {
+    position:absolute; top:12px; left:12px; right:12px; display:flex; justify-content:space-between; align-items:flex-start;
+    color:white; pointer-events:none;
+    text-shadow:0 2px 6px rgba(0,0,0,.65);
+  }
+  .hudBox {
+    background:rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.09); border-radius:14px; padding:10px 12px;
+    backdrop-filter: blur(6px);
+  }
+  .hudSmall { font-size:12px; opacity:.88; }
+  .hudBig { font-size:20px; font-weight:800; margin-top:2px; }
+  #toast {
+    position:absolute; left:50%; top:18%; transform:translateX(-50%);
+    color:#fff; font-weight:700; font-size:16px; padding:10px 16px; border-radius:999px;
+    background:rgba(20,28,40,.74); border:1px solid rgba(255,255,255,.12);
+    opacity:0; transition:opacity .2s ease, transform .2s ease; pointer-events:none;
+  }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(6px); }
+  .hidden { display:none !important; }
+  .setting { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:12px 0; }
+  .setting label { flex:1; color:#dbe7ff; }
+  .setting input[type="range"] { flex:1.2; }
+  .chipRow { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin:12px 0; }
+  .chip { padding:8px 12px; border-radius:999px; background:rgba(255,255,255,.08); color:#fff; border:1px solid rgba(255,255,255,.09); cursor:pointer; pointer-events:auto; }
+  .chip.active { background:rgba(255,157,46,.24); border-color:rgba(255,157,46,.5); }
+  .footerHint { text-align:center; opacity:.75; font-size:12px; margin-top:14px; line-height:1.35; }
+</style>
+</head>
+<body>
+<div id="overlay"></div>
+
+<div id="ui">
+  <div class="hud">
+    <div class="hudBox">
+      <div class="hudSmall">SCORE</div>
+      <div id="score" class="hudBig">0</div>
+    </div>
+    <div class="hudBox">
+      <div class="hudSmall">COINS</div>
+      <div id="coins" class="hudBig">0</div>
+    </div>
+    <div class="hudBox">
+      <div class="hudSmall">DISTANCE</div>
+      <div id="distance" class="hudBig">0m</div>
+    </div>
+    <div class="hudBox" style="text-align:right;">
+      <div class="hudSmall">POWER-UP</div>
+      <div id="powerup" class="hudBig">—</div>
+    </div>
+  </div>
+  <div id="toast"></div>
+</div>
+
+<div id="menu" class="panel">
+  <div class="title">Temple Runner 3D</div>
+  <p class="subtitle">Escape the ancient curse. Swipe to survive.</p>
+  <div class="chipRow" id="characterChips"></div>
+  <div class="row">
+    <button id="startBtn">Start Run</button>
+    <button id="settingsBtn" class="secondary">Settings</button>
+    <button id="challengesBtn" class="secondary">Daily Challenge</button>
+  </div>
+  <div class="footerHint">
+    Controls: Swipe left/right to turn, up to jump, down to slide.<br/>
+    On desktop: Arrow keys / WASD. Space to pause.
+  </div>
+</div>
+
+<div id="pauseMenu" class="hidden panel">
+  <div class="title" style="font-size:32px;">Paused</div>
+  <div class="row">
+    <button id="resumeBtn">Resume</button>
+    <button id="restartBtn" class="secondary">Restart</button>
+    <button id="pauseSettingsBtn" class="secondary">Settings</button>
+  </div>
+</div>
+
+<div id="settingsMenu" class="hidden panel">
+  <div class="title" style="font-size:30px;">Settings</div>
+  <div class="setting"><label>Music Volume</label><input id="musicVol" type="range" min="0" max="1" step="0.01"></div>
+  <div class="setting"><label>SFX Volume</label><input id="sfxVol" type="range" min="0" max="1" step="0.01"></div>
+  <div class="setting"><label>Graphics Quality</label><input id="gfxQual" type="range" min="0" max="2" step="1"></div>
+  <div class="setting"><label>Camera Shake</label><input id="shakeToggle" type="checkbox"></div>
+  <div class="row">
+    <button id="settingsCloseBtn">Close</button>
+  </div>
+</div>
+
+<div id="challengeMenu" class="hidden panel">
+  <div class="title" style="font-size:30px;">Daily Challenge</div>
+  <p class="subtitle" id="challengeText">Collect 30 coins in one run.</p>
+  <div class="row">
+    <button id="challengeCloseBtn">Close</button>
+  </div>
+</div>
+
+<div id="gameover" class="hidden panel">
+  <div class="title">Game Over</div>
+  <p class="subtitle" id="finalStats">Score: 0</p>
+  <div class="row">
+    <button id="playAgainBtn">Play Again</button>
+    <button id="goMenuBtn" class="secondary">Main Menu</button>
+  </div>
+</div>
+
+<canvas id="game"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:false});
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x09111f, 18, 120);
+  scene.background = new THREE.Color(0x09111f);
+
+  const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, 0.1, 500);
+  camera.position.set(0, 5.5, 10);
+
+  const ambient = new THREE.AmbientLight(0xffffff, 1.1);
+  scene.add(ambient);
+  const sun = new THREE.DirectionalLight(0xfff2d6, 2.2);
+  sun.position.set(12, 20, 10);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048,2048);
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far = 60;
+  sun.shadow.camera.left = -30;
+  sun.shadow.camera.right = 30;
+  sun.shadow.camera.top = 30;
+  sun.shadow.camera.bottom = -30;
+  scene.add(sun);
+
+  const fill = new THREE.DirectionalLight(0x8bb8ff, 0.65);
+  fill.position.set(-10, 10, -6);
+  scene.add(fill);
+
+  const loaderTexture = (color1, color2) => {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d');
+    const grd = g.createLinearGradient(0,0,64,64); grd.addColorStop(0,color1); grd.addColorStop(1,color2);
+    g.fillStyle = grd; g.fillRect(0,0,64,64);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  };
+  const stoneTex = loaderTexture('#8d8b82','#5c5b56');
+  const mossTex = loaderTexture('#3d5930','#24361f');
+  const sandTex = loaderTexture('#c8a86b','#8d6b38');
+
+  const materials = {
+    stone: new THREE.MeshStandardMaterial({map:stoneTex, roughness:1, metalness:0}),
+    moss: new THREE.MeshStandardMaterial({map:mossTex, roughness:1, metalness:0}),
+    sand: new THREE.MeshStandardMaterial({map:sandTex, roughness:1, metalness:0}),
+    gold: new THREE.MeshStandardMaterial({color:0xffd45a, emissive:0x553300, roughness:0.35, metalness:0.2}),
+    red: new THREE.MeshStandardMaterial({color:0xd74f4f, emissive:0x220000, roughness:0.5}),
+    blue: new THREE.MeshStandardMaterial({color:0x78b7ff, emissive:0x0b1d33, roughness:0.35}),
+    green: new THREE.MeshStandardMaterial({color:0x7cff92, emissive:0x00220b, roughness:0.4}),
+    purple: new THREE.MeshStandardMaterial({color:0xc48cff, emissive:0x160021, roughness:0.4})
+  };
+
+  const ui = {
+    score: document.getElementById('score'),
+    coins: document.getElementById('coins'),
+    distance: document.getElementById('distance'),
+    powerup: document.getElementById('powerup'),
+    toast: document.getElementById('toast'),
+    menu: document.getElementById('menu'),
+    pauseMenu: document.getElementById('pauseMenu'),
+    settingsMenu: document.getElementById('settingsMenu'),
+    challengeMenu: document.getElementById('challengeMenu'),
+    gameover: document.getElementById('gameover'),
+    finalStats: document.getElementById('finalStats'),
+    challengeText: document.getElementById('challengeText')
+  };
+
+  const state = {
+    mode: 'menu',
+    score: 0, coins: 0, distance: 0,
+    speed: 12, baseSpeed: 12, accel: 0.35,
+    lane: 0, targetLane: 0,
+    yVel: 0, gravity: 24, jumping:false, sliding:false, slideTimer:0,
+    isTurning: false, turnAngle: 0, nextTurn: 0,
+    cameraShake: true, shakeT:0,
+    powerup: null, powerTimer:0,
+    magnetTimer:0, shield:0, boostTimer:0,
+    challengeCoins: 0, challengeTarget: 30,
+    selectedCharacter: 0,
+    quality: 1,
+    musicVol: 0.45, sfxVol: 0.7,
+  };
+
+  const lanes = [-2, 0, 2];
+  const world = new THREE.Group();
+  scene.add(world);
+
+  const player = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.45, 1.0, 6, 10), materials.stone);
+  body.castShadow = true;
+  body.position.y = 1.25;
+  player.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 14), materials.sand);
+  head.castShadow = true; head.position.y = 2.1; player.add(head);
+  const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.42,0.55,0.22), materials.moss);
+  backpack.castShadow = true; backpack.position.set(0,1.35,-0.42); player.add(backpack);
+  player.position.set(0,0,2);
+  scene.add(player);
+
+  const runnerSkins = [materials.stone, materials.sand, materials.moss, materials.blue, materials.purple];
+  function setCharacter(i) { state.selectedCharacter = i; body.material = runnerSkins[i]; head.material = i===1?materials.gold:(i===2?materials.moss:(i===3?materials.blue:(i===4?materials.purple:materials.sand))); }
+
+  const activeTiles = [];
+  const obstacles = [];
+  const coins = [];
+  const powerups = [];
+  const pathSegments = [];
+  const pool = { tile:[], obstacle:[], coin:[], power:[] };
+
+  function makeTile(type='stone') {
+    const g = new THREE.BoxGeometry(4, 0.4, 12);
+    const m = type==='moss' ? materials.moss : (type==='sand' ? materials.sand : materials.stone);
+    const mesh = new THREE.Mesh(g, m);
+    mesh.receiveShadow = true;
+    return mesh;
+  }
+  function makeObstacle(kind='spikes') {
+    let mesh;
+    if (kind === 'spikes') mesh = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.2, 4), materials.red);
+    else if (kind === 'log') mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 2.6, 10), materials.stone);
+    else if (kind === 'fire') mesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 1.2), materials.red);
+    else if (kind === 'bar') mesh = new THREE.Mesh(new THREE.BoxGeometry(3.0, 1.4, 0.5), materials.stone);
+    else mesh = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), materials.stone);
+    mesh.castShadow = true;
+    return mesh;
+  }
+  function makeCoin() {
+    const mesh = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.11, 10, 18), materials.gold);
+    mesh.castShadow = true;
+    return mesh;
+  }
+  function makePower(kind='shield') {
+    const mat = kind==='shield'?materials.blue:(kind==='magnet'?materials.green:materials.purple);
+    const mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45, 0), mat);
+    mesh.castShadow = true;
+    return mesh;
+  }
+
+  function spawnSegment(z, theme='ruins', turn=0) {
+    const tile = pool.tile.pop() || makeTile(theme==='jungle'?'moss':(theme==='cave'?'stone':'sand'));
+    tile.material = theme==='jungle'?materials.moss:(theme==='cave'?materials.stone:materials.sand);
+    tile.position.set(0, -0.2, z);
+    tile.rotation.y = turn;
+    world.add(tile);
+    activeTiles.push(tile);
+
+    const deco = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.35, 12.2), new THREE.MeshStandardMaterial({color: theme==='cave'?0x2a2f3a:(theme==='jungle'?0x2f4a28:0x8d7448), roughness:1}));
+    deco.position.set(0, -0.41, z);
+    deco.visible = state.quality > 0;
+    world.add(deco);
+    pathSegments.push(deco);
+
+    if (Math.random() < 0.55) {
+      const kind = ['spikes','log','fire','bar'][Math.floor(Math.random()*4)];
+      const ob = pool.obstacle.pop() || makeObstacle(kind);
+      ob.geometry.dispose && false;
+      ob.material = kind==='fire'?materials.red:materials.stone;
+      ob.userData.kind = kind;
+      ob.userData.lane = [-1,0,1][Math.floor(Math.random()*3)];
+      ob.userData.speed = 0;
+      ob.position.set(lanes[ob.userData.lane+1], kind==='bar'?1.0:0.0, z - 4 + Math.random()*6);
+      ob.rotation.y = Math.random()*Math.PI;
+      if (kind==='spikes') ob.scale.set(1,1,1);
+      if (kind==='bar') ob.scale.set(1,1,1);
+      world.add(ob); obstacles.push(ob);
+    }
+
+    if (Math.random() < 0.75) {
+      const n = 3 + Math.floor(Math.random()*5);
+      for (let i=0;i<n;i++) {
+        const c = pool.coin.pop() || makeCoin();
+        c.position.set((Math.random()*2-1)*1.1, 1.2 + Math.sin(i)*0.08, z - 5 + i*1.1);
+        c.rotation.x = Math.random()*Math.PI;
+        c.userData.collected = false;
+        world.add(c); coins.push(c);
+      }
+    }
+
+    if (Math.random() < 0.09) {
+      const kinds = ['shield','magnet','boost'];
+      const kind = kinds[Math.floor(Math.random()*kinds.length)];
+      const p = pool.power.pop() || makePower(kind);
+      p.material = kind==='shield'?materials.blue:(kind==='magnet'?materials.green:materials.purple);
+      p.userData.kind = kind;
+      p.position.set(lanes[Math.floor(Math.random()*3)], 1.2, z - 1.5);
+      world.add(p); powerups.push(p);
+    }
+  }
+
+  let nextZ = 0;
+  function resetWorld() {
+    [...activeTiles, ...obstacles, ...coins, ...powerups, ...pathSegments].forEach(o => world.remove(o));
+    activeTiles.length = obstacles.length = coins.length = powerups.length = pathSegments.length = 0;
+    nextZ = 0;
+    for (let i=0;i<18;i++) {
+      const theme = i<6?'ruins':(i<12?'jungle':'cave');
+      spawnSegment(nextZ, theme, 0);
+      nextZ -= 12;
+    }
+  }
+
+  function toast(msg) {
+    ui.toast.textContent = msg;
+    ui.toast.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(()=>ui.toast.classList.remove('show'), 1200);
+  }
+
+  function playTone(freq, dur, type='sine', gain=0.04) {
+    if (!audio.ready) return;
+    const ctx = audio.ctx;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.value = gain * state.sfxVol;
+    o.connect(g); g.connect(ctx.destination);
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+    o.stop(ctx.currentTime + dur + 0.02);
+  }
+
+  const audio = { ctx:null, ready:false, musicOsc:null, musicGain:null, noiseGain:null };
+  function initAudio() {
+    if (audio.ctx) return;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    audio.ctx = ctx;
+    const g = ctx.createGain(); g.gain.value = state.musicVol * 0.15; g.connect(ctx.destination);
+    audio.musicGain = g;
+    const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = 55;
+    const filt = ctx.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value = 180;
+    osc.connect(filt); filt.connect(g); osc.start();
+    audio.musicOsc = osc;
+    audio.ready = true;
+  }
+
+  function setMode(m) {
+    state.mode = m;
+    ui.menu.classList.toggle('hidden', m !== 'menu');
+    ui.pauseMenu.classList.toggle('hidden', m !== 'pause');
+    ui.gameover.classList.toggle('hidden', m !== 'gameover');
+    ui.settingsMenu.classList.toggle('hidden', m !== 'settings');
+    ui.challengeMenu.classList.toggle('hidden', m !== 'challenge');
+  }
+
+  function startGame() {
+    initAudio();
+    resetWorld();
+    state.score = state.coins = state.distance = 0;
+    state.speed = state.baseSpeed = 12;
+    state.lane = state.targetLane = 0;
+    state.yVel = 0; state.jumping = false; state.sliding = false; state.slideTimer = 0;
+    state.isTurning = false; state.turnAngle = 0; state.nextTurn = 0;
+    state.powerup = null; state.powerTimer = 0; state.magnetTimer = 0; state.shield = 0; state.boostTimer = 0;
+    state.challengeCoins = 0;
+    player.position.set(0,0,2); player.rotation.set(0,0,0); body.scale.set(1,1,1); head.visible = true;
+    camera.position.set(0,5.5,10);
+    camera.lookAt(0,1.5,-20);
+    setMode('play');
+    toast('Run!');
+    playTone(440, .12, 'triangle', .05);
+  }
+
+  function gameOver() {
+    setMode('gameover');
+    ui.finalStats.textContent = `Score: ${Math.floor(state.score)}  |  Coins: ${state.coins}  |  Distance: ${Math.floor(state.distance)}m`;
+    playTone(120, .25, 'sawtooth', .07);
+    playTone(70, .35, 'square', .04);
+  }
+
+  function pickupPower(kind) {
+    if (kind === 'shield') { state.shield = 12; state.powerup = 'Shield'; toast('Shield!'); playTone(660,.12,'sine',.05); }
+    if (kind === 'magnet') { state.magnetTimer = 12; state.powerup = 'Magnet'; toast('Coin Magnet!'); playTone(740,.12,'sine',.05); }
+    if (kind === 'boost') { state.boostTimer = 8; state.powerup = 'Boost'; toast('Speed Boost!'); playTone(520,.12,'sine',.05); }
+    state.powerTimer = 0;
+  }
+
+  function handleCollision(ob) {
+    if (state.shield > 0) {
+      state.shield = 0;
+      state.shakeT = 0.25;
+      toast('Shield saved you!');
+      world.remove(ob); pool.obstacle.push(ob);
+      return;
+    }
+    gameOver();
+  }
+
+  function jump() { if (!state.jumping && !state.sliding && state.mode==='play') { state.yVel = 9.5; state.jumping = true; playTone(360,.06,'triangle',.03); } }
+  function slide() { if (!state.sliding && state.mode==='play') { state.sliding = true; state.slideTimer = 0.75; body.scale.y = 0.65; head.visible = true; playTone(220,.05,'square',.02); } }
+  function moveLane(dir) { if (state.mode!=='play') return; state.targetLane = Math.max(-1, Math.min(1, state.targetLane + dir)); }
+
+  const keys = {};
+  addEventListener('keydown', e => {
+    keys[e.key.toLowerCase()] = true;
+    if (e.key === ' ' && state.mode==='play') { setMode('pause'); return; }
+    if (e.key === 'Enter' && state.mode==='menu') startGame();
+    if (e.key === 'ArrowLeft' || e.key.toLowerCase()==='a') moveLane(-1);
+    if (e.key === 'ArrowRight' || e.key.toLowerCase()==='d') moveLane(1);
+    if (e.key === 'ArrowUp' || e.key.toLowerCase()==='w') jump();
+    if (e.key === 'ArrowDown' || e.key.toLowerCase()==='s') slide();
+    if (e.key === 'Escape' && state.mode==='pause') setMode('play');
+  });
+  addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+  let touch = null;
+  addEventListener('touchstart', e => { const t=e.changedTouches[0]; touch={x:t.clientX,y:t.clientY,time:performance.now()}; }, {passive:true});
+  addEventListener('touchend', e => {
+    if (!touch) return;
+    const t=e.changedTouches[0], dx=t.clientX-touch.x, dy=t.clientY-touch.y, dt=performance.now()-touch.time;
+    if (dt < 700 && Math.max(Math.abs(dx), Math.abs(dy)) > 24) {
+      if (Math.abs(dx) > Math.abs(dy)) moveLane(dx > 0 ? 1 : -1);
+      else if (dy < 0) jump(); else slide();
+    } else if (state.mode==='menu') startGame();
+    touch = null;
+  }, {passive:true});
+
+  document.getElementById('startBtn').onclick = startGame;
+  document.getElementById('settingsBtn').onclick = () => setMode('settings');
+  document.getElementById('pauseSettingsBtn').onclick = () => setMode('settings');
+  document.getElementById('settingsCloseBtn').onclick = () => setMode(state.score>0 ? 'pause' : 'menu');
+  document.getElementById('resumeBtn').onclick = () => setMode('play');
+  document.getElementById('restartBtn').onclick = startGame;
+  document.getElementById('playAgainBtn').onclick = startGame;
+  document.getElementById('goMenuBtn').onclick = () => setMode('menu');
+  document.getElementById('challengesBtn').onclick = () => { ui.challengeText.textContent = `Daily Challenge: Collect ${state.challengeTarget} coins in one run.`; setMode('challenge'); };
+  document.getElementById('challengeCloseBtn').onclick = () => setMode('menu');
+
+  const musicVol = document.getElementById('musicVol');
+  const sfxVol = document.getElementById('sfxVol');
+  const gfxQual = document.getElementById('gfxQual');
+  const shakeToggle = document.getElementById('shakeToggle');
+  musicVol.value = state.musicVol; sfxVol.value = state.sfxVol; gfxQual.value = state.quality; shakeToggle.checked = state.cameraShake;
+  musicVol.oninput = e => { state.musicVol = +e.target.value; if (audio.musicGain) audio.musicGain.gain.value = state.musicVol * 0.15; };
+  sfxVol.oninput = e => state.sfxVol = +e.target.value;
+  gfxQual.oninput = e => state.quality = +e.target.value;
+  shakeToggle.onchange = e => state.cameraShake = e.target.checked;
+
+  const chips = document.getElementById('characterChips');
+  ['Explorer','Scout','Relic','Azure','Mystic'].forEach((n,i)=> {
+    const d=document.createElement('div'); d.className='chip'+(i===0?' active':''); d.textContent=n;
+    d.onclick=()=>{ [...chips.children].forEach(c=>c.classList.remove('active')); d.classList.add('active'); setCharacter(i); };
+    chips.appendChild(d);
+  });
+  setCharacter(0);
+
+  function update(delta) {
+    if (state.mode !== 'play') return;
+
+    state.speed = state.baseSpeed + state.score * 0.002 + (state.boostTimer>0 ? 8 : 0);
+    state.distance += state.speed * delta;
+    state.score += state.speed * delta * 1.6 + (state.coins * 0.02);
+
+    state.targetLane = Math.max(-1, Math.min(1, state.targetLane));
+    const targetX = lanes[state.targetLane+1];
+    player.position.x += (targetX - player.position.x) * Math.min(1, delta * 10);
+
+    state.yVel -= state.gravity * delta;
+    player.position.y += state.yVel * delta;
+    if (player.position.y <= 0) { player.position.y = 0; state.yVel = 0; state.jumping = false; }
+
+    if (state.sliding) {
+      state.slideTimer -= delta;
+      if (state.slideTimer <= 0) { state.sliding = false; body.scale.y = 1; }
+    }
+
+    if (state.shield > 0) state.shield -= delta;
+    if (state.magnetTimer > 0) state.magnetTimer -= delta;
+    if (state.boostTimer > 0) state.boostTimer -= delta;
+    state.powerTimer += delta;
+
+    camera.position.x += (player.position.x * 0.35 - camera.position.x) * Math.min(1, delta * 4);
+    camera.position.y += ((5.5 + player.position.y * 0.2) - camera.position.y) * Math.min(1, delta * 4);
+    camera.position.z += ((10) - camera.position.z) * Math.min(1, delta * 2);
+    camera.lookAt(player.position.x * 0.2, 1.4 + player.position.y*0.1, -12);
+
+    if (state.cameraShake && state.shakeT > 0) {
+      state.shakeT -= delta;
+      camera.position.x += (Math.random()-0.5)*0.12;
+      camera.position.y += (Math.random()-0.5)*0.12;
+    }
+
+    const moveZ = state.speed * delta;
+    for (const t of activeTiles) { t.position.z += moveZ; if (t.position.z > 16) { t.position.z -= 18*12; } }
+    for (const d of pathSegments) { d.position.z += moveZ; if (d.position.z > 16) d.position.z -= 18*12; }
+
+    for (const ob of obstacles) {
+      ob.position.z += moveZ;
+      if (ob.position.z > 18) { world.remove(ob); pool.obstacle.push(ob); ob.userData.dead = true; }
+      const dz = Math.abs(ob.position.z - player.position.z);
+      if (dz < 1.4 && Math.abs(ob.position.x - player.position.x) < 0.95) {
+        if (ob.userData.kind === 'bar' && !state.sliding) handleCollision(ob);
+        else if ((ob.userData.kind === 'spikes' || ob.userData.kind === 'fire') && !state.jumping) handleCollision(ob);
+        else if (ob.userData.kind === 'log' && player.position.y < 0.75) handleCollision(ob);
+      }
+      ob.rotation.y += delta * 1.5;
+    }
+    for (let i=obstacles.length-1;i>=0;i--) if (obstacles[i].userData.dead) obstacles.splice(i,1);
+
+    for (const c of coins) {
+      c.position.z += moveZ;
+      c.rotation.y += delta * 6;
+      if (c.position.z > 18) { world.remove(c); pool.coin.push(c); c.userData.collected = true; }
+      if (!c.userData.collected) {
+        const dx = c.position.x - player.position.x;
+        const dy = c.position.y - (player.position.y + 1.5);
+        const dz = c.position.z - player.position.z;
+        const dist = Math.hypot(dx, dy, dz);
+        if (state.magnetTimer > 0 && Math.abs(dz) < 8) c.position.x += (player.position.x - c.position.x) * delta * 6;
+        if (dist < 1.0) {
+          c.userData.collected = true;
+          state.coins++; state.challengeCoins++;
+          world.remove(c); pool.coin.push(c);
+          playTone(880, .05, 'triangle', .025);
+        }
+      }
+    }
+    for (let i=coins.length-1;i>=0;i--) if (coins[i].userData.collected) coins.splice(i,1);
+
+    for (const p of powerups) {
+      p.position.z += moveZ;
+      p.rotation.x += delta * 2; p.rotation.y += delta * 2.5;
+      if (p.position.z > 18) { world.remove(p); pool.power.push(p); p.userData.collected = true; }
+      if (!p.userData.collected) {
+        const dist = p.position.distanceTo(player.position.clone().add(new THREE.Vector3(0,1.2,0)));
+        if (dist < 1.0) {
+          p.userData.collected = true;
+          pickupPower(p.userData.kind);
+          world.remove(p); pool.power.push(p);
+        }
+      }
+    }
+    for (let i=powerups.length-1;i>=0;i--) if (powerups[i].userData.collected) powerups.splice(i,1);
+
+    while (nextZ > -240) {
+      const theme = nextZ > -80 ? 'ruins' : (nextZ > -160 ? 'jungle' : 'cave');
+      spawnSegment(nextZ, theme, 0);
+      nextZ -= 12;
+    }
+
+    if (Math.random() < Math.min(0.01 + state.speed * 0.0004, 0.03)) state.shakeT = 0.08;
+    if (state.challengeCoins >= state.challengeTarget) state.challengeCoins = state.challengeTarget;
+
+    ui.score.textContent = Math.floor(state.score).toString();
+    ui.coins.textContent = state.coins.toString();
+    ui.distance.textContent = Math.floor(state.distance).toString() + 'm';
+    ui.powerup.textContent = state.shield>0 ? `Shield ${Math.ceil(state.shield)}s` : state.magnetTimer>0 ? `Magnet ${Math.ceil(state.magnetTimer)}s` : state.boostTimer>0 ? `Boost ${Math.ceil(state.boostTimer)}s` : '—';
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const delta = Math.min(0.033, clock.getDelta());
+    if (state.mode === 'play') update(delta);
+    renderer.render(scene, camera);
+  }
+
+  const clock = new THREE.Clock();
+
+  addEventListener('resize', () => {
+    renderer.setSize(innerWidth, innerHeight);
+    camera.aspect = innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+  });
+
+  setMode('menu');
+  resetWorld();
+  animate();
+})();
+</script>
+</body>
+</html>

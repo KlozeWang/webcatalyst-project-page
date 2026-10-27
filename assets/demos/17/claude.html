@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sky Runner</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;user-select:none}
+body{overflow:hidden;font-family:'Segoe UI',sans-serif;background:#000;color:#fff}
+#game{position:fixed;inset:0}
+#hud{position:fixed;top:0;left:0;right:0;padding:15px;display:flex;justify-content:space-between;pointer-events:none;z-index:10;text-shadow:0 2px 6px rgba(0,0,0,.6)}
+.stat{background:rgba(0,0,0,.35);padding:8px 14px;border-radius:10px;font-weight:bold;backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15)}
+.stat .lbl{font-size:11px;opacity:.8;display:block}
+.stat .val{font-size:20px}
+#fuelBar{width:120px;height:8px;background:rgba(255,255,255,.2);border-radius:4px;margin-top:4px;overflow:hidden}
+#fuelFill{height:100%;background:linear-gradient(90deg,#ff4444,#ffaa00,#44ff88);transition:width .2s;width:100%}
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a2a6c,#b21f1f,#fdbb2d);z-index:20;text-align:center;padding:20px}
+.screen.hidden{display:none}
+h1{font-size:64px;margin-bottom:10px;letter-spacing:4px;text-shadow:0 4px 20px rgba(0,0,0,.5)}
+h2{font-size:36px;margin-bottom:20px}
+p{font-size:16px;opacity:.9;margin-bottom:8px;max-width:500px}
+button{margin-top:25px;padding:15px 40px;font-size:20px;font-weight:bold;background:linear-gradient(135deg,#ffaa00,#ff6600);color:#fff;border:none;border-radius:30px;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.4);transition:transform .15s}
+button:hover{transform:scale(1.05)}
+.controls{margin-top:20px;font-size:14px;opacity:.85;line-height:1.8}
+.kbd{display:inline-block;background:rgba(0,0,0,.4);padding:2px 8px;border-radius:5px;margin:0 3px;font-family:monospace}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="hud" class="hidden">
+  <div class="stat"><span class="lbl">SCORE</span><span class="val" id="score">0</span></div>
+  <div class="stat"><span class="lbl">⚙ PROPS</span><span class="val" id="coins">0</span></div>
+  <div class="stat"><span class="lbl">⛽ FUEL</span><div id="fuelBar"><div id="fuelFill"></div></div></div>
+</div>
+<div id="startScreen" class="screen">
+  <h1>SKY RUNNER</h1>
+  <p>Pilot your aircraft through endless skies. Dodge obstacles, collect fuel, and grab golden propellers!</p>
+  <div class="controls">
+    <span class="kbd">A</span> / <span class="kbd">←</span> Left lane &nbsp; <span class="kbd">D</span> / <span class="kbd">→</span> Right lane<br>
+    <span class="kbd">W</span> / <span class="kbd">↑</span> Climb &nbsp; <span class="kbd">S</span> / <span class="kbd">↓</span> Dive<br>
+    <span class="kbd">SPACE</span> Barrel Roll (invincibility) &nbsp; <span class="kbd">SHIFT</span> Boost<br>
+    <em style="opacity:.7">Mobile: swipe to move, double-tap to roll</em>
+  </div>
+  <button onclick="startGame()">TAKE OFF ✈</button>
+</div>
+<div id="overScreen" class="screen hidden">
+  <h2>💥 CRASHED!</h2>
+  <p>Final Score: <span id="finalScore" style="font-size:28px;color:#ffd700">0</span></p>
+  <p>Propellers Collected: <span id="finalCoins" style="color:#ffd700">0</span></p>
+  <button onclick="startGame()">FLY AGAIN</button>
+</div>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+let scene, camera, renderer, clock;
+let player, playerGroup;
+let state = 'menu';
+let score = 0, coins = 0, fuel = 100;
+let speed = 40, baseSpeed = 40;
+let targetLane = 1, targetAlt = 1; // 0,1,2
+const LANES = [-5, 0, 5];
+const ALTS = [3, 7, 11];
+let obstacles = [], collectibles = [], clouds = [];
+let invincible = 0, boost = 0, shield = 0, magnet = 0;
+let rollAngle = 0;
+let spawnTimer = 0;
+let audioCtx;
+
+// --- Audio ---
+function beep(freq, dur, type='sine', vol=.15){
+  if(!audioCtx) return;
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type=type; o.frequency.value=freq;
+  g.gain.setValueAtTime(vol,audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+dur);
+  o.connect(g);g.connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime+dur);
+}
+
+// --- Init ---
+function init(){
+  scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x87ceeb, 60, 250);
+  scene.background = new THREE.Color(0x87ceeb);
+
+  camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 500);
+  camera.position.set(0, 10, -15);
+  camera.lookAt(0, 7, 20);
+
+  renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  document.getElementById('game').appendChild(renderer.domElement);
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  const sun = new THREE.DirectionalLight(0xffeecc, 1);
+  sun.position.set(10,30,10);
+  scene.add(sun);
+
+  // Player
+  playerGroup = new THREE.Group();
+  player = createPlane(0xff4444);
+  playerGroup.add(player);
+  playerGroup.position.set(0, 7, 0);
+  scene.add(playerGroup);
+
+  // Initial clouds
+  for(let i=0;i<40;i++) spawnCloud(Math.random()*300-50);
+
+  // Ground reference (distant)
+  const groundGeo = new THREE.PlaneGeometry(500, 500);
+  const groundMat = new THREE.MeshLambertMaterial({color:0x3a8857});
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI/2;
+  ground.position.y = -15;
+  scene.add(ground);
+
+  clock = new THREE.Clock();
+  window.addEventListener('resize', onResize);
+  setupControls();
+  animate();
+}
+
+function createPlane(color){
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(.6,.4,4,8), new THREE.MeshLambertMaterial({color}));
+  body.rotation.x = Math.PI/2;
+  g.add(body);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(.6,1.2,8), new THREE.MeshLambertMaterial({color:0x222222}));
+  nose.rotation.x = Math.PI/2; nose.position.z = 2.5;
+  g.add(nose);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(5,.15,1.2), new THREE.MeshLambertMaterial({color:0xdddddd}));
+  g.add(wing);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(.15,1,.8), new THREE.MeshLambertMaterial({color}));
+  tail.position.set(0,.5,-1.8); g.add(tail);
+  const htail = new THREE.Mesh(new THREE.BoxGeometry(1.8,.1,.6), new THREE.MeshLambertMaterial({color:0xdddddd}));
+  htail.position.set(0,.2,-1.8); g.add(htail);
+  return g;
+}
+
+function spawnCloud(z){
+  const c = new THREE.Group();
+  const mat = new THREE.MeshLambertMaterial({color:0xffffff, transparent:true, opacity:.85});
+  for(let i=0;i<4;i++){
+    const s = new THREE.Mesh(new THREE.SphereGeometry(2+Math.random()*2,6,5), mat);
+    s.position.set((Math.random()-.5)*4,(Math.random()-.5)*1.5,(Math.random()-.5)*4);
+    c.add(s);
+  }
+  c.position.set((Math.random()-.5)*60, 3+Math.random()*20, z);
+  scene.add(c);
+  clouds.push(c);
+}
+
+function spawnObstacle(type, lane, alt){
+  let mesh;
+  if(type==='plane'){
+    mesh = createPlane(0x666666);
+    mesh.rotation.y = Math.PI; // flying toward us
+  } else if(type==='storm'){
+    mesh = new THREE.Group();
+    const mat = new THREE.MeshLambertMaterial({color:0x444466, transparent:true, opacity:.9});
+    for(let i=0;i<5;i++){
+      const s = new THREE.Mesh(new THREE.SphereGeometry(2.5,6,5),mat);
+      s.position.set((Math.random()-.5)*4,(Math.random()-.5)*2,(Math.random()-.5)*4);
+      mesh.add(s);
+    }
+  } else if(type==='birds'){
+    mesh = new THREE.Group();
+    const mat = new THREE.MeshLambertMaterial({color:0x222222});
+    for(let i=0;i<5;i++){
+      const b = new THREE.Mesh(new THREE.ConeGeometry(.4,1,4),mat);
+      b.rotation.z = Math.PI/2;
+      b.position.set((Math.random()-.5)*3,(Math.random()-.5)*2,(Math.random()-.5)*3);
+      mesh.add(b);
+    }
+  } else { // tower
+    mesh = new THREE.Mesh(new THREE.BoxGeometry(1.5,12,1.5), new THREE.MeshLambertMaterial({color:0xaa3333}));
+  }
+  mesh.position.set(LANES[lane], ALTS[alt], 200);
+  mesh.userData = {type, lane, alt, isObstacle:true, radius: type==='tower'?2:3};
+  scene.add(mesh);
+  obstacles.push(mesh);
+}
+
+function spawnCollectible(type, lane, alt, z){
+  let mesh;
+  if(type==='fuel'){
+    mesh = new THREE.Mesh(new THREE.SphereGeometry(.7,12,12), new THREE.MeshStandardMaterial({color:0x44ff88,emissive:0x22aa44,emissiveIntensity:.6}));
+  } else if(type==='prop'){
+    mesh = new THREE.Mesh(new THREE.TorusGeometry(.5,.2,6,12), new THREE.MeshStandardMaterial({color:0xffd700,emissive:0xaa7700,emissiveIntensity:.5,metalness:.7}));
+  } else if(type==='cargo'){
+    mesh = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshLambertMaterial({color:0xaa6633}));
+  } else { // powerup
+    const colors={shield:0x44aaff,boost:0xff4488,magnet:0xaa44ff};
+    mesh = new THREE.Mesh(new THREE.OctahedronGeometry(.8), new THREE.MeshStandardMaterial({color:colors[type],emissive:colors[type],emissiveIntensity:.5}));
+  }
+  mesh.position.set(LANES[lane], ALTS[alt], z);
+  mesh.userData = {type, isCollectible:true};
+  scene.add(mesh);
+  collectibles.push(mesh);
+}
+
+function spawnPattern(){
+  const z = 200;
+  const r = Math.random();
+  if(r<0.6){
+    // obstacle
+    const types=['plane','storm','birds','tower'];
+    const t = types[Math.floor(Math.random()*types.length)];
+    const lane = Math.floor(Math.random()*3);
+    const alt = t==='tower'?0:Math.floor(Math.random()*3);
+    spawnObstacle(t, lane, alt);
+  }
+  // also spawn collectibles in line
+  const cLane = Math.floor(Math.random()*3);
+  const cAlt = Math.floor(Math.random()*3);
+  const cType = Math.random()<0.1 ? ['shield','boost','magnet','cargo'][Math.floor(Math.random()*4)]
+              : Math.random()<0.3 ? 'fuel'
+              : 'prop';
+  for(let i=0;i<5;i++){
+    // avoid overlap with tower lane
+    spawnCollectible(cType, cLane, cAlt, z + i*3);
+  }
+}
+
+// --- Controls ---
+function setupControls(){
+  document.addEventListener('keydown', e=>{
+    if(state!=='play') return;
+    const k=e.key.toLowerCase();
+    if(k==='a'||k==='arrowleft') targetLane=Math.max(0,targetLane-1);
+    else if(k==='d'||k==='arrowright') targetLane=Math.min(2,targetLane+1);
+    else if(k==='w'||k==='arrowup') targetAlt=Math.min(2,targetAlt+1);
+    else if(k==='s'||k==='arrowdown') targetAlt=Math.max(0,targetAlt-1);
+    else if(k===' '){ if(invincible<=0){invincible=1.2; beep(800,.2,'square');} }
+    else if(k==='shift') boost=Math.max(boost,2);
+  });
+
+  // touch
+  let sx=0,sy=0,st=0,lastTap=0;
+  const el=renderer.domElement;
+  el.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;st=Date.now();},{passive:true});
+  el.addEventListener('touchend',e=>{
+    if(state!=='play')return;
+    const dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy;
+    const dt=Date.now()-st;
+    if(Math.abs(dx)<20&&Math.abs(dy)<20&&dt<250){
+      if(Date.now()-lastTap<300){ if(invincible<=0)invincible=1.2; }
+      lastTap=Date.now();
+    } else if(Math.abs(dx)>Math.abs(dy)){
+      if(dx>0)targetLane=Math.min(2,targetLane+1); else targetLane=Math.max(0,targetLane-1);
+    } else {
+      if(dy<0)targetAlt=Math.min(2,targetAlt+1); else targetAlt=Math.max(0,targetAlt-1);
+    }
+  },{passive:true});
+}
+
+function onResize(){
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+}
+
+// --- Loop ---
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  if(state==='play'){
+    updateGame(dt);
+  }
+  // animate clouds always
+  for(const c of clouds){
+    c.position.z -= (state==='play'?speed:5) * dt;
+    if(c.position.z < -50){ c.position.z += 350; c.position.x=(Math.random()-.5)*60; }
+  }
+  renderer.render(scene, camera);
+}
+
+function updateGame(dt){
+  // speed up over time
+  baseSpeed += dt*0.5;
+  const curSpeed = baseSpeed * (boost>0?1.8:1);
+  speed = curSpeed;
+
+  if(boost>0) boost-=dt;
+  if(shield>0) shield-=dt;
+  if(magnet>0) magnet-=dt;
+  if(invincible>0){ invincible-=dt; rollAngle += dt*Math.PI*4; }
+  else rollAngle *= 0.85;
+
+  // Fuel
+  fuel -= dt * 2.5;
+  if(fuel<=0){ gameOver(); return; }
+
+  // Smooth player movement
+  const targetX = LANES[targetLane];
+  const targetY = ALTS[targetAlt];
+  playerGroup.position.x += (targetX - playerGroup.position.x) * Math.min(1, dt*8);
+  playerGroup.position.y += (targetY - playerGroup.position.y) * Math.min(1, dt*6);
+  // bank effect
+  const bank = (targetX - playerGroup.position.x) * 0.15;
+  player.rotation.z = rollAngle + bank;
+  player.rotation.x = (targetY - playerGroup.position.y) * -0.1;
+
+  // Camera follow
+  camera.position.x += (playerGroup.position.x*0.5 - camera.position.x)*dt*3;
+  camera.position.y += ((playerGroup.position.y+3) - camera.position.y)*dt*3;
+  camera.lookAt(playerGroup.position.x*0.3, playerGroup.position.y, playerGroup.position.z+20);
+
+  // Spawn
+  spawnTimer -= dt;
+  if(spawnTimer<=0){
+    spawnPattern();
+    spawnTimer = 0.8 + Math.random()*0.5;
+  }
+
+  // Move obstacles
+  for(let i=obstacles.length-1;i>=0;i--){
+    const o = obstacles[i];
+    o.position.z -= curSpeed * dt;
+    o.rotation.y += dt;
+    if(o.position.z < -20){
+      scene.remove(o); obstacles.splice(i,1);
+    } else {
+      // collision
+      const dx=o.position.x-playerGroup.position.x;
+      const dy=o.position.y-playerGroup.position.y;
+      const dz=o.position.z-playerGroup.position.z;
+      if(Math.abs(dz)<2.5 && Math.abs(dx)<2 && Math.abs(dy)<2){
+        if(invincible>0){ /* ignore */ }
+        else if(shield>0){ shield=0; scene.remove(o); obstacles.splice(i,1); beep(300,.3,'sawtooth'); }
+        else if(o.userData.type==='storm'){ baseSpeed = Math.max(20, baseSpeed*0.7); fuel-=5; scene.remove(o); obstacles.splice(i,1); }
+        else { gameOver(); return; }
+      }
+    }
+  }
+
+  // Move collectibles
+  for(let i=collectibles.length-1;i>=0;i--){
+    const c = collectibles[i];
+    c.position.z -= curSpeed * dt;
+    c.rotation.y += dt*3;
+    c.rotation.x += dt*2;
+
+    // magnet
+    if(magnet>0 && c.position.z<40 && c.position.z>0){
+      c.position.x += (playerGroup.position.x - c.position.x)*dt*4;
+      c.position.y += (playerGroup.position.y - c.position.y)*dt*4;
+    }
+
+    if(c.position.z < -10){
+      scene.remove(c); collectibles.splice(i,1);
+    } else {
+      const dx=c.position.x-playerGroup.position.x;
+      const dy=c.position.y-playerGroup.position.y;
+      const dz=c.position.z-playerGroup.position.z;
+      if(dx*dx+dy*dy+dz*dz < 4){
+        if(c.userData.type==='fuel'){ fuel=Math.min(100,fuel+20); beep(900,.1); }
+        else if(c.userData.type==='prop'){ coins++; score+=10; beep(1200,.08); }
+        else if(c.userData.type==='cargo'){ score+=50; beep(600,.15); }
+        else if(c.userData.type==='shield'){ shield=8; beep(700,.2,'triangle'); }
+        else if(c.userData.type==='boost'){ boost=Math.max(boost,3); beep(1000,.2,'triangle'); }
+        else if(c.userData.type==='magnet'){ magnet=8; beep(1100,.2,'triangle'); }
+        scene.remove(c); collectibles.splice(i,1);
+      }
+    }
+  }
+
+  // Score
+  score += dt * 5 * (boost>0?2:1);
+
+  // HUD
+  document.getElementById('score').textContent = Math.floor(score);
+  document.getElementById('coins').textContent = coins;
+  document.getElementById('fuelFill').style.width = Math.max(0,fuel)+'%';
+
+  // Tint player when invincible/shield
+  if(shield>0) player.children[0].material.emissive = new THREE.Color(0x4488ff);
+}
+
+window.startGame = function(){
+  if(!audioCtx){ try{audioCtx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){} }
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('overScreen').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  // reset
+  for(const o of obstacles) scene.remove(o);
+  for(const c of collectibles) scene.remove(c);
+  obstacles=[]; collectibles=[];
+  score=0; coins=0; fuel=100; baseSpeed=40;
+  targetLane=1; targetAlt=1;
+  boost=0; shield=0; magnet=0; invincible=0;
+  playerGroup.position.set(0,7,0);
+  state='play';
+  clock.start();
+};
+
+function gameOver(){
+  state='over';
+  beep(200,.4,'sawtooth',.3);
+  setTimeout(()=>beep(150,.5,'sawtooth',.3),150);
+  document.getElementById('finalScore').textContent = Math.floor(score);
+  document.getElementById('finalCoins').textContent = coins;
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('overScreen').classList.remove('hidden');
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Cobrinha das Frutas</title>
+  <style>
+    :root{
+      --bg:#0f172a;
+      --panel:#111827;
+      --text:#e5e7eb;
+      --muted:#94a3b8;
+      --accent:#22c55e;
+      --danger:#ef4444;
+      --grid:#1f2937;
+      --snake:#22c55e;
+      --snake-head:#16a34a;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,sans-serif;
+      background: radial-gradient(circle at top, #1e293b 0%, var(--bg) 55%);
+      color:var(--text);
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+      touch-action: manipulation;
+      user-select:none;
+    }
+    .wrap{
+      width:min(94vw, 520px);
+      background:rgba(17,24,39,.85);
+      border:1px solid #334155;
+      border-radius:18px;
+      padding:14px;
+      box-shadow:0 12px 35px rgba(0,0,0,.35);
+      backdrop-filter: blur(3px);
+    }
+    .top{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:10px;
+      flex-wrap:wrap;
+    }
+    h1{
+      font-size:1.05rem;
+      margin:0;
+      font-weight:700;
+      letter-spacing:.2px;
+    }
+    .stats{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    .badge{
+      background:#0b1220;
+      border:1px solid #2b3548;
+      border-radius:999px;
+      padding:6px 11px;
+      font-size:.9rem;
+      color:var(--muted);
+      white-space:nowrap;
+    }
+    .badge b{ color:var(--text); }
+    .game-box{
+      position:relative;
+      border-radius:12px;
+      overflow:hidden;
+      border:1px solid #334155;
+      background:#0b1220;
+    }
+    canvas{
+      width:100%;
+      height:auto;
+      display:block;
+      image-rendering:pixelated;
+      image-rendering:crisp-edges;
+      background:#0b1220;
+    }
+    .overlay{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      background:rgba(2,6,23,.6);
+      padding:16px;
+    }
+    .overlay.hidden{ display:none; }
+    .card{
+      background:rgba(15,23,42,.92);
+      border:1px solid #334155;
+      border-radius:14px;
+      padding:18px;
+      max-width:90%;
+    }
+    .card h2{
+      margin:0 0 8px;
+      font-size:1.2rem;
+    }
+    .card p{
+      margin:0 0 14px;
+      color:var(--muted);
+      font-size:.95rem;
+      line-height:1.4;
+    }
+    .actions{
+      display:flex;
+      gap:8px;
+      justify-content:center;
+      flex-wrap:wrap;
+    }
+    button{
+      border:0;
+      border-radius:10px;
+      padding:10px 14px;
+      font-weight:700;
+      cursor:pointer;
+      font-size:.95rem;
+      transition:.15s transform ease, .15s opacity ease;
+    }
+    button:active{ transform:scale(.97); }
+    .primary{
+      background:var(--accent);
+      color:#052e16;
+    }
+    .secondary{
+      background:#334155;
+      color:#e2e8f0;
+    }
+    .danger{
+      background:var(--danger);
+      color:#fff;
+    }
+    .help{
+      margin-top:10px;
+      color:var(--muted);
+      font-size:.85rem;
+      text-align:center;
+    }
+    .controls{
+      margin-top:12px;
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+      max-width:220px;
+      margin-inline:auto;
+    }
+    .controls button{
+      background:#1e293b;
+      color:#e2e8f0;
+      border:1px solid #334155;
+      font-size:1.05rem;
+      padding:11px 0;
+    }
+    .controls .blank{ visibility:hidden; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <h1>🐍 Cobrinha das Frutas</h1>
+      <div class="stats">
+        <div class="badge">Pontos: <b id="score">0</b></div>
+        <div class="badge">Recorde: <b id="best">0</b></div>
+      </div>
+    </div>
+
+    <div class="game-box">
+      <canvas id="game" width="420" height="420" aria-label="Jogo da cobrinha"></canvas>
+
+      <div id="overlayStart" class="overlay">
+        <div class="card">
+          <h2>Pronto para jogar?</h2>
+          <p>Coma frutas para crescer. Não bata na parede nem em você mesmo.</p>
+          <div class="actions">
+            <button id="startBtn" class="primary">Iniciar</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="overlayGameOver" class="overlay hidden">
+        <div class="card">
+          <h2>Fim de jogo 💥</h2>
+          <p id="finalText">Você fez 0 pontos.</p>
+          <div class="actions">
+            <button id="restartBtn" class="danger">Jogar de novo</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="overlayPause" class="overlay hidden">
+        <div class="card">
+          <h2>Pausado ⏸️</h2>
+          <p>Aperte <b>Espaço</b> para continuar.</p>
+          <div class="actions">
+            <button id="resumeBtn" class="secondary">Continuar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="help">Teclado: setas / WASD • Espaço: pausar</div>
+
+    <div class="controls" aria-label="Controles de direção">
+      <button class="blank" tabindex="-1"> </button>
+      <button data-dir="up">⬆️</button>
+      <button class="blank" tabindex="-1"> </button>
+      <button data-dir="left">⬅️</button>
+      <button data-dir="down">⬇️</button>
+      <button data-dir="right">➡️</button>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d');
+
+      const scoreEl = document.getElementById('score');
+      const bestEl = document.getElementById('best');
+      const finalText = document.getElementById('finalText');
+
+      const overlayStart = document.getElementById('overlayStart');
+      const overlayGameOver = document.getElementById('overlayGameOver');
+      const overlayPause = document.getElementById('overlayPause');
+
+      const startBtn = document.getElementById('startBtn');
+      const restartBtn = document.getElementById('restartBtn');
+      const resumeBtn = document.getElementById('resumeBtn');
+
+      const GRID = 21;
+      const TILE = canvas.width / GRID;
+
+      const FRUITS = [
+        { name: 'maçã', emoji: '🍎', points: 1, color: '#ef4444' },
+        { name: 'banana', emoji: '🍌', points: 2, color: '#f59e0b' },
+        { name: 'uva', emoji: '🍇', points: 3, color: '#8b5cf6' },
+        { name: 'morango', emoji: '🍓', points: 2, color: '#f43f5e' },
+        { name: 'laranja', emoji: '🍊', points: 1, color: '#fb923c' }
+      ];
+
+      let snake, dir, nextDir, fruit, score, best, speed, timer;
+      let running = false;
+      let paused = false;
+
+      function init() {
+        snake = [
+          { x: 10, y: 10 },
+          { x: 9, y: 10 },
+          { x: 8, y: 10 }
+        ];
+        dir = { x: 1, y: 0 };
+        nextDir = { x: 1, y: 0 };
+        score = 0;
+        speed = 135;
+        fruit = spawnFruit();
+        updateScore();
+        draw();
+      }
+
+      function spawnFruit() {
+        let p;
+        do {
+          p = {
+            x: Math.floor(Math.random() * GRID),
+            y: Math.floor(Math.random() * GRID),
+            ...FRUITS[Math.floor(Math.random() * FRUITS.length)]
+          };
+        } while (snake.some(s => s.x === p.x && s.y === p.y));
+        return p;
+      }
+
+      function updateScore() {
+        scoreEl.textContent = score;
+        bestEl.textContent = best;
+      }
+
+      function setDirection(nx, ny) {
+        if (!running || paused) return;
+        if (nx === -dir.x && ny === -dir.y) return;
+        nextDir = { x: nx, y: ny };
+      }
+
+      function startGame() {
+        clearInterval(timer);
+        running = true;
+        paused = false;
+        overlayStart.classList.add('hidden');
+        overlayGameOver.classList.add('hidden');
+        overlayPause.classList.add('hidden');
+
+        timer = setInterval(tick, speed);
+      }
+
+      function restartGame() {
+        init();
+        startGame();
+      }
+
+      function pauseGame() {
+        if (!running) return;
+        paused = true;
+        overlayPause.classList.remove('hidden');
+      }
+
+      function resumeGame() {
+        if (!running) return;
+        paused = false;
+        overlayPause.classList.add('hidden');
+      }
+
+      function gameOver() {
+        running = false;
+        clearInterval(timer);
+        if (score > best) {
+          best = score;
+          localStorage.setItem('snake-frutas-best', String(best));
+          bestEl.textContent = best;
+        }
+        finalText.textContent = `Você fez ${score} ponto${score === 1 ? '' : 's'}!`;
+        overlayGameOver.classList.remove('hidden');
+      }
+
+      function speedUpIfNeeded() {
+        const newSpeed = Math.max(72, 135 - Math.floor(score / 5) * 6);
+        if (newSpeed !== speed) {
+          speed = newSpeed;
+          clearInterval(timer);
+          timer = setInterval(tick, speed);
+        }
+      }
+
+      function tick() {
+        if (!running || paused) return;
+
+        dir = nextDir;
+        const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+        if (head.x < 0 || head.y < 0 || head.x >= GRID || head.y >= GRID) {
+          gameOver();
+          return;
+        }
+
+        for (let i = 0; i < snake.length; i++) {
+          if (snake[i].x === head.x && snake[i].y === head.y) {
+            gameOver();
+            return;
+          }
+        }
+
+        snake.unshift(head);
+
+        if (head.x === fruit.x && head.y === fruit.y) {
+          score += fruit.points;
+          fruit = spawnFruit();
+          speedUpIfNeeded();
+          updateScore();
+        } else {
+          snake.pop();
+        }
+
+        draw();
+      }
+
+      function drawGrid() {
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.12)';
+        ctx.lineWidth = 1;
+        for (let i = 1; i < GRID; i++) {
+          const p = i * TILE;
+          ctx.beginPath();
+          ctx.moveTo(p, 0);
+          ctx.lineTo(p, canvas.height);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(0, p);
+          ctx.lineTo(canvas.width, p);
+          ctx.stroke();
+        }
+      }
+
+      function roundRect(x, y, w, h, r) {
+        const rr = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + rr, y);
+        ctx.arcTo(x + w, y, x + w, y + h, rr);
+        ctx.arcTo(x + w, y + h, x, y + h, rr);
+        ctx.arcTo(x, y + h, x, y, rr);
+        ctx.arcTo(x, y, x + w, y, rr);
+        ctx.closePath();
+      }
+
+      function drawSnake() {
+        for (let i = snake.length - 1; i >= 0; i--) {
+          const s = snake[i];
+          const x = s.x * TILE;
+          const y = s.y * TILE;
+          const pad = i === 0 ? 2.2 : 2.8;
+
+          ctx.fillStyle = i === 0 ? getComputedStyle(document.documentElement).getPropertyValue('--snake-head').trim() : getComputedStyle(document.documentElement).getPropertyValue('--snake').trim();
+          roundRect(x + pad, y + pad, TILE - pad * 2, TILE - pad * 2, 6);
+          ctx.fill();
+
+          if (i === 0) {
+            ctx.fillStyle = '#052e16';
+            const eye = 2.1;
+            const ex1 = x + TILE * 0.35;
+            const ex2 = x + TILE * 0.65;
+            const ey = y + TILE * 0.35;
+            ctx.beginPath();
+            ctx.arc(ex1, ey, eye, 0, Math.PI * 2);
+            ctx.arc(ex2, ey, eye, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+
+      function drawFruit() {
+        const x = fruit.x * TILE + TILE / 2;
+        const y = fruit.y * TILE + TILE / 2;
+
+        ctx.fillStyle = fruit.color;
+        ctx.beginPath();
+        ctx.arc(x, y, TILE * 0.31, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#14532d';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, y - TILE * 0.26);
+        ctx.lineTo(x + TILE * 0.08, y - TILE * 0.42);
+        ctx.stroke();
+
+        ctx.font = `${Math.floor(TILE * 0.48)}px serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(fruit.emoji, x, y + 0.5);
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#0b1220';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        drawGrid();
+        drawFruit();
+        drawSnake();
+      }
+
+      document.addEventListener('keydown', (e) => {
+        const k = e.key.toLowerCase();
+
+        if (['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d',' '].includes(k)) {
+          e.preventDefault();
+        }
+
+        if (k === 'arrowup' || k === 'w') setDirection(0, -1);
+        else if (k === 'arrowdown' || k === 's') setDirection(0, 1);
+        else if (k === 'arrowleft' || k === 'a') setDirection(-1, 0);
+        else if (k === 'arrowright' || k === 'd') setDirection(1, 0);
+        else if (k === ' ') {
+          if (!running) return;
+          paused ? resumeGame() : pauseGame();
+        }
+      }, { passive: false });
+
+      document.querySelectorAll('.controls button[data-dir]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const d = btn.dataset.dir;
+          if (d === 'up') setDirection(0, -1);
+          if (d === 'down') setDirection(0, 1);
+          if (d === 'left') setDirection(-1, 0);
+          if (d === 'right') setDirection(1, 0);
+        });
+      });
+
+      startBtn.addEventListener('click', restartGame);
+      restartBtn.addEventListener('click', restartGame);
+      resumeBtn.addEventListener('click', resumeGame);
+
+      best = Number(localStorage.getItem('snake-frutas-best') || 0);
+      init();
+      updateScore();
+    })();
+  </script>
+</body>
+</html>

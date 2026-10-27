@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gesture Blocks — Google TV Edition</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    background: radial-gradient(ellipse at center, #0b1a3a 0%, #03060f 100%);
+    color: #fff;
+    font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+  #wrap {
+    position: relative;
+    width: 100vw; height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #game {
+    background: linear-gradient(180deg, #0a1230 0%, #050714 100%);
+    box-shadow: 0 0 60px rgba(80,160,255,.35), inset 0 0 60px rgba(0,0,0,.7);
+    border-radius: 12px;
+    display: block;
+    max-width: 100vw; max-height: 100vh;
+  }
+  #cam {
+    position: absolute;
+    bottom: 12px; right: 12px;
+    width: 180px; height: 135px;
+    border: 2px solid #4fc3ff;
+    border-radius: 8px;
+    transform: scaleX(-1);
+    background: #000;
+    box-shadow: 0 0 20px rgba(79,195,255,.6);
+    z-index: 5;
+  }
+  #camLabel {
+    position: absolute;
+    bottom: 150px; right: 14px;
+    font-size: 11px; color: #4fc3ff;
+    text-transform: uppercase; letter-spacing: 2px;
+    z-index: 5;
+    text-shadow: 0 0 6px #4fc3ff;
+  }
+  #hud {
+    position: absolute;
+    top: 16px; left: 0; right: 0;
+    display: flex; justify-content: space-around;
+    font-size: 22px; font-weight: bold;
+    text-shadow: 0 0 10px #4fc3ff;
+    z-index: 4;
+    pointer-events: none;
+  }
+  .hud-item span { color: #4fc3ff; }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,5,20,.85);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    z-index: 10;
+    backdrop-filter: blur(8px);
+    padding: 20px;
+  }
+  #overlay h1 {
+    font-size: 48px;
+    background: linear-gradient(90deg, #4fc3ff, #b388ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin-bottom: 14px;
+    letter-spacing: 2px;
+  }
+  #overlay p {
+    font-size: 16px;
+    max-width: 560px;
+    line-height: 1.6;
+    color: #cfe6ff;
+    margin-bottom: 22px;
+  }
+  #overlay button {
+    background: linear-gradient(90deg, #4fc3ff, #b388ff);
+    color: #0a0f24;
+    border: none;
+    padding: 14px 38px;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 30px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    transition: transform .2s, box-shadow .2s;
+    box-shadow: 0 0 25px rgba(79,195,255,.6);
+  }
+  #overlay button:hover { transform: scale(1.06); box-shadow: 0 0 35px rgba(179,136,255,.8); }
+  .gesture-bar {
+    position: absolute;
+    bottom: 12px; right: 200px;
+    width: 12px; height: 135px;
+    background: rgba(255,255,255,.1);
+    border-radius: 6px;
+    overflow: hidden;
+    z-index: 5;
+  }
+  .gesture-fill {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(0deg, #4fc3ff, #b388ff);
+    transition: height .1s linear;
+  }
+  .legend {
+    display: flex; gap: 20px; margin-top: 10px; font-size: 14px; color: #9cf;
+  }
+  .legend div { display: flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="960" height="720"></canvas>
+  <div id="hud">
+    <div class="hud-item">SCORE: <span id="score">0</span></div>
+    <div class="hud-item">LIVES: <span id="lives">3</span></div>
+    <div class="hud-item">LEVEL: <span id="level">1</span></div>
+  </div>
+  <div id="camLabel">📹 Gesture Cam</div>
+  <video id="cam" autoplay playsinline muted></video>
+  <div class="gesture-bar"><div class="gesture-fill" id="gestureFill"></div></div>
+
+  <div id="overlay">
+    <h1>GESTURE BLOCKS</h1>
+    <p>
+      Wave your hand <b>left and right</b> in front of your webcam to move the paddle.
+      Catch the <b>blue and purple</b> blocks for points. Avoid the <b>red</b> ones!
+      Optimized for Google TV with webcam.
+    </p>
+    <div class="legend">
+      <div><div class="swatch" style="background:#4fc3ff"></div>Good +10</div>
+      <div><div class="swatch" style="background:#b388ff"></div>Bonus +25</div>
+      <div><div class="swatch" style="background:#ff5277"></div>Bad −1 Life</div>
+    </div>
+    <button id="startBtn" style="margin-top:24px">▶ Enable Camera & Start</button>
+    <p id="status" style="margin-top:14px;font-size:13px;color:#ffa;"></p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const video = document.getElementById('cam');
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const statusEl = document.getElementById('status');
+  const scoreEl = document.getElementById('score');
+  const livesEl = document.getElementById('lives');
+  const levelEl = document.getElementById('level');
+  const gestureFill = document.getElementById('gestureFill');
+
+  const W = canvas.width, H = canvas.height;
+
+  // Motion detection canvas
+  const motionCanvas = document.createElement('canvas');
+  motionCanvas.width = 80; motionCanvas.height = 60;
+  const mctx = motionCanvas.getContext('2d', { willReadFrequently: true });
+  let prevFrame = null;
+
+  // Game state
+  let state = 'menu'; // menu | playing | gameover
+  let paddleX = W / 2, paddleTargetX = W / 2;
+  const paddleW = 140, paddleH = 18;
+  const paddleY = H - 60;
+  let blocks = [];
+  let particles = [];
+  let score = 0, lives = 3, level = 1;
+  let spawnTimer = 0, spawnInterval = 70;
+  let frame = 0;
+  let motionStrength = 0;
+
+  // Audio
+  let audioCtx;
+  function beep(freq, dur, type='sine', vol=0.15) {
+    if (!audioCtx) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + dur);
+  }
+
+  async function initCamera() {
+    statusEl.textContent = 'Requesting camera...';
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 320, height: 240, facingMode: 'user' }, audio: false
+      });
+      video.srcObject = stream;
+      await new Promise(r => video.onloadedmetadata = r);
+      statusEl.textContent = '';
+      return true;
+    } catch (e) {
+      statusEl.textContent = '⚠ Camera unavailable. Use ← → keys or mouse to play.';
+      return false;
+    }
+  }
+
+  function detectMotion() {
+    if (!video.videoWidth) return;
+    mctx.save();
+    mctx.scale(-1, 1); // mirror
+    mctx.drawImage(video, -motionCanvas.width, 0, motionCanvas.width, motionCanvas.height);
+    mctx.restore();
+    const frameData = mctx.getImageData(0, 0, motionCanvas.width, motionCanvas.height);
+    const data = frameData.data;
+    if (!prevFrame) { prevFrame = new Uint8ClampedArray(data); return; }
+
+    let sumX = 0, count = 0, totalDiff = 0;
+    const w = motionCanvas.width, h = motionCanvas.height;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        const dr = Math.abs(data[i] - prevFrame[i]);
+        const dg = Math.abs(data[i+1] - prevFrame[i+1]);
+        const db = Math.abs(data[i+2] - prevFrame[i+2]);
+        const diff = dr + dg + db;
+        if (diff > 60) {
+          sumX += x;
+          count++;
+          totalDiff += diff;
+        }
+      }
+    }
+    prevFrame.set(data);
+    motionStrength = Math.min(1, count / 400);
+    gestureFill.style.height = (motionStrength * 100) + '%';
+
+    if (count > 25) {
+      const avgX = sumX / count / w; // 0..1
+      paddleTargetX = avgX * W;
+    }
+  }
+
+  function spawnBlock() {
+    const r = Math.random();
+    let type;
+    if (r < 0.18) type = 'bonus';
+    else if (r < 0.65) type = 'good';
+    else type = 'bad';
+    blocks.push({
+      x: 40 + Math.random() * (W - 80),
+      y: -40,
+      w: 50, h: 50,
+      vy: 2 + Math.random() * 1.5 + level * 0.5,
+      type,
+      rot: 0,
+      vr: (Math.random() - 0.5) * 0.05
+    });
+  }
+
+  function addParticles(x, y, color, n=20) {
+    for (let i = 0; i < n; i++) {
+      particles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 6,
+        vy: (Math.random() - 0.5) * 6 - 2,
+        life: 40, max: 40,
+        color
+      });
+    }
+  }
+
+  function update() {
+    frame++;
+    if (state !== 'playing') return;
+
+    // Smooth paddle
+    paddleX += (paddleTargetX - paddleX) * 0.25;
+    paddleX = Math.max(paddleW/2, Math.min(W - paddleW/2, paddleX));
+
+    // Spawn
+    spawnTimer++;
+    if (spawnTimer >= spawnInterval) {
+      spawnTimer = 0;
+      spawnBlock();
+    }
+
+    // Level up
+    const newLevel = 1 + Math.floor(score / 100);
+    if (newLevel !== level) {
+      level = newLevel;
+      spawnInterval = Math.max(25, 70 - level * 4);
+      beep(880, 0.2, 'square');
+    }
+
+    // Blocks
+    for (let i = blocks.length - 1; i >= 0; i--) {
+      const b = blocks[i];
+      b.y += b.vy;
+      b.rot += b.vr;
+      // Collision with paddle
+      if (b.y + b.h >= paddleY && b.y < paddleY + paddleH &&
+          b.x + b.w > paddleX - paddleW/2 && b.x < paddleX + paddleW/2) {
+        if (b.type === 'bad') {
+          lives--;
+          beep(120, 0.3, 'sawtooth', 0.2);
+          addParticles(b.x + b.w/2, b.y + b.h/2, '#ff5277', 25);
+          if (lives <= 0) gameOver();
+        } else if (b.type === 'bonus') {
+          score += 25;
+          beep(1200, 0.15, 'triangle');
+          addParticles(b.x + b.w/2, b.y + b.h/2, '#b388ff', 30);
+        } else {
+          score += 10;
+          beep(700, 0.1, 'sine');
+          addParticles(b.x + b.w/2, b.y + b.h/2, '#4fc3ff', 15);
+        }
+        blocks.splice(i, 1);
+        continue;
+      }
+      if (b.y > H) {
+        if (b.type !== 'bad') { /* missed good - no penalty */ }
+        blocks.splice(i, 1);
+      }
+    }
+
+    // Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx; p.y += p.vy;
+      p.vy += 0.2; p.life--;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    scoreEl.textContent = score;
+    livesEl.textContent = lives;
+    levelEl.textContent = level;
+  }
+
+  function drawBlock(b) {
+    ctx.save();
+    ctx.translate(b.x + b.w/2, b.y + b.h/2);
+    ctx.rotate(b.rot);
+    let color, glow;
+    if (b.type === 'good') { color = '#4fc3ff'; glow = '#4fc3ff'; }
+    else if (b.type === 'bonus') { color = '#b388ff'; glow = '#b388ff'; }
+    else { color = '#ff5277'; glow = '#ff5277'; }
+    ctx.shadowColor = glow; ctx.shadowBlur = 20;
+    ctx.fillStyle = color;
+    ctx.fillRect(-b.w/2, -b.h/2, b.w, b.h);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(255,255,255,.3)';
+    ctx.fillRect(-b.w/2 + 4, -b.h/2 + 4, b.w - 8, 6);
+    if (b.type === 'bad') {
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-10, -10); ctx.lineTo(10, 10);
+      ctx.moveTo(10, -10); ctx.lineTo(-10, 10);
+      ctx.stroke();
+    } else if (b.type === 'bonus') {
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 24px Arial';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('★', 0, 0);
+    }
+    ctx.restore();
+  }
+
+  function render() {
+    // Background
+    ctx.fillStyle = '#050714';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid lines for TV vibe
+    ctx.strokeStyle = 'rgba(79,195,255,.06)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < W; i += 40) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, H); ctx.stroke();
+    }
+    for (let i = 0; i < H; i += 40) {
+      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(W, i); ctx.stroke();
+    }
+
+    // Blocks
+    blocks.forEach(drawBlock);
+
+    // Particles
+    particles.forEach(p => {
+      const a = p.life / p.max;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
+    });
+    ctx.globalAlpha = 1;
+
+    // Paddle
+    ctx.save();
+    ctx.shadowColor = '#4fc3ff'; ctx.shadowBlur = 25;
+    const grad = ctx.createLinearGradient(paddleX - paddleW/2, 0, paddleX + paddleW/2, 0);
+    grad.addColorStop(0, '#4fc3ff');
+    grad.addColorStop(1, '#b388ff');
+    ctx.fillStyle = grad;
+    ctx.fillRect(paddleX - paddleW/2, paddleY, paddleW, paddleH);
+    ctx.restore();
+
+    // Floor line
+    ctx.strokeStyle = 'rgba(79,195,255,.4)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, paddleY + paddleH + 5); ctx.lineTo(W, paddleY + paddleH + 5);
+    ctx.stroke();
+  }
+
+  function loop() {
+    detectMotion();
+    update();
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  function startGame() {
+    score = 0; lives = 3; level = 1;
+    blocks = []; particles = [];
+    spawnTimer = 0; spawnInterval = 70;
+    state = 'playing';
+    overlay.style.display = 'none';
+  }
+
+  function gameOver() {
+    state = 'gameover';
+    beep(200, 0.5, 'sawtooth', 0.2);
+    setTimeout(() => beep(150, 0.6, 'sawtooth', 0.2), 200);
+    overlay.style.display = 'flex';
+    overlay.querySelector('h1').textContent = 'GAME OVER';
+    overlay.querySelector('p').innerHTML = `Final Score: <b style="color:#4fc3ff">${score}</b> &nbsp; Level: <b style="color:#b388ff">${level}</b><br><br>Wave your hand to play again!`;
+    startBtn.textContent = '▶ Play Again';
+  }
+
+  startBtn.addEventListener('click', async () => {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx.resume();
+    await initCamera();
+    startGame();
+  });
+
+  // Keyboard fallback (Google TV remote D-pad)
+  window.addEventListener('keydown', e => {
+    if (state !== 'playing') {
+      if (e.key === 'Enter' || e.key === ' ') startBtn.click();
+      return;
+    }
+    if (e.key === 'ArrowLeft') paddleTargetX -= 50;
+    if (e.key === 'ArrowRight') paddleTargetX += 50;
+  });
+
+  // Mouse fallback
+  canvas.addEventListener('mousemove', e => {
+    const r = canvas.getBoundingClientRect();
+    paddleTargetX = (e.clientX - r.left) * (W / r.width);
+  });
+
+  // Resize handling
+  function resize() {
+    const ratio = W / H;
+    const maxW = window.innerWidth;
+    const maxH = window.innerHeight;
+    let cw = maxW, ch = maxW / ratio;
+    if (ch > maxH) { ch = maxH; cw = ch * ratio; }
+    canvas.style.width = cw + 'px';
+    canvas.style.height = ch + 'px';
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  loop();
+})();
+</script>
+</body>
+</html>

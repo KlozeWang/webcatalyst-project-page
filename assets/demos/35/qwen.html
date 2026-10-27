@@ -1,0 +1,1465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Red Dead: Mobile</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+canvas { display: block; }
+#ui-overlay {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 10;
+}
+#start-screen {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(180deg, #1a0a00 0%, #3d1c00 40%, #8b4513 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 100;
+}
+#start-screen h1 {
+  font-family: 'Georgia', serif; color: #f4c542; font-size: 42px;
+  text-shadow: 3px 3px 6px #000, 0 0 20px rgba(244,197,66,0.3);
+  margin-bottom: 5px; letter-spacing: 3px;
+}
+#start-screen h2 {
+  font-family: 'Georgia', serif; color: #c4943a; font-size: 18px;
+  margin-bottom: 40px; font-style: italic;
+}
+#start-btn {
+  font-family: 'Georgia', serif; background: linear-gradient(180deg, #8b4513, #5c2d0e);
+  color: #f4c542; border: 2px solid #f4c542; padding: 15px 50px;
+  font-size: 22px; cursor: pointer; letter-spacing: 2px;
+  border-radius: 4px; pointer-events: all;
+}
+#start-btn:active { background: linear-gradient(180deg, #a0522d, #8b4513); }
+#controls {
+  position: absolute; bottom: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 20;
+}
+#joystick-zone {
+  position: absolute; bottom: 20px; left: 20px; width: 140px; height: 140px;
+  pointer-events: all;
+}
+#joystick-base {
+  position: absolute; bottom: 0; left: 0; width: 140px; height: 140px;
+  border-radius: 50%; background: rgba(255,255,255,0.1);
+  border: 2px solid rgba(255,255,255,0.2);
+}
+#joystick-thumb {
+  position: absolute; width: 56px; height: 56px; border-radius: 50%;
+  background: rgba(255,255,255,0.3); border: 2px solid rgba(255,255,255,0.4);
+  left: 42px; top: 42px;
+}
+.action-btn {
+  position: absolute; border-radius: 50%; pointer-events: all;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Georgia', serif; font-weight: bold; font-size: 14px;
+  color: #fff; text-shadow: 1px 1px 2px #000;
+}
+#shoot-btn {
+  bottom: 80px; right: 20px; width: 70px; height: 70px;
+  background: rgba(180,40,40,0.6); border: 2px solid rgba(255,100,100,0.5);
+}
+#shoot-btn:active { background: rgba(220,60,60,0.8); }
+#aim-btn {
+  bottom: 170px; right: 20px; width: 55px; height: 55px;
+  background: rgba(40,40,180,0.5); border: 2px solid rgba(100,100,255,0.4);
+}
+#aim-btn:active { background: rgba(60,60,220,0.7); }
+#reload-btn {
+  bottom: 20px; right: 100px; width: 50px; height: 50px;
+  background: rgba(40,140,40,0.5); border: 2px solid rgba(100,220,100,0.4);
+  font-size: 11px;
+}
+#reload-btn:active { background: rgba(60,180,60,0.7); }
+#horse-btn {
+  bottom: 80px; right: 100px; width: 50px; height: 50px;
+  background: rgba(140,100,40,0.5); border: 2px solid rgba(220,180,100,0.4);
+  font-size: 11px;
+}
+#horse-btn:active { background: rgba(180,140,60,0.7); }
+#game-over-screen {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.85); display: none; flex-direction: column;
+  align-items: center; justify-content: center; z-index: 200;
+}
+#game-over-screen h1 { color: #c41e1e; font-family: 'Georgia', serif; font-size: 48px; margin-bottom: 10px; }
+#game-over-screen p { color: #ccc; font-family: 'Georgia', serif; font-size: 20px; margin-bottom: 30px; }
+#restart-btn {
+  font-family: 'Georgia', serif; background: linear-gradient(180deg, #8b4513, #5c2d0e);
+  color: #f4c542; border: 2px solid #f4c542; padding: 12px 40px;
+  font-size: 20px; cursor: pointer; border-radius: 4px; pointer-events: all;
+}
+#minimap {
+  position: absolute; top: 10px; right: 10px; width: 110px; height: 110px;
+  border-radius: 50%; border: 2px solid rgba(255,255,255,0.3);
+  overflow: hidden; z-index: 15; pointer-events: none;
+}
+#minimap-canvas { width: 110px; height: 110px; }
+#hud {
+  position: absolute; top: 10px; left: 10px; z-index: 15; pointer-events: none;
+}
+#health-bar-container {
+  width: 150px; height: 12px; background: rgba(0,0,0,0.6);
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 6px;
+  margin-bottom: 4px; overflow: hidden;
+}
+#health-bar {
+  width: 100%; height: 100%; background: linear-gradient(90deg, #c41e1e, #ff4444);
+  border-radius: 6px; transition: width 0.3s;
+}
+#ammo-display {
+  color: #f4c542; font-family: 'Georgia', serif; font-size: 16px;
+  text-shadow: 1px 1px 3px #000;
+}
+#wanted-display {
+  color: #f4c542; font-family: 'Georgia', serif; font-size: 20px;
+  text-shadow: 1px 1px 3px #000; margin-top: 2px;
+}
+#money-display {
+  color: #4a4; font-family: 'Georgia', serif; font-size: 16px;
+  text-shadow: 1px 1px 3px #000; margin-top: 2px;
+}
+#mission-text {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  color: #f4c542; font-family: 'Georgia', serif; font-size: 24px;
+  text-shadow: 2px 2px 4px #000; z-index: 25; pointer-events: none;
+  text-align: center; display: none;
+}
+#compass {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  color: #ddd; font-family: 'Georgia', serif; font-size: 14px;
+  text-shadow: 1px 1px 3px #000; z-index: 15; pointer-events: none;
+  background: rgba(0,0,0,0.4); padding: 3px 15px; border-radius: 10px;
+}
+</style>
+</head>
+<body>
+
+<div id="start-screen">
+  <h1>RED DEAD</h1>
+  <h2>Mobile Outlaw</h2>
+  <button id="start-btn">PLAY</button>
+  <p style="color:#a08060;font-family:Georgia,serif;font-size:13px;margin-top:20px;text-align:center;padding:0 20px;">
+    Left joystick to move • Right buttons to shoot & aim<br>
+    Hunt, rob, ride & survive the Wild West
+  </p>
+</div>
+
+<div id="game-over-screen">
+  <h1>WASTED</h1>
+  <p id="death-stats"></p>
+  <button id="restart-btn">TRY AGAIN</button>
+</div>
+
+<canvas id="game"></canvas>
+<canvas id="minimap-canvas" width="110" height="110"></canvas>
+
+<div id="hud">
+  <div id="health-bar-container"><div id="health-bar"></div></div>
+  <div id="ammo-display">🔫 12 / 48</div>
+  <div id="wanted-display">☆☆☆☆☆</div>
+  <div id="money-display">$150</div>
+</div>
+
+<div id="compass">N</div>
+
+<div id="mission-text"></div>
+
+<div id="controls">
+  <div id="joystick-zone">
+    <div id="joystick-base"></div>
+    <div id="joystick-thumb"></div>
+  </div>
+  <div class="action-btn" id="shoot-btn">FIRE</div>
+  <div class="action-btn" id="aim-btn">AIM</div>
+  <div class="action-btn" id="reload-btn">R</div>
+  <div class="action-btn" id="horse-btn">🐴</div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const miniCanvas = document.getElementById('minimap-canvas');
+const miniCtx = miniCanvas.getContext('2d');
+
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Game State
+let gameRunning = false;
+let gameTime = 0;
+let dayNightCycle = 0; // 0-1
+let money = 150;
+let kills = 0;
+let wantedLevel = 0;
+let wantedTimer = 0;
+let missionActive = false;
+let missionTarget = null;
+let missionTextTimer = 0;
+
+// World
+const WORLD_W = 4000;
+const WORLD_H = 4000;
+
+// Player
+let player = {
+  x: 2000, y: 2000, angle: 0, speed: 0,
+  health: 100, maxHealth: 100,
+  ammo: 12, maxAmmo: 12, reserveAmmo: 48,
+  reloading: false, reloadTimer: 0,
+  riding: false, horse: null,
+  shootCooldown: 0, aimMode: false,
+  invincible: 0
+};
+
+// Horse
+let horse = {
+  x: 2000, y: 2010, angle: 0, speed: 0,
+  health: 80, maxHealth: 80,
+  stamina: 100, maxStamina: 100,
+  tired: false
+};
+
+// Camera
+let camera = { x: 0, y: 0 };
+
+// Joystick
+let joystickActive = false;
+let joystickTouch = null;
+let joystickDX = 0, joystickDY = 0;
+
+// Input
+let shootPressed = false;
+let aimPressed = false;
+let reloading = false;
+let horsePressed = false;
+
+// Entities
+let enemies = [];
+let bullets = [];
+let particles = [];
+let bloodStains = [];
+let pickups = [];
+let buildings = [];
+let trees = [];
+let rocks = [];
+let roads = [];
+let npcs = [];
+let cacti = [];
+let grassPatches = [];
+let waterPatches = [];
+
+// Town buildings
+const TOWN_X = 1800, TOWN_Y = 1800;
+
+function generateWorld() {
+  buildings = [];
+  trees = [];
+  rocks = [];
+  roads = [];
+  npcs = [];
+  cacti = [];
+  grassPatches = [];
+  waterPatches = [];
+
+  // Roads
+  roads.push({ x: 1700, y: 1500, w: 60, h: 1000, dir: 'v' });
+  roads.push({ x: 1500, y: 1700, w: 1000, h: 60, dir: 'h' });
+  roads.push({ x: 2500, y: 1500, w: 60, h: 1200, dir: 'v' });
+  roads.push({ x: 1500, y: 2500, w: 1200, h: 60, dir: 'h' });
+  roads.push({ x: 3000, y: 1000, w: 60, h: 800, dir: 'v' });
+  roads.push({ x: 1000, y: 1000, w: 800, h: 60, dir: 'h' });
+
+  // Town buildings
+  const townBuildings = [
+    { x: 1750, y: 1750, w: 120, h: 80, color: '#8B6914', name: 'SALOON' },
+    { x: 1890, y: 1750, w: 100, h: 70, color: '#6B4226', name: 'GENERAL STORE' },
+    { x: 1750, y: 1850, w: 90, h: 70, color: '#5C3317', name: 'SHERIFF' },
+    { x: 1860, y: 1850, w: 110, h: 80, color: '#7B5B3A', name: 'HOTEL' },
+    { x: 1750, y: 1950, w: 100, h: 60, color: '#6B4226', name: 'BARBER' },
+    { x: 1870, y: 1950, w: 80, h: 70, color: '#5C3317', name: 'TAVERN' },
+    { x: 2000, y: 1750, w: 90, h: 60, color: '#8B6914', name: 'BANK' },
+    { x: 2000, y: 1850, w: 100, h: 70, color: '#6B4226', name: 'POST OFFICE' },
+    { x: 2000, y: 1950, w: 80, h: 60, color: '#5C3317', name: 'JAIL' },
+  ];
+
+  townBuildings.forEach(b => {
+    buildings.push({ ...b, type: 'town', roofColor: '#4a2800' });
+  });
+
+  // Ranch buildings
+  const ranchBuildings = [
+    { x: 3100, y: 1100, w: 140, h: 100, color: '#8B4513', name: 'RANCH' },
+    { x: 3260, y: 1100, w: 80, h: 70, color: '#6B3410', name: 'BARN' },
+    { x: 3100, y: 1220, w: 70, h: 60, color: '#5C2D0E', name: 'SHACK' },
+  ];
+  ranchBuildings.forEach(b => buildings.push({ ...b, type: 'ranch', roofColor: '#3a1800' }));
+
+  // Desert structures
+  buildings.push({ x: 800, y: 800, w: 60, h: 50, color: '#8B7355', name: 'OUTPOST', type: 'desert', roofColor: '#4a3a2a' });
+  buildings.push({ x: 3400, y: 3200, w: 80, h: 60, color: '#7B6345', name: 'TRADING POST', type: 'desert', roofColor: '#4a3a2a' });
+
+  // Trees (more in north/east)
+  for (let i = 0; i < 300; i++) {
+    let tx = Math.random() * WORLD_W;
+    let ty = Math.random() * WORLD_H;
+    // Avoid town area
+    if (tx > 1650 && tx < 2150 && ty > 1650 && ty < 2100) continue;
+    // Avoid roads
+    let onRoad = false;
+    roads.forEach(r => {
+      if (tx > r.x - 10 && tx < r.x + r.w + 10 && ty > r.y - 10 && ty < r.y + r.h + 10) onRoad = true;
+    });
+    if (onRoad) continue;
+    trees.push({
+      x: tx, y: ty,
+      size: 15 + Math.random() * 20,
+      type: Math.random() > 0.5 ? 'pine' : 'oak',
+      color: Math.random() > 0.5 ? '#2d5a1e' : '#1a4a0e'
+    });
+  }
+
+  // Rocks
+  for (let i = 0; i < 150; i++) {
+    let rx = Math.random() * WORLD_W;
+    let ry = Math.random() * WORLD_H;
+    let onRoad = false;
+    roads.forEach(r => {
+      if (rx > r.x - 10 && rx < r.x + r.w + 10 && ry > r.y - 10 && ry < r.y + r.h + 10) onRoad = true;
+    });
+    if (onRoad) continue;
+    rocks.push({ x: rx, y: ry, size: 8 + Math.random() * 15, color: `hsl(30, ${10+Math.random()*20}%, ${30+Math.random()*20}%)` });
+  }
+
+  // Cacti
+  for (let i = 0; i < 100; i++) {
+    let cx = Math.random() * WORLD_W;
+    let cy = Math.random() * WORLD_H;
+    let onRoad = false;
+    roads.forEach(r => {
+      if (cx > r.x - 10 && cx < r.x + r.w + 10 && cy > r.y - 10 && cy < r.y + r.h + 10) onRoad = true;
+    });
+    if (onRoad) continue;
+    cacti.push({ x: cx, y: cy, size: 12 + Math.random() * 15, arms: Math.floor(Math.random() * 3) + 1 });
+  }
+
+  // Water
+  waterPatches.push({ x: 500, y: 500, r: 120 });
+  waterPatches.push({ x: 3500, y: 2800, r: 80 });
+  waterPatches.push({ x: 1200, y: 3200, r: 60 });
+
+  // Grass patches
+  for (let i = 0; i < 200; i++) {
+    grassPatches.push({
+      x: Math.random() * WORLD_W,
+      y: Math.random() * WORLD_H,
+      size: 5 + Math.random() * 10,
+      color: `hsl(${80 + Math.random()*40}, ${40+Math.random()*30}%, ${25+Math.random()*20}%)`
+    });
+  }
+
+  // NPCs
+  for (let i = 0; i < 25; i++) {
+    let nx, ny;
+    do {
+      nx = 1650 + Math.random() * 500;
+      ny = 1650 + Math.random() * 400;
+    } while (false);
+    npcs.push({
+      x: nx, y: ny,
+      angle: Math.random() * Math.PI * 2,
+      speed: 0.3 + Math.random() * 0.5,
+      color: `hsl(${Math.random()*360}, 40%, 50%)`,
+      moveTimer: Math.random() * 200,
+      type: 'civilian'
+    });
+  }
+
+  // Spawn enemies
+  spawnEnemies(15);
+}
+
+function spawnEnemies(count) {
+  for (let i = 0; i < count; i++) {
+    spawnEnemy();
+  }
+}
+
+function spawnEnemy() {
+  let ex, ey;
+  let attempts = 0;
+  do {
+    ex = 200 + Math.random() * (WORLD_W - 400);
+    ey = 200 + Math.random() * (WORLD_H - 400);
+    attempts++;
+  } while (Math.hypot(ex - player.x, ey - player.y) < 400 && attempts < 50);
+
+  let type = Math.random();
+  let enemy;
+  if (type < 0.4) {
+    enemy = { type: 'bandit', x: ex, y: ey, angle: Math.random()*Math.PI*2,
+      health: 40, maxHealth: 40, speed: 1.2, ammo: 12, shootCooldown: 0,
+      state: 'wander', stateTimer: 60 + Math.random()*120, color: '#8B0000',
+      hatColor: '#2a1a0a' };
+  } else if (type < 0.7) {
+    enemy = { type: 'cowboy', x: ex, y: ey, angle: Math.random()*Math.PI*2,
+      health: 50, maxHealth: 50, speed: 1.5, ammo: 8, shootCooldown: 0,
+      state: 'wander', stateTimer: 60 + Math.random()*120, color: '#4a4a2a',
+      hatColor: '#3a3a1a' };
+  } else {
+    enemy = { type: 'marshal', x: ex, y: ey, angle: Math.random()*Math.PI*2,
+      health: 60, maxHealth: 60, speed: 1.8, ammo: 12, shootCooldown: 0,
+      state: 'wander', stateTimer: 60 + Math.random()*120, color: '#2a4a8a',
+      hatColor: '#1a2a4a' };
+  }
+  enemies.push(enemy);
+}
+
+function spawnPickup(x, y) {
+  let r = Math.random();
+  if (r < 0.4) {
+    pickups.push({ x, y, type: 'ammo', amount: 12 });
+  } else if (r < 0.7) {
+    pickups.push({ x, y, type: 'health', amount: 25 });
+  } else {
+    let m = 20 + Math.floor(Math.random() * 80);
+    pickups.push({ x, y, type: 'money', amount: m });
+  }
+}
+
+// Touch handling
+const joystickZone = document.getElementById('joystick-zone');
+const joystickThumb = document.getElementById('joystick-thumb');
+const shootBtn = document.getElementById('shoot-btn');
+const aimBtn = document.getElementById('aim-btn');
+const reloadBtn = document.getElementById('reload-btn');
+const horseBtn = document.getElementById('horse-btn');
+
+joystickZone.addEventListener('touchstart', e => {
+  e.preventDefault();
+  joystickActive = true;
+  joystickTouch = e.changedTouches[0];
+  updateJoystick(joystickTouch);
+});
+
+joystickZone.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (joystickActive) {
+    for (let t of e.changedTouches) {
+      if (t.identifier === joystickTouch.identifier) {
+        updateJoystick(t);
+        break;
+      }
+    }
+  }
+});
+
+joystickZone.addEventListener('touchend', e => {
+  e.preventDefault();
+  joystickActive = false;
+  joystickDX = 0;
+  joystickDY = 0;
+  joystickThumb.style.left = '42px';
+  joystickThumb.style.top = '42px';
+});
+
+function updateJoystick(touch) {
+  const rect = document.getElementById('joystick-base').getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  let dx = touch.clientX - cx;
+  let dy = touch.clientY - cy;
+  let dist = Math.hypot(dx, dy);
+  let maxDist = rect.width / 2 - 28;
+  if (dist > maxDist) {
+    dx = dx / dist * maxDist;
+    dy = dy / dist * maxDist;
+  }
+  joystickDX = dx / maxDist;
+  joystickDY = dy / maxDist;
+  joystickThumb.style.left = (42 + dx) + 'px';
+  joystickThumb.style.top = (42 + dy) + 'px';
+}
+
+shootBtn.addEventListener('touchstart', e => { e.preventDefault(); shootPressed = true; });
+shootBtn.addEventListener('touchend', e => { e.preventDefault(); shootPressed = false; });
+aimBtn.addEventListener('touchstart', e => { e.preventDefault(); aimPressed = true; });
+aimBtn.addEventListener('touchend', e => { e.preventDefault(); aimPressed = false; });
+reloadBtn.addEventListener('touchstart', e => { e.preventDefault(); startReload(); });
+horseBtn.addEventListener('touchstart', e => { e.preventDefault(); toggleHorse(); });
+
+// Mouse fallback for testing
+let mouseDown = false;
+canvas.addEventListener('mousedown', e => { mouseDown = true; });
+canvas.addEventListener('mouseup', e => { mouseDown = false; });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+document.getElementById('start-btn').addEventListener('click', startGame);
+document.getElementById('restart-btn').addEventListener('click', startGame);
+
+function startGame() {
+  document.getElementById('start-screen').style.display = 'none';
+  document.getElementById('game-over-screen').style.display = 'none';
+  document.getElementById('controls').style.display = 'block';
+
+  player.x = 2000; player.y = 2000;
+  player.health = 100; player.ammo = 12; player.reserveAmmo = 48;
+  player.reloading = false; player.riding = false; player.aimMode = false;
+  player.invincible = 0; player.shootCooldown = 0;
+  horse.x = 2000; horse.y = 2010; horse.health = 80; horse.stamina = 100;
+  horse.speed = 0;
+  enemies = []; bullets = []; particles = []; bloodStains = []; pickups = [];
+  money = 150; kills = 0; wantedLevel = 0; wantedTimer = 0;
+  gameTime = 0;
+  missionActive = false;
+  missionTarget = null;
+
+  generateWorld();
+  gameRunning = true;
+  showMessage("Welcome to the Wild West, partner.", 2000);
+  setTimeout(() => {
+    startMission();
+  }, 3000);
+  requestAnimationFrame(gameLoop);
+}
+
+function startMission() {
+  missionActive = true;
+  let valid = false;
+  let mx, my;
+  for (let i = 0; i < 50; i++) {
+    mx = 400 + Math.random() * (WORLD_W - 800);
+    my = 400 + Math.random() * (WORLD_H - 800);
+    if (Math.hypot(mx - player.x, my - player.y) > 300) { valid = true; break; }
+  }
+  missionTarget = { x: mx, y: my, alive: true };
+  showMessage("💀 BOUNTY: Eliminate the outlaw\nat the marked location!", 3000);
+}
+
+function showMessage(text, duration) {
+  const el = document.getElementById('mission-text');
+  el.innerHTML = text.replace(/\n/g, '<br>');
+  el.style.display = 'block';
+  missionTextTimer = duration;
+}
+
+function toggleHorse() {
+  if (player.riding) {
+    player.riding = false;
+    player.x = horse.x - 20;
+    player.y = horse.y;
+    horse.x = player.x + 20;
+    horse.y = player.y;
+  } else {
+    if (Math.hypot(player.x - horse.x, player.y - horse.y) < 60) {
+      player.riding = true;
+      horse.x = player.x;
+      horse.y = player.y;
+    }
+  }
+}
+
+function startReload() {
+  if (!player.reloading && player.ammo < player.maxAmmo && player.reserveAmmo > 0) {
+    player.reloading = true;
+    player.reloadTimer = 90;
+  }
+}
+
+function shoot() {
+  if (player.ammo <= 0 || player.reloading || player.shootCooldown > 0) return;
+  player.ammo--;
+  player.shootCooldown = 12;
+
+  let bx, by, bvx, bvy;
+  if (player.riding) {
+    bx = player.x + Math.cos(player.angle) * 25;
+    by = player.y + Math.sin(player.angle) * 25;
+  } else {
+    bx = player.x + Math.cos(player.angle) * 20;
+    by = player.y + Math.sin(player.angle) * 20;
+  }
+  bvx = Math.cos(player.angle) * 12;
+  bvy = Math.sin(player.angle) * 12;
+
+  bullets.push({
+    x: bx, y: by, vx: bvx, vy: bvy,
+    owner: 'player', life: 80, damage: 20
+  });
+
+  // Muzzle flash particles
+  for (let i = 0; i < 5; i++) {
+    particles.push({
+      x: bx, y: by,
+      vx: Math.cos(player.angle) * (3 + Math.random()*4) + (Math.random()-0.5)*2,
+      vy: Math.sin(player.angle) * (3 + Math.random()*4) + (Math.random()-0.5)*2,
+      life: 8 + Math.random()*5, maxLife: 13,
+      color: `hsl(${30+Math.random()*30}, 100%, ${60+Math.random()*40}%)`,
+      size: 2 + Math.random()*3
+    });
+  }
+}
+
+function enemyShoot(enemy) {
+  let dx = player.x - enemy.x;
+  let dy = player.y - enemy.y;
+  let dist = Math.hypot(dx, dy);
+  let angle = Math.atan2(dy, dx) + (Math.random()-0.5)*0.3;
+
+  bullets.push({
+    x: enemy.x + Math.cos(angle) * 18,
+    y: enemy.y + Math.sin(angle) * 18,
+    vx: Math.cos(angle) * 8,
+    vy: Math.sin(angle) * 8,
+    owner: enemy, life: 60, damage: 8 + wantedLevel * 2
+  });
+
+  for (let i = 0; i < 3; i++) {
+    particles.push({
+      x: enemy.x + Math.cos(angle) * 18,
+      y: enemy.y + Math.sin(angle) * 18,
+      vx: Math.cos(angle) * (2+Math.random()*3) + (Math.random()-0.5),
+      vy: Math.sin(angle) * (2+Math.random()*3) + (Math.random()-0.5),
+      life: 6, maxLife: 6,
+      color: `hsl(30, 100%, 70%)`, size: 2
+    });
+  }
+}
+
+function addBlood(x, y) {
+  bloodStains.push({ x, y, size: 3 + Math.random()*5, alpha: 0.7 });
+  for (let i = 0; i < 6; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random()-0.5)*4,
+      vy: (Math.random()-0.5)*4,
+      life: 15+Math.random()*10, maxLife: 25,
+      color: `hsl(0, ${60+Math.random()*40}%, ${20+Math.random()*20}%)`,
+      size: 2+Math.random()*3
+    });
+  }
+}
+
+function update() {
+  gameTime++;
+  dayNightCycle = (Math.sin(gameTime * 0.0005) + 1) / 2;
+
+  // Player movement
+  let moveX = joystickDX;
+  let moveY = joystickDY;
+  let moveMag = Math.hypot(moveX, moveY);
+
+  if (player.riding) {
+    let speed = moveMag * 4;
+    if (horse.stamina > 0 && moveMag > 0.5) {
+      speed = moveMag * 5.5;
+      horse.stamina -= moveMag * 0.3;
+    } else {
+      speed = moveMag * 3;
+    }
+    if (horse.stamina < horse.maxStamina) horse.stamina += 0.1;
+    horse.x += Math.cos(player.angle) * speed;
+    horse.y += Math.sin(player.angle) * speed;
+    horse.x = Math.max(20, Math.min(WORLD_W - 20, horse.x));
+    horse.y = Math.max(20, Math.min(WORLD_H - 20, horse.y));
+    player.x = horse.x;
+    player.y = horse.y;
+  } else {
+    let speed = moveMag * 2.5;
+    player.x += Math.cos(player.angle) * speed;
+    player.y += Math.sin(player.angle) * speed;
+    player.x = Math.max(20, Math.min(WORLD_W - 20, player.x));
+    player.y = Math.max(20, Math.min(WORLD_H - 20, player.y));
+  }
+
+  // Player angle
+  if (moveMag > 0.1) {
+    player.angle = Math.atan2(moveY, moveX);
+  }
+
+  // Aim mode - auto aim at nearest enemy
+  if (aimPressed && !player.riding) {
+    let nearest = null, nearDist = 300;
+    enemies.forEach(e => {
+      let d = Math.hypot(e.x - player.x, e.y - player.y);
+      if (d < nearDist) { nearDist = d; nearest = e; }
+    });
+    if (nearest) {
+      player.angle = Math.atan2(nearest.y - player.y, nearest.x - player.x);
+    }
+  }
+
+  // Shooting
+  if (player.shootCooldown > 0) player.shootCooldown--;
+  if (shootPressed) shoot();
+
+  // Reload
+  if (player.reloading) {
+    player.reloadTimer--;
+    if (player.reloadTimer <= 0) {
+      let needed = player.maxAmmo - player.ammo;
+      let available = Math.min(needed, player.reserveAmmo);
+      player.ammo += available;
+      player.reserveAmmo -= available;
+      player.reloading = false;
+    }
+  }
+
+  if (player.invincible > 0) player.invincible--;
+
+  // Horse follow player when not riding
+  if (!player.riding) {
+    let hd = Math.hypot(horse.x - player.x, horse.y - player.y);
+    if (hd > 80) {
+      let ha = Math.atan2(player.y - horse.y, player.x - horse.x);
+      horse.x += Math.cos(ha) * 1.5;
+      horse.y += Math.sin(ha) * 1.5;
+    }
+  }
+
+  // Update enemies
+  enemies.forEach((e, i) => {
+    let dx = player.x - e.x;
+    let dy = player.y - e.y;
+    let dist = Math.hypot(dx, dy);
+
+    if (e.state === 'wander') {
+      e.stateTimer--;
+      if (e.stateTimer <= 0) {
+        e.angle = Math.random() * Math.PI * 2;
+        e.stateTimer = 60 + Math.random() * 120;
+        e.state = 'wander';
+      }
+      e.x += Math.cos(e.angle) * e.speed * 0.5;
+      e.y += Math.sin(e.angle) * e.speed * 0.5;
+    } else if (e.state === 'chase') {
+      e.angle = Math.atan2(dy, dx);
+      if (dist > 80) {
+        e.x += Math.cos(e.angle) * e.speed;
+        e.y += Math.sin(e.angle) * e.speed;
+      }
+      if (dist < 300 && e.shootCooldown <= 0) {
+        enemyShoot(e);
+        e.shootCooldown = 40 + Math.random() * 40;
+      }
+    } else if (e.state === 'flee') {
+      e.angle = Math.atan2(-dy, -dx);
+      e.x += Math.cos(e.angle) * e.speed * 1.2;
+      e.y += Math.sin(e.angle) * e.speed * 1.2;
+    }
+
+    if (e.shootCooldown > 0) e.shootCooldown--;
+
+    // Keep in world
+    e.x = Math.max(20, Math.min(WORLD_W - 20, e.x));
+    e.y = Math.max(20, Math.min(WORLD_H - 20, e.y));
+
+    // State transitions
+    if (dist < 250 && player.invincible <= 0) {
+      e.state = 'chase';
+    }
+    if (dist > 500) {
+      e.state = 'wander';
+    }
+    if (e.health <= 0 && e.alive !== false) {
+      e.alive = false;
+      addBlood(e.x, e.y);
+      money += 10 + Math.floor(Math.random() * 20);
+      kills++;
+      spawnPickup(e.x, e.y);
+      wantedLevel = Math.min(5, wantedLevel + 1);
+      wantedTimer = 1200;
+      // Respawn
+      setTimeout(() => {
+        let idx = enemies.indexOf(e);
+        if (idx > -1) {
+          enemies.splice(idx, 1);
+          spawnEnemy();
+        }
+      }, 5000);
+    }
+  });
+
+  // Remove dead enemies
+  enemies = enemies.filter(e => e.alive !== false);
+
+  // Update bullets
+  bullets.forEach((b, i) => {
+    b.x += b.vx;
+    b.y += b.vy;
+    b.life--;
+
+    // Hit buildings
+    let hitBuilding = false;
+    buildings.forEach(bl => {
+      if (b.x > bl.x && b.x < bl.x + bl.w && b.y > bl.y && b.y < bl.y + bl.h) {
+        hitBuilding = true;
+        for (let j = 0; j < 3; j++) {
+          particles.push({
+            x: b.x, y: b.y,
+            vx: (Math.random()-0.5)*3, vy: (Math.random()-0.5)*3,
+            life: 10, maxLife: 10, color: '#aaa', size: 2
+          });
+        }
+      }
+    });
+
+    if (hitBuilding || b.life <= 0 || b.x < 0 || b.x > WORLD_W || b.y < 0 || b.y > WORLD_H) {
+      bullets.splice(i, 1);
+      return;
+    }
+
+    // Player bullet hits enemy
+    if (b.owner === 'player') {
+      enemies.forEach(e => {
+        if (Math.hypot(b.x - e.x, b.y - e.y) < 15) {
+          e.health -= b.damage;
+          addBlood(e.x, e.y);
+          bullets.splice(i, 1);
+        }
+      });
+    }
+
+    // Enemy bullet hits player
+    if (b.owner !== 'player' && player.invincible <= 0) {
+      let target = player.riding ? horse : player;
+      let tx = player.riding ? horse.x : player.x;
+      let ty = player.riding ? horse.y : player.y;
+      if (Math.hypot(b.x - tx, b.y - ty) < 15) {
+        if (player.riding) {
+          horse.health -= b.damage;
+          if (horse.health <= 0) {
+            player.riding = false;
+            horse.health = 0;
+            showMessage("Your horse has fallen!", 2000);
+          }
+        } else {
+          player.health -= b.damage;
+        }
+        player.invincible = 10;
+        addBlood(tx, ty);
+        bullets.splice(i, 1);
+
+        if (player.health <= 0) {
+          gameOver();
+        }
+      }
+    }
+  });
+
+  // Update particles
+  particles.forEach((p, i) => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vx *= 0.9;
+    p.vy *= 0.9;
+    p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  });
+
+  // Pickups
+  pickups.forEach((p, i) => {
+    let dx = player.x - p.x;
+    let dy = player.y - p.y;
+    if (Math.hypot(dx, dy) < 30) {
+      if (p.type === 'ammo') player.reserveAmmo += p.amount;
+      else if (p.type === 'health') { player.health = Math.min(player.maxHealth, player.health + p.amount); }
+      else if (p.type === 'money') money += p.amount;
+      pickups.splice(i, 1);
+    }
+  });
+
+  // Wanted timer
+  if (wantedTimer > 0) {
+    wantedTimer--;
+    if (wantedTimer <= 0) {
+      wantedLevel = Math.max(0, wantedLevel - 1);
+    }
+  }
+
+  // Mission
+  if (missionActive && missionTarget && missionTarget.alive) {
+    let md = Math.hypot(player.x - missionTarget.x, player.y - missionTarget.y);
+    if (md < 40) {
+      missionTarget.alive = false;
+      missionActive = false;
+      money += 200;
+      showMessage("🤠 Bounty eliminated! +$200", 2500);
+      setTimeout(startMission, 4000);
+    }
+  }
+
+  if (missionTextTimer > 0) {
+    missionTextTimer--;
+    if (missionTextTimer <= 0) {
+      document.getElementById('mission-text').style.display = 'none';
+    }
+  }
+
+  // Camera
+  camera.x = player.x - W / 2;
+  camera.y = player.y - H / 2;
+  camera.x = Math.max(0, Math.min(WORLD_W - W, camera.x));
+  camera.y = Math.max(0, Math.min(WORLD_H - H, camera.y));
+
+  // Update HUD
+  document.getElementById('health-bar').style.width = (player.health / player.maxHealth * 100) + '%';
+  document.getElementById('ammo-display').textContent = `🔫 ${player.ammo} / ${player.reserveAmmo}`;
+  document.getElementById('money-display').textContent = `$${money}`;
+  let stars = '';
+  for (let i = 0; i < 5; i++) stars += i < wantedLevel ? '★' : '☆';
+  document.getElementById('wanted-display').textContent = stars;
+
+  // Compass
+  let dirs = ['N','NE','E','SE','S','SW','W','NW'];
+  let dirIdx = Math.round(((player.angle % (Math.PI*2)) + Math.PI*2) % (Math.PI*2) / (Math.PI/4)) % 8;
+  document.getElementById('compass').textContent = dirs[dirIdx];
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);
+
+  // Ground
+  let groundColor = `hsl(${30 + dayNightCycle * 10}, ${30 + dayNightCycle * 15}%, ${35 + dayNightCycle * 15}%)`;
+  ctx.fillStyle = groundColor;
+  ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+
+  // Grass patches
+  grassPatches.forEach(g => {
+    if (g.x > camera.x - 20 && g.x < camera.x + W + 20 && g.y > camera.y - 20 && g.y < camera.y + H + 20) {
+      ctx.fillStyle = g.color;
+      ctx.globalAlpha = 0.4;
+      ctx.beginPath();
+      ctx.arc(g.x, g.y, g.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  });
+
+  // Water
+  waterPatches.forEach(w => {
+    if (w.x + w.r > camera.x && w.x - w.r < camera.x + W && w.y + w.r > camera.y && w.y - w.r < camera.y + H) {
+      let grad = ctx.createRadialGradient(w.x, w.y, 0, w.x, w.y, w.r);
+      grad.addColorStop(0, `rgba(40,100,180,${0.6 + dayNightCycle * 0.2})`);
+      grad.addColorStop(1, `rgba(20,60,120,${0.3 + dayNightCycle * 0.1})`);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+
+  // Roads
+  ctx.fillStyle = '#8B7355';
+  roads.forEach(r => {
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.fillStyle = '#7a6345';
+    if (r.dir === 'v') {
+      for (let y = r.y; y < r.y + r.h; y += 30) {
+        ctx.fillRect(r.x + r.w/2 - 1, y, 2, 15);
+      }
+    } else {
+      for (let x = r.x; x < r.x + r.w; x += 30) {
+        ctx.fillRect(x, r.y + r.h/2 - 1, 15, 2);
+      }
+    }
+    ctx.fillStyle = '#8B7355';
+  });
+
+  // Blood stains
+  bloodStains.forEach(b => {
+    ctx.fillStyle = `rgba(80,10,10,${b.alpha})`;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Buildings
+  buildings.forEach(b => {
+    if (b.x + b.w > camera.x - 50 && b.x < camera.x + W + 50 && b.y + b.h > camera.y - 50 && b.y < camera.y + H + 50) {
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(b.x + 5, b.y + 5, b.w, b.h);
+
+      // Building
+      ctx.fillStyle = b.color;
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+
+      // Roof
+      ctx.fillStyle = b.roofColor;
+      ctx.fillRect(b.x - 3, b.y - 3, b.w + 6, 8);
+
+      // Door
+      ctx.fillStyle = '#3a2010';
+      ctx.fillRect(b.x + b.w/2 - 8, b.y + b.h - 20, 16, 20);
+
+      // Windows
+      ctx.fillStyle = `rgba(255,220,100,${0.3 + dayNightCycle * 0.5})`;
+      ctx.fillRect(b.x + 10, b.y + 15, 15, 12);
+      ctx.fillRect(b.x + b.w - 25, b.y + 15, 15, 12);
+
+      // Name
+      ctx.fillStyle = '#ddd';
+      ctx.font = '9px Georgia';
+      ctx.textAlign = 'center';
+      ctx.fillText(b.name, b.x + b.w/2, b.y - 6);
+    }
+  });
+
+  // Trees
+  trees.forEach(t => {
+    if (t.x > camera.x - 40 && t.x < camera.x + W + 40 && t.y > camera.y - 40 && t.y < camera.y + H + 40) {
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.beginPath();
+      ctx.ellipse(t.x + 5, t.y + 5, t.size, t.size * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Trunk
+      ctx.fillStyle = '#5a3a1a';
+      ctx.fillRect(t.x - 3, t.y - 5, 6, 15);
+
+      // Canopy
+      ctx.fillStyle = t.color;
+      if (t.type === 'pine') {
+        ctx.beginPath();
+        ctx.moveTo(t.x, t.y - t.size - 10);
+        ctx.lineTo(t.x - t.size, t.y + 5);
+        ctx.lineTo(t.x + t.size, t.y + 5);
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.arc(t.x, t.y - 5, t.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  });
+
+  // Rocks
+  rocks.forEach(r => {
+    if (r.x > camera.x - 20 && r.x < camera.x + W + 20 && r.y > camera.y - 20 && r.y < camera.y + H + 20) {
+      ctx.fillStyle = r.color;
+      ctx.beginPath();
+      ctx.ellipse(r.x, r.y, r.size, r.size * 0.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.beginPath();
+      ctx.ellipse(r.x + 2, r.y + 2, r.size, r.size * 0.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+
+  // Cacti
+  cacti.forEach(c => {
+    if (c.x > camera.x - 20 && c.x < camera.x + W + 20 && c.y > camera.y - 20 && c.y < camera.y + H + 20) {
+      ctx.fillStyle = '#2a5a1a';
+      ctx.fillRect(c.x - 4, c.y - c.size, 8, c.size + 5);
+      for (let a = 0; a < c.arms; a++) {
+        let side = a % 2 === 0 ? 1 : -1;
+        ctx.fillRect(c.x + side * 4, c.y - c.size * 0.6, side * 10, 4);
+        ctx.fillRect(c.x + side * 12, c.y - c.size * 0.6 - 8, 4, 12);
+      }
+    }
+  });
+
+  // NPCs
+  npcs.forEach(n => {
+    n.moveTimer--;
+    if (n.moveTimer <= 0) {
+      n.angle = Math.random() * Math.PI * 2;
+      n.moveTimer = 60 + Math.random() * 120;
+    }
+    n.x += Math.cos(n.angle) * n.speed;
+    n.y += Math.sin(n.angle) * n.speed;
+    n.x = Math.max(1650, Math.min(2150, n.x));
+    n.y = Math.max(1650, Math.min(2050, n.y));
+
+    ctx.fillStyle = n.color;
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#f5d5b0';
+    ctx.beginPath();
+    ctx.arc(n.x, n.y - 2, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath();
+    ctx.arc(n.x, n.y - 7, 6, Math.PI, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // Horse
+  if (player.riding) {
+    drawHorse(horse.x, horse.y, horse.angle);
+  } else {
+    drawHorse(horse.x, horse.y, horse.angle);
+  }
+
+  // Enemies
+  enemies.forEach(e => {
+    drawCharacter(e.x, e.y, e.angle, e.color, e.hatColor, false);
+    // Health bar
+    if (e.health < e.maxHealth) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(e.x - 15, e.y - 22, 30, 4);
+      ctx.fillStyle = '#c41e1e';
+      ctx.fillRect(e.x - 15, e.y - 22, 30 * (e.health / e.maxHealth), 4);
+    }
+  });
+
+  // Player
+  if (player.invincible <= 0 || Math.floor(gameTime / 3) % 2 === 0) {
+    drawCharacter(player.x, player.y, player.angle, '#c4943a', '#3a2a1a', true);
+  }
+
+  // Bullets
+  bullets.forEach(b => {
+    ctx.fillStyle = b.owner === 'player' ? '#ffdd44' : '#ff6644';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    // Trail
+    ctx.strokeStyle = b.owner === 'player' ? 'rgba(255,221,68,0.4)' : 'rgba(255,102,68,0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x - b.vx * 2, b.y - b.vy * 2);
+    ctx.stroke();
+  });
+
+  // Particles
+  particles.forEach(p => {
+    ctx.globalAlpha = p.life / p.maxLife;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * (p.life / p.maxLife), 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+
+  // Pickups
+  pickups.forEach(p => {
+    let bob = Math.sin(gameTime * 0.1) * 3;
+    if (p.type === 'ammo') {
+      ctx.fillStyle = '#ddd';
+      ctx.fillRect(p.x - 4, p.y - 6 + bob, 8, 12);
+      ctx.fillStyle = '#c41e1e';
+      ctx.fillRect(p.x - 3, p.y - 5 + bob, 6, 4);
+    } else if (p.type === 'health') {
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(p.x - 6, p.y - 3 + bob, 12, 6);
+      ctx.fillRect(p.x - 3, p.y - 6 + bob, 6, 12);
+    } else {
+      ctx.fillStyle = '#f4c542';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y + bob, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#8B6914';
+      ctx.font = '8px Georgia';
+      ctx.textAlign = 'center';
+      ctx.fillText('$', p.x, p.y + 3 + bob);
+    }
+  });
+
+  // Mission marker
+  if (missionActive && missionTarget && missionTarget.alive) {
+    let bob = Math.sin(gameTime * 0.08) * 5;
+    ctx.fillStyle = '#ff0000';
+    ctx.globalAlpha = 0.6 + Math.sin(gameTime * 0.1) * 0.3;
+    ctx.beginPath();
+    ctx.arc(missionTarget.x, missionTarget.y - 20 + bob, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillText('☠', missionTarget.x, missionTarget.y - 15 + bob);
+
+    // Arrow
+    let a = Math.atan2(player.y - missionTarget.y, player.x - missionTarget.x);
+    ctx.fillStyle = '#ff4444';
+    ctx.beginPath();
+    ctx.moveTo(missionTarget.x + Math.cos(a) * 30, missionTarget.y + Math.sin(a) * 30);
+    ctx.lineTo(missionTarget.x + Math.cos(a + 2.5) * 20, missionTarget.y + Math.sin(a + 2.5) * 20);
+    ctx.lineTo(missionTarget.x + Math.cos(a - 2.5) * 20, missionTarget.y + Math.sin(a - 2.5) * 20);
+    ctx.fill();
+  }
+
+  ctx.restore();
+
+  // Day/night overlay
+  let nightAlpha = (1 - dayNightCycle) * 0.5;
+  if (nightAlpha > 0) {
+    ctx.fillStyle = `rgba(0,0,30,${nightAlpha})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Reload indicator
+  if (player.reloading) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(W/2 - 40, H - 80, 80, 10);
+    ctx.fillStyle = '#f4c542';
+    ctx.fillRect(W/2 - 40, H - 80, 80 * (1 - player.reloadTimer / 90), 10);
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px Georgia';
+    ctx.textAlign = 'center';
+    ctx.fillText('RELOADING', W/2, H - 84);
+  }
+
+  // Horse stamina bar
+  if (player.riding) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(W/2 - 40, H - 65, 80, 6);
+    ctx.fillStyle = horse.stamina > 30 ? '#4a4' : '#c41e1e';
+    ctx.fillRect(W/2 - 40, H - 65, 80 * (horse.stamina / horse.maxStamina), 6);
+  }
+
+  // Draw minimap
+  drawMinimap();
+}
+
+function drawCharacter(x, y, angle, shirtColor, hatColor, isPlayer) {
+  ctx.save();
+  ctx.translate(x, y);
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(2, 2, 10, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Body
+  ctx.fillStyle = shirtColor;
+  ctx.beginPath();
+  ctx.arc(0, 0, 10, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Head
+  ctx.fillStyle = '#f5d5b0';
+  ctx.beginPath();
+  ctx.arc(0, -2, 6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Hat
+  ctx.fillStyle = hatColor;
+  ctx.beginPath();
+  ctx.ellipse(0, -5, 9, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(-5, -9, 10, 5);
+
+  // Gun arm
+  ctx.save();
+  ctx.rotate(angle);
+  ctx.fillStyle = shirtColor;
+  ctx.fillRect(5, -2, 12, 4);
+  ctx.fillStyle = '#333';
+  ctx.fillRect(15, -2, 8, 3);
+  ctx.restore();
+
+  ctx.restore();
+}
+
+function drawHorse(x, y, angle) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(3, 3, 18, 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Body
+  ctx.fillStyle = '#6B3410';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 18, 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Head
+  ctx.fillStyle = '#5a2a0a';
+  ctx.beginPath();
+  ctx.ellipse(20, -3, 8, 5, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Eye
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.arc(23, -4, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Ears
+  ctx.fillStyle = '#5a2a0a';
+  ctx.beginPath();
+  ctx.moveTo(16, -7);
+  ctx.lineTo(14, -12);
+  ctx.lineTo(18, -8);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(19, -7);
+  ctx.lineTo(18, -12);
+  ctx.lineTo(22, -7);
+  ctx.fill();
+
+  // Legs
+  ctx.fillStyle = '#4a1a00';
+  ctx.fillRect(-12, 8, 4, 10);
+  ctx.fillRect(-4, 8, 4, 10);
+  ctx.fillRect(4, 8, 4, 10);
+  ctx.fillRect(10, 8, 4, 10);
+
+  // Tail
+  ctx.strokeStyle = '#3a1000';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-18, 0);
+  ctx.quadraticCurveTo(-25, -5, -22, -12);
+  ctx.stroke();
+
+  // Saddle
+  ctx.fillStyle = '#8B4513';
+  ctx.fillRect(-5, -8, 12, 6);
+
+  ctx.restore();
+}
+
+function drawMinimap() {
+  miniCtx.clearRect(0, 0, 110, 110);
+
+  // Background
+  miniCtx.fillStyle = '#3a2a1a';
+  miniCtx.fillRect(0, 0, 110, 110);
+
+  let scale = 110 / WORLD_W;
+  let offsetX = 55 - player.x * scale;
+  let offsetY = 55 - player.y * scale;
+
+  miniCtx.save();
+  miniCtx.beginPath();
+  miniCtx.arc(55, 55, 53, 0, Math.PI * 2);
+  miniCtx.clip();
+
+  // Water
+  waterPatches.forEach(w => {
+    miniCtx.fillStyle = '#2a5a9a';
+    miniCtx.beginPath();
+    miniCtx.arc(w.x * scale + offsetX, w.y * scale + offsetY, w.r * scale, 0, Math.PI * 2);
+    miniCtx.fill();
+  });
+
+  // Roads
+  miniCtx.fillStyle = '#5a4a3a';
+  roads.forEach(r => {
+    miniCtx.fillRect(r.x * scale + offsetX, r.y * scale + offsetY, r.w * scale, r.h * scale);
+  });
+
+  // Buildings
+  miniCtx.fillStyle = '#8a7a6a';
+  buildings.forEach(b => {
+    miniCtx.fillRect(b.x * scale + offsetX, b.y * scale + offsetY, Math.max(b.w * scale, 2), Math.max(b.h * scale, 2));
+  });
+
+  // Trees
+  miniCtx.fillStyle = '#2a5a1a';
+  trees.forEach(t => {
+    miniCtx.beginPath();
+    miniCtx.arc(t.x * scale + offsetX, t.y * scale + offsetY, Math.max(t.size * scale, 1), 0, Math.PI * 2);
+    miniCtx.fill();
+  });
+
+  // Enemies
+  enemies.forEach(e => {
+    miniCtx.fillStyle = '#ff4444';
+    miniCtx.beginPath();
+    miniCtx.arc(e.x * scale + offsetX, e.y * scale + offsetY, 2, 0, Math.PI * 2);
+    miniCtx.fill();
+  });
+
+  // Mission target
+  if (missionActive && missionTarget && missionTarget.alive) {
+    miniCtx.fillStyle = '#ff0000';
+    miniCtx.beginPath();
+    miniCtx.arc(missionTarget.x * scale + offsetX, missionTarget.y * scale + offsetY, 4, 0, Math.PI * 2);
+    miniCtx.fill();
+  }
+
+  // Pickups
+  pickups.forEach(p => {
+    miniCtx.fillStyle = p.type === 'ammo' ? '#fff' : p.type === 'health' ? '#f44' : '#ff0';
+    miniCtx.beginPath();
+    miniCtx.arc(p.x * scale + offsetX, p.y * scale + offsetY, 2, 0, Math.PI * 2);
+    miniCtx.fill();
+  });
+
+  // Player
+  miniCtx.fillStyle = '#4af';
+  miniCtx.beginPath();
+  miniCtx.arc(55, 55, 3, 0, Math.PI * 2);
+  miniCtx.fill();
+
+  // Player direction
+  miniCtx.strokeStyle = '#4af';
+  miniCtx.lineWidth = 1.5;
+  miniCtx.beginPath();
+  miniCtx.moveTo(55, 55);
+  miniCtx.lineTo(55 + Math.cos(player.angle) * 10, 55 + Math.sin(player.angle) * 10);
+  miniCtx.stroke();
+
+  miniCtx.restore();
+
+  // Border
+  miniCtx.strokeStyle = 'rgba(255,255,255,0.3)';
+  miniCtx.lineWidth = 2;
+  miniCtx.beginPath();
+  miniCtx.arc(55, 55, 53, 0, Math.PI * 2);
+  miniCtx.stroke();
+}
+
+function gameOver() {
+  gameRunning = false;
+  document.getElementById('death-stats').textContent = `Kills: ${kills} | Money: $${money} | Wanted: ${'★'.repeat(wantedLevel)}${'☆'.repeat(5-wantedLevel)}`;
+  document.getElementById('game-over-screen').style.display = 'flex';
+}
+
+function gameLoop() {
+  if (!gameRunning) return;
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+// Keyboard controls for desktop testing
+document.addEventListener('keydown', e => {
+  if (e.key === 'w' || e.key === 'ArrowUp') joystickDY = -1;
+  if (e.key === 's' || e.key === 'ArrowDown') joystickDY = 1;
+  if (e.key === 'a' || e.key === 'ArrowLeft') joystickDX = -1;
+  if (e.key === 'd' || e.key === 'ArrowRight') joystickDX = 1;
+  if (e.key === ' ') shootPressed = true;
+  if (e.key === 'Shift') aimPressed = true;
+  if (e.key === 'r') startReload();
+  if (e.key === 'h') toggleHorse();
+});
+document.addEventListener('keyup', e => {
+  if (e.key === 'w' || e.key === 'ArrowUp') joystickDY = Math.max(0, joystickDY);
+  if (e.key === 's' || e.key === 'ArrowDown') joystickDY = Math.min(0, joystickDY);
+  if (e.key === 'a' || e.key === 'ArrowLeft') joystickDX = Math.max(0, joystickDX);
+  if (e.key === 'd' || e.key === 'ArrowRight') joystickDX = Math.min(0, joystickDX);
+  if (e.key === ' ') shootPressed = false;
+  if (e.key === 'Shift') aimPressed = false;
+});
+
+// Prevent scrolling
+document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+</script>
+</body>
+</html>

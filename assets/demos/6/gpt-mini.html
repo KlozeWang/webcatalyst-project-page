@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Neon Tic-Tac-Toe</title>
+<style>
+  :root{
+    --bg:#05050a;
+    --grid:#2b2b4a;
+    --pink:#ff4fd8;
+    --yellow:#ffe600;
+    --cyan:#39f6ff;
+    --purple:#b84dff;
+    --green:#49ff8a;
+    --white:#f5f7ff;
+  }
+  html,body{
+    margin:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(57,246,255,.12), transparent 25%),
+      radial-gradient(circle at 80% 30%, rgba(255,79,216,.14), transparent 22%),
+      radial-gradient(circle at 50% 80%, rgba(255,230,0,.08), transparent 30%),
+      linear-gradient(180deg, #04040a 0%, #090916 100%);
+    font-family: "Trebuchet MS", "Arial Black", Arial, sans-serif;
+    color: var(--white);
+  }
+  canvas{
+    position:fixed;
+    inset:0;
+    width:100%;
+    height:100%;
+    display:block;
+  }
+  .ui{
+    position:fixed;
+    left:0;
+    top:0;
+    width:100%;
+    pointer-events:none;
+    text-align:center;
+    padding-top:16px;
+    text-transform:uppercase;
+    letter-spacing:3px;
+    text-shadow:
+      0 0 8px rgba(57,246,255,.8),
+      0 0 18px rgba(255,79,216,.6);
+  }
+  .title{
+    font-size:clamp(22px, 3vw, 44px);
+    color:#f7f0ff;
+  }
+  .subtitle{
+    margin-top:6px;
+    font-size:clamp(11px, 1.3vw, 16px);
+    color:#d8d4ff;
+    opacity:.9;
+  }
+  .panel{
+    position:fixed;
+    left:50%;
+    bottom:18px;
+    transform:translateX(-50%);
+    pointer-events:none;
+    display:flex;
+    gap:14px;
+    align-items:center;
+    justify-content:center;
+    flex-wrap:wrap;
+    padding:10px 14px;
+    border:1px solid rgba(57,246,255,.35);
+    border-radius:16px;
+    background:rgba(5,5,10,.58);
+    box-shadow:0 0 25px rgba(57,246,255,.12), inset 0 0 18px rgba(255,79,216,.08);
+    backdrop-filter: blur(6px);
+  }
+  .badge{
+    font-size:14px;
+    font-weight:700;
+    padding:7px 12px;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,.18);
+    background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.01));
+  }
+  .x { color: var(--pink); text-shadow:0 0 10px rgba(255,79,216,.9), 0 0 22px rgba(255,79,216,.45);}
+  .o { color: var(--yellow); text-shadow:0 0 10px rgba(255,230,0,.95), 0 0 22px rgba(255,230,0,.45);}
+  .msg{
+    color:#ffffff;
+    text-shadow:0 0 10px rgba(57,246,255,.5);
+  }
+  .hint{
+    color:#c9c4ff;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div class="ui">
+  <div class="title">Neon Tic-Tac-Toe</div>
+  <div class="subtitle">Click to place marks • X = neon pink • O = bright yellow • Press R to restart</div>
+</div>
+<div class="panel">
+  <div class="badge msg" id="status">X's TURN</div>
+  <div class="badge x">X</div>
+  <div class="badge o">O</div>
+  <div class="badge hint" id="score">X: 0 | O: 0 | Draws: 0</div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const statusEl = document.getElementById('status');
+  const scoreEl = document.getElementById('score');
+
+  let W=0,H=0,DPR=1;
+  let board = Array(9).fill(null);
+  let current = 'X';
+  let winner = null;
+  let winningLine = null;
+  let scores = {X:0, O:0, D:0};
+  let particles = [];
+  let t = 0;
+
+  const winLines = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+
+  function resize(){
+    DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    W = canvas.width = Math.floor(innerWidth * DPR);
+    H = canvas.height = Math.floor(innerHeight * DPR);
+    canvas.style.width = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+  }
+
+  function resetRound(keepScore=true){
+    board = Array(9).fill(null);
+    current = 'X';
+    winner = null;
+    winningLine = null;
+    particles = [];
+    updateStatus();
+  }
+
+  function updateStatus(){
+    if (winner === 'X' || winner === 'O'){
+      statusEl.textContent = `${winner}'S WIN!`;
+    } else if (winner === 'D'){
+      statusEl.textContent = `DRAW!`;
+    } else {
+      statusEl.textContent = `${current}'S TURN`;
+    }
+    scoreEl.textContent = `X: ${scores.X} | O: ${scores.O} | Draws: ${scores.D}`;
+  }
+
+  function getCellAt(mx, my){
+    const minDim = Math.min(W, H);
+    const boardSize = minDim * 0.72;
+    const x0 = (W - boardSize) / 2;
+    const y0 = (H - boardSize) / 2 + minDim * 0.02;
+    const cell = boardSize / 3;
+    if (mx < x0 || my < y0 || mx > x0 + boardSize || my > y0 + boardSize) return -1;
+    const col = Math.floor((mx - x0) / cell);
+    const row = Math.floor((my - y0) / cell);
+    return row * 3 + col;
+  }
+
+  function checkWinner(){
+    for (const line of winLines){
+      const [a,b,c] = line;
+      if (board[a] && board[a] === board[b] && board[a] === board[c]){
+        winner = board[a];
+        winningLine = line;
+        scores[winner]++;
+        spawnWinParticles(line, winner);
+        updateStatus();
+        return;
+      }
+    }
+    if (board.every(v => v)){
+      winner = 'D';
+      scores.D++;
+      updateStatus();
+    }
+  }
+
+  function spawnWinParticles(line, who){
+    const pts = line.map(i => cellCenter(i));
+    for (let k=0; k<120; k++){
+      const p = pts[Math.floor(Math.random()*pts.length)];
+      const ang = Math.random() * Math.PI * 2;
+      const sp = 1.5 + Math.random() * 5;
+      particles.push({
+        x: p.x, y: p.y,
+        vx: Math.cos(ang)*sp*DPR,
+        vy: Math.sin(ang)*sp*DPR,
+        life: 70 + Math.random()*35,
+        r: (1.5 + Math.random()*2.5) * DPR,
+        c: who === 'X' ? '255,79,216' : '255,230,0'
+      });
+    }
+  }
+
+  function cellCenter(i){
+    const minDim = Math.min(W, H);
+    const boardSize = minDim * 0.72;
+    const x0 = (W - boardSize) / 2;
+    const y0 = (H - boardSize) / 2 + minDim * 0.02;
+    const cell = boardSize / 3;
+    const row = Math.floor(i / 3);
+    const col = i % 3;
+    return {
+      x: x0 + col * cell + cell / 2,
+      y: y0 + row * cell + cell / 2,
+      size: cell
+    };
+  }
+
+  function drawBackground(){
+    ctx.fillStyle = '#05050a';
+    ctx.fillRect(0,0,W,H);
+
+    const grad = ctx.createLinearGradient(0,0,0,H);
+    grad.addColorStop(0,'rgba(57,246,255,0.06)');
+    grad.addColorStop(0.5,'rgba(255,79,216,0.03)');
+    grad.addColorStop(1,'rgba(255,230,0,0.06)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,W,H);
+
+    ctx.save();
+    ctx.globalAlpha = 0.08;
+    ctx.strokeStyle = '#7cf7ff';
+    ctx.lineWidth = 1 * DPR;
+    const spacing = 24 * DPR;
+    for(let x=0;x<W;x+=spacing){
+      ctx.beginPath();
+      ctx.moveTo(x,0);
+      ctx.lineTo(x,H);
+      ctx.stroke();
+    }
+    for(let y=0;y<H;y+=spacing){
+      ctx.beginPath();
+      ctx.moveTo(0,y);
+      ctx.lineTo(W,y);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    for(let i=0;i<35;i++){
+      const x = (Math.sin(t*0.001 + i*12.31)*0.5+0.5)*W;
+      const y = (Math.cos(t*0.0012 + i*4.7)*0.5+0.5)*H;
+      ctx.fillStyle = i%3===0 ? 'rgba(255,79,216,0.9)' : i%3===1 ? 'rgba(57,246,255,0.9)' : 'rgba(255,230,0,0.9)';
+      ctx.beginPath();
+      ctx.arc(x,y,(1.2 + (i%4))*DPR,0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function neonLine(x1,y1,x2,y2,color,shadow){
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 7.5 * DPR;
+    ctx.lineCap = 'round';
+    ctx.shadowColor = shadow;
+    ctx.shadowBlur = 22 * DPR;
+    ctx.beginPath();
+    ctx.moveTo(x1,y1);
+    ctx.lineTo(x2,y2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawBoard(){
+    const minDim = Math.min(W, H);
+    const boardSize = minDim * 0.72;
+    const x0 = (W - boardSize) / 2;
+    const y0 = (H - boardSize) / 2 + minDim * 0.02;
+    const cell = boardSize / 3;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(9,9,20,0.88)';
+    ctx.shadowColor = 'rgba(57,246,255,0.18)';
+    ctx.shadowBlur = 30 * DPR;
+    roundRect(x0-10*DPR, y0-10*DPR, boardSize+20*DPR, boardSize+20*DPR, 26*DPR);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 2 * DPR;
+    roundRect(x0-10*DPR, y0-10*DPR, boardSize+20*DPR, boardSize+20*DPR, 26*DPR);
+    ctx.stroke();
+    ctx.restore();
+
+    for(let i=1;i<3;i++){
+      neonLine(x0 + i*cell, y0, x0 + i*cell, y0 + boardSize, 'rgba(57,246,255,0.95)', 'rgba(57,246,255,0.8)');
+      neonLine(x0, y0 + i*cell, x0 + boardSize, y0 + i*cell, 'rgba(184,77,255,0.95)', 'rgba(184,77,255,0.8)');
+    }
+
+    if (winningLine){
+      const a = cellCenter(winningLine[0]);
+      const c = cellCenter(winningLine[2]);
+      neonLine(a.x, a.y, c.x, c.y, 'rgba(255,255,255,0.95)', 'rgba(255,230,0,0.95)');
+    }
+
+    for(let i=0;i<9;i++){
+      if(!board[i]) continue;
+      const c = cellCenter(i);
+      const pad = c.size * 0.18;
+      if(board[i]==='X'){
+        neonLine(c.x - c.size/2 + pad, c.y - c.size/2 + pad, c.x + c.size/2 - pad, c.y + c.size/2 - pad, 'rgba(255,79,216,1)', 'rgba(255,79,216,0.9)');
+        neonLine(c.x + c.size/2 - pad, c.y - c.size/2 + pad, c.x - c.size/2 + pad, c.y + c.size/2 - pad, 'rgba(255,79,216,1)', 'rgba(255,79,216,0.9)');
+      } else {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,230,0,1)';
+        ctx.lineWidth = 8 * DPR;
+        ctx.shadowColor = 'rgba(255,230,0,0.95)';
+        ctx.shadowBlur = 24 * DPR;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, c.size * 0.28, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  function drawParticles(){
+    for(const p of particles){
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, p.life / 100);
+      ctx.fillStyle = `rgb(${p.c})`;
+      ctx.shadowColor = `rgb(${p.c})`;
+      ctx.shadowBlur = 18 * DPR;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function updateParticles(){
+    for(const p of particles){
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vx *= 0.985;
+      p.vy *= 0.985;
+      p.vy += 0.03 * DPR;
+      p.life -= 1;
+    }
+    particles = particles.filter(p => p.life > 0);
+  }
+
+  function roundRect(x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y, x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x, y+h, r);
+    ctx.arcTo(x, y+h, x, y, r);
+    ctx.arcTo(x, y, x+w, y, r);
+    ctx.closePath();
+  }
+
+  function render(){
+    t++;
+    drawBackground();
+    drawBoard();
+    drawParticles();
+    updateParticles();
+    requestAnimationFrame(render);
+  }
+
+  canvas.addEventListener('click', (e) => {
+    if (winner) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * DPR;
+    const my = (e.clientY - rect.top) * DPR;
+    const idx = getCellAt(mx, my);
+    if (idx < 0 || board[idx]) return;
+    board[idx] = current;
+    checkWinner();
+    if (!winner){
+      current = current === 'X' ? 'O' : 'X';
+      updateStatus();
+    }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'r'){
+      resetRound();
+    }
+  });
+
+  window.addEventListener('resize', resize);
+
+  resize();
+  resetRound();
+  render();
+})();
+</script>
+</body>
+</html>

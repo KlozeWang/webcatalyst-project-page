@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neon Obby Runner</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    color: #fff;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  #gameContainer {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    max-width: 800px;
+    max-height: 600px;
+    background: #000;
+    border: 3px solid #0ff;
+    box-shadow: 0 0 40px #0ff;
+    overflow: hidden;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0,0,0,0.7);
+    text-align: center;
+    z-index: 10;
+    padding: 20px;
+  }
+  .hidden { display: none; }
+  h1 {
+    font-size: 3rem;
+    color: #0ff;
+    text-shadow: 0 0 20px #0ff;
+    margin-bottom: 20px;
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse {
+    0%,100% { text-shadow: 0 0 20px #0ff; }
+    50% { text-shadow: 0 0 40px #ff00ff, 0 0 60px #ff00ff; }
+  }
+  p { font-size: 1.1rem; margin: 8px 0; max-width: 500px; }
+  button {
+    margin-top: 25px;
+    padding: 15px 40px;
+    font-size: 1.3rem;
+    background: linear-gradient(45deg, #ff00ff, #00ffff);
+    color: #000;
+    border: none;
+    border-radius: 30px;
+    cursor: pointer;
+    font-weight: bold;
+    box-shadow: 0 0 20px #ff00ff;
+    transition: transform 0.2s;
+  }
+  button:hover { transform: scale(1.1); }
+  #hud {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 1.2rem;
+    color: #0ff;
+    text-shadow: 0 0 8px #0ff;
+    z-index: 5;
+    pointer-events: none;
+  }
+  #mobileControls {
+    position: absolute;
+    bottom: 20px;
+    left: 0;
+    right: 0;
+    display: none;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 5;
+  }
+  .ctrlBtn {
+    width: 70px;
+    height: 70px;
+    background: rgba(0,255,255,0.3);
+    border: 2px solid #0ff;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 1.5rem;
+    user-select: none;
+    touch-action: manipulation;
+  }
+  @media (max-width: 768px) {
+    #mobileControls { display: flex; }
+    h1 { font-size: 2rem; }
+  }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <canvas id="game"></canvas>
+  <div id="hud">
+    <div>Score: <span id="score">0</span></div>
+    <div>Best: <span id="best">0</span></div>
+  </div>
+  <div id="startScreen" class="overlay">
+    <h1>NEON OBBY</h1>
+    <p>Jump across the neon platforms. Avoid red spikes. Collect glowing orbs!</p>
+    <p>Desktop: ← → to move, SPACE / ↑ to jump</p>
+    <p>Mobile: Use on-screen buttons</p>
+    <button id="startBtn">START</button>
+  </div>
+  <div id="gameOverScreen" class="overlay hidden">
+    <h1>GAME OVER</h1>
+    <p>Score: <span id="finalScore">0</span></p>
+    <button id="restartBtn">PLAY AGAIN</button>
+  </div>
+  <div id="mobileControls">
+    <div style="display:flex; gap:15px;">
+      <div class="ctrlBtn" id="leftBtn">◀</div>
+      <div class="ctrlBtn" id="rightBtn">▶</div>
+    </div>
+    <div class="ctrlBtn" id="jumpBtn">▲</div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+  const r = canvas.getBoundingClientRect();
+  canvas.width = r.width;
+  canvas.height = r.height;
+  W = canvas.width; H = canvas.height;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Audio
+const AC = window.AudioContext || window.webkitAudioContext;
+const audio = new AC();
+function beep(freq, dur, type='square', vol=0.1) {
+  const o = audio.createOscillator();
+  const g = audio.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.value = vol;
+  o.connect(g); g.connect(audio.destination);
+  o.start();
+  g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + dur);
+  o.stop(audio.currentTime + dur);
+}
+
+const player = { x:100, y:300, w:30, h:30, vx:0, vy:0, onGround:false, color:'#0ff' };
+const GRAV = 0.6, JUMP = -12, SPEED = 5;
+let platforms = [], spikes = [], orbs = [];
+let cameraX = 0, score = 0, best = +localStorage.getItem('obbyBest')||0;
+let state = 'start';
+let furthest = 0;
+document.getElementById('best').textContent = best;
+
+const keys = {};
+document.addEventListener('keydown', e => { keys[e.key] = true; if(e.key===' ')e.preventDefault(); });
+document.addEventListener('keyup', e => keys[e.key] = false);
+
+function bindHold(id, key) {
+  const el = document.getElementById(id);
+  const on = e => { e.preventDefault(); keys[key] = true; };
+  const off = e => { e.preventDefault(); keys[key] = false; };
+  el.addEventListener('touchstart', on);
+  el.addEventListener('touchend', off);
+  el.addEventListener('mousedown', on);
+  el.addEventListener('mouseup', off);
+  el.addEventListener('mouseleave', off);
+}
+bindHold('leftBtn','ArrowLeft');
+bindHold('rightBtn','ArrowRight');
+bindHold('jumpBtn',' ');
+
+function generateLevel() {
+  platforms = [{x:0,y:H-40,w:300,h:40,c:'#0ff'}];
+  spikes = []; orbs = [];
+  let x = 350;
+  for (let i=0; i<80; i++) {
+    const w = 60 + Math.random()*80;
+    const y = H - 40 - Math.random()*180;
+    const colors = ['#0ff','#ff00ff','#ffff00','#00ff88'];
+    platforms.push({x, y, w, h:20, c:colors[i%4]});
+    if (Math.random() < 0.4) {
+      spikes.push({x: x + w/2 - 10, y: y - 15, w:20, h:15});
+    }
+    if (Math.random() < 0.5) {
+      orbs.push({x: x + w/2, y: y - 40, r:8, taken:false});
+    }
+    x += w + 50 + Math.random()*70;
+  }
+}
+
+function reset() {
+  player.x = 50; player.y = 300; player.vx = 0; player.vy = 0;
+  cameraX = 0; score = 0; furthest = 0;
+  generateLevel();
+  state = 'play';
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('gameOverScreen').classList.add('hidden');
+}
+
+function gameOver() {
+  state = 'over';
+  if (score > best) { best = score; localStorage.setItem('obbyBest', best); }
+  document.getElementById('finalScore').textContent = score;
+  document.getElementById('best').textContent = best;
+  document.getElementById('gameOverScreen').classList.remove('hidden');
+  beep(120, 0.4, 'sawtooth', 0.15);
+}
+
+document.getElementById('startBtn').onclick = () => { audio.resume(); reset(); };
+document.getElementById('restartBtn').onclick = () => reset();
+
+function update() {
+  if (state !== 'play') return;
+  // input
+  player.vx = 0;
+  if (keys['ArrowLeft'] || keys['a']) player.vx = -SPEED;
+  if (keys['ArrowRight'] || keys['d']) player.vx = SPEED;
+  if ((keys[' '] || keys['ArrowUp'] || keys['w']) && player.onGround) {
+    player.vy = JUMP; player.onGround = false; beep(600, 0.1);
+  }
+  player.vy += GRAV;
+  if (player.vy > 15) player.vy = 15;
+  player.x += player.vx;
+  player.y += player.vy;
+  player.onGround = false;
+  // collisions
+  for (const p of platforms) {
+    if (player.x + player.w > p.x && player.x < p.x + p.w &&
+        player.y + player.h > p.y && player.y + player.h < p.y + p.h + 20 &&
+        player.vy >= 0) {
+      player.y = p.y - player.h;
+      player.vy = 0;
+      player.onGround = true;
+    }
+  }
+  for (const s of spikes) {
+    if (player.x + player.w > s.x && player.x < s.x + s.w &&
+        player.y + player.h > s.y && player.y < s.y + s.h) {
+      gameOver();
+    }
+  }
+  for (const o of orbs) {
+    if (!o.taken) {
+      const dx = (player.x+15)-o.x, dy = (player.y+15)-o.y;
+      if (dx*dx + dy*dy < (o.r+15)*(o.r+15)) {
+        o.taken = true; score += 10; beep(1000, 0.1, 'sine', 0.15);
+      }
+    }
+  }
+  if (player.y > H + 100) gameOver();
+  if (player.x > furthest) { score += Math.floor((player.x - furthest)/10); furthest = player.x; }
+  cameraX = player.x - 200;
+  if (cameraX < 0) cameraX = 0;
+  document.getElementById('score').textContent = score;
+}
+
+function draw() {
+  ctx.fillStyle = '#0a0a1f';
+  ctx.fillRect(0,0,W,H);
+  // bg stars
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  for (let i=0; i<30; i++) {
+    const sx = (i*123 - cameraX*0.2) % W;
+    ctx.fillRect((sx+W)%W, (i*47)%H, 2, 2);
+  }
+  ctx.save();
+  ctx.translate(-cameraX, 0);
+  // platforms
+  for (const p of platforms) {
+    ctx.shadowBlur = 15; ctx.shadowColor = p.c;
+    ctx.fillStyle = p.c;
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+  }
+  // spikes
+  ctx.shadowColor = '#f00';
+  ctx.fillStyle = '#f00';
+  for (const s of spikes) {
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y+s.h);
+    ctx.lineTo(s.x+s.w/2, s.y);
+    ctx.lineTo(s.x+s.w, s.y+s.h);
+    ctx.closePath(); ctx.fill();
+  }
+  // orbs
+  for (const o of orbs) {
+    if (o.taken) continue;
+    ctx.shadowColor = '#ff0'; ctx.fillStyle = '#ff0';
+    ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI*2); ctx.fill();
+  }
+  // player
+  ctx.shadowColor = player.color; ctx.shadowBlur = 20;
+  ctx.fillStyle = player.color;
+  ctx.fillRect(player.x, player.y, player.w, player.h);
+  ctx.restore();
+  ctx.shadowBlur = 0;
+}
+
+function loop() {
+  update(); draw();
+  requestAnimationFrame(loop);
+}
+generateLevel();
+loop();
+</script>
+</body>
+</html>

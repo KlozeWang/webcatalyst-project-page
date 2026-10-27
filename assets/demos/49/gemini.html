@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rabbit Race Rush</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #2d3748;
+            overflow: hidden;
+            touch-action: none; /* Prevent pull-to-refresh on mobile */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            max-width: 500px;
+            margin: 0 auto;
+            background-color: #4ade80; /* Grass color */
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            z-index: 10;
+        }
+        .hidden { display: none !important; }
+        
+        .hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+            text-shadow: 1px 1px 2px black;
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .effect-text {
+            position: absolute;
+            font-weight: bold;
+            font-size: 1.5rem;
+            text-shadow: 2px 2px 4px black;
+            pointer-events: none;
+            animation: floatUp 1s forwards;
+            opacity: 0;
+        }
+
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-50px); }
+        }
+
+        .controls-hint {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: rgba(255,255,255,0.7);
+            font-size: 0.9rem;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="hud" class="hud hidden">
+        <div id="distDisplay">Distance: 0m</div>
+        <div id="speedDisplay">Speed: Normal</div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="startScreen" class="ui-layer">
+        <h1 class="text-4xl font-bold mb-4 text-center text-yellow-300 drop-shadow-lg">Rabbit Race Rush</h1>
+        <div class="text-6xl mb-6">🐰 🏁 🐇</div>
+        <p class="mb-2">Collect 🥕 to go faster!</p>
+        <p class="mb-6">Avoid 🪨 to maintain speed!</p>
+        <p class="mb-8 text-sm text-gray-300">Tap Left/Right to change lanes</p>
+        <button id="startBtn" class="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 px-8 rounded-full text-xl shadow-lg transform transition active:scale-95">
+            START RACE
+        </button>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameOverScreen" class="ui-layer hidden">
+        <h1 id="winnerText" class="text-4xl font-bold mb-4 text-center text-white drop-shadow-lg">Game Over</h1>
+        <div id="finalScore" class="text-2xl mb-8"></div>
+        <button id="restartBtn" class="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 px-8 rounded-full text-xl shadow-lg transform transition active:scale-95">
+            PLAY AGAIN
+        </button>
+    </div>
+
+    <div id="effects-container"></div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const startScreen = document.getElementById('startScreen');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const hud = document.getElementById('hud');
+    const distDisplay = document.getElementById('distDisplay');
+    const speedDisplay = document.getElementById('speedDisplay');
+    const winnerText = document.getElementById('winnerText');
+    const finalScore = document.getElementById('finalScore');
+    const effectsContainer = document.getElementById('effects-container');
+
+    // Game Constants & Configuration
+    const LANE_COUNT = 3;
+    const RACE_DISTANCE = 10000;
+    const BASE_SPEED = 8;
+    const BOOST_SPEED = 14;
+    const PENALTY_SPEED = 3;
+    const EFFECT_DURATION = 150; // frames
+    
+    let canvasW, canvasH, laneWidth;
+    let gameState = 'start'; // start, playing, over
+    let animationId;
+    let frameCount = 0;
+    let trackOffset = 0;
+
+    // Entities
+    let player, ai, entities = [];
+    
+    // Audio Context (Simple synth sounds)
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let actx;
+
+    function initAudio() {
+        if (!actx) actx = new AudioContext();
+    }
+
+    function playSound(type) {
+        if (!actx) return;
+        const osc = actx.createOscillator();
+        const gain = actx.createGain();
+        osc.connect(gain);
+        gain.connect(actx.destination);
+
+        if (type === 'boost') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(400, actx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(800, actx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.3, actx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.1);
+            osc.start();
+            osc.stop(actx.currentTime + 0.1);
+        } else if (type === 'hit') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, actx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(50, actx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.3, actx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.2);
+            osc.start();
+            osc.stop(actx.currentTime + 0.2);
+        } else if (type === 'win') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(400, actx.currentTime);
+            osc.frequency.setValueAtTime(600, actx.currentTime + 0.1);
+            osc.frequency.setValueAtTime(800, actx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.2, actx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, actx.currentTime + 0.5);
+            osc.start();
+            osc.stop(actx.currentTime + 0.5);
+        }
+    }
+
+    function resize() {
+        const container = document.getElementById('game-container');
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+        canvasW = canvas.width;
+        canvasH = canvas.height;
+        laneWidth = canvasW / LANE_COUNT;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    class Rabbit {
+        constructor(isPlayer, emoji) {
+            this.isPlayer = isPlayer;
+            this.emoji = emoji;
+            this.lane = isPlayer ? 1 : 0;
+            this.progress = 0;
+            this.speed = BASE_SPEED;
+            this.targetSpeed = BASE_SPEED;
+            this.effectTimer = 0;
+            this.size = 40;
+            this.y = isPlayer ? canvasH - 100 : canvasH - 100;
+        }
+
+        update() {
+            // Handle speed effects
+            if (this.effectTimer > 0) {
+                this.effectTimer--;
+                if (this.effectTimer <= 0) {
+                    this.targetSpeed = BASE_SPEED;
+                }
+            }
+            
+            // Smooth speed transition
+            this.speed += (this.targetSpeed - this.speed) * 0.1;
+            this.progress += this.speed;
+
+            // Simple AI Logic
+            if (!this.isPlayer && frameCount % 30 === 0) {
+                // Check ahead in current lane
+                let danger = false;
+                let carrotAhead = false;
+                
+                for (let e of entities) {
+                    if (e.active && e.lane === this.lane) {
+                        let dist = e.worldY - this.progress;
+                        if (dist > 0 && dist < 500) {
+                            if (e.type === 'obstacle') danger = true;
+                            if (e.type === 'reward') carrotAhead = true;
+                        }
+                    }
+                }
+
+                if (danger && !carrotAhead) {
+                    // Try to dodge
+                    let possibleLanes = [];
+                    if (this.lane > 0) possibleLanes.push(this.lane - 1);
+                    if (this.lane < 2) possibleLanes.push(this.lane + 1);
+                    if (possibleLanes.length > 0) {
+                        this.lane = possibleLanes[Math.floor(Math.random() * possibleLanes.length)];
+                    }
+                }
+            }
+        }
+
+        draw(ctx, playerProgress) {
+            ctx.font = `${this.size}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            let drawX = (this.lane * laneWidth) + (laneWidth / 2);
+            let drawY;
+
+            if (this.isPlayer) {
+                drawY = this.y;
+            } else {
+                // AI position relative to player
+                let diff = playerProgress - this.progress;
+                drawY = this.y + diff;
+            }
+
+            // Draw aura if boosted/slowed
+            if (this.effectTimer > 0) {
+                ctx.beginPath();
+                ctx.arc(drawX, drawY, this.size * 0.6, 0, Math.PI * 2);
+                ctx.fillStyle = this.targetSpeed > BASE_SPEED ? 'rgba(255, 215, 0, 0.4)' : 'rgba(255, 0, 0, 0.4)';
+                ctx.fill();
+            }
+
+            ctx.fillText(this.emoji, drawX, drawY);
+            
+            // Draw nametag for AI
+            if (!this.isPlayer) {
+                ctx.font = '12px Arial';
+                ctx.fillStyle = 'white';
+                ctx.fillText('Rival', drawX, drawY - 30);
+            }
+        }
+
+        applyEffect(type) {
+            if (type === 'reward') {
+                this.targetSpeed = BOOST_SPEED;
+                this.effectTimer = EFFECT_DURATION;
+                if(this.isPlayer) {
+                    showFloatingText("SPEED UP!", 'text-yellow-300');
+                    playSound('boost');
+                }
+            } else if (type === 'obstacle') {
+                this.targetSpeed = PENALTY_SPEED;
+                this.effectTimer = EFFECT_DURATION / 2;
+                if(this.isPlayer) {
+                    showFloatingText("SLOWED!", 'text-red-400');
+                    playSound('hit');
+                }
+            }
+        }
+    }
+
+    class Entity {
+        constructor(worldY, lane, type) {
+            this.worldY = worldY;
+            this.lane = lane;
+            this.type = type; // 'reward' or 'obstacle'
+            this.emoji = type === 'reward' ? '🥕' : '🪨';
+            this.active = true;
+            this.size = 30;
+        }
+
+        draw(ctx, playerProgress, playerY) {
+            if (!this.active) return;
+            
+            // Calculate screen Y based on player's progress
+            let screenY = playerY - (this.worldY - playerProgress);
+            
+            // Culling
+            if (screenY > canvasH + 50 || screenY < -50) return;
+
+            let drawX = (this.lane * laneWidth) + (laneWidth / 2);
+            ctx.font = `${this.size}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // Add slight bobbing to carrots
+            let yOffset = this.type === 'reward' ? Math.sin(frameCount * 0.1 + this.worldY) * 5 : 0;
+            
+            ctx.fillText(this.emoji, drawX, screenY + yOffset);
+        }
+    }
+
+    function showFloatingText(text, colorClass) {
+        const el = document.createElement('div');
+        el.className = `effect-text ${colorClass}`;
+        el.innerText = text;
+        
+        // Randomize position slightly near player
+        const x = canvasW / 2 + (Math.random() * 40 - 20);
+        const y = player.y - 50;
+        
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+        
+        effectsContainer.appendChild(el);
+        setTimeout(() => el.remove(), 1000);
+    }
+
+    function generateTrack() {
+        entities = [];
+        let currentY = 500; // Start spawning ahead
+        
+        while (currentY < RACE_DISTANCE) {
+            // Randomly spawn 1 or 2 items per row
+            let numItems = Math.random() > 0.7 ? 2 : 1;
+            let lanes = [0, 1, 2].sort(() => 0.5 - Math.random()).slice(0, numItems);
+            
+            lanes.forEach(lane => {
+                // 70% chance obstacle, 30% carrot (makes carrots valuable)
+                let type = Math.random() > 0.3 ? 'obstacle' : 'reward';
+                entities.push(new Entity(currentY, lane, type));
+            });
+            
+            currentY += 300 + Math.random() * 200; // Gap between rows
+        }
+    }
+
+    function drawTrack(playerProgress) {
+        // Grass background
+        ctx.fillStyle = '#4ade80';
+        ctx.fillRect(0, 0, canvasW, canvasH);
+        
+        // Dirt track
+        ctx.fillStyle = '#8B5A2B';
+        let trackWidth = canvasW * 0.9;
+        let trackX = (canvasW - trackWidth) / 2;
+        ctx.fillRect(trackX, 0, trackWidth, canvasH);
+
+        // Lane dividers (moving)
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([20, 20]);
+        
+        let offset = -(playerProgress % 40);
+        
+        for (let i = 1; i < LANE_COUNT; i++) {
+            let x = i * laneWidth;
+            ctx.beginPath();
+            ctx.moveTo(x, offset);
+            ctx.lineTo(x, canvasH);
+            ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        // Draw Finish Line
+        let finishScreenY = player.y - (RACE_DISTANCE - playerProgress);
+        if (finishScreenY > -100 && finishScreenY < canvasH + 100) {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(trackX, finishScreenY, trackWidth, 40);
+            
+            // Checkerboard pattern
+            ctx.fillStyle = 'black';
+            let sqSize = 20;
+            for(let row=0; row<2; row++) {
+                for(let col=0; col<trackWidth/sqSize; col++) {
+                    if ((row+col)%2 === 0) {
+                        ctx.fillRect(trackX + col*sqSize, finishScreenY + row*sqSize, sqSize, sqSize);
+                    }
+                }
+            }
+        }
+    }
+
+    function checkCollisions(rabbit) {
+        // Hitbox size
+        const hitRadius = 25;
+        
+        for (let e of entities) {
+            if (!e.active || e.lane !== rabbit.lane) continue;
+            
+            // Calculate distance in world Y
+            let distY = Math.abs(e.worldY - rabbit.progress);
+            
+            if (distY < hitRadius) {
+                rabbit.applyEffect(e.type);
+                e.active = false; // Consume item
+            }
+        }
+    }
+
+    function updateHUD() {
+        let distLeft = Math.max(0, Math.floor((RACE_DISTANCE - player.progress)/10));
+        distDisplay.innerText = `To Finish: ${distLeft}m`;
+        
+        if (player.targetSpeed === BOOST_SPEED) {
+            speedDisplay.innerText = "Speed: FAST";
+            speedDisplay.className = "text-yellow-300";
+        } else if (player.targetSpeed === PENALTY_SPEED) {
+            speedDisplay.innerText = "Speed: SLOW";
+            speedDisplay.className = "text-red-400";
+        } else {
+            speedDisplay.innerText = "Speed: Normal";
+            speedDisplay.className = "text-white";
+        }
+    }
+
+    function gameLoop() {
+        if (gameState !== 'playing') return;
+
+        frameCount++;
+        
+        // Update
+        player.update();
+        ai.update();
+        
+        checkCollisions(player);
+        checkCollisions(ai);
+
+        // Win Condition
+        if (player.progress >= RACE_DISTANCE || ai.progress >= RACE_DISTANCE) {
+            endGame(player.progress >= ai.progress ? 'player' : 'ai');
+            return;
+        }
+
+        // Render
+        ctx.clearRect(0, 0, canvasW, canvasH);
+        
+        drawTrack(player.progress);
+        
+        // Draw entities
+        entities.forEach(e => e.draw(ctx, player.progress, player.y));
+        
+        // Draw Rabbits (draw AI first so player is on top if they overlap)
+        ai.draw(ctx, player.progress);
+        player.draw(ctx, player.progress);
+        
+        updateHUD();
+
+        animationId = requestAnimationFrame(gameLoop);
+    }
+
+    function startGame() {
+        initAudio();
+        resize();
+        gameState = 'playing';
+        startScreen.classList.add('hidden');
+        gameOverScreen.classList.add('hidden');
+        hud.classList.remove('hidden');
+        effectsContainer.innerHTML = '';
+        
+        player = new Rabbit(true, '🐰');
+        ai = new Rabbit(false, '🐇');
+        
+        // Give AI a slight random variance in base speed so it's not identical
+        ai.targetSpeed = BASE_SPEED * (0.95 + Math.random()*0.1); 
+        
+        frameCount = 0;
+        generateTrack();
+        
+        gameLoop();
+    }
+
+    function endGame(winner) {
+        gameState = 'over';
+        hud.classList.add('hidden');
+        gameOverScreen.classList.remove('hidden');
+        playSound('win');
+        
+        if (winner === 'player') {
+            winnerText.innerText = "You Won! 🏆";
+            winnerText.className = "text-4xl font-bold mb-4 text-center text-yellow-400 drop-shadow-lg";
+        } else {
+            winnerText.innerText = "Rival Won! 🥈";
+            winnerText.className = "text-4xl font-bold mb-4 text-center text-gray-300 drop-shadow-lg";
+        }
+    }
+
+    // Input Handling
+    function handleInput(xPos) {
+        if (gameState !== 'playing') return;
+        // Divide screen into left/right halves
+        if (xPos < canvasW / 2) {
+            // Move left
+            if (player.lane > 0) player.lane--;
+        } else {
+            // Move right
+            if (player.lane < LANE_COUNT - 1) player.lane++;
+        }
+    }
+
+    canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault(); // Prevent scrolling
+        handleInput(e.touches[0].clientX);
+    }, {passive: false});
+
+    canvas.addEventListener('mousedown', (e) => {
+        handleInput(e.clientX);
+    });
+
+    window.addEventListener('keydown', (e) => {
+        if (gameState !== 'playing') return;
+        if (e.key === 'ArrowLeft' || e.key === 'a') {
+            if (player.lane > 0) player.lane--;
+        } else if (e.key === 'ArrowRight' || e.key === 'd') {
+            if (player.lane < LANE_COUNT - 1) player.lane++;
+        }
+    });
+
+    document.getElementById('startBtn').addEventListener('click', startGame);
+    document.getElementById('restartBtn').addEventListener('click', startGame);
+
+    // Initial render for background
+    ctx.fillStyle = '#4ade80';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+</script>
+
+</body>
+</html>

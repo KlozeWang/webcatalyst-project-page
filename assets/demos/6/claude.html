@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Neon Tic-Tac-Toe 80s</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Courier New', monospace;
+    background: #000;
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      linear-gradient(rgba(255,0,180,0.15) 1px, transparent 1px) 0 0 / 40px 40px,
+      linear-gradient(90deg, rgba(0,255,255,0.15) 1px, transparent 1px) 0 0 / 40px 40px,
+      radial-gradient(ellipse at center bottom, #1a0033 0%, #000 70%);
+    perspective: 500px;
+    transform: perspective(400px) rotateX(60deg);
+    transform-origin: center top;
+    z-index: -1;
+    animation: scroll 4s linear infinite;
+  }
+  @keyframes scroll {
+    from { background-position: 0 0, 0 0, center; }
+    to { background-position: 0 40px, 0 0, center; }
+  }
+  h1 {
+    font-size: clamp(1.8rem, 6vw, 3rem);
+    color: #ff00ff;
+    text-shadow:
+      0 0 10px #ff00ff,
+      0 0 20px #ff00ff,
+      0 0 40px #ff00ff,
+      3px 3px 0 #00ffff;
+    letter-spacing: 4px;
+    margin-bottom: 10px;
+    text-align: center;
+    animation: flicker 3s infinite;
+  }
+  @keyframes flicker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.85; }
+  }
+  .status {
+    font-size: 1.3rem;
+    color: #ffff00;
+    text-shadow: 0 0 8px #ffff00, 0 0 16px #ffaa00;
+    margin-bottom: 15px;
+    min-height: 30px;
+    letter-spacing: 2px;
+  }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 10px;
+    background: rgba(0,255,255,0.05);
+    border: 3px solid #00ffff;
+    border-radius: 8px;
+    box-shadow:
+      0 0 20px #00ffff,
+      inset 0 0 20px rgba(0,255,255,0.3);
+    width: min(90vw, 400px);
+    aspect-ratio: 1;
+  }
+  .cell {
+    background: #0a0014;
+    border: 2px solid #ff00ff;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(2.5rem, 10vw, 4rem);
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: inset 0 0 10px rgba(255,0,255,0.3);
+    user-select: none;
+  }
+  .cell:hover:not(.taken) {
+    background: rgba(255,0,255,0.15);
+    box-shadow: inset 0 0 20px rgba(255,0,255,0.6), 0 0 15px #ff00ff;
+    transform: scale(1.03);
+  }
+  .cell.x {
+    color: #ff1493;
+    text-shadow: 0 0 10px #ff1493, 0 0 20px #ff00ff, 0 0 30px #ff00ff;
+    animation: pop 0.3s;
+  }
+  .cell.o {
+    color: #ffff00;
+    text-shadow: 0 0 10px #ffff00, 0 0 20px #ffaa00, 0 0 30px #ffaa00;
+    animation: pop 0.3s;
+  }
+  .cell.win {
+    background: rgba(0,255,0,0.2);
+    border-color: #00ff00;
+    box-shadow: 0 0 25px #00ff00, inset 0 0 20px #00ff00;
+    animation: winPulse 0.6s infinite alternate;
+  }
+  @keyframes pop {
+    0% { transform: scale(0); }
+    60% { transform: scale(1.3); }
+    100% { transform: scale(1); }
+  }
+  @keyframes winPulse {
+    from { box-shadow: 0 0 15px #00ff00, inset 0 0 10px #00ff00; }
+    to { box-shadow: 0 0 35px #00ff00, inset 0 0 25px #00ff00; }
+  }
+  .scoreboard {
+    display: flex;
+    gap: 30px;
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+    letter-spacing: 2px;
+  }
+  .score-x { color: #ff1493; text-shadow: 0 0 8px #ff1493; }
+  .score-o { color: #ffff00; text-shadow: 0 0 8px #ffff00; }
+  .score-t { color: #00ffff; text-shadow: 0 0 8px #00ffff; }
+  button {
+    margin-top: 20px;
+    padding: 12px 30px;
+    font-family: 'Courier New', monospace;
+    font-size: 1rem;
+    font-weight: bold;
+    letter-spacing: 3px;
+    color: #000;
+    background: #00ffff;
+    border: 3px solid #ff00ff;
+    border-radius: 4px;
+    cursor: pointer;
+    text-transform: uppercase;
+    box-shadow: 0 0 15px #00ffff, 0 0 30px #ff00ff;
+    transition: all 0.2s;
+  }
+  button:hover {
+    background: #ff00ff;
+    color: #fff;
+    box-shadow: 0 0 25px #ff00ff, 0 0 50px #ffff00;
+    transform: scale(1.05);
+  }
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    text-align: center;
+    padding: 20px;
+  }
+  .overlay h2 {
+    font-size: clamp(2rem, 8vw, 4rem);
+    margin-bottom: 20px;
+    color: #00ffff;
+    text-shadow: 0 0 15px #00ffff, 0 0 30px #ff00ff;
+    letter-spacing: 5px;
+  }
+  .overlay p {
+    color: #ffff00;
+    text-shadow: 0 0 8px #ffff00;
+    margin-bottom: 10px;
+    font-size: 1.1rem;
+    letter-spacing: 2px;
+  }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<div class="overlay" id="startScreen">
+  <h2>NEON<br>TIC-TAC-TOE</h2>
+  <p>★ 1980'S ARCADE EDITION ★</p>
+  <p style="margin-top:20px;">PINK X vs YELLOW O</p>
+  <p>TWO PLAYERS - TAKE TURNS</p>
+  <button onclick="startGame()">INSERT COIN</button>
+</div>
+
+<h1>TIC-TAC-TOE</h1>
+<div class="scoreboard">
+  <span class="score-x">X: <span id="scoreX">0</span></span>
+  <span class="score-t">TIES: <span id="scoreT">0</span></span>
+  <span class="score-o">O: <span id="scoreO">0</span></span>
+</div>
+<div class="status" id="status">PLAYER X'S TURN</div>
+<div class="board" id="board"></div>
+<button onclick="resetGame()">NEW GAME</button>
+
+<script>
+const board = document.getElementById('board');
+const statusEl = document.getElementById('status');
+let cells = Array(9).fill('');
+let current = 'X';
+let gameOver = false;
+let scores = { X: 0, O: 0, T: 0 };
+
+const wins = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+
+// Audio
+let audioCtx;
+function beep(freq, dur, type='square', vol=0.15) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.value = vol;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    o.stop(audioCtx.currentTime + dur);
+  } catch(e) {}
+}
+
+function buildBoard() {
+  board.innerHTML = '';
+  for (let i = 0; i < 9; i++) {
+    const c = document.createElement('div');
+    c.className = 'cell';
+    c.dataset.idx = i;
+    c.addEventListener('click', () => play(i));
+    board.appendChild(c);
+  }
+}
+
+function play(i) {
+  if (gameOver || cells[i]) return;
+  cells[i] = current;
+  const cellEl = board.children[i];
+  cellEl.textContent = current;
+  cellEl.classList.add(current.toLowerCase(), 'taken');
+  beep(current === 'X' ? 660 : 440, 0.15);
+
+  const winLine = checkWin();
+  if (winLine) {
+    winLine.forEach(idx => board.children[idx].classList.add('win'));
+    statusEl.textContent = `★ PLAYER ${current} WINS! ★`;
+    scores[current]++;
+    document.getElementById('score' + current).textContent = scores[current];
+    gameOver = true;
+    victorySound();
+    return;
+  }
+  if (cells.every(c => c)) {
+    statusEl.textContent = "★ IT'S A TIE! ★";
+    scores.T++;
+    document.getElementById('scoreT').textContent = scores.T;
+    gameOver = true;
+    beep(220, 0.3, 'sawtooth');
+    return;
+  }
+  current = current === 'X' ? 'O' : 'X';
+  statusEl.textContent = `PLAYER ${current}'S TURN`;
+}
+
+function checkWin() {
+  for (const line of wins) {
+    const [a,b,c] = line;
+    if (cells[a] && cells[a] === cells[b] && cells[a] === cells[c]) return line;
+  }
+  return null;
+}
+
+function victorySound() {
+  [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.15, 'square', 0.2), i * 100));
+}
+
+function resetGame() {
+  cells = Array(9).fill('');
+  current = 'X';
+  gameOver = false;
+  statusEl.textContent = "PLAYER X'S TURN";
+  buildBoard();
+  beep(880, 0.1);
+}
+
+function startGame() {
+  document.getElementById('startScreen').classList.add('hidden');
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+  }
+  beep(880, 0.1);
+  setTimeout(() => beep(1320, 0.15), 100);
+}
+
+buildBoard();
+</script>
+</body>
+</html>

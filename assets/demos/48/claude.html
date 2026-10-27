@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HackThink :: Mindset, Recon & Exploitation</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; font-family: 'Courier New', monospace; background: #000; color: #0f0; overflow: hidden; user-select: none; }
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(0,255,0,0.04) 0, rgba(0,255,0,0.04) 1px, transparent 1px, transparent 3px);
+    z-index: 50;
+  }
+  #app { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+  header {
+    padding: 10px 16px; border-bottom: 1px solid #0f0;
+    display: flex; justify-content: space-between; align-items: center;
+    background: rgba(0, 30, 0, 0.4); flex-wrap: wrap; gap: 8px;
+  }
+  header h1 { font-size: 16px; letter-spacing: 2px; text-shadow: 0 0 8px #0f0; }
+  .stats { display: flex; gap: 14px; font-size: 13px; }
+  .stat span { color: #0ff; }
+  main { flex: 1; padding: 16px; overflow: hidden; position: relative; }
+  .screen { display: none; height: 100%; flex-direction: column; }
+  .screen.active { display: flex; animation: fadein .3s; }
+  @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+  .terminal {
+    background: rgba(0,20,0,0.5); border: 1px solid #0f0; padding: 14px;
+    flex: 1; overflow-y: auto; font-size: 14px; line-height: 1.55;
+    box-shadow: inset 0 0 30px rgba(0,255,0,0.15);
+  }
+  .terminal::-webkit-scrollbar { width: 6px; }
+  .terminal::-webkit-scrollbar-thumb { background: #0f0; }
+  .line { white-space: pre-wrap; }
+  .dim { color: #060; }
+  .warn { color: #ff0; }
+  .err { color: #f33; }
+  .ok { color: #0ff; }
+  button, .btn {
+    background: transparent; color: #0f0; border: 1px solid #0f0;
+    padding: 10px 18px; font-family: inherit; font-size: 14px; cursor: pointer;
+    letter-spacing: 1px; transition: all .15s; margin: 4px;
+  }
+  button:hover, .btn:hover { background: #0f0; color: #000; box-shadow: 0 0 12px #0f0; }
+  .center { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; gap: 14px; }
+  .title { font-size: clamp(28px, 6vw, 56px); letter-spacing: 6px; text-shadow: 0 0 20px #0f0; animation: glitch 3s infinite; }
+  @keyframes glitch {
+    0%, 90%, 100% { transform: translate(0); }
+    92% { transform: translate(-2px, 1px); color: #f0f; }
+    94% { transform: translate(2px, -1px); color: #0ff; }
+  }
+  .sub { color: #0a0; max-width: 600px; line-height: 1.6; }
+  .grid { display: grid; gap: 8px; margin-top: 10px; }
+  .targets { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .target {
+    border: 1px solid #0a0; padding: 10px; cursor: pointer; font-size: 12px;
+    background: rgba(0,40,0,0.3); transition: all .15s;
+  }
+  .target:hover { border-color: #0ff; color: #0ff; }
+  .target.scanned { border-color: #0ff; background: rgba(0,80,80,0.2); }
+  .target.exploited { border-color: #ff0; color: #ff0; opacity: 0.6; }
+  .puzzle-grid { display: grid; grid-template-columns: repeat(4, 60px); gap: 6px; justify-content: center; margin: 16px 0; }
+  .pcell {
+    width: 60px; height: 60px; border: 1px solid #0f0; display: flex;
+    align-items: center; justify-content: center; cursor: pointer; font-size: 18px;
+    background: rgba(0,20,0,0.5); transition: all .15s;
+  }
+  .pcell:hover { background: rgba(0,80,0,0.6); }
+  .pcell.selected { background: #0f0; color: #000; }
+  .pcell.correct { background: #0ff; color: #000; border-color: #0ff; }
+  .typing { font-size: 20px; letter-spacing: 2px; background: rgba(0,30,0,0.5); padding: 14px; border: 1px solid #0f0; min-height: 60px; }
+  .typing .done { color: #0ff; opacity: 0.5; }
+  .typing .cur { background: #0f0; color: #000; }
+  input.cmd {
+    background: #000; border: 1px solid #0f0; color: #0f0; padding: 8px;
+    font-family: inherit; font-size: 14px; width: 100%; outline: none;
+  }
+  .progress { height: 6px; background: #030; margin-top: 6px; }
+  .progress > div { height: 100%; background: #0f0; transition: width .2s; }
+  .phase-tag { display: inline-block; padding: 2px 8px; border: 1px solid #0ff; color: #0ff; font-size: 11px; margin-bottom: 8px; }
+  @media (max-width: 500px) {
+    .puzzle-grid { grid-template-columns: repeat(4, 50px); }
+    .pcell { width: 50px; height: 50px; font-size: 14px; }
+    header h1 { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>▣ HACKTHINK_OS v1.337</h1>
+    <div class="stats">
+      <div class="stat">SCORE: <span id="score">0</span></div>
+      <div class="stat">PHASE: <span id="phase">--</span></div>
+      <div class="stat">TIME: <span id="time">0</span>s</div>
+    </div>
+  </header>
+  <main>
+
+    <!-- START -->
+    <section class="screen active" id="start">
+      <div class="center">
+        <div class="title">HACK_THINK</div>
+        <div class="sub">A 3-phase simulation exploring how a hacker thinks.<br>
+          <span class="ok">[1] MINDSET</span> — find the pattern.
+          <span class="ok">[2] RECON</span> — map the target.
+          <span class="ok">[3] EXPLOIT</span> — type to breach.
+        </div>
+        <button onclick="game.start()">▶ INITIALIZE</button>
+        <div class="dim" style="font-size:11px;margin-top:20px;">For educational purposes only.</div>
+      </div>
+    </section>
+
+    <!-- MINDSET -->
+    <section class="screen" id="mindset">
+      <div class="phase-tag">PHASE 1 / MINDSET</div>
+      <div class="terminal" id="mindTerm"></div>
+      <div style="margin-top:10px;">
+        <div class="dim">Select the 4 values in the sequence (low → high). Pattern: <span id="patternHint" class="ok"></span></div>
+        <div class="puzzle-grid" id="puzzleGrid"></div>
+        <div style="text-align:center">
+          <button onclick="game.checkPuzzle()">▶ SUBMIT</button>
+          <button onclick="game.newPuzzle()">↻ NEW SET</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RECON -->
+    <section class="screen" id="recon">
+      <div class="phase-tag">PHASE 2 / RECON</div>
+      <div class="dim">Network discovered. Scan each host to gather intel. Find the VULNERABLE target.</div>
+      <div class="grid targets" id="targets" style="margin-top:10px;"></div>
+      <div class="terminal" id="reconTerm" style="margin-top:10px; max-height:200px;"></div>
+    </section>
+
+    <!-- EXPLOIT -->
+    <section class="screen" id="exploit">
+      <div class="phase-tag">PHASE 3 / EXPLOITATION</div>
+      <div class="dim">Target acquired. Type the exploit payload before the IDS detects you.</div>
+      <div class="typing" id="typing"></div>
+      <div class="progress"><div id="ipsBar" style="width:100%;background:#f33"></div></div>
+      <div class="dim" style="margin-top:6px;">IDS Detection ↑ <span id="ipsPct">0</span>%</div>
+      <input class="cmd" id="typeInput" placeholder="// start typing the payload..." autocomplete="off" spellcheck="false">
+    </section>
+
+    <!-- END -->
+    <section class="screen" id="end">
+      <div class="center">
+        <div class="title" id="endTitle">ROOT ACCESS</div>
+        <div class="sub" id="endMsg"></div>
+        <div>
+          <div>Final Score: <span class="ok" id="finalScore">0</span></div>
+          <div>Time: <span class="ok" id="finalTime">0</span>s</div>
+        </div>
+        <button onclick="game.start()">▶ RUN AGAIN</button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const screens = ['start','mindset','recon','exploit','end'];
+function show(s) { screens.forEach(x => $(x).classList.toggle('active', x===s)); }
+
+// audio
+let actx;
+function beep(freq=440, dur=0.08, type='square', vol=0.05) {
+  try {
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.value = vol;
+    o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + dur);
+  } catch(e){}
+}
+
+const game = {
+  score: 0, startTime: 0, timer: null,
+  start() {
+    this.score = 0; this.updateScore();
+    this.startTime = Date.now();
+    clearInterval(this.timer);
+    this.timer = setInterval(() => {
+      $('time').textContent = Math.floor((Date.now()-this.startTime)/1000);
+    }, 500);
+    this.startMindset();
+  },
+  updateScore() { $('score').textContent = this.score; },
+  addScore(n) { this.score += n; this.updateScore(); beep(880,0.1,'sine',0.06); },
+
+  // ============== MINDSET ==============
+  startMindset() {
+    $('phase').textContent = 'MINDSET';
+    show('mindset');
+    const term = $('mindTerm');
+    term.innerHTML = '';
+    const lines = [
+      '> booting cognitive_module.sh ...',
+      '> <span class="ok">[OK]</span> Curiosity engine online',
+      '> <span class="ok">[OK]</span> Pattern recognition active',
+      '> <span class="warn">[NOTE]</span> A hacker doesn\'t break things — they NOTICE things others miss.',
+      '> <span class="dim">Find structure. Question assumptions. Think laterally.</span>',
+      '> ',
+      '> CHALLENGE: Identify a hidden sequence in the noise.',
+    ];
+    let i = 0;
+    const interval = setInterval(() => {
+      if (i >= lines.length) { clearInterval(interval); return; }
+      const d = document.createElement('div'); d.className = 'line';
+      d.innerHTML = lines[i++]; term.appendChild(d); term.scrollTop = term.scrollHeight;
+      beep(300+Math.random()*200, 0.02, 'square', 0.02);
+    }, 220);
+    this.newPuzzle();
+  },
+  puzzle: null,
+  newPuzzle() {
+    // pick a pattern, e.g. multiples of K, primes, fib, even
+    const patterns = [
+      { name: 'multiples of 3', test: n => n%3===0 },
+      { name: 'multiples of 7', test: n => n%7===0 },
+      { name: 'prime numbers', test: n => { if(n<2)return false; for(let i=2;i*i<=n;i++)if(n%i===0)return false; return true; } },
+      { name: 'perfect squares', test: n => Number.isInteger(Math.sqrt(n)) },
+    ];
+    const p = patterns[Math.floor(Math.random()*patterns.length)];
+    $('patternHint').textContent = p.name;
+    const correct = [];
+    while (correct.length < 4) {
+      const n = Math.floor(Math.random()*80)+2;
+      if (p.test(n) && !correct.includes(n)) correct.push(n);
+    }
+    const decoys = [];
+    while (decoys.length < 12) {
+      const n = Math.floor(Math.random()*99)+2;
+      if (!p.test(n) && !decoys.includes(n) && !correct.includes(n)) decoys.push(n);
+    }
+    const cells = [...correct, ...decoys].sort(() => Math.random()-0.5);
+    this.puzzle = { correct: new Set(correct), selected: new Set() };
+    const grid = $('puzzleGrid');
+    grid.innerHTML = '';
+    cells.forEach(n => {
+      const c = document.createElement('div');
+      c.className = 'pcell'; c.textContent = n;
+      c.onclick = () => {
+        if (this.puzzle.selected.has(n)) { this.puzzle.selected.delete(n); c.classList.remove('selected'); }
+        else { this.puzzle.selected.add(n); c.classList.add('selected'); beep(600,0.04,'square',0.03); }
+      };
+      grid.appendChild(c);
+    });
+  },
+  checkPuzzle() {
+    const sel = this.puzzle.selected, corr = this.puzzle.correct;
+    if (sel.size !== 4) { beep(150,0.1,'sawtooth',0.06); return; }
+    let right = 0;
+    sel.forEach(v => corr.has(v) && right++);
+    if (right === 4) {
+      this.addScore(300);
+      [...document.querySelectorAll('.pcell.selected')].forEach(c => c.classList.add('correct'));
+      setTimeout(() => this.startRecon(), 700);
+    } else {
+      beep(150,0.15,'sawtooth',0.07);
+      const t = $('mindTerm');
+      const d = document.createElement('div'); d.className='line err';
+      d.textContent = `> Pattern mismatch (${right}/4 correct). Reset and re-analyze.`;
+      t.appendChild(d); t.scrollTop = t.scrollHeight;
+      this.score = Math.max(0, this.score - 30); this.updateScore();
+    }
+  },
+
+  // ============== RECON ==============
+  startRecon() {
+    $('phase').textContent = 'RECON';
+    show('recon');
+    const term = $('reconTerm'); term.innerHTML = '';
+    const log = (html, cls='') => {
+      const d = document.createElement('div'); d.className = 'line '+cls; d.innerHTML = html;
+      term.appendChild(d); term.scrollTop = term.scrollHeight;
+    };
+    log('> nmap -sV 10.0.0.0/24 ...', 'dim');
+    log('> Hosts discovered. Click each to enumerate.', 'ok');
+
+    const hostTypes = [
+      { svc: 'SSH 8.2p1', os: 'Ubuntu 22.04', vuln: false },
+      { svc: 'Apache 2.4.49', os: 'CentOS 7', vuln: true, cve: 'CVE-2021-41773 (Path Traversal)' },
+      { svc: 'IIS 10', os: 'Win Server 2019', vuln: false },
+      { svc: 'OpenSSH 9.1', os: 'Debian 12', vuln: false },
+      { svc: 'vsftpd 2.3.4', os: 'Legacy Linux', vuln: true, cve: 'CVE-2011-2523 (Backdoor)' },
+      { svc: 'MySQL 8.0', os: 'Ubuntu 20.04', vuln: false },
+    ];
+    const hosts = hostTypes.sort(() => Math.random()-0.5).map((h, i) => ({
+      ...h, ip: `10.0.0.${10 + Math.floor(Math.random()*240)}`
+    }));
+    // ensure exactly one is the "target" - pick first vuln
+    const targetIdx = hosts.findIndex(h => h.vuln);
+    hosts.forEach((h, i) => h.isTarget = (i === targetIdx));
+
+    const grid = $('targets'); grid.innerHTML = '';
+    let scanned = 0;
+    hosts.forEach((h, idx) => {
+      const div = document.createElement('div');
+      div.className = 'target';
+      div.innerHTML = `<div class="ok">${h.ip}</div><div class="dim">[unknown]</div>`;
+      div.onclick = () => {
+        if (div.classList.contains('scanned')) return this.selectTarget(h, hosts);
+        div.classList.add('scanned');
+        beep(500+Math.random()*200, 0.06, 'square', 0.04);
+        div.innerHTML = `<div class="ok">${h.ip}</div>
+          <div>${h.svc}</div><div class="dim">${h.os}</div>
+          ${h.vuln ? '<div class="warn">⚠ VULN: '+h.cve+'</div>' : '<div class="dim">no known CVE</div>'}`;
+        log(`> scan ${h.ip}: ${h.svc} / ${h.os} ${h.vuln ? '<span class="warn">[VULNERABLE: '+h.cve+']</span>' : ''}`);
+        scanned++;
+        this.addScore(40);
+        if (scanned === hosts.length) {
+          log('> Recon complete. Click the VULNERABLE host to exploit.', 'ok');
+        }
+      };
+      grid.appendChild(div);
+      h._el = div;
+    });
+  },
+  selectTarget(h, hosts) {
+    if (!hosts.every(x => x._el.classList.contains('scanned'))) {
+      const t = $('reconTerm');
+      const d = document.createElement('div'); d.className='line warn';
+      d.textContent = '> Hold up. Recon all hosts first — never engage blind.';
+      t.appendChild(d); t.scrollTop = t.scrollHeight; return;
+    }
+    if (h.vuln) {
+      this.addScore(200);
+      h._el.classList.add('exploited');
+      this.startExploit(h);
+    } else {
+      beep(120,0.2,'sawtooth',0.08);
+      const t = $('reconTerm');
+      const d = document.createElement('div'); d.className='line err';
+      d.textContent = `> ${h.ip} hardened. Alarms triggered. -50 pts.`;
+      t.appendChild(d); t.scrollTop = t.scrollHeight;
+      this.score = Math.max(0, this.score - 50); this.updateScore();
+    }
+  },
+
+  // ============== EXPLOIT ==============
+  startExploit(target) {
+    $('phase').textContent = 'EXPLOIT';
+    show('exploit');
+    const payloads = [
+      `curl http://${target.ip}/cgi-bin/.%2e/.%2e/etc/passwd`,
+      `ssh root@${target.ip} -p 6200 'cat /root/flag'`,
+      `python3 exploit.py --target ${target.ip} --payload reverse_shell`,
+      `msfconsole -q -x "use exploit/multi/http; set RHOSTS ${target.ip}; run"`,
+    ];
+    const text = payloads[Math.floor(Math.random()*payloads.length)];
+    let pos = 0, ids = 0;
+    const render = () => {
+      $('typing').innerHTML =
+        `<span class="done">${text.slice(0,pos)}</span>` +
+        (pos < text.length ? `<span class="cur">${text[pos]}</span>` : '') +
+        text.slice(pos+1);
+    };
+    render();
+    const input = $('typeInput');
+    input.value = ''; input.focus();
+    const idsTimer = setInterval(() => {
+      ids += 1.2;
+      $('ipsBar').style.width = Math.max(0, 100 - ids) + '%';
+      $('ipsPct').textContent = Math.floor(ids);
+      if (ids >= 100) { clearInterval(idsTimer); input.onkeydown = null; this.endGame(false); }
+    }, 100);
+    input.onkeydown = (e) => {
+      if (e.key === 'Backspace') return;
+      if (e.key.length !== 1) return;
+      if (e.key === text[pos]) {
+        pos++; render();
+        beep(800+pos*5, 0.02, 'square', 0.03);
+        if (pos >= text.length) {
+          clearInterval(idsTimer);
+          input.onkeydown = null;
+          this.addScore(Math.floor((100-ids)*10));
+          setTimeout(() => this.endGame(true), 400);
+        }
+      } else {
+        ids += 3; beep(180,0.05,'sawtooth',0.05);
+        e.preventDefault();
+      }
+    };
+  },
+
+  endGame(success) {
+    clearInterval(this.timer);
+    show('end');
+    $('finalScore').textContent = this.score;
+    $('finalTime').textContent = Math.floor((Date.now()-this.startTime)/1000);
+    if (success) {
+      $('endTitle').textContent = '# ROOT ACCESS';
+      $('endTitle').style.color = '#0f0';
+      $('endMsg').innerHTML = 'Mindset → Recon → Exploit.<br>You thought like a hacker: <span class="ok">observed patterns</span>, <span class="ok">mapped the surface</span>, then <span class="ok">struck precisely</span>.<br><span class="dim">Now use these powers ethically.</span>';
+      beep(660,0.15,'sine',0.06); setTimeout(()=>beep(880,0.2,'sine',0.06), 150);
+    } else {
+      $('endTitle').textContent = '# DETECTED';
+      $('endTitle').style.color = '#f33';
+      $('endMsg').innerHTML = 'The IDS caught you. Real hackers know: <span class="warn">stealth and patience</span> matter as much as skill.';
+      beep(180,0.3,'sawtooth',0.07);
+    }
+  }
+};
+</script>
+</body>
+</html>

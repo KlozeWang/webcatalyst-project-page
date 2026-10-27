@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Persib Bandung: Liga 1 & World Clash</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a202c; touch-action: none; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #gameCanvas { display: block; width: 100vw; height: 100vh; }
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        .interactive { pointer-events: auto; }
+        
+        /* Mobile Controls */
+        #mobileControls { display: none; position: absolute; bottom: 20px; left: 0; width: 100%; padding: 0 20px; box-sizing: border-box; justify-content: space-between; align-items: flex-end; pointer-events: none; }
+        .dpad { display: grid; grid-template-columns: repeat(3, 50px); grid-template-rows: repeat(3, 50px); gap: 5px; pointer-events: auto; }
+        .dpad-btn { background: rgba(255, 255, 255, 0.2); border-radius: 10px; border: 1px solid rgba(255,255,255,0.4); display: flex; justify-content: center; align-items: center; color: white; user-select: none; font-weight: bold; }
+        .dpad-btn:active { background: rgba(255, 255, 255, 0.5); }
+        .up { grid-column: 2; grid-row: 1; }
+        .left { grid-column: 1; grid-row: 2; }
+        .right { grid-column: 3; grid-row: 2; }
+        .down { grid-column: 2; grid-row: 3; }
+        
+        .action-btn { width: 70px; height: 70px; border-radius: 50%; background: rgba(0, 82, 159, 0.6); border: 2px solid white; color: white; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 14px; pointer-events: auto; user-select: none; margin-bottom: 20px; }
+        .action-btn:active { background: rgba(0, 82, 159, 0.9); }
+
+        @media (max-width: 768px) {
+            #mobileControls { display: flex; }
+            .desktop-hint { display: none; }
+        }
+
+        /* Screen overlays */
+        .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; z-index: 10; transition: opacity 0.3s; }
+        .hidden { opacity: 0; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI Overlay -->
+    <div class="ui-layer">
+        <div id="hud" class="w-full flex justify-between p-4 hidden transition-opacity">
+            <div class="bg-blue-800 text-white px-4 py-2 rounded shadow border border-blue-400 font-bold">
+                <span id="playerTeamName">PERSIB</span> <span id="scorePlayer" class="text-2xl ml-2">0</span>
+            </div>
+            <div class="bg-gray-800 text-white px-4 py-2 rounded shadow border border-gray-600 font-bold text-xl">
+                <span id="gameClock">00:00</span>
+            </div>
+            <div class="bg-red-700 text-white px-4 py-2 rounded shadow border border-red-400 font-bold">
+                <span id="scoreOpponent" class="text-2xl mr-2">0</span> <span id="oppTeamName">OPP</span>
+            </div>
+        </div>
+
+        <div id="mobileControls">
+            <div class="dpad">
+                <div class="dpad-btn up" id="btnUp">W</div>
+                <div class="dpad-btn left" id="btnLeft">A</div>
+                <div class="dpad-btn right" id="btnRight">D</div>
+                <div class="dpad-btn down" id="btnDown">S</div>
+            </div>
+            <div class="action-btn" id="btnKick">KICK<br>(Space)</div>
+        </div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="startScreen" class="screen interactive">
+        <h1 class="text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600 mb-2 text-center drop-shadow-lg uppercase tracking-wider" style="-webkit-text-stroke: 1px white;">PERSIB BANDUNG</h1>
+        <h2 class="text-2xl text-yellow-400 font-bold mb-8 tracking-widest uppercase text-center shadow-black drop-shadow-md">Liga 1 & World Clash</h2>
+        
+        <div class="bg-gray-800 p-6 rounded-lg border-2 border-blue-500 mb-6 w-11/12 max-w-md">
+            <h3 class="text-xl mb-4 text-center border-b border-gray-600 pb-2">Pilih Lawan</h3>
+            <div id="opponentList" class="grid grid-cols-1 gap-2">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <button id="startBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-12 rounded-full text-xl shadow-lg border-2 border-white transition transform hover:scale-105 hidden">
+            MULAI PERTANDINGAN
+        </button>
+        <p class="mt-4 text-gray-400 text-sm desktop-hint">Gunakan W,A,S,D / Panah untuk bergerak. Spasi untuk menendang/merebut.</p>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameOverScreen" class="screen hidden interactive">
+        <h1 id="matchResultText" class="text-6xl font-black mb-4 uppercase drop-shadow-lg">FULL TIME</h1>
+        <div class="text-4xl font-bold mb-8 flex items-center gap-4">
+            <span class="text-blue-400">PERSIB</span>
+            <span id="finalScorePlayer" class="bg-white text-black px-4 py-1 rounded">0</span>
+            <span>-</span>
+            <span id="finalScoreOpponent" class="bg-white text-black px-4 py-1 rounded">0</span>
+            <span id="finalOppName" class="text-red-400">OPP</span>
+        </div>
+        <button id="restartBtn" class="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 px-8 rounded-full text-xl shadow-lg border-2 border-white transition transform hover:scale-105">
+            KEMBALI KE MENU
+        </button>
+    </div>
+
+<script>
+/**
+ * Audio Context Setup
+ */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playSound(type) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    const now = audioCtx.currentTime;
+    if (type === 'kick') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+    } else if (type === 'whistle') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(1200, now);
+        osc.frequency.setValueAtTime(1400, now + 0.1);
+        osc.frequency.setValueAtTime(1200, now + 0.2);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.5);
+        osc.start(now);
+        osc.stop(now + 0.5);
+    } else if (type === 'goal') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.setValueAtTime(600, now + 0.2);
+        osc.frequency.setValueAtTime(800, now + 0.4);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 1);
+        osc.start(now);
+        osc.stop(now + 1);
+    }
+}
+
+/**
+ * Game Setup & Data
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let cw, ch;
+function resize() {
+    cw = canvas.width = window.innerWidth;
+    ch = canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+const opponents = [
+    { id: 'persija', name: 'Persija (Liga 1)', color: '#FF5733', difficulty: 0.6 },
+    { id: 'persebaya', name: 'Persebaya (Liga 1)', color: '#008000', difficulty: 0.65 },
+    { id: 'arema', name: 'Arema FC (Liga 1)', color: '#0000FF', difficulty: 0.6 },
+    { id: 'alnassr', name: 'Al Nassr (Asia)', color: '#FFFF00', textColor: 'black', difficulty: 0.8 },
+    { id: 'realmadrid', name: 'Real Madrid (Eropa)', color: '#FFFFFF', textColor: 'black', difficulty: 0.95 }
+];
+
+let selectedOpponent = null;
+const persibColor = '#00529F'; // Persib Blue
+
+// Game State variables
+let state = 'menu'; // menu, playing, goal_celebration, gameover
+let score = { player: 0, opponent: 0 };
+let gameTime = 0;
+const matchDuration = 90; // virtual minutes
+let realTimeElapsed = 0;
+let lastTime = 0;
+
+// Input tracking
+const keys = { w:false, a:false, s:false, d:false, space:false };
+
+// Touch mapping
+const touchBtns = {
+    btnUp: 'w', btnLeft: 'a', btnRight: 'd', btnDown: 's', btnKick: 'space'
+};
+
+for (const [id, key] of Object.entries(touchBtns)) {
+    const el = document.getElementById(id);
+    el.addEventListener('touchstart', (e) => { e.preventDefault(); keys[key] = true; });
+    el.addEventListener('touchend', (e) => { e.preventDefault(); keys[key] = false; });
+}
+
+window.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'w' || k === 'arrowup') keys.w = true;
+    if (k === 'a' || k === 'arrowleft') keys.a = true;
+    if (k === 's' || k === 'arrowdown') keys.s = true;
+    if (k === 'd' || k === 'arrowright') keys.d = true;
+    if (k === ' ') keys.space = true;
+});
+window.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'w' || k === 'arrowup') keys.w = false;
+    if (k === 'a' || k === 'arrowleft') keys.a = false;
+    if (k === 's' || k === 'arrowdown') keys.s = false;
+    if (k === 'd' || k === 'arrowright') keys.d = false;
+    if (k === ' ') keys.space = false;
+});
+
+/**
+ * Entities
+ */
+class Ball {
+    constructor(x, y) {
+        this.x = x; this.y = y;
+        this.vx = 0; this.vy = 0;
+        this.radius = Math.min(cw, ch) * 0.015;
+        this.friction = 0.98;
+        this.mass = 1;
+    }
+    update(dt) {
+        this.x += this.vx * dt * 60;
+        this.y += this.vy * dt * 60;
+        this.vx *= this.friction;
+        this.vy *= this.friction;
+
+        // Pitch boundaries (bounce)
+        const margin = 20;
+        const goalWidth = ch * 0.3;
+        const goalTop = ch/2 - goalWidth/2;
+        const goalBottom = ch/2 + goalWidth/2;
+
+        if (this.y < margin + this.radius) { this.y = margin + this.radius; this.vy *= -0.8; }
+        if (this.y > ch - margin - this.radius) { this.y = ch - margin - this.radius; this.vy *= -0.8; }
+        
+        // Left/Right boundaries (check for goal)
+        if (this.x < margin + this.radius) {
+            if (this.y > goalTop && this.y < goalBottom) {
+                // Goal for Opponent
+                if (state === 'playing') triggerGoal('opponent');
+            } else {
+                this.x = margin + this.radius; this.vx *= -0.8;
+            }
+        }
+        if (this.x > cw - margin - this.radius) {
+            if (this.y > goalTop && this.y < goalBottom) {
+                // Goal for Player
+                if (state === 'playing') triggerGoal('player');
+            } else {
+                this.x = cw - margin - this.radius; this.vx *= -0.8;
+            }
+        }
+    }
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'white';
+        ctx.fill();
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // simple pattern
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius * 0.4, 0, Math.PI * 2);
+        ctx.fillStyle = 'black';
+        ctx.fill();
+    }
+}
+
+class Player {
+    constructor(x, y, isPlayerTeam, role) {
+        this.x = x; this.y = y;
+        this.vx = 0; this.vy = 0;
+        this.radius = Math.min(cw, ch) * 0.025;
+        this.speed = isPlayerTeam ? 200 : 180; // slightly faster player
+        this.isPlayerTeam = isPlayerTeam;
+        this.role = role; // string for formation loosely
+        this.color = isPlayerTeam ? persibColor : selectedOpponent.color;
+        this.textColor = (this.color === '#FFFFFF' || this.color === '#FFFF00') ? 'black' : 'white';
+        this.isControlled = false;
+        this.kickCooldown = 0;
+    }
+    update(dt, ball, allPlayers) {
+        if (this.kickCooldown > 0) this.kickCooldown -= dt;
+
+        let dx = 0, dy = 0;
+
+        if (this.isPlayerTeam && this.isControlled && state === 'playing') {
+            if (keys.w) dy -= 1;
+            if (keys.s) dy += 1;
+            if (keys.a) dx -= 1;
+            if (keys.d) dx += 1;
+            
+            // Normalize
+            if (dx !== 0 && dy !== 0) {
+                const len = Math.sqrt(dx*dx + dy*dy);
+                dx /= len; dy /= len;
+            }
+
+            // Kicking
+            if (keys.space && this.kickCooldown <= 0) {
+                const distToBall = Math.hypot(ball.x - this.x, ball.y - this.y);
+                if (distToBall < this.radius + ball.radius + 15) {
+                    // Kick direction based on movement, or default towards opponent goal
+                    let kx = dx, ky = dy;
+                    if (kx === 0 && ky === 0) {
+                        kx = 1; // towards right goal
+                        ky = (ball.y - this.y) * 0.1; 
+                    }
+                    // Add power
+                    ball.vx = kx * 8;
+                    ball.vy = ky * 8;
+                    playSound('kick');
+                    this.kickCooldown = 0.5;
+                }
+            }
+
+        } else if (state === 'playing') {
+            // AI Logic
+            const distToBall = Math.hypot(ball.x - this.x, ball.y - this.y);
+            
+            // Opponent AI
+            if (!this.isPlayerTeam) {
+                // Move towards ball if closest, else formation
+                let closest = true;
+                for (let p of allPlayers) {
+                    if (!p.isPlayerTeam && p !== this && Math.hypot(ball.x - p.x, ball.y - p.y) < distToBall) {
+                        closest = false;
+                        break;
+                    }
+                }
+
+                if (closest) {
+                    const tx = ball.x - this.x;
+                    const ty = ball.y - this.y;
+                    const len = Math.hypot(tx, ty);
+                    if (len > 0) { dx = tx/len; dy = ty/len; }
+                    
+                    // Adjust speed based on difficulty
+                    this.speed = 150 * selectedOpponent.difficulty + 50;
+
+                    // Auto kick if near ball
+                    if (distToBall < this.radius + ball.radius + 10 && this.kickCooldown <= 0) {
+                        // Kick towards player goal (left)
+                        ball.vx = -6 - (Math.random()*2);
+                        ball.vy = (Math.random() - 0.5) * 4;
+                        playSound('kick');
+                        this.kickCooldown = 1.0;
+                    }
+                } else {
+                    // Return to rough position
+                    let targetX = cw * 0.7;
+                    let targetY = ch * 0.5;
+                    if (this.role === 'def') { targetX = cw * 0.8; }
+                    if (this.role === 'fwd') { targetX = cw * 0.6; }
+                    
+                    const tx = targetX - this.x;
+                    const ty = targetY - this.y;
+                    if (Math.hypot(tx,ty) > 50) {
+                        const len = Math.hypot(tx, ty);
+                        dx = tx/len * 0.5; dy = ty/len * 0.5;
+                    }
+                }
+            } else {
+                // Teammate AI (Move towards ball slightly if not controlled)
+                 const tx = ball.x - this.x;
+                 const ty = ball.y - this.y;
+                 const len = Math.hypot(tx, ty);
+                 if (len > 100) { dx = (tx/len) * 0.3; dy = (ty/len) * 0.3; }
+            }
+        }
+
+        this.vx = dx * this.speed;
+        this.vy = dy * this.speed;
+
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+
+        // Field bounds
+        const margin = 20;
+        this.x = Math.max(margin + this.radius, Math.min(cw - margin - this.radius, this.x));
+        this.y = Math.max(margin + this.radius, Math.min(ch - margin - this.radius, this.y));
+
+        // Player-Ball collision (pushing)
+        const dpx = ball.x - this.x;
+        const dpy = ball.y - this.y;
+        const dist = Math.hypot(dpx, dpy);
+        const minDist = this.radius + ball.radius;
+        if (dist < minDist) {
+            const overlap = minDist - dist;
+            const nx = dpx / dist;
+            const ny = dpy / dist;
+            ball.x += nx * overlap;
+            ball.y += ny * overlap;
+            // Transfer some momentum
+            ball.vx += this.vx * 0.01;
+            ball.vy += this.vy * 0.01;
+        }
+    }
+
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.strokeStyle = this.isControlled ? '#FFFF00' : 'rgba(0,0,0,0.5)';
+        ctx.lineWidth = this.isControlled ? 4 : 2;
+        ctx.stroke();
+
+        // Direction indicator if controlled
+        if (this.isControlled) {
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            let px = keys.a ? -1 : keys.d ? 1 : 0;
+            let py = keys.w ? -1 : keys.s ? 1 : 0;
+            if(px===0 && py===0) { px=1; py=0; } // default facing right
+            ctx.lineTo(this.x + px * this.radius * 1.5, this.y + py * this.radius * 1.5);
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+    }
+}
+
+let ball;
+let players = [];
+
+function initMatch() {
+    score = { player: 0, opponent: 0 };
+    gameTime = 0;
+    realTimeElapsed = 0;
+    updateHUD();
+    resetPositions();
+    playSound('whistle');
+    state = 'playing';
+}
+
+function resetPositions() {
+    ball = new Ball(cw / 2, ch / 2);
+    players = [];
+    
+    // Persib (Left -> Right)
+    players.push(new Player(cw * 0.2, ch * 0.5, true, 'def'));
+    players.push(new Player(cw * 0.4, ch * 0.3, true, 'mid'));
+    players.push(new Player(cw * 0.4, ch * 0.7, true, 'mid'));
+    players.push(new Player(cw * 0.45, ch * 0.5, true, 'fwd')); // Initial controlled
+
+    // Opponent (Right -> Left)
+    players.push(new Player(cw * 0.8, ch * 0.5, false, 'def'));
+    players.push(new Player(cw * 0.6, ch * 0.3, false, 'mid'));
+    players.push(new Player(cw * 0.6, ch * 0.7, false, 'mid'));
+    players.push(new Player(cw * 0.55, ch * 0.5, false, 'fwd'));
+}
+
+function triggerGoal(team) {
+    if (state !== 'playing') return;
+    state = 'goal_celebration';
+    score[team]++;
+    playSound('goal');
+    updateHUD();
+    
+    setTimeout(() => {
+        if (gameTime >= matchDuration) {
+            endMatch();
+        } else {
+            resetPositions();
+            playSound('whistle');
+            state = 'playing';
+        }
+    }, 2500);
+}
+
+function endMatch() {
+    state = 'gameover';
+    playSound('whistle');
+    document.getElementById('hud').classList.add('hidden');
+    
+    const goScreen = document.getElementById('gameOverScreen');
+    goScreen.classList.remove('hidden');
+    
+    document.getElementById('finalScorePlayer').textContent = score.player;
+    document.getElementById('finalScoreOpponent').textContent = score.opponent;
+    document.getElementById('finalOppName').textContent = selectedOpponent.name.split(' ')[0];
+    
+    const resultText = document.getElementById('matchResultText');
+    if (score.player > score.opponent) {
+        resultText.textContent = "PERSIB MENANG!";
+        resultText.className = "text-6xl font-black mb-4 uppercase drop-shadow-lg text-green-400";
+    } else if (score.player < score.opponent) {
+        resultText.textContent = "PERSIB KALAH";
+        resultText.className = "text-6xl font-black mb-4 uppercase drop-shadow-lg text-red-500";
+    } else {
+        resultText.textContent = "SERI";
+        resultText.className = "text-6xl font-black mb-4 uppercase drop-shadow-lg text-yellow-400";
+    }
+}
+
+function updateHUD() {
+    document.getElementById('scorePlayer').textContent = score.player;
+    document.getElementById('scoreOpponent').textContent = score.opponent;
+    
+    // Virtual timer (e.g., 2 minutes real time = 90 mins virtual)
+    // Let's say 120 seconds real time = 90 mins game time
+    const ratio = 90 / 120;
+    gameTime = Math.min(90, Math.floor(realTimeElapsed * ratio));
+    let mins = gameTime.toString().padStart(2, '0');
+    document.getElementById('gameClock').textContent = `${mins}:00`;
+
+    if (gameTime >= matchDuration && state === 'playing') {
+        endMatch();
+    }
+}
+
+function drawPitch(ctx) {
+    // Grass
+    ctx.fillStyle = '#2e8b57'; // Sea green
+    ctx.fillRect(0, 0, cw, ch);
+    
+    // Pattern (Stripes)
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
+    for(let i=0; i<cw; i+=cw/10) {
+        if(Math.round(i/(cw/10)) % 2 === 0) ctx.fillRect(i, 0, cw/10, ch);
+    }
+
+    const margin = 20;
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 3;
+
+    // Outer lines
+    ctx.strokeRect(margin, margin, cw - margin*2, ch - margin*2);
+
+    // Center line
+    ctx.beginPath();
+    ctx.moveTo(cw/2, margin);
+    ctx.lineTo(cw/2, ch-margin);
+    ctx.stroke();
+
+    // Center circle
+    ctx.beginPath();
+    ctx.arc(cw/2, ch/2, ch*0.15, 0, Math.PI*2);
+    ctx.stroke();
+
+    // Goals areas
+    const goalAreaW = cw * 0.15;
+    const goalAreaH = ch * 0.5;
+    const gy = ch/2 - goalAreaH/2;
+    
+    ctx.strokeRect(margin, gy, goalAreaW, goalAreaH); // Left
+    ctx.strokeRect(cw - margin - goalAreaW, gy, goalAreaW, goalAreaH); // Right
+
+    // Actual Goals (colored)
+    const gw = 10;
+    const gh = ch * 0.3;
+    const gy2 = ch/2 - gh/2;
+    
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillRect(margin-gw, gy2, gw, gh); // Left Net
+    ctx.fillRect(cw-margin, gy2, gw, gh); // Right Net
+}
+
+function gameLoop(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    const dt = (timestamp - lastTime) / 1000; // seconds
+    lastTime = timestamp;
+
+    if (state === 'playing' || state === 'goal_celebration') {
+        
+        if (state === 'playing') {
+            realTimeElapsed += dt;
+            updateHUD();
+        }
+
+        // Logic
+        // Find closest player team member to ball to assign control
+        let closestDist = Infinity;
+        let activePlayer = null;
+        for (let p of players) {
+            if (p.isPlayerTeam) {
+                p.isControlled = false;
+                const d = Math.hypot(ball.x - p.x, ball.y - p.y);
+                if (d < closestDist) {
+                    closestDist = d;
+                    activePlayer = p;
+                }
+            }
+        }
+        if (activePlayer) activePlayer.isControlled = true;
+
+        for (let p of players) {
+            p.update(dt, ball, players);
+        }
+        ball.update(dt);
+
+        // Player-Player Collisions (basic repulse)
+        for (let i=0; i<players.length; i++) {
+            for (let j=i+1; j<players.length; j++) {
+                const p1 = players[i];
+                const p2 = players[j];
+                const dx = p2.x - p1.x;
+                const dy = p2.y - p1.y;
+                const dist = Math.hypot(dx, dy);
+                const minDist = p1.radius + p2.radius;
+                if (dist < minDist) {
+                    const overlap = minDist - dist;
+                    const nx = dx/dist; const ny = dy/dist;
+                    p1.x -= nx * overlap/2; p1.y -= ny * overlap/2;
+                    p2.x += nx * overlap/2; p2.y += ny * overlap/2;
+                }
+            }
+        }
+    }
+
+    // Render
+    ctx.clearRect(0, 0, cw, ch);
+    
+    if (state !== 'menu') {
+        drawPitch(ctx);
+        // Draw players based on Y to simulate slight depth
+        players.sort((a,b) => a.y - b.y).forEach(p => p.draw(ctx));
+        ball.draw(ctx);
+
+        if (state === 'goal_celebration') {
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(0,0,cw,ch);
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 80px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText("GOAL!", cw/2, ch/2);
+        }
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+/**
+ * UI Setup
+ */
+const oppListDiv = document.getElementById('opponentList');
+const startBtn = document.getElementById('startBtn');
+
+opponents.forEach(opp => {
+    const btn = document.createElement('div');
+    btn.className = `p-3 rounded cursor-pointer border-2 font-bold text-center transition-colors`;
+    btn.style.borderColor = opp.color;
+    btn.style.color = 'white';
+    btn.textContent = opp.name;
+    
+    btn.onclick = () => {
+        // Clear selection
+        Array.from(oppListDiv.children).forEach(c => {
+            c.style.backgroundColor = 'transparent';
+            c.style.color = 'white';
+        });
+        // Select
+        btn.style.backgroundColor = opp.color;
+        btn.style.color = opp.textColor || 'white';
+        selectedOpponent = opp;
+        startBtn.classList.remove('hidden');
+    };
+    oppListDiv.appendChild(btn);
+});
+
+startBtn.onclick = () => {
+    if(!selectedOpponent) return;
+    document.getElementById('startScreen').classList.add('hidden');
+    document.getElementById('hud').classList.remove('hidden');
+    document.getElementById('oppTeamName').textContent = selectedOpponent.name.split(' ')[0].toUpperCase();
+    initMatch();
+};
+
+document.getElementById('restartBtn').onclick = () => {
+    document.getElementById('gameOverScreen').classList.add('hidden');
+    document.getElementById('startScreen').classList.remove('hidden');
+    state = 'menu';
+    startBtn.classList.add('hidden');
+    selectedOpponent = null;
+    Array.from(oppListDiv.children).forEach(c => {
+        c.style.backgroundColor = 'transparent';
+        c.style.color = 'white';
+    });
+};
+
+// Start Loop
+requestAnimationFrame(gameLoop);
+
+</script>
+</body>
+</html>

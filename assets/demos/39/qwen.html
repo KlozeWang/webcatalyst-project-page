@@ -1,0 +1,1944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shadows of the Abyss - Roguelike Deck Builder</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0a0a0f;
+  color: #c8b89a;
+  font-family: 'Crimson Text', serif;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+#game-container {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== TITLE SCREEN ===== */
+#title-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, #1a1020 0%, #0a0a0f 70%);
+  z-index: 100;
+}
+
+#title-screen h1 {
+  font-family: 'Cinzel', serif;
+  font-size: 3.5em;
+  font-weight: 900;
+  color: #8b0000;
+  text-shadow: 0 0 30px rgba(139,0,0,0.5), 0 0 60px rgba(139,0,0,0.2);
+  letter-spacing: 4px;
+  margin-bottom: 10px;
+}
+
+#title-screen .subtitle {
+  font-family: 'Cinzel', serif;
+  font-size: 1.1em;
+  color: #6a5a4a;
+  letter-spacing: 8px;
+  text-transform: uppercase;
+  margin-bottom: 50px;
+}
+
+#title-screen .start-btn {
+  font-family: 'Cinzel', serif;
+  font-size: 1.3em;
+  padding: 15px 50px;
+  background: linear-gradient(180deg, #2a1a1a, #1a0a0a);
+  border: 2px solid #8b0000;
+  color: #c8b89a;
+  cursor: pointer;
+  letter-spacing: 4px;
+  transition: all 0.3s;
+}
+
+#title-screen .start-btn:hover {
+  background: linear-gradient(180deg, #3a1a1a, #2a0a0a);
+  box-shadow: 0 0 20px rgba(139,0,0,0.4);
+  color: #fff;
+}
+
+/* ===== MAP SCREEN ===== */
+#map-screen {
+  display: none;
+  flex-direction: column;
+  height: 100vh;
+  background: radial-gradient(ellipse at 30% 50%, #15101a 0%, #0a0a0f 100%);
+}
+
+#map-header {
+  padding: 10px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(180deg, #1a1018, transparent);
+  border-bottom: 1px solid #2a1a2a;
+}
+
+#map-header .player-stats {
+  display: flex;
+  gap: 20px;
+  font-family: 'Cinzel', serif;
+  font-size: 0.95em;
+}
+
+.stat-item { display: flex; align-items: center; gap: 6px; }
+.stat-item .label { color: #6a5a4a; }
+.stat-item .value { color: #e8d8b8; font-weight: 600; }
+.stat-item .value.hp { color: #c0392b; }
+.stat-item .value.gold { color: #f1c40f; }
+
+#map-canvas-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+#map-canvas {
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+/* ===== COMBAT SCREEN ===== */
+#combat-screen {
+  display: none;
+  flex-direction: column;
+  height: 100vh;
+  background: radial-gradient(ellipse at 50% 80%, #1a1018 0%, #0a0a0f 100%);
+}
+
+#combat-top {
+  padding: 10px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(180deg, #1a1018, transparent);
+  border-bottom: 1px solid #2a1a2a;
+}
+
+#combat-top .player-stats {
+  display: flex;
+  gap: 20px;
+  font-family: 'Cinzel', serif;
+  font-size: 0.95em;
+}
+
+#enemy-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+#enemy-display {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+#enemy-sprite {
+  width: 120px;
+  height: 120px;
+  margin: 0 auto 10px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#enemy-sprite .enemy-art {
+  font-size: 80px;
+  filter: drop-shadow(0 0 20px rgba(139,0,0,0.5));
+  transition: transform 0.2s;
+}
+
+#enemy-sprite.hit .enemy-art {
+  animation: enemyHit 0.3s ease;
+}
+
+@keyframes enemyHit {
+  0% { transform: scale(1); filter: drop-shadow(0 0 20px rgba(139,0,0,0.5)); }
+  50% { transform: scale(1.15); filter: drop-shadow(0 0 40px rgba(255,0,0,0.8)); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 20px rgba(139,0,0,0.5)); }
+}
+
+#enemy-name {
+  font-family: 'Cinzel', serif;
+  font-size: 1.3em;
+  color: #c0392b;
+  margin-bottom: 5px;
+}
+
+#enemy-hp-bar {
+  width: 200px;
+  height: 16px;
+  background: #1a0a0a;
+  border: 1px solid #4a2a2a;
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+#enemy-hp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8b0000, #c0392b);
+  transition: width 0.4s ease;
+  border-radius: 8px;
+}
+
+#enemy-hp-text {
+  font-size: 0.85em;
+  color: #8a7a6a;
+  margin-top: 4px;
+}
+
+#enemy-effects {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+  margin-top: 5px;
+  min-height: 20px;
+}
+
+.effect-badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.75em;
+  font-family: 'Cinzel', serif;
+}
+
+.effect-badge.poison { background: #2d5a1e; color: #7aef5a; }
+.effect-badge.weak { background: #5a4a1e; color: #efef7a; }
+.effect-badge.vulnerable { background: #5a1e1e; color: #ef7a7a; }
+.effect-badge.buff { background: #1e3a5a; color: #7aafef; }
+
+#combat-log {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#combat-log .log-entry {
+  font-size: 0.9em;
+  color: #e8d8b8;
+  opacity: 0;
+  animation: logFade 2s ease forwards;
+  text-shadow: 0 0 10px rgba(0,0,0,0.8);
+}
+
+@keyframes logFade {
+  0% { opacity: 0; transform: translateY(10px); }
+  15% { opacity: 1; transform: translateY(0); }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ===== HAND AREA ===== */
+#hand-area {
+  padding: 10px 10px 15px;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: linear-gradient(0deg, rgba(10,10,15,0.95) 0%, rgba(10,10,15,0.5) 80%, transparent 100%);
+}
+
+#hand-info {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 900px;
+  padding: 0 10px;
+  margin-bottom: 8px;
+  font-family: 'Cinzel', serif;
+  font-size: 0.9em;
+}
+
+#hand-info .energy-display {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+#hand-info .energy-display .energy-icon {
+  width: 20px;
+  height: 20px;
+  background: radial-gradient(circle, #4a9eff, #2a5a9f);
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(74,158,255,0.5);
+}
+
+#hand-info .energy-display .energy-val { color: #4a9eff; font-weight: 700; }
+
+#hand-cards {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 5px;
+  max-width: 950px;
+}
+
+.card {
+  width: 140px;
+  min-height: 190px;
+  background: linear-gradient(145deg, #1e1828, #15101a);
+  border: 2px solid #3a2a3a;
+  border-radius: 10px;
+  padding: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.card:hover {
+  transform: translateY(-15px) scale(1.05);
+  z-index: 20;
+  border-color: #6a4a6a;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 15px rgba(106,74,106,0.3);
+}
+
+.card.unplayable {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.card.unplayable:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.card-cost {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: 28px;
+  height: 28px;
+  background: radial-gradient(circle, #4a9eff, #2a5a9f);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cinzel', serif;
+  font-weight: 900;
+  font-size: 0.95em;
+  color: #fff;
+  box-shadow: 0 0 8px rgba(74,158,255,0.5);
+}
+
+.card-type {
+  font-family: 'Cinzel', serif;
+  font-size: 0.6em;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #6a5a4a;
+  margin-top: 15px;
+  text-align: center;
+}
+
+.card-name {
+  font-family: 'Cinzel', serif;
+  font-size: 0.85em;
+  font-weight: 700;
+  color: #e8d8b8;
+  text-align: center;
+  margin: 4px 0;
+}
+
+.card-art {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5em;
+  margin: 5px 0;
+}
+
+.card-desc {
+  font-size: 0.75em;
+  color: #9a8a7a;
+  text-align: center;
+  line-height: 1.3;
+  margin-top: auto;
+}
+
+.card.rarity-common { border-color: #4a4a4a; }
+.card.rarity-uncommon { border-color: #2a6a2a; }
+.card.rarity-rare { border-color: #6a2a6a; }
+.card.rarity-boss { border-color: #8b0000; }
+
+.card.rarity-uncommon .card-name { color: #7aea7a; }
+.card.rarity-rare .card-name { color: #da7aff; }
+.card.rarity-boss .card-name { color: #ff4444; }
+
+#end-turn-btn {
+  font-family: 'Cinzel', serif;
+  font-size: 1em;
+  padding: 10px 30px;
+  background: linear-gradient(180deg, #2a1a1a, #1a0a0a);
+  border: 2px solid #6a3a3a;
+  color: #c8b89a;
+  cursor: pointer;
+  letter-spacing: 3px;
+  margin-top: 10px;
+  transition: all 0.3s;
+}
+
+#end-turn-btn:hover {
+  background: linear-gradient(180deg, #3a1a1a, #2a0a0a);
+  border-color: #8b0000;
+  box-shadow: 0 0 15px rgba(139,0,0,0.3);
+}
+
+/* ===== DRAFT SCREEN ===== */
+#draft-screen {
+  display: none;
+  flex-direction: column;
+  height: 100vh;
+  background: radial-gradient(ellipse at 50% 50%, #15101a 0%, #0a0a0f 100%);
+  align-items: center;
+  justify-content: center;
+}
+
+#draft-screen h2 {
+  font-family: 'Cinzel', serif;
+  font-size: 1.8em;
+  color: #8b0000;
+  margin-bottom: 5px;
+}
+
+#draft-screen .draft-subtitle {
+  color: #6a5a4a;
+  margin-bottom: 30px;
+  font-style: italic;
+}
+
+#draft-cards {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+#draft-cards .card {
+  width: 180px;
+  min-height: 240px;
+}
+
+#draft-cards .card .card-art { font-size: 3em; }
+
+#draft-cards .card:hover {
+  transform: translateY(-20px) scale(1.08);
+}
+
+/* ===== SHOP SCREEN ===== */
+#shop-screen {
+  display: none;
+  flex-direction: column;
+  height: 100vh;
+  background: radial-gradient(ellipse at 50% 50%, #1a1510 0%, #0a0a0f 100%);
+  align-items: center;
+  justify-content: center;
+}
+
+#shop-screen h2 {
+  font-family: 'Cinzel', serif;
+  font-size: 1.8em;
+  color: #f1c40f;
+  margin-bottom: 5px;
+}
+
+#shop-screen .shop-subtitle {
+  color: #6a5a4a;
+  margin-bottom: 30px;
+  font-style: italic;
+}
+
+#shop-cards {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+#shop-cards .card {
+  width: 180px;
+  min-height: 240px;
+}
+
+#shop-cards .card .card-art { font-size: 3em; }
+
+.shop-price {
+  position: absolute;
+  bottom: -8px;
+  right: -8px;
+  padding: 2px 10px;
+  background: linear-gradient(180deg, #f1c40f, #b8860b);
+  border-radius: 10px;
+  font-family: 'Cinzel', serif;
+  font-weight: 700;
+  font-size: 0.8em;
+  color: #1a0a0a;
+}
+
+#shop-actions {
+  display: flex;
+  gap: 15px;
+  margin-top: 10px;
+}
+
+#shop-actions button {
+  font-family: 'Cinzel', serif;
+  font-size: 1em;
+  padding: 10px 30px;
+  background: linear-gradient(180deg, #2a2010, #1a100a);
+  border: 2px solid #6a5a2a;
+  color: #c8b89a;
+  cursor: pointer;
+  letter-spacing: 2px;
+  transition: all 0.3s;
+}
+
+#shop-actions button:hover {
+  border-color: #f1c40f;
+  box-shadow: 0 0 15px rgba(241,196,15,0.3);
+}
+
+/* ===== REST SCREEN ===== */
+#rest-screen {
+  display: none;
+  flex-direction: column;
+  height: 100vh;
+  background: radial-gradient(ellipse at 50% 50%, #101a15 0%, #0a0a0f 100%);
+  align-items: center;
+  justify-content: center;
+}
+
+#rest-screen h2 {
+  font-family: 'Cinzel', serif;
+  font-size: 1.8em;
+  color: #2a8a4a;
+  margin-bottom: 5px;
+}
+
+#rest-screen .rest-subtitle {
+  color: #6a5a4a;
+  margin-bottom: 30px;
+  font-style: italic;
+}
+
+#rest-screen .rest-options {
+  display: flex;
+  gap: 20px;
+}
+
+#rest-screen .rest-option {
+  width: 200px;
+  padding: 20px;
+  background: linear-gradient(145deg, #1e2818, #151a10);
+  border: 2px solid #3a4a2a;
+  border-radius: 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+#rest-screen .rest-option:hover {
+  border-color: #5a8a4a;
+  box-shadow: 0 0 20px rgba(42,138,74,0.3);
+  transform: translateY(-5px);
+}
+
+#rest-screen .rest-option .rest-icon { font-size: 2.5em; margin-bottom: 10px; }
+#rest-screen .rest-option .rest-label {
+  font-family: 'Cinzel', serif;
+  font-size: 1em;
+  color: #c8b89a;
+  margin-bottom: 5px;
+}
+#rest-screen .rest-option .rest-desc {
+  font-size: 0.8em;
+  color: #6a5a4a;
+}
+
+/* ===== GAME OVER / VICTORY ===== */
+#game-over-screen, #victory-screen {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: radial-gradient(ellipse at center, #1a1018 0%, #0a0a0f 100%);
+}
+
+#game-over-screen h1 {
+  font-family: 'Cinzel', serif;
+  font-size: 3em;
+  color: #8b0000;
+  text-shadow: 0 0 30px rgba(139,0,0,0.5);
+  margin-bottom: 10px;
+}
+
+#victory-screen h1 {
+  font-family: 'Cinzel', serif;
+  font-size: 3em;
+  color: #f1c40f;
+  text-shadow: 0 0 30px rgba(241,196,15,0.5);
+  margin-bottom: 10px;
+}
+
+.end-stats {
+  color: #6a5a4a;
+  margin-bottom: 30px;
+  font-size: 1.1em;
+  text-align: center;
+  line-height: 1.8;
+}
+
+.restart-btn {
+  font-family: 'Cinzel', serif;
+  font-size: 1.2em;
+  padding: 12px 40px;
+  background: linear-gradient(180deg, #2a1a1a, #1a0a0a);
+  border: 2px solid #8b0000;
+  color: #c8b89a;
+  cursor: pointer;
+  letter-spacing: 3px;
+  transition: all 0.3s;
+}
+
+.restart-btn:hover {
+  background: linear-gradient(180deg, #3a1a1a, #2a0a0a);
+  box-shadow: 0 0 20px rgba(139,0,0,0.4);
+}
+
+/* ===== PARTICLES ===== */
+.particle {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+  animation: particleFloat 3s ease forwards;
+}
+
+@keyframes particleFloat {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-80px) scale(0); }
+}
+
+/* ===== DAMAGE FLASH ===== */
+.damage-flash {
+  position: fixed;
+  inset: 0;
+  background: rgba(139,0,0,0.15);
+  pointer-events: none;
+  z-index: 999;
+  animation: dmgFlash 0.3s ease forwards;
+}
+
+@keyframes dmgFlash {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0a0a0f; }
+::-webkit-scrollbar-thumb { background: #3a2a3a; border-radius: 3px; }
+
+/* ===== DECK VIEW ===== */
+#deck-view {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(10,10,15,0.95);
+  z-index: 50;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+#deck-view h2 {
+  font-family: 'Cinzel', serif;
+  color: #c8b89a;
+  margin-bottom: 20px;
+}
+
+#deck-cards-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  max-width: 700px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+#deck-cards-list .mini-card {
+  width: 100px;
+  padding: 6px;
+  background: linear-gradient(145deg, #1e1828, #15101a);
+  border: 1px solid #3a2a3a;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 0.7em;
+}
+
+#deck-cards-list .mini-card .mc-cost {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  background: radial-gradient(circle, #4a9eff, #2a5a9f);
+  border-radius: 50%;
+  line-height: 18px;
+  font-family: 'Cinzel', serif;
+  font-weight: 700;
+  font-size: 0.9em;
+  color: #fff;
+}
+
+#deck-cards-list .mini-card .mc-name {
+  font-family: 'Cinzel', serif;
+  font-size: 1em;
+  color: #e8d8b8;
+  margin: 3px 0;
+}
+
+#deck-cards-list .mini-card .mc-art { font-size: 1.5em; }
+
+#close-deck-btn {
+  font-family: 'Cinzel', serif;
+  margin-top: 20px;
+  padding: 10px 30px;
+  background: linear-gradient(180deg, #2a1a1a, #1a0a0a);
+  border: 2px solid #6a3a3a;
+  color: #c8b89a;
+  cursor: pointer;
+  letter-spacing: 2px;
+}
+
+/* Tooltip */
+.tooltip {
+  position: absolute;
+  background: #1a1018;
+  border: 1px solid #4a3a4a;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.8em;
+  color: #c8b89a;
+  pointer-events: none;
+  z-index: 200;
+  max-width: 200px;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+}
+</style>
+</head>
+<body>
+<div id="game-container">
+
+  <!-- TITLE SCREEN -->
+  <div id="title-screen">
+    <h1>SHADOWS OF THE ABYSS</h1>
+    <div class="subtitle">A Roguelike Deck Builder</div>
+    <button class="start-btn" onclick="startGame()">DESCEND INTO DARKNESS</button>
+  </div>
+
+  <!-- MAP SCREEN -->
+  <div id="map-screen">
+    <div id="map-header">
+      <div class="player-stats">
+        <div class="stat-item"><span class="label">HP:</span><span class="value hp" id="map-hp">50/50</span></div>
+        <div class="stat-item"><span class="label">Gold:</span><span class="value gold" id="map-gold">0</span></div>
+        <div class="stat-item"><span class="label">Deck:</span><span class="value" id="map-deck-size">10</span></div>
+        <div class="stat-item"><span class="label">Floor:</span><span class="value" id="map-floor">1</span></div>
+      </div>
+      <button onclick="toggleDeckView()" style="font-family:'Cinzel',serif;background:linear-gradient(180deg,#2a1a1a,#1a0a0a);border:1px solid #4a2a2a;color:#c8b89a;padding:5px 15px;cursor:pointer;letter-spacing:2px;">Deck</button>
+    </div>
+    <div id="map-canvas-container">
+      <canvas id="map-canvas"></canvas>
+    </div>
+  </div>
+
+  <!-- COMBAT SCREEN -->
+  <div id="combat-screen">
+    <div id="combat-top">
+      <div class="player-stats">
+        <div class="stat-item"><span class="label">HP:</span><span class="value hp" id="combat-hp">50/50</span></div>
+        <div class="stat-item"><span class="label">Gold:</span><span class="value gold" id="combat-gold">0</span></div>
+        <div class="stat-item"><span class="label">Block:</span><span class="value" id="combat-block" style="color:#4a9eff;">0</span></div>
+      </div>
+      <button onclick="toggleDeckView()" style="font-family:'Cinzel',serif;background:linear-gradient(180deg,#2a1a1a,#1a0a0a);border:1px solid #4a2a2a;color:#c8b89a;padding:5px 15px;cursor:pointer;letter-spacing:2px;">Deck</button>
+    </div>
+    <div id="enemy-area">
+      <div id="combat-log"></div>
+      <div id="enemy-display">
+        <div id="enemy-sprite"><div class="enemy-art" id="enemy-art"></div></div>
+        <div id="enemy-name"></div>
+        <div id="enemy-hp-bar"><div id="enemy-hp-fill"></div></div>
+        <div id="enemy-hp-text"></div>
+        <div id="enemy-effects"></div>
+      </div>
+    </div>
+    <div id="hand-area">
+      <div id="hand-info">
+        <div class="energy-display"><div class="energy-icon"></div><span class="energy-val" id="energy-val">3</span><span style="color:#6a5a4a;">/3 Energy</span></div>
+        <div><span style="color:#6a5a4a;">Deck: </span><span id="deck-count" style="color:#c8b89a;">0</span><span style="color:#6a5a4a;"> | Discard: </span><span id="discard-count" style="color:#c8b89a;">0</span></div>
+      </div>
+      <div id="hand-cards"></div>
+      <button id="end-turn-btn" onclick="endTurn()">END TURN</button>
+    </div>
+  </div>
+
+  <!-- DRAFT SCREEN -->
+  <div id="draft-screen">
+    <h2>CHOOSE YOUR FATE</h2>
+    <div class="draft-subtitle">Select a card to add to your deck</div>
+    <div id="draft-cards"></div>
+  </div>
+
+  <!-- SHOP SCREEN -->
+  <div id="shop-screen">
+    <h2>⚔ THE MERCHANT ⚔</h2>
+    <div class="shop-subtitle">Spend your gold wisely, traveler...</div>
+    <div id="shop-cards"></div>
+    <div id="shop-actions">
+      <button onclick="leaveShop()">LEAVE</button>
+    </div>
+  </div>
+
+  <!-- REST SCREEN -->
+  <div id="rest-screen">
+    <h2>🔥 CAMPFIRE</h2>
+    <div class="rest-subtitle">Rest and recover before continuing...</div>
+    <div class="rest-options">
+      <div class="rest-option" onclick="restAction('heal')">
+        <div class="rest-icon">💚</div>
+        <div class="rest-label">Rest</div>
+        <div class="rest-desc">Restore 15 HP</div>
+      </div>
+      <div class="rest-option" onclick="restAction('draft')">
+        <div class="rest-icon">🃏</div>
+        <div class="rest-label">Card Choice</div>
+        <div class="rest-desc">Choose a card (+25 gold)</div>
+      </div>
+      <div class="rest-option" onclick="restAction('gold')">
+        <div class="rest-icon">💰</div>
+        <div class="rest-label">Search</div>
+        <div class="rest-desc">Find 20 gold</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="game-over-screen">
+    <h1>YOU HAVE FALLEN</h1>
+    <div class="end-stats" id="death-stats"></div>
+    <button class="restart-btn" onclick="location.reload()">RISE AGAIN</button>
+  </div>
+
+  <!-- VICTORY -->
+  <div id="victory-screen">
+    <h1>⚔ VICTORY ⚔</h1>
+    <div class="end-stats" id="victory-stats"></div>
+    <button class="restart-btn" onclick="location.reload()">PLAY AGAIN</button>
+  </div>
+
+  <!-- DECK VIEW OVERLAY -->
+  <div id="deck-view">
+    <h2>YOUR DECK</h2>
+    <div id="deck-cards-list"></div>
+    <button id="close-deck-btn" onclick="toggleDeckView()">CLOSE</button>
+  </div>
+</div>
+
+<script>
+// ===== GAME STATE =====
+const G = {
+  player: { hp: 50, maxHp: 50, gold: 0, block: 0, energy: 3, maxEnergy: 3 },
+  deck: [],
+  hand: [],
+  discard: [],
+  drawPile: [],
+  currentEnemy: null,
+  mapNodes: [],
+  currentNode: null,
+  floor: 1,
+  maxFloor: 10,
+  combatTurn: 0,
+  totalKills: 0,
+  totalGold: 0,
+  mapOffsetX: 0,
+  mapOffsetY: 0,
+  isPlayerTurn: true,
+  combatActive: false,
+  pendingDraft: null,
+  restChoice: null
+};
+
+// ===== CARD DATABASE =====
+const CARD_DB = [
+  // Common cards
+  { id: 'strike', name: 'Strike', cost: 1, type: 'Attack', rarity: 'common', art: '⚔️', desc: 'Deal 6 damage.', effect: { type: 'damage', value: 6 } },
+  { id: 'defend', name: 'Defend', cost: 1, type: 'Skill', rarity: 'common', art: '🛡️', desc: 'Gain 5 Block.', effect: { type: 'block', value: 5 } },
+  { id: 'bash', name: 'Bash', cost: 2, type: 'Attack', rarity: 'common', art: '🔨', desc: 'Deal 8 damage. Apply 2 Weak.', effect: { type: 'damage', value: 8, apply: { type: 'weak', value: 2, turns: 3 } } },
+  { id: 'iron_wave', name: 'Iron Wave', cost: 1, type: 'Attack', rarity: 'common', art: '🌊', desc: 'Deal 5 damage. Gain 5 Block.', effect: { type: 'damage', value: 5, block: 5 } },
+  { id: 'heal', name: 'Mend Wounds', cost: 1, type: 'Skill', rarity: 'common', art: '💚', desc: 'Restore 4 HP.', effect: { type: 'heal', value: 4 } },
+  { id: 'fire_attack', name: 'Fire Bolt', cost: 1, type: 'Attack', rarity: 'common', art: '🔥', desc: 'Deal 4 damage. Apply 2 Poison.', effect: { type: 'damage', value: 4, apply: { type: 'poison', value: 2, turns: 3 } } },
+  { id: 'war_cry', name: 'War Cry', cost: 0, type: 'Skill', rarity: 'common', art: '📯', desc: 'Gain 2 Energy.', effect: { type: 'energy', value: 2 } },
+  { id: 'dagger_strike', name: 'Dagger Strike', cost: 0, type: 'Attack', rarity: 'common', art: '🗡️', desc: 'Deal 3 damage.', effect: { type: 'damage', value: 3 } },
+  { id: 'meditate', name: 'Meditate', cost: 0, type: 'Skill', rarity: 'common', art: '🧘', desc: 'Draw 2 cards.', effect: { type: 'draw', value: 2 } },
+  { id: 'entangle', name: 'Entangle', cost: 1, type: 'Skill', rarity: 'common', art: '🌿', desc: 'Apply 3 Poison.', effect: { type: 'apply', effect: { type: 'poison', value: 3, turns: 4 } } },
+
+  // Uncommon cards
+  { id: 'flame_blade', name: 'Flame Blade', cost: 2, type: 'Attack', rarity: 'uncommon', art: '⚔️', desc: 'Deal 12 damage.', effect: { type: 'damage', value: 12 } },
+  { id: 'fortify', name: 'Fortify', cost: 1, type: 'Skill', rarity: 'uncommon', art: '🏰', desc: 'Gain 10 Block.', effect: { type: 'block', value: 10 } },
+  { id: 'vampiric', name: 'Vampiric Touch', cost: 1, type: 'Attack', rarity: 'uncommon', art: '🧛', desc: 'Deal 7 damage. Heal 3 HP.', effect: { type: 'damage', value: 7, heal: 3 } },
+  { id: 'berserk', name: 'Berserk', cost: 1, type: 'Skill', rarity: 'uncommon', art: '😤', desc: 'Gain 3 Strength. Lose 3 HP.', effect: { type: 'buff', stat: 'strength', value: 3, selfDmg: 3 } },
+  { id: 'siphon', name: 'Siphon Life', cost: 2, type: 'Attack', rarity: 'uncommon', art: '💀', desc: 'Deal 6 damage. Heal 6 HP.', effect: { type: 'damage', value: 6, heal: 6 } },
+  { id: 'iron_form', name: 'Iron Form', cost: 2, type: 'Skill', rarity: 'uncommon', art: '🗿', desc: 'Gain 8 Block. Apply 1 Weak to enemy.', effect: { type: 'block', value: 8, apply: { type: 'weak', value: 1, turns: 3 } } },
+  { id: 'double_strike', name: 'Double Strike', cost: 1, type: 'Attack', rarity: 'uncommon', art: '⚔️', desc: 'Deal 5 damage twice.', effect: { type: 'damage', value: 5, multi: 2 } },
+  { id: 'blood_ritual', name: 'Blood Ritual', cost: 1, type: 'Skill', rarity: 'uncommon', art: '🩸', desc: 'Lose 5 HP. Gain 8 Block.', effect: { type: 'block', value: 8, selfDmg: 5 } },
+
+  // Rare cards
+  { id: 'annihilate', name: 'Annihilate', cost: 3, type: 'Attack', rarity: 'rare', art: '💥', desc: 'Deal 20 damage.', effect: { type: 'damage', value: 20 } },
+  { id: 'phantom_guard', name: 'Phantom Guard', cost: 1, type: 'Skill', rarity: 'rare', art: '👻', desc: 'Gain 15 Block.', effect: { type: 'block', value: 15 } },
+  { id: 'blood_lust', name: 'Blood Lust', cost: 1, type: 'Attack', rarity: 'rare', art: '🔴', desc: 'Deal 8 damage. Gain 2 Strength.', effect: { type: 'damage', value: 8, buff: { stat: 'strength', value: 2 } } },
+  { id: 'time_warp', name: 'Time Warp', cost: 0, type: 'Skill', rarity: 'rare', art: '⏳', desc: 'Draw 4 cards. Gain 1 Energy.', effect: { type: 'draw', value: 4, energy: 1 } },
+  { id: 'abyssal_gaze', name: 'Abyssal Gaze', cost: 2, type: 'Attack', rarity: 'rare', art: '👁️', desc: 'Deal 10 damage. Apply 4 Poison.', effect: { type: 'damage', value: 10, apply: { type: 'poison', value: 4, turns: 4 } } },
+  { id: 'soul_rend', name: 'Soul Rend', cost: 2, type: 'Attack', rarity: 'rare', art: '💜', desc: 'Deal 8 damage. Draw 2 cards.', effect: { type: 'damage', value: 8, draw: 2 } },
+
+  // Boss card
+  { id: 'dark_ritual', name: 'Dark Ritual', cost: 2, type: 'Attack', rarity: 'boss', art: '🔮', desc: 'Deal 15 damage. Apply 3 Weak & 3 Vulnerable.', effect: { type: 'damage', value: 15, apply: [{ type: 'weak', value: 3, turns: 3 }, { type: 'vulnerable', value: 3, turns: 3 }] } },
+];
+
+// ===== ENEMY DATABASE =====
+const ENEMY_DB = [
+  { name: 'Cursed Wretch', art: '🧟', hp: 28, atk: 6, def: 0, gold: 8, behavior: 'attack', desc: 'A mindless undead brute.' },
+  { name: 'Shadow Fiend', art: '👤', hp: 22, atk: 8, def: 0, gold: 10, behavior: 'attack', desc: 'A creature of pure shadow.' },
+  { name: 'Poison Spider', art: '🕷️', hp: 18, atk: 5, def: 0, gold: 7, behavior: 'poison', desc: 'Its bite injects venom.' },
+  { name: 'Skeleton Warrior', art: '💀', hp: 35, atk: 7, def: 2, gold: 12, behavior: 'defend', desc: 'An armored undead soldier.' },
+  { name: 'Dark Cultist', art: '🧙', hp: 25, atk: 6, def: 0, gold: 10, behavior: 'debuff', desc: 'Weaves dark curses.' },
+  { name: 'Giant Bat', art: '🦇', hp: 15, atk: 9, def: 0, gold: 6, behavior: 'attack', desc: 'Fast and vicious.' },
+  { name: 'Stone Golem', art: '🗿', hp: 50, atk: 5, def: 5, gold: 15, behavior: 'defend', desc: 'A hulking stone construct.' },
+  { name: 'Wraith', art: '👻', hp: 30, atk: 10, def: 1, gold: 14, behavior: 'attack', desc: 'A spectral horror.' },
+  { name: 'Venom Serpent', art: '🐍', hp: 20, atk: 7, def: 0, gold: 9, behavior: 'poison', desc: 'Its fangs carry deadly poison.' },
+  { name: 'Nightmare', art: '😈', hp: 32, atk: 9, def: 2, gold: 16, behavior: 'debuff', desc: 'A creature from your worst dreams.' },
+  // Boss
+  { name: 'Lich King', art: '👑', hp: 80, atk: 12, def: 4, gold: 40, behavior: 'boss', desc: 'The undead sovereign of the abyss.', isBoss: true },
+  { name: 'Abyssal Titan', art: '🌋', hp: 120, atk: 15, def: 6, gold: 60, behavior: 'boss', desc: 'An ancient entity of pure destruction.', isBoss: true },
+];
+
+// ===== UTILITY =====
+function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function pick(arr) { return arr[rand(0, arr.length - 1)]; }
+function shuffle(arr) { for (let i = arr.length - 1; i > 0; i--) { const j = rand(0, i); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+function getCardById(id) { return CARD_DB.find(c => c.id === id); }
+
+// ===== GAME INIT =====
+function startGame() {
+  document.getElementById('title-screen').style.display = 'none';
+  document.getElementById('map-screen').style.display = 'flex';
+
+  // Starting deck
+  for (let i = 0; i < 4; i++) G.deck.push({ ...getCardById('strike') });
+  for (let i = 0; i < 4; i++) G.deck.push({ ...getCardById('defend') });
+  G.deck.push({ ...getCardById('heal') });
+  G.deck.push({ ...getCardById('dagger_strike') });
+
+  generateMap();
+  updateMapUI();
+  initMapCanvas();
+}
+
+// ===== MAP GENERATION =====
+function generateMap() {
+  G.mapNodes = [];
+  const cols = 4;
+  const rows = G.maxFloor + 2;
+  let nodeId = 0;
+
+  for (let row = 0; row < rows; row++) {
+    const nodesInRow = row === 0 ? 1 : (row === rows - 1 ? 1 : rand(1, cols));
+    for (let col = 0; col < nodesInRow; col++) {
+      const type = row === 0 ? 'start' : (row === rows - 1 ? 'boss' : pickNodeType(row));
+      G.mapNodes.push({
+        id: nodeId++,
+        row, col,
+        type,
+        x: 0, y: 0,
+        visited: false,
+        connected: false,
+        cleared: false
+      });
+    }
+  }
+
+  // Connect nodes
+  for (let i = 0; i < G.mapNodes.length; i++) {
+    const node = G.mapNodes[i];
+    const nextRow = G.mapNodes.filter(n => n.row === node.row + 1);
+    if (nextRow.length > 0) {
+      const target = pick(nextRow);
+      node.target = target;
+      target.parent = node;
+    }
+  }
+
+  G.currentNode = G.mapNodes[0];
+}
+
+function pickNodeType(row) {
+  const r = Math.random();
+  if (r < 0.45) return 'combat';
+  if (r < 0.60) return 'rest';
+  if (r < 0.75) return 'shop';
+  if (r < 0.85) return 'draft';
+  if (r < 0.92) return 'elite';
+  return 'event';
+}
+
+// ===== MAP RENDERING =====
+let mapCanvas, mapCtx;
+
+function initMapCanvas() {
+  mapCanvas = document.getElementById('map-canvas');
+  mapCtx = mapCanvas.getContext('2d');
+  resizeMapCanvas();
+  window.addEventListener('resize', resizeMapCanvas);
+  mapCanvas.addEventListener('click', onMapClick);
+  mapCanvas.addEventListener('mousemove', onMapHover);
+  renderMap();
+}
+
+function resizeMapCanvas() {
+  const container = document.getElementById('map-canvas-container');
+  mapCanvas.width = container.clientWidth;
+  mapCanvas.height = container.clientHeight;
+  renderMap();
+}
+
+function renderMap() {
+  if (!mapCtx) return;
+  const w = mapCanvas.width;
+  const h = mapCanvas.height;
+  mapCtx.clearRect(0, 0, w, h);
+
+  // Background
+  const bgGrad = mapCtx.createRadialGradient(w/2, h/2, 0, w/2, h/2, w*0.6);
+  bgGrad.addColorStop(0, '#15101a');
+  bgGrad.addColorStop(1, '#0a0a0f');
+  mapCtx.fillStyle = bgGrad;
+  mapCtx.fillRect(0, 0, w, h);
+
+  // Calculate node positions
+  const rows = Math.max(...G.mapNodes.map(n => n.row)) + 1;
+  const nodeH = h / (rows + 1);
+  const nodeW = w / 5;
+
+  G.mapNodes.forEach(node => {
+    node.x = nodeW * (node.col + 1.5);
+    node.y = nodeH * (node.row + 1);
+  });
+
+  // Draw connections
+  G.mapNodes.forEach(node => {
+    if (node.target && node.cleared) {
+      mapCtx.beginPath();
+      mapCtx.moveTo(node.x, node.y);
+      mapCtx.lineTo(node.target.x, node.target.y);
+      mapCtx.strokeStyle = '#3a2a2a';
+      mapCtx.lineWidth = 2;
+      mapCtx.stroke();
+    }
+  });
+
+  // Draw nodes
+  G.mapNodes.forEach(node => {
+    const cx = node.x;
+    const cy = node.y;
+    const r = 22;
+
+    // Node glow
+    if (node === G.currentNode) {
+      mapCtx.beginPath();
+      mapCtx.arc(cx, cy, r + 8, 0, Math.PI * 2);
+      const glow = mapCtx.createRadialGradient(cx, cy, r, cx, cy, r + 8);
+      glow.addColorStop(0, 'rgba(139,0,0,0.3)');
+      glow.addColorStop(1, 'rgba(139,0,0,0)');
+      mapCtx.fillStyle = glow;
+      mapCtx.fill();
+    }
+
+    // Node circle
+    mapCtx.beginPath();
+    mapCtx.arc(cx, cy, r, 0, Math.PI * 2);
+
+    let fillColor, strokeColor;
+    if (node.cleared) {
+      fillColor = '#1a1a1a';
+      strokeColor = '#2a2a2a';
+    } else if (node === G.currentNode) {
+      fillColor = '#2a1010';
+      strokeColor = '#8b0000';
+    } else {
+      fillColor = '#15101a';
+      strokeColor = '#3a2a3a';
+    }
+
+    mapCtx.fillStyle = fillColor;
+    mapCtx.fill();
+    mapCtx.lineWidth = 2;
+    mapCtx.strokeStyle = strokeColor;
+    mapCtx.stroke();
+
+    // Node icon
+    mapCtx.font = '18px serif';
+    mapCtx.textAlign = 'center';
+    mapCtx.textBaseline = 'middle';
+    let icon = '❓';
+    if (node.cleared) icon = '✓';
+    else if (node.type === 'combat') icon = '⚔️';
+    else if (node.type === 'elite') icon = '💀';
+    else if (node.type === 'rest') icon = '🔥';
+    else if (node.type === 'shop') icon = '🏪';
+    else if (node.type === 'draft') icon = '🃏';
+    else if (node.type === 'event') icon = '✨';
+    else if (node.type === 'boss') icon = '👑';
+    else if (node.type === 'start') icon = '🚪';
+
+    mapCtx.fillText(icon, cx, cy);
+
+    // Node label
+    mapCtx.font = '10px Cinzel, serif';
+    mapCtx.fillStyle = '#6a5a4a';
+    mapCtx.fillText(node.type.charAt(0).toUpperCase() + node.type.slice(1), cx, cy + r + 14);
+  });
+
+  // Draw ambient particles
+  drawMapParticles();
+}
+
+let mapParticles = [];
+function drawMapParticles() {
+  if (Math.random() < 0.05) {
+    mapParticles.push({
+      x: rand(0, mapCanvas.width),
+      y: rand(0, mapCanvas.height),
+      vx: rand(-0.3, 0.3),
+      vy: rand(-0.5, -0.1),
+      life: rand(60, 180),
+      size: rand(1, 3),
+      color: Math.random() < 0.5 ? 'rgba(139,0,0,0.4)' : 'rgba(106,74,106,0.3)'
+    });
+  }
+
+  mapParticles = mapParticles.filter(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+    mapCtx.beginPath();
+    mapCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    mapCtx.fillStyle = p.color.replace(/[\d.]+\)$/, (p.life / 180) + ')');
+    mapCtx.fill();
+    return p.life > 0;
+  });
+
+  if (document.getElementById('map-screen').style.display !== 'none') {
+    requestAnimationFrame(drawMapParticles);
+  }
+}
+
+function onMapClick(e) {
+  if (!G.currentNode || G.currentNode.cleared) return;
+  const rect = mapCanvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  // Check if clicking current node
+  const cx = G.currentNode.x;
+  const cy = G.currentNode.y;
+  const dist = Math.sqrt((mx - cx) ** 2 + (my - cy) ** 2);
+
+  if (dist < 30) {
+    enterNode(G.currentNode);
+    return;
+  }
+
+  // Check if clicking a connected node
+  if (G.currentNode.target) {
+    const t = G.currentNode.target;
+    const tDist = Math.sqrt((mx - t.x) ** 2 + (my - t.y) ** 2);
+    if (tDist < 30) {
+      G.currentNode = t;
+      renderMap();
+      updateMapUI();
+    }
+  }
+}
+
+function onMapHover(e) {
+  const rect = mapCanvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  mapCanvas.style.cursor = 'default';
+  G.mapNodes.forEach(node => {
+    const dist = Math.sqrt((mx - node.x) ** 2 + (my - node.y) ** 2);
+    if (dist < 30 && (!node.cleared || node === G.currentNode)) {
+      mapCanvas.style.cursor = 'pointer';
+    }
+  });
+}
+
+function updateMapUI() {
+  document.getElementById('map-hp').textContent = `${G.player.hp}/${G.player.maxHp}`;
+  document.getElementById('map-gold').textContent = G.player.gold;
+  document.getElementById('map-deck-size').textContent = G.deck.length;
+  document.getElementById('map-floor').textContent = G.floor;
+}
+
+// ===== NODE ENTRY =====
+function enterNode(node) {
+  if (node.type === 'combat' || node.type === 'elite') {
+    startCombat(node.type === 'elite');
+  } else if (node.type === 'rest') {
+    showRest();
+  } else if (node.type === 'shop') {
+    showShop();
+  } else if (node.type === 'draft') {
+    startDraft();
+  } else if (node.type === 'event') {
+    triggerEvent();
+  } else if (node.type === 'boss') {
+    startCombat(true, true);
+  } else if (node.type === 'start') {
+    startCombat(false);
+  }
+
+  node.cleared = true;
+  renderMap();
+}
+
+// ===== COMBAT =====
+function startCombat(isElite, isBoss = false) {
+  document.getElementById('map-screen').style.display = 'none';
+  document.getElementById('combat-screen').style.display = 'flex';
+
+  G.player.block = 0;
+  G.player.energy = G.player.maxEnergy;
+  G.combatTurn = 0;
+  G.isPlayerTurn = true;
+  G.combatActive = true;
+
+  // Select enemy
+  let pool = ENEMY_DB.filter(e => !e.isBoss);
+  if (isBoss) pool = ENEMY_DB.filter(e => e.isBoss);
+  else if (isElite) pool = ENEMY_DB.filter(e => e.hp > 25);
+
+  const template = pick(pool);
+  const scale = 1 + (G.floor - 1) * 0.15;
+
+  G.currentEnemy = {
+    ...template,
+    hp: Math.floor(template.hp * scale),
+    maxHp: Math.floor(template.hp * scale),
+    atk: Math.floor(template.atk * scale),
+    def: Math.floor(template.def * scale),
+    effects: [],
+    nextMove: null
+  };
+
+  if (isElite) {
+    G.currentEnemy.hp = Math.floor(G.currentEnemy.hp * 1.5);
+    G.currentEnemy.maxHp = G.currentEnemy.hp;
+    G.currentEnemy.atk = Math.floor(G.currentEnemy.atk * 1.3);
+  }
+
+  // Reset player buffs/debuffs
+  G.player.strength = 0;
+  G.player.vulnerable = 0;
+
+  // Setup draw pile
+  G.drawPile = shuffle(G.deck.map(c => ({ ...c })));
+  G.hand = [];
+  G.discard = [];
+
+  updateCombatUI();
+  drawCards(5);
+  computeEnemyMove();
+}
+
+function updateCombatUI() {
+  const e = G.currentEnemy;
+  document.getElementById('combat-hp').textContent = `${G.player.hp}/${G.player.maxHp}`;
+  document.getElementById('combat-gold').textContent = G.player.gold;
+  document.getElementById('combat-block').textContent = G.player.block;
+  document.getElementById('energy-val').textContent = G.player.energy;
+  document.getElementById('deck-count').textContent = G.drawPile.length;
+  document.getElementById('discard-count').textContent = G.discard.length;
+
+  document.getElementById('enemy-art').textContent = e.art;
+  document.getElementById('enemy-name').textContent = e.name;
+  document.getElementById('enemy-hp-text').textContent = `${e.hp}/${e.maxHp}`;
+  document.getElementById('enemy-hp-fill').style.width = `${(e.hp / e.maxHp) * 100}%`;
+
+  // Enemy effects
+  const effectsDiv = document.getElementById('enemy-effects');
+  effectsDiv.innerHTML = '';
+  e.effects.forEach(fx => {
+    const badge = document.createElement('span');
+    badge.className = `effect-badge ${fx.type}`;
+    badge.textContent = `${fx.type.charAt(0).toUpperCase() + fx.type.slice(1)} ${fx.value}`;
+    effectsDiv.appendChild(badge);
+  });
+
+  // Player effects
+  if (G.player.strength > 0) {
+    const badge = document.createElement('span');
+    badge.className = 'effect-badge buff';
+    badge.textContent = `STR +${G.player.strength}`;
+    effectsDiv.appendChild(badge);
+  }
+  if (G.player.vulnerable > 0) {
+    const badge = document.createElement('span');
+    badge.className = 'effect-badge vulnerable';
+    badge.textContent = `VULN ${G.player.vulnerable}`;
+    effectsDiv.appendChild(badge);
+  }
+
+  renderHand();
+}
+
+function renderHand() {
+  const container = document.getElementById('hand-cards');
+  container.innerHTML = '';
+
+  G.hand.forEach((card, idx) => {
+    const el = document.createElement('div');
+    el.className = `card rarity-${card.rarity}`;
+    if (card.cost > G.player.energy) el.classList.add('unplayable');
+
+    el.innerHTML = `
+      <div class="card-cost">${card.cost}</div>
+      <div class="card-type">${card.type}</div>
+      <div class="card-name">${card.name}</div>
+      <div class="card-art">${card.art}</div>
+      <div class="card-desc">${card.desc}</div>
+    `;
+
+    if (card.cost <= G.player.energy) {
+      el.onclick = () => playCard(idx);
+    }
+
+    container.appendChild(el);
+  });
+}
+
+function drawCards(count) {
+  for (let i = 0; i < count; i++) {
+    if (G.drawPile.length === 0) {
+      if (G.discard.length === 0) break;
+      G.drawPile = shuffle(G.discard.slice());
+      G.discard = [];
+    }
+    if (G.drawPile.length > 0) {
+      G.hand.push(G.drawPile.pop());
+    }
+  }
+}
+
+function playCard(idx) {
+  if (!G.isPlayerTurn || !G.combatActive) return;
+
+  const card = G.hand[idx];
+  if (card.cost > G.player.energy) return;
+
+  G.player.energy -= card.cost;
+  G.hand.splice(idx, 1);
+  G.discard.push(card);
+
+  // Apply card effect
+  applyCardEffect(card);
+
+  updateCombatUI();
+  checkCombatEnd();
+}
+
+function applyCardEffect(card) {
+  const e = G.currentEnemy;
+  const eff = card.effect;
+
+  if (eff.type === 'damage') {
+    let dmg = eff.value;
+    if (eff.multi) {
+      for (let i = 0; i < eff.multi; i++) {
+        let d = dmg;
+        if (e.def > 0) {
+          const blocked = Math.min(e.def, d);
+          e.def -= blocked;
+          d -= blocked;
+        }
+        e.hp -= d;
+        addLog(`You deal ${d} damage!`);
+      }
+    } else {
+      let d = dmg;
+      if (e.def > 0) {
+        const blocked = Math.min(e.def, d);
+        e.def -= blocked;
+        d -= blocked;
+      }
+      e.hp -= d;
+      addLog(`You deal ${d} damage!`);
+    }
+    flashEnemy();
+
+    if (eff.block) {
+      G.player.block += eff.block;
+      addLog(`You gain ${eff.block} Block.`);
+    }
+    if (eff.heal) {
+      G.player.hp = Math.min(G.player.maxHp, G.player.hp + eff.heal);
+      addLog(`You heal ${eff.heal} HP.`);
+    }
+    if (eff.draw) {
+      drawCards(eff.draw);
+      addLog(`You draw ${eff.draw} cards.`);
+    }
+    if (eff.apply) {
+      applyToEnemy(eff.apply);
+    }
+    if (eff.buff) {
+      G.player[eff.buff.stat] = (G.player[eff.buff.stat] || 0) + eff.buff.value;
+      addLog(`You gain ${eff.buff.value} ${eff.buff.stat}!`);
+    }
+    if (eff.selfDmg) {
+      G.player.hp -= eff.selfDmg;
+      addLog(`You lose ${eff.selfDmg} HP.`);
+    }
+  } else if (eff.type === 'block') {
+    G.player.block += eff.value;
+    addLog(`You gain ${eff.value} Block.`);
+    if (eff.apply) applyToEnemy(eff.apply);
+  } else if (eff.type === 'heal') {
+    G.player.hp = Math.min(G.player.maxHp, G.player.hp + eff.value);
+    addLog(`You heal ${eff.value} HP.`);
+  } else if (eff.type === 'energy') {
+    G.player.energy += eff.value;
+    addLog(`You gain ${eff.value} Energy!`);
+  } else if (eff.type === 'draw') {
+    drawCards(eff.value);
+    addLog(`You draw ${eff.value} cards.`);
+    if (eff.energy) {
+      G.player.energy += eff.energy;
+      addLog(`You gain ${eff.energy} Energy!`);
+    }
+  } else if (eff.type === 'apply') {
+    applyToEnemy(eff.effect);
+  } else if (eff.type === 'buff') {
+    G.player[eff.stat] = (G.player[eff.stat] || 0) + eff.value;
+    addLog(`You gain ${eff.value} ${eff.stat}!`);
+    if (eff.selfDmg) {
+      G.player.hp -= eff.selfDmg;
+      addLog(`You lose ${eff.selfDmg} HP.`);
+    }
+  }
+}
+
+function applyToEnemy(fx) {
+  const e = G.currentEnemy;
+  if (Array.isArray(fx)) {
+    fx.forEach(f => applyToEnemy(f));
+    return;
+  }
+  const existing = e.effects.find(f => f.type === fx.type);
+  if (existing) {
+    existing.value += fx.value;
+    existing.turns = Math.max(existing.turns, fx.turns);
+  } else {
+    e.effects.push({ type: fx.type, value: fx.value, turns: fx.turns });
+  }
+  addLog(`${e.name} is affected by ${fx.type}!`);
+}
+
+function addLog(msg) {
+  const log = document.getElementById('combat-log');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.textContent = msg;
+  log.appendChild(entry);
+  setTimeout(() => entry.remove(), 2500);
+}
+
+function flashEnemy() {
+  const sprite = document.getElementById('enemy-sprite');
+  sprite.classList.remove('hit');
+  void sprite.offsetWidth;
+  sprite.classList.add('hit');
+}
+
+function computeEnemyMove() {
+  const e = G.currentEnemy;
+  const behaviors = {
+    attack: () => {
+      const dmg = e.atk + rand(-1, 2);
+      e.nextMove = { type: 'attack', value: Math.max(1, dmg) };
+    },
+    defend: () => {
+      const block = e.def + rand(2, 5);
+      e.nextMove = { type: 'defend', value: block };
+    },
+    poison: () => {
+      if (Math.random() < 0.4) {
+        e.nextMove = { type: 'attack', value: e.atk };
+      } else {
+        e.nextMove = { type: 'poison', value: rand(3, 5) };
+      }
+    },
+    debuff: () => {
+      const r = Math.random();
+      if (r < 0.33) {
+        e.nextMove = { type: 'attack', value: e.atk };
+      } else if (r < 0.66) {
+        e.nextMove = { type: 'debuff_weak', value: rand(1, 3) };
+      } else {
+        e.nextMove = { type: 'debuff_vuln', value: rand(1, 3) };
+      }
+    },
+    boss: () => {
+      const r = Math.random();
+      if (r < 0.4) {
+        e.nextMove = { type: 'attack', value: e.atk + rand(0, 3) };
+      } else if (r < 0.6) {
+        e.nextMove = { type: 'defend', value: e.def + rand(2, 4) };
+      } else if (r < 0.8) {
+        e.nextMove = { type: 'debuff_weak', value: rand(1, 2) };
+      } else {
+        e.nextMove = { type: 'attack', value: e.atk + rand(2, 5) };
+      }
+    }
+  };
+
+  (behaviors[e.behavior] || behaviors.attack)();
+}
+
+function endTurn() {
+  if (!G.isPlayerTurn || !G.combatActive) return;
+  G.isPlayerTurn = false;
+  document.getElementById('end-turn-btn').disabled = true;
+  document.getElementById('end-turn-btn').style.opacity = '0.5';
+
+  // Discard excess hand
+  while (G.hand.length > 10) {
+    G.discard.push(G.hand.pop());
+  }
+
+  // Enemy turn
+  setTimeout(() => enemyTurn(), 600);
+}
+
+function enemyTurn() {
+  const e = G.currentEnemy;
+
+  // Process enemy effects (poison ticks)
+  e.effects = e.effects.filter(fx => {
+    if (fx.type === 'poison') {
+      e.hp -= fx.value;
+      addLog(`${e.name} takes ${fx.value} poison damage!`);
+      fx.turns--;
+      flashEnemy();
+    }
+    return fx.turns > 0;
+  });
+
+  if (e.hp <= 0) {
+    updateCombatUI();
+    checkCombatEnd();
+    return;
+  }
+
+  // Process enemy move
+  if (e.nextMove) {
+    const move = e.nextMove;
+    if (move.type === 'attack') {
+      let dmg = move.value;
+      // Apply vulnerable
+      if (G.player.vulnerable > 0) {
+        dmg = Math.floor(dmg * 1.5);
+      }
+      // Apply strength
+      if (G.player.strength > 0) {
+        dmg = Math.max(0, dmg - G.player.strength); // strength reduces incoming? No, strength increases damage dealt
+      }
+      // Player strength increases damage dealt by player, not reduces incoming
+      // Let me fix: strength should increase player damage, not reduce enemy damage
+
+      // Block
+      let blocked = Math.min(G.player.block, dmg);
+      G.player.block -= blocked;
+      let actualDmg = dmg - blocked;
+      G.player.hp -= actualDmg;
+      addLog(`${e.name} deals ${actualDmg} damage!${blocked > 0 ? ` (${blocked} blocked)` : ''}`);
+      flashScreen();
+
+      if (G.player.block <= 0) G.player.block = 0;
+    } else if (move.type === 'defend') {
+      e.def += move.value;
+      addLog(`${e.name} gains ${move.value} Block.`);
+    } else if (move.type === 'poison') {
+      const existing = e.effects.find(f => f.type === 'poison');
+      if (existing) {
+        existing.value += move.value;
+        existing.turns = Math.max(existing.turns, move.value + 2);
+      } else {
+        e.effects.push({ type: 'poison', value: move.value, turns: move.value + 2 });
+      }
+      addLog(`${e.name} applies poison!`);
+    } else if (move.type === 'debuff_weak') {
+      const existing = e.effects.find(f => f.type === 'weak');
+      if (existing) {
+        existing.value += move.value;
+        existing.turns = Math.max(existing.turns, move.value + 2);
+      } else {
+        e.effects.push({ type: 'weak', value: move.value, turns: move.value + 2 });
+      }
+      addLog(`${e.name} applies Weak!`);
+    } else if (move.type === 'debuff_vuln') {
+      const existing = e.effects.find(f => f.type === 'vulnerable');
+      if (existing) {
+        existing.value += move.value;
+        existing.turns = Math.max(existing.turns, move.value + 2);
+      } else {
+        e.effects.push({ type: 'vulnerable', value: move.value, turns: move.value + 2 });
+      }
+      addLog(`${e.name} applies Vulnerable!`);
+    }
+  }
+
+  // Process player effects (weak, vulnerable tick down)
+  if (G.player.vulnerable > 0) G.player.vulnerable--;
+
+  updateCombatUI();
+
+  if (checkCombatEnd()) return;
+
+  // Start player turn
+  setTimeout(() => {
+    G.combatTurn++;
+    G.player.energy = G.player.maxEnergy;
+    G.player.block = 0; // Block resets each turn
+    G.isPlayerTurn = true;
+    document.getElementById('end-turn-btn').disabled = false;
+    document.getElementById('end-turn-btn').style.opacity = '1';
+    drawCards(5);
+    computeEnemyMove();
+    updateCombatUI();
+  }, 800);
+}
+
+function flashScreen() {
+  const flash = document.createElement('div');
+  flash.className = 'damage-flash';
+  document.body.appendChild(flash);
+  setTimeout(() => flash.remove(), 400);
+}
+
+function checkCombatEnd() {
+  const e = G.currentEnemy;
+
+  if (e.hp <= 0) {
+    G.combatActive = false;
+    G.totalKills++;
+    G.player.gold += e.gold;
+    G.totalGold += e.gold;
+
+    addLog(`${e.name} is defeated!`);
+
+    setTimeout(() => {
+      document.getElementById('combat-screen').style.display = 'none';
+      document.getElementById('map-screen').style.display = 'flex';
+
+      if (e.isBoss) {
+        showVictory();
+        return;
+      }
+
+      G.floor++;
+      updateMapUI();
+      renderMap();
+
+      // Auto draft after combat
+      setTimeout(() => startDraft(), 300);
+    }, 1500);
+
+    return true;
+  }
+
+  if (G.player.hp <= 0) {
+    G.combatActive = false;
+    setTimeout(() => showGameOver(), 1000);
+    return true;
+  }
+
+  return false;
+}
+
+// ===== DRAFT =====
+function startDraft(fromShop = false) {
+  document.getElementById('combat-screen').style.display = 'none';
+  document.getElementById('map-screen').style.display = 'none';
+  document.getElementById('draft-screen').style.display = 'flex';
+
+  // Pick 3 random cards
+  const options = [];
+  const pool = [...CARD_DB];
+  shuffle(pool);
+
+  for (let i = 0; i < 3 && i < pool.length; i++) {
+    // Weight by rarity
+    const r = Math.random();
+    let card;
+    if (r < 0.6) {
+      card = pool.find(c => c.rarity === 'common');
+    } else if (r < 0.85) {
+      card = pool.find(c => c.rarity === 'uncommon');
+    } else if (r < 0.95) {
+      card = pool.find(c => c.rarity === 'rare');
+    } else {
+      card = pool.find(c => c.rarity === 'boss');
+    }
+    if (card) {
+      options.push({ ...card });
+    }
+  }
+
+  const container = document.getElementById('draft-cards');
+  container.innerHTML = '';
+
+  options.forEach((card, idx) => {
+    const el = document.createElement('div');
+    el.className = `card rarity-${card.rarity}`;
+    el.style.width = '180px';
+    el.style.minHeight = '240px';
+    el.innerHTML = `
+      <div class="card-cost">${card.cost}</div>
+      <div class="card-type">${card.type}</div>
+      <div class="card-name">${card.name}</div>
+      <div class="card-art">${card.art}</div>
+      <div class="card-desc">${card.desc}</div>
+    `;
+    el.onclick = () => selectDraftCard(card);
+    container.appendChild(el);
+  });
+}
+
+function selectDraftCard(card) {
+  G.deck.push({ ...card });
+  document.getElementById('draft-screen').style.display = 'none';
+  document.getElementById('map-screen').style.display = 'flex';
+  updateMapUI();
+  renderMap();
+}
+
+// ===== SHOP =====
+function showShop() {
+  document.getElementById('map-screen').style.display = 'none';
+  document.getElementById('shop-screen').style.display = 'flex';
+
+  const options = [];
+  const pool = [...CARD_DB];
+  shuffle(pool);
+
+  for (let i = 0; i < 3 && i < pool.length; i++) {
+    const card = pool[i];
+    const price = card.rarity === 'common' ? rand(30, 50) :
+                  card.rarity === 'uncommon' ? rand(50, 70) :
+                  card.rarity === 'rare' ? rand(70, 100) : 120;
+    options.push({ ...card, price });
+  }
+
+  const container = document.getElementById('shop-cards');
+  container.innerHTML = '';
+
+  options.forEach((card) => {
+    const el = document.createElement('div');
+    el.className = `card rarity-${card.rarity}`;
+    el.style.width = '180px';
+    el.style.minHeight = '240px';
+    el.style.position = 'relative';
+    el.innerHTML = `
+      <div class="card-cost">${card.cost}</div>
+      <div class="card-type">${card.type}</div>
+      <div class="card-name">${card.name}</div>
+      <div class="card-art">${card.art}</div>
+      <div class="card-desc">${card.desc}</div>
+      <div class="shop-price">💰 ${card.price}</div>
+    `;
+
+    if (G.player.gold >= card.price) {
+      el.onclick = () => buyCard(card);
+    } else {
+      el.style.opacity = '0.4';
+      el.style.cursor = 'not-allowed';
+    }
+
+    container.appendChild(el);
+  });
+}
+
+function buyCard(card) {
+  if (G.player.gold >= card.price) {
+    G.player.gold -= card.price;
+    G.deck.push({ ...card });
+    updateMapUI();
+    addLog(`Purchased ${card.name}!`);
+  }
+}
+
+function leaveShop() {
+  document.getElementById('shop-screen').style.display = 'none';
+  document.getElementById('map-screen').style.display = 'flex';
+  updateMapUI();
+  renderMap();
+}
+
+// ===== REST =====
+function showRest() {
+  document.getElementById('map-screen').style.display = 'none';
+  document.getElementById('rest-screen').style.display = 'flex';
+}
+
+function restAction(choice) {
+  if (choice === 'heal') {
+    G.player.hp = Math.min(G.player.maxHp, G.player.hp + 15);
+    addLog('You rest and recover 15 HP.');
+  } else if (choice === 'draft') {
+    G.player.gold -= 25;
+    startDraft();
+    return;
+  } else if (choice === 'gold') {
+    G.player.gold += 20;
+    G.totalGold += 20;
+    addLog('You find 20 gold.');
+  }
+
+  document.getElementById('rest-screen').style.display = 'none';
+  document.getElementById('map-screen').style.display = 'flex';
+  updateMapUI();
+  renderMap();
+}
+
+// ===== EVENT =====
+function triggerEvent() {
+  const events = [
+    { msg: 'You find a mysterious shrine. (+10 HP)', action: () => { G.player.hp = Math.min(G.player.maxHp, G.player.hp + 10); } },
+    { msg: 'A wandering merchant gives you gold. (+15 gold)', action: () => { G.player.gold += 15; G.totalGold += 15; } },
+    { msg: 'You discover ancient knowledge. (+1 max HP)', action: () => { G.player.maxHp += 1; G.player.hp += 1; } },
+    { msg: 'A dark spirit offers power. (-5 HP, +1 Strength)', action: () => { G.player.hp -= 5; G.player.strength = (G.player.strength || 0) + 1; } },
+    { msg: 'You find a hidden cache of cards. (+1 random card)', action: () => { const c = pick(CARD_DB); G.deck.push({ ...c }); } },
+  ];
+
+  const event = pick(events);
+  event.action();
+
+  alert(event.msg);
+
+  document.getElementById('map-screen').style.display = 'flex';
+  updateMapUI();
+  renderMap();
+}
+
+// ===== GAME OVER / VICTORY =====
+function showGameOver() {
+  document.getElementById('combat-screen').style.display = 'none';
+  document.getElementById('game-over-screen').style.display = 'flex';
+  document.getElementById('death-stats').innerHTML = `
+    Floor Reached: ${G.floor}<br>
+    Enemies Defeated: ${G.totalKills}<br>
+    Gold Collected: ${G.totalGold}<br>
+    Deck Size: ${G.deck.length}
+  `;
+}
+
+function showVictory() {
+  document.getElementById('combat-screen').style.display = 'none';
+  document.getElementById('victory-screen').style.display = 'flex';
+  document.getElementById('victory-stats').innerHTML = `
+    You have conquered the Abyss!<br>
+    Floor Reached: ${G.floor}<br>
+    Enemies Defeated: ${G.totalKills}<br>
+    Gold Collected: ${G.totalGold}<br>
+    Final Deck Size: ${G.deck.length}
+  `;
+}
+
+// ===== DECK VIEW =====
+function toggleDeckView() {
+  const view = document.getElementById('deck-view');
+  if (view.style.display === 'flex') {
+    view.style.display = 'none';
+    return;
+  }
+
+  const list = document.getElementById('deck-cards-list');
+  list.innerHTML = '';
+
+  // Count cards
+  const counts = {};
+  G.deck.forEach(c => {
+    if (!counts[c.id]) counts[c.id] = { ...c, count: 0 };
+    counts[c.id].count++;
+  });
+
+  Object.values(counts).forEach(card => {
+    const el = document.createElement('div');
+    el.className = 'mini-card';
+    el.innerHTML = `
+      <div><span class="mc-cost">${card.cost}</span> x${card.count}</div>
+      <div class="mc-name">${card.name}</div>
+      <div class="mc-art">${card.art}</div>
+    `;
+    list.appendChild(el);
+  });
+
+  view.style.display = 'flex';
+}
+
+// ===== INIT =====
+window.addEventListener('load', () => {
+  // Title screen is shown by default
+});
+</script>
+</body>
+</html>

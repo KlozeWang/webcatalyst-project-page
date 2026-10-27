@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ramp Runner - Collect Points!</title>
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+body {
+    background: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden;
+}
+#gameContainer {
+    position: relative;
+    border: 3px solid #e94560;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 0 30px rgba(233, 69, 96, 0.3);
+}
+canvas {
+    display: block;
+    background: #16213e;
+}
+#ui {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    right: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    pointer-events: none;
+}
+#score {
+    color: #ffd700;
+    font-size: 28px;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+}
+#highScore {
+    color: #0ff;
+    font-size: 18px;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+}
+#startScreen, #gameOverScreen {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(22, 33, 62, 0.95);
+    z-index: 10;
+}
+#startScreen h1, #gameOverScreen h1 {
+    color: #e94560;
+    font-size: 48px;
+    margin-bottom: 10px;
+    text-shadow: 3px 3px 6px rgba(0,0,0,0.5);
+}
+#startScreen p, #gameOverScreen p {
+    color: #aaa;
+    font-size: 18px;
+    margin-bottom: 20px;
+}
+#finalScore {
+    color: #ffd700;
+    font-size: 32px;
+    font-weight: bold;
+    margin-bottom: 20px;
+}
+button {
+    padding: 15px 40px;
+    font-size: 20px;
+    font-weight: bold;
+    color: #fff;
+    background: #e94560;
+    border: none;
+    border-radius: 30px;
+    cursor: pointer;
+    transition: all 0.3s;
+    pointer-events: all;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+button:hover {
+    background: #ff6b81;
+    transform: scale(1.05);
+    box-shadow: 0 5px 20px rgba(233, 69, 96, 0.4);
+}
+#controls {
+    color: #666;
+    font-size: 14px;
+    margin-top: 15px;
+}
+</style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui">
+        <div id="score">⭐ 0</div>
+        <div id="highScore">🏆 Best: 0</div>
+    </div>
+    <div id="startScreen">
+        <h1>🏔️ RAMP RUNNER</h1>
+        <p>Run up the ramp and collect points!</p>
+        <button onclick="startGame()">START GAME</button>
+        <div id="controls">⬅️ ➡️ Move &nbsp;|&nbsp; ⬆️ / SPACE Jump &nbsp;|&nbsp; 🔄 Double Jump available!</div>
+    </div>
+    <div id="gameOverScreen" style="display:none;">
+        <h1>GAME OVER</h1>
+        <div id="finalScore">Score: 0</div>
+        <button onclick="startGame()">PLAY AGAIN</button>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Responsive canvas
+const W = 800;
+const H = 500;
+canvas.width = W;
+canvas.height = H;
+
+// Game state
+let gameRunning = false;
+let score = 0;
+let highScore = parseInt(localStorage.getItem('rampRunnerHigh') || '0');
+let cameraX = 0;
+let frameCount = 0;
+
+// Player
+const player = {
+    x: 100,
+    y: 300,
+    width: 30,
+    height: 40,
+    vx: 0,
+    vy: 0,
+    speed: 5,
+    jumpForce: -12,
+    gravity: 0.6,
+    onGround: false,
+    jumps: 0,
+    maxJumps: 2,
+    color: '#e94560',
+    trail: [],
+    facing: 1
+};
+
+// Ramp / terrain generation
+let terrainPoints = [];
+let coins = [];
+let particles = [];
+let floatingTexts = [];
+let stars = [];
+let powerUps = [];
+
+// Generate initial stars
+for (let i = 0; i < 100; i++) {
+    stars.push({
+        x: Math.random() * W * 3,
+        y: Math.random() * H * 0.6,
+        size: Math.random() * 2 + 0.5,
+        twinkle: Math.random() * Math.PI * 2,
+        speed: Math.random() * 0.02 + 0.01
+    });
+}
+
+// Generate terrain
+function generateTerrain() {
+    terrainPoints = [];
+    let y = H - 80;
+    let slope = 0;
+    for (let x = 0; x < 10000; x += 5) {
+        // Create ramp-like terrain with variations
+        slope += (Math.random() - 0.5) * 0.3;
+        slope = Math.max(-2, Math.min(2, slope));
+        
+        // General upward trend for ramp feel
+        y += slope * 0.5;
+        y = Math.max(H * 0.3, Math.min(H - 30, y));
+        
+        terrainPoints.push({ x: x, y: y });
+    }
+}
+
+function getTerrainYAt(x) {
+    for (let i = 0; i < terrainPoints.length - 1; i++) {
+        if (terrainPoints[i].x <= x && terrainPoints[i + 1].x > x) {
+            let t = (x - terrainPoints[i].x) / (terrainPoints[i + 1].x - terrainPoints[i].x);
+            return terrainPoints[i].y + t * (terrainPoints[i + 1].y - terrainPoints[i].y);
+        }
+    }
+    return H - 80;
+}
+
+function getTerrainAngleAt(x) {
+    let dx = 5;
+    let y1 = getTerrainYAt(x - dx);
+    let y2 = getTerrainYAt(x + dx);
+    return Math.atan2(y2 - y1, dx * 2);
+}
+
+// Generate coins
+function generateCoins() {
+    coins = [];
+    for (let x = 200; x < 10000; x += Math.random() * 150 + 80) {
+        let terrainY = getTerrainYAt(x);
+        coins.push({
+            x: x,
+            y: terrainY - 40 - Math.random() * 60,
+            radius: 12,
+            collected: false,
+            bobOffset: Math.random() * Math.PI * 2,
+            type: Math.random() < 0.15 ? 'gold' : 'silver',
+            sparkle: 0
+        });
+    }
+}
+
+function generatePowerUps() {
+    powerUps = [];
+    for (let x = 500; x < 10000; x += Math.random() * 800 + 400) {
+        let terrainY = getTerrainYAt(x);
+        powerUps.push({
+            x: x,
+            y: terrainY - 80 - Math.random() * 40,
+            radius: 15,
+            collected: false,
+            type: Math.random() < 0.5 ? 'magnet' : 'shield',
+            bobOffset: Math.random() * Math.PI * 2
+        });
+    }
+}
+
+// Particle system
+function createParticles(x, y, color, count, spread) {
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * spread,
+            vy: (Math.random() - 0.5) * spread - 2,
+            life: 1,
+            decay: Math.random() * 0.03 + 0.02,
+            color: color,
+            size: Math.random() * 4 + 2
+        });
+    }
+}
+
+function createFloatingText(x, y, text, color) {
+    floatingTexts.push({
+        x: x,
+        y: y,
+        text: text,
+        color: color,
+        life: 1,
+        vy: -2
+    });
+}
+
+// Input handling
+const keys = {};
+document.addEventListener('keydown', (e) => {
+    keys[e.code] = true;
+    if (e.code === 'Space' || e.code === 'ArrowUp') {
+        e.preventDefault();
+    }
+});
+document.addEventListener('keyup', (e) => {
+    keys[e.code] = false;
+});
+
+// Touch controls
+let touchLeft = false;
+let touchRight = false;
+let touchJump = false;
+
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    for (let touch of e.touches) {
+        let rect = canvas.getBoundingClientRect();
+        let x = touch.clientX - rect.left;
+        let y = touch.clientY - rect.top;
+        
+        if (y < H * 0.5) {
+            touchJump = true;
+        } else if (x < W * 0.5) {
+            touchLeft = true;
+        } else {
+            touchRight = true;
+        }
+    }
+});
+
+canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    touchLeft = false;
+    touchRight = false;
+    touchJump = false;
+});
+
+// Game start
+function startGame() {
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('gameOverScreen').style.display = 'none';
+    
+    score = 0;
+    cameraX = 0;
+    frameCount = 0;
+    
+    player.x = 100;
+    player.y = 300;
+    player.vx = 0;
+    player.vy = 0;
+    player.onGround = false;
+    player.jumps = 0;
+    player.trail = [];
+    
+    generateTerrain();
+    generateCoins();
+    generatePowerUps();
+    particles = [];
+    floatingTexts = [];
+    
+    document.getElementById('score').textContent = '⭐ 0';
+    document.getElementById('highScore').textContent = '🏆 Best: ' + highScore;
+    
+    gameRunning = true;
+    gameLoop();
+}
+
+function gameOver() {
+    gameRunning = false;
+    
+    if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('rampRunnerHigh', highScore.toString());
+    }
+    
+    document.getElementById('finalScore').textContent = 'Score: ' + score;
+    document.getElementById('gameOverScreen').style.display = 'flex';
+}
+
+// Update game
+function update() {
+    frameCount++;
+    
+    // Player movement
+    let moveLeft = keys['ArrowLeft'] || keys['KeyA'] || touchLeft;
+    let moveRight = keys['ArrowRight'] || keys['KeyD'] || touchRight;
+    let jump = keys['ArrowUp'] || keys['KeyW'] || keys['Space'] || touchJump;
+    
+    if (moveLeft) {
+        player.vx = -player.speed;
+        player.facing = -1;
+    } else if (moveRight) {
+        player.vx = player.speed;
+        player.facing = 1;
+    } else {
+        player.vx *= 0.8;
+    }
+    
+    // Jump
+    if (jump && player.jumps < player.maxJumps) {
+        player.vy = player.jumpForce;
+        player.jumps++;
+        player.onGround = false;
+        createParticles(player.x, player.y + player.height/2, '#0ff', 8, 4);
+        jump = false; // Prevent holding jump
+    }
+    
+    // Gravity
+    player.vy += player.gravity;
+    
+    // Apply velocity
+    player.x += player.vx;
+    player.y += player.vy;
+    
+    // Terrain collision
+    let terrainY = getTerrainYAt(player.x);
+    let terrainAngle = getTerrainAngleAt(player.x);
+    
+    if (player.y + player.height/2 >= terrainY) {
+        player.y = terrainY - player.height/2;
+        player.vy = 0;
+        player.onGround = true;
+        player.jumps = 0;
+        
+        // Slide on slope
+        player.vx += Math.sin(terrainAngle) * 0.5;
+    } else {
+        player.onGround = false;
+    }
+    
+    // Keep player in bounds
+    if (player.x < 0) player.x = 0;
+    if (player.x > 9900) player.x = 9900;
+    
+    // Fall death
+    if (player.y > H + 100) {
+        gameOver();
+        return;
+    }
+    
+    // Camera follow
+    let targetCameraX = player.x - W * 0.3;
+    cameraX += (targetCameraX - cameraX) * 0.1;
+    cameraX = Math.max(0, Math.min(cameraX, 9200));
+    
+    // Trail
+    if (Math.abs(player.vx) > 1 || Math.abs(player.vy) > 1) {
+        player.trail.push({ x: player.x, y: player.y, life: 1 });
+    }
+    player.trail = player.trail.filter(t => {
+        t.life -= 0.05;
+        return t.life > 0;
+    });
+    
+    // Coin collection
+    coins.forEach(coin => {
+        if (coin.collected) return;
+        
+        let dx = player.x - coin.x;
+        let dy = player.y - coin.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist < coin.radius + 20) {
+            coin.collected = true;
+            let points = coin.type === 'gold' ? 50 : 10;
+            score += points;
+            document.getElementById('score').textContent = '⭐ ' + score;
+            
+            createParticles(coin.x, coin.y, coin.type === 'gold' ? '#ffd700' : '#c0c0c0', 15, 6);
+            createFloatingText(coin.x, coin.y, '+' + points, coin.type === 'gold' ? '#ffd700' : '#fff');
+        }
+        
+        coin.sparkle += 0.1;
+    });
+    
+    // Power-up collection
+    powerUps.forEach(pu => {
+        if (pu.collected) return;
+        
+        let dx = player.x - pu.x;
+        let dy = player.y - pu.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist < pu.radius + 20) {
+            pu.collected = true;
+            score += 25;
+            document.getElementById('score').textContent = '⭐ ' + score;
+            
+            createParticles(pu.x, pu.y, '#0f0', 20, 8);
+            createFloatingText(pu.x, pu.y, '+25 ⚡', '#0f0');
+        }
+        
+        pu.bobOffset += 0.05;
+    });
+    
+    // Update particles
+    particles = particles.filter(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.1;
+        p.life -= p.decay;
+        return p.life > 0;
+    });
+    
+    // Update floating texts
+    floatingTexts = floatingTexts.filter(ft => {
+        ft.y += ft.vy;
+        ft.life -= 0.02;
+        return ft.life > 0;
+    });
+    
+    // Update stars
+    stars.forEach(star => {
+        star.twinkle += star.speed;
+    });
+}
+
+// Draw game
+function draw() {
+    // Clear
+    ctx.fillStyle = '#16213e';
+    ctx.fillRect(0, 0, W, H);
+    
+    // Draw stars
+    stars.forEach(star => {
+        let alpha = 0.5 + Math.sin(star.twinkle) * 0.5;
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(star.x - cameraX * 0.1, star.y, star.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    
+    // Draw mountains background
+    ctx.fillStyle = '#0f3460';
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 50) {
+        let worldX = x + cameraX * 0.2;
+        let y = H - 150 - Math.sin(worldX * 0.005) * 80 - Math.cos(worldX * 0.003) * 50;
+        ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, H);
+    ctx.fill();
+    
+    // Draw second mountain layer
+    ctx.fillStyle = '#1a1a4e';
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 30) {
+        let worldX = x + cameraX * 0.4;
+        let y = H - 100 - Math.sin(worldX * 0.008) * 60 - Math.cos(worldX * 0.005) * 40;
+        ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, H);
+    ctx.fill();
+    
+    // Draw terrain
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    
+    let startIdx = Math.max(0, Math.floor(cameraX / 5) - 1);
+    let endIdx = Math.min(terrainPoints.length - 1, Math.ceil((cameraX + W) / 5) + 1);
+    
+    for (let i = startIdx; i <= endIdx; i++) {
+        let px = terrainPoints[i].x - cameraX;
+        let py = terrainPoints[i].y;
+        ctx.lineTo(px, py);
+    }
+    
+    ctx.lineTo(W, H);
+    ctx.closePath();
+    
+    // Terrain gradient
+    let gradient = ctx.createLinearGradient(0, H * 0.3, 0, H);
+    gradient.addColorStop(0, '#2d4a3e');
+    gradient.addColorStop(0.5, '#1a3a2a');
+    gradient.addColorStop(1, '#0d1f17');
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    
+    // Terrain top line
+    ctx.strokeStyle = '#4ade80';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = startIdx; i <= endIdx; i++) {
+        let px = terrainPoints[i].x - cameraX;
+        let py = terrainPoints[i].y;
+        if (i === startIdx) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    
+    // Terrain pattern
+    ctx.strokeStyle = 'rgba(74, 222, 128, 0.1)';
+    ctx.lineWidth = 1;
+    for (let i = startIdx; i <= endIdx; i += 10) {
+        let px = terrainPoints[i].x - cameraX;
+        let py = terrainPoints[i].y;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px, py + 30);
+        ctx.stroke();
+    }
+    
+    // Draw coins
+    coins.forEach(coin => {
+        if (coin.collected) return;
+        
+        let cx = coin.x - cameraX;
+        let cy = coin.y + Math.sin(frameCount * 0.05 + coin.bobOffset) * 5;
+        
+        if (cx < -50 || cx > W + 50) return;
+        
+        // Coin glow
+        let glowColor = coin.type === 'gold' ? 'rgba(255, 215, 0, 0.3)' : 'rgba(192, 192, 192, 0.3)';
+        ctx.fillStyle = glowColor;
+        ctx.beginPath();
+        ctx.arc(cx, cy, coin.radius + 8, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Coin body
+        let coinGradient = ctx.createRadialGradient(cx - 3, cy - 3, 0, cx, cy, coin.radius);
+        if (coin.type === 'gold') {
+            coinGradient.addColorStop(0, '#fff700');
+            coinGradient.addColorStop(0.5, '#ffd700');
+            coinGradient.addColorStop(1, '#b8860b');
+        } else {
+            coinGradient.addColorStop(0, '#fff');
+            coinGradient.addColorStop(0.5, '#c0c0c0');
+            coinGradient.addColorStop(1, '#808080');
+        }
+        ctx.fillStyle = coinGradient;
+        ctx.beginPath();
+        ctx.arc(cx, cy, coin.radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Coin shine
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.beginPath();
+        ctx.arc(cx - 3, cy - 3, 3, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Star symbol
+        ctx.fillStyle = coin.type === 'gold' ? '#b8860b' : '#666';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('★', cx, cy + 1);
+    });
+    
+    // Draw power-ups
+    powerUps.forEach(pu => {
+        if (pu.collected) return;
+        
+        let px = pu.x - cameraX;
+        let py = pu.y + Math.sin(frameCount * 0.03 + pu.bobOffset) * 8;
+        
+        if (px < -50 || px > W + 50) return;
+        
+        // Power-up glow
+        let glowColor = pu.type === 'magnet' ? 'rgba(0, 255, 255, 0.3)' : 'rgba(255, 0, 255, 0.3)';
+        ctx.fillStyle = glowColor;
+        ctx.beginPath();
+        ctx.arc(px, py, pu.radius + 10, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Power-up body
+        ctx.fillStyle = pu.type === 'magnet' ? '#0ff' : '#f0f';
+        ctx.beginPath();
+        ctx.arc(px, py, pu.radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Icon
+        ctx.fillStyle = '#fff';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(pu.type === 'magnet' ? '⚡' : '🛡️', px, py);
+    });
+    
+    // Draw player trail
+    player.trail.forEach(t => {
+        let tx = t.x - cameraX;
+        ctx.fillStyle = `rgba(233, 69, 96, ${t.life * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(tx, t.y, 5 * t.life, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    
+    // Draw player
+    let px = player.x - cameraX;
+    let py = player.y;
+    
+    // Player shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.ellipse(px, py + player.height/2 + 5, 15, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Player body
+    ctx.fillStyle = player.color;
+    ctx.beginPath();
+    ctx.roundRect(px - player.width/2, py - player.height/2, player.width, player.height, 8);
+    ctx.fill();
+    
+    // Player face
+    ctx.fillStyle = '#fff';
+    // Eyes
+    let eyeOffsetX = player.facing * 3;
+    ctx.beginPath();
+    ctx.arc(px - 5 + eyeOffsetX, py - 5, 4, 0, Math.PI * 2);
+    ctx.arc(px + 5 + eyeOffsetX, py - 5, 4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Pupils
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(px - 5 + eyeOffsetX + player.facing * 2, py - 5, 2, 0, Math.PI * 2);
+    ctx.arc(px + 5 + eyeOffsetX + player.facing * 2, py - 5, 2, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Mouth
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (player.vy < -2) {
+        // Jumping - open mouth
+        ctx.arc(px + eyeOffsetX, py + 8, 4, 0, Math.PI);
+    } else {
+        // Normal - smile
+        ctx.arc(px + eyeOffsetX, py + 5, 3, 0.2, Math.PI - 0.2);
+    }
+    ctx.stroke();
+    
+    // Player hat
+    ctx.fillStyle = '#ff6b81';
+    ctx.beginPath();
+    ctx.moveTo(px - 12, py - player.height/2);
+    ctx.lineTo(px, py - player.height/2 - 15);
+    ctx.lineTo(px + 12, py - player.height/2);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Draw particles
+    particles.forEach(p => {
+        let ppx = p.x - cameraX;
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life;
+        ctx.beginPath();
+        ctx.arc(ppx, p.y, p.size * p.life, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    });
+    
+    // Draw floating texts
+    floatingTexts.forEach(ft => {
+        let ftx = ft.x - cameraX;
+        ctx.fillStyle = ft.color;
+        ctx.globalAlpha = ft.life;
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(ft.text, ftx, ft.y);
+        ctx.globalAlpha = 1;
+    });
+    
+    // Draw distance marker
+    let distance = Math.floor(player.x / 10);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${distance}m`, W - 15, H - 15);
+}
+
+// Game loop
+function gameLoop() {
+    if (!gameRunning) return;
+    
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+// Initial draw
+document.getElementById('highScore').textContent = '🏆 Best: ' + highScore;
+
+// Polyfill for roundRect
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+        if (typeof r === 'number') r = [r, r, r, r];
+        this.moveTo(x + r[0], y);
+        this.lineTo(x + w - r[1], y);
+        this.quadraticCurveTo(x + w, y, x + w, y + r[1]);
+        this.lineTo(x + w, y + h - r[2]);
+        this.quadraticCurveTo(x + w, y + h, x + w - r[2], y + h);
+        this.lineTo(x + r[3], y + h);
+        this.quadraticCurveTo(x, y + h, x, y + h - r[3]);
+        this.lineTo(x, y + r[0]);
+        this.quadraticCurveTo(x, y, x + r[0], y);
+        this.closePath();
+        return this;
+    };
+}
+</script>
+
+</body>
+</html>

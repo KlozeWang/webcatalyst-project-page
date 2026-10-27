@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Cadavre Exquis</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:Georgia,serif}
+body{min-height:100vh;background:linear-gradient(135deg,#2c1810,#5d2e0d,#8b4513);display:flex;align-items:center;justify-content:center;padding:20px;color:#f4e8d0}
+.container{background:rgba(0,0,0,0.6);backdrop-filter:blur(10px);border:2px solid #d4a574;border-radius:20px;padding:30px;max-width:700px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.7)}
+h1{text-align:center;font-size:2.2em;margin-bottom:10px;color:#f4d4a0;text-shadow:2px 2px 4px #000;font-style:italic}
+.subtitle{text-align:center;margin-bottom:25px;color:#d4a574;font-size:0.95em}
+.screen{display:none;animation:fade .5s}
+.screen.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(10px)}to{opacity:1}}
+input,textarea,button{width:100%;padding:14px;margin:8px 0;border-radius:10px;border:none;font-size:1em;font-family:inherit}
+input,textarea{background:rgba(255,255,255,0.1);color:#fff;border:1px solid #d4a574}
+textarea{resize:vertical;min-height:90px}
+input::placeholder,textarea::placeholder{color:#bbb}
+button{background:linear-gradient(135deg,#d4a574,#8b4513);color:#fff;font-weight:bold;cursor:pointer;transition:.2s;font-size:1.05em;letter-spacing:1px}
+button:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(212,165,116,0.5)}
+button:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn-secondary{background:linear-gradient(135deg,#555,#333)}
+.player-list{margin:15px 0}
+.player-tag{display:inline-block;background:#d4a574;color:#2c1810;padding:6px 14px;border-radius:20px;margin:4px;font-weight:bold}
+.turn-info{text-align:center;background:rgba(212,165,116,0.2);padding:15px;border-radius:10px;margin-bottom:15px;border:1px dashed #d4a574}
+.turn-info .name{font-size:1.5em;color:#f4d4a0;font-weight:bold}
+.hint{background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;margin:10px 0;font-style:italic;color:#d4a574;font-size:.9em;border-left:3px solid #d4a574}
+.story{background:rgba(244,232,208,0.95);color:#2c1810;padding:25px;border-radius:10px;font-size:1.15em;line-height:1.8;margin:15px 0;max-height:400px;overflow-y:auto}
+.story p{margin-bottom:8px;animation:reveal .8s}
+@keyframes reveal{from{opacity:0;transform:translateX(-20px)}to{opacity:1}}
+.warning{color:#ff6b6b;text-align:center;font-weight:bold;margin:10px 0}
+.progress{text-align:center;color:#d4a574;margin-bottom:10px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>✒️ Le Cadavre Exquis ✒️</h1>
+<p class="subtitle">Écrivez une histoire absurde, ensemble, à l'aveugle !</p>
+
+<div id="setup" class="screen active">
+  <h3 style="margin-bottom:10px">👥 Les joueurs</h3>
+  <input id="nameInput" placeholder="Nom du joueur" maxlength="20">
+  <button onclick="addPlayer()">+ Ajouter joueur</button>
+  <div class="player-list" id="playerList"></div>
+  <h3 style="margin:15px 0 10px">📜 Nombre de phrases par joueur</h3>
+  <input id="rounds" type="number" value="2" min="1" max="10">
+  <button onclick="startGame()" id="startBtn">🎭 Commencer l'histoire</button>
+</div>
+
+<div id="play" class="screen">
+  <div class="progress" id="progress"></div>
+  <div class="turn-info">
+    Au tour de <div class="name" id="currentName"></div>
+    <small>(Passe l'appareil à ce joueur)</small>
+  </div>
+  <div class="hint" id="hint"></div>
+  <textarea id="sentenceInput" placeholder="Écris ta phrase ici..."></textarea>
+  <p class="warning" id="warning"></p>
+  <button onclick="submitSentence()">✅ Valider et passer</button>
+</div>
+
+<div id="pass" class="screen">
+  <div class="turn-info" style="margin-top:20px">
+    <p style="margin-bottom:10px">📱 Passe l'appareil à</p>
+    <div class="name" id="nextName"></div>
+  </div>
+  <button onclick="showPlay()">Je suis prêt(e) 👁️</button>
+</div>
+
+<div id="end" class="screen">
+  <h2 style="text-align:center;color:#f4d4a0;margin-bottom:15px">🎉 Voici votre chef-d'œuvre !</h2>
+  <div class="story" id="finalStory"></div>
+  <button onclick="location.reload()">🔄 Nouvelle histoire</button>
+</div>
+</div>
+
+<script>
+let players=[],sentences=[],rounds=2,turn=0;
+const hints=["Commence par 'Il était une fois...'","Introduis un personnage étrange","Décris un lieu mystérieux","Un événement inattendu arrive","Quelqu'un dit quelque chose","Un objet magique apparaît","Une catastrophe se produit","Un retournement de situation","Termine l'histoire avec une morale absurde"];
+
+function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active')}
+
+function addPlayer(){
+  const i=document.getElementById('nameInput'),n=i.value.trim();
+  if(!n)return;
+  players.push(n);i.value='';render();
+}
+function render(){
+  document.getElementById('playerList').innerHTML=players.map((p,i)=>`<span class="player-tag" onclick="removeP(${i})" style="cursor:pointer">${p} ✕</span>`).join('');
+}
+function removeP(i){players.splice(i,1);render()}
+
+function startGame(){
+  if(players.length<2){alert('Au moins 2 joueurs !');return}
+  rounds=parseInt(document.getElementById('rounds').value)||2;
+  turn=0;sentences=[];
+  showPass();
+}
+function showPass(){
+  if(turn>=players.length*rounds){return showEnd()}
+  document.getElementById('nextName').textContent=players[turn%players.length];
+  show('pass');
+}
+function showPlay(){
+  const idx=turn%players.length;
+  document.getElementById('currentName').textContent=players[idx];
+  document.getElementById('progress').textContent=`Phrase ${turn+1} / ${players.length*rounds}`;
+  document.getElementById('hint').textContent=turn===0?"💡 Commence avec : « Il était une fois... »":(turn===players.length*rounds-1?"💡 C'est la dernière phrase, conclus l'histoire !":"💡 "+hints[turn%hints.length]+" (tu ne vois pas les phrases précédentes !)");
+  document.getElementById('sentenceInput').value='';
+  document.getElementById('warning').textContent='';
+  show('play');
+}
+function submitSentence(){
+  const t=document.getElementById('sentenceInput').value.trim();
+  if(t.length<3){document.getElementById('warning').textContent='Écris une vraie phrase !';return}
+  sentences.push({player:players[turn%players.length],text:t});
+  turn++;
+  beep();
+  showPass();
+}
+function showEnd(){
+  document.getElementById('finalStory').innerHTML=sentences.map((s,i)=>`<p style="animation-delay:${i*0.3}s"><strong style="color:#8b4513">${s.player}:</strong> ${s.text}</p>`).join('');
+  show('end');
+  fanfare();
+}
+function beep(){
+  try{const c=new(window.AudioContext||webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();
+  o.connect(g);g.connect(c.destination);o.frequency.value=600;g.gain.setValueAtTime(0.2,c.currentTime);g.gain.exponentialRampToValueAtTime(0.01,c.currentTime+0.2);o.start();o.stop(c.currentTime+0.2)}catch(e){}
+}
+function fanfare(){
+  try{const c=new(window.AudioContext||webkitAudioContext)();[523,659,784,1047].forEach((f,i)=>{const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=f;g.gain.setValueAtTime(0.15,c.currentTime+i*0.15);g.gain.exponentialRampToValueAtTime(0.01,c.currentTime+i*0.15+0.3);o.start(c.currentTime+i*0.15);o.stop(c.currentTime+i*0.15+0.3)})}catch(e){}
+}
+document.getElementById('nameInput').addEventListener('keypress',e=>{if(e.key==='Enter')addPlayer()});
+</script>
+</body>
+</html>

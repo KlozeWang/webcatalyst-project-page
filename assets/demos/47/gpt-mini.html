@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Indian Road Driving Arena</title>
+<style>
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: linear-gradient(#87d7ff, #dff6ff 55%, #b7d86a 56%, #8bc34a 100%);
+    font-family: Arial, Helvetica, sans-serif;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  #ui {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  #title {
+    position: absolute;
+    left: 14px;
+    top: 12px;
+    color: #fff;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.4px;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    background: rgba(0,0,0,0.16);
+    padding: 8px 10px;
+    border-radius: 10px;
+    backdrop-filter: blur(3px);
+  }
+  #hint {
+    position: absolute;
+    right: 14px;
+    top: 12px;
+    color: rgba(255,255,255,0.95);
+    font-size: 12px;
+    text-align: right;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    background: rgba(0,0,0,0.16);
+    padding: 8px 10px;
+    border-radius: 10px;
+  }
+  #controls {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 160px;
+    pointer-events: none;
+  }
+  .pad {
+    position: absolute;
+    bottom: 18px;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.18);
+    backdrop-filter: blur(2px);
+  }
+  .pad:before {
+    content: "";
+    position: absolute;
+    inset: 22px;
+    border-radius: 50%;
+    border: 1px dashed rgba(255,255,255,0.26);
+  }
+  #steerLeft { left: 18px; }
+  #steerRight { right: 18px; }
+  .btn {
+    position: absolute;
+    bottom: 34px;
+    width: 78px;
+    height: 78px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255,255,255,0.22);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    font-weight: 700;
+    text-shadow: 0 2px 5px rgba(0,0,0,0.4);
+    box-shadow: 0 10px 28px rgba(0,0,0,0.15);
+    pointer-events: auto;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #leftBtn { left: 40px; }
+  #rightBtn { right: 40px; }
+  #speedInfo {
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    color: #fff;
+    font-size: 13px;
+    background: rgba(0,0,0,0.18);
+    padding: 8px 12px;
+    border-radius: 999px;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <div id="title">Indian City Road Arena</div>
+  <div id="hint">Third-person drive view<br/>Left-side driving · Android ready</div>
+  <div id="speedInfo">Swipe or tap controls to steer</div>
+  <div id="controls">
+    <div class="pad" id="steerLeft"></div>
+    <div class="pad" id="steerRight"></div>
+    <div class="btn" id="leftBtn">◀</div>
+    <div class="btn" id="rightBtn">▶</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0, DPR = 1;
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+    W = canvas.width = Math.floor(innerWidth * DPR);
+    H = canvas.height = Math.floor(innerHeight * DPR);
+    canvas.style.width = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+  }
+  window.addEventListener('resize', resize, { passive: true });
+  resize();
+
+  const keys = { left:false, right:false };
+  function bindBtn(id, key) {
+    const el = document.getElementById(id);
+    const on = (e) => { e.preventDefault(); keys[key] = true; };
+    const off = (e) => { e.preventDefault(); keys[key] = false; };
+    el.addEventListener('touchstart', on, { passive:false });
+    el.addEventListener('touchend', off, { passive:false });
+    el.addEventListener('touchcancel', off, { passive:false });
+    el.addEventListener('mousedown', on);
+    window.addEventListener('mouseup', off);
+    el.addEventListener('mouseleave', off);
+  }
+  bindBtn('leftBtn', 'left');
+  bindBtn('rightBtn', 'right');
+
+  let steer = 0, speed = 0.9, camShake = 0;
+  let t = 0;
+  const roadW = 0.42;
+  const roadLanes = 4;
+  const objects = [];
+  const deco = [];
+  const traffic = [];
+  const signs = [
+    'SPEED BREAKER AHEAD', 'RIGHT TURN', 'HOSPITAL', 'METRO STATION',
+    'NO ENTRY', 'SCHOOL ZONE', 'PETROL PUMP', 'इंदिरा नगर'
+  ];
+  const hindi = ['रुकिए', 'धीरे चलिए', 'ट्रैफिक सिग्नल', 'बस स्टॉप', 'मुख्य मार्ग', 'नो हॉर्न'];
+  function rnd(a,b){ return a + Math.random()*(b-a); }
+  function choice(arr){ return arr[(Math.random()*arr.length)|0]; }
+
+  function addTraffic(kind, z, side, laneOffset=0) {
+    traffic.push({
+      kind, z, side, laneOffset,
+      wobble: rnd(0, Math.PI*2),
+      color: kind==='bus' ? '#d62828' :
+             kind==='auto' ? '#f4a261' :
+             kind==='truck' ? '#7f8c8d' :
+             kind==='bike' ? '#264653' : '#2a9d8f'
+    });
+  }
+  function addDeco(kind, z, side, extra={}) {
+    deco.push({ kind, z, side, ...extra, hue: rnd(0,1) });
+  }
+
+  for (let i=0;i<70;i++) {
+    addDeco('tree', i*16 + rnd(-2,2), i%2? -1:1);
+    if (i%5===0) addDeco('pole', i*22 + rnd(-4,4), i%2? -1:1);
+    if (i%9===0) addDeco('stall', i*30 + rnd(-5,5), i%3===0? -1:1);
+    if (i%12===0) addDeco('billboard', i*42 + rnd(-6,6), i%2? -1:1);
+  }
+  for (let i=0;i<18;i++) addDeco('divider', i*28, 0);
+  for (let i=0;i<22;i++) addTraffic(choice(['bus','auto','truck','bike']), i*28 + 15, i%2? -1:1, rnd(-0.18,0.18));
+  addTraffic('cow', 110, 1, 0.25);
+  addTraffic('cow', 170, -1, -0.25);
+
+  function project(z, side=0, xOffset=0, yOffset=0) {
+    const perspective = 1 / (0.01 + z*0.012);
+    const x = W*0.5 + (side*W*0.25 + xOffset*W*0.4) * perspective;
+    const y = H*0.78 - z*H*0.22 * perspective + yOffset*H*0.18;
+    const scale = perspective;
+    return { x, y, s: scale };
+  }
+
+  function drawSky() {
+    const grd = ctx.createLinearGradient(0,0,0,H);
+    grd.addColorStop(0, '#86d7ff');
+    grd.addColorStop(0.6, '#c9f0ff');
+    grd.addColorStop(0.61, '#c7e79a');
+    grd.addColorStop(1, '#7fbd4b');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0,0,W,H);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    for (let i=0;i<8;i++) {
+      const x = (i*0.18 + (t*0.00002))%1 * W;
+      const y = H*0.12 + Math.sin(i*1.7 + t*0.0004)*H*0.03;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 70*DPR, 26*DPR, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#8c6a3f';
+    ctx.fillRect(0, H*0.57, W, H*0.43);
+  }
+
+  function drawRoad() {
+    const horizon = H*0.38;
+    const roadTopW = W*0.18;
+    const roadBotW = W*0.72;
+    ctx.beginPath();
+    ctx.moveTo(W*0.5 - roadTopW*0.5, horizon);
+    ctx.lineTo(W*0.5 + roadTopW*0.5, horizon);
+    ctx.lineTo(W*0.5 + roadBotW*0.5, H);
+    ctx.lineTo(W*0.5 - roadBotW*0.5, H);
+    ctx.closePath();
+    ctx.fillStyle = '#2e3136';
+    ctx.fill();
+
+    ctx.fillStyle = '#3a3f45';
+    for (let i=0;i<14;i++) {
+      const y = horizon + (i/14)*H*0.62;
+      const w = roadTopW + (roadBotW-roadTopW)*(i/14);
+      ctx.fillRect(W*0.5 - w*0.5, y, w, H*0.002);
+    }
+
+    ctx.strokeStyle = '#f4f4f4';
+    ctx.lineWidth = 4*DPR;
+    ctx.setLineDash([26*DPR, 18*DPR]);
+    ctx.beginPath();
+    ctx.moveTo(W*0.5, horizon);
+    ctx.lineTo(W*0.5, H);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = '#f1d54f';
+    for (let i=0;i<18;i++) {
+      const y = H*0.4 + i*H*0.035 + (t*0.03)% (H*0.035);
+      const w = 8 + i*1.4;
+      ctx.fillRect(W*0.5 - w*0.5, y, w, 3*DPR);
+    }
+
+    ctx.fillStyle = '#b6b6b6';
+    ctx.fillRect(W*0.5 - roadBotW*0.53, H*0.42, roadBotW*0.06, H*0.58);
+    ctx.fillRect(W*0.5 + roadBotW*0.47, H*0.42, roadBotW*0.06, H*0.58);
+
+    ctx.fillStyle = '#d5d5d5';
+    for (let i=0;i<15;i++) {
+      const y = H*0.43 + i*H*0.04;
+      ctx.fillRect(W*0.5 - roadBotW*0.48, y, roadBotW*0.96, 2*DPR);
+    }
+
+    ctx.fillStyle = '#ece8d0';
+    ctx.fillRect(W*0.5 - roadBotW*0.15, H*0.43, roadBotW*0.30, H*0.012);
+    ctx.fillRect(W*0.5 - roadBotW*0.15, H*0.52, roadBotW*0.30, H*0.012);
+
+    ctx.fillStyle = '#cfe8a8';
+    ctx.fillRect(0, H*0.58, W, H*0.42);
+  }
+
+  function drawFlyover() {
+    const y = H*0.28;
+    ctx.fillStyle = '#8d8f95';
+    ctx.fillRect(0, y, W, H*0.03);
+    ctx.fillRect(0, y+H*0.02, W, H*0.012);
+
+    for (let i=0;i<7;i++) {
+      const x = i * W/6;
+      ctx.fillStyle = '#6f7278';
+      ctx.fillRect(x-6*DPR, y+H*0.03, 12*DPR, H*0.18);
+      ctx.fillStyle = '#9aa0a8';
+      ctx.beginPath();
+      ctx.arc(x, y+H*0.03, 8*DPR, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function drawMetro() {
+    const baseY = H*0.21;
+    ctx.strokeStyle = '#5d6f7a';
+    ctx.lineWidth = 6*DPR;
+    ctx.beginPath();
+    ctx.moveTo(0, baseY);
+    ctx.lineTo(W, baseY);
+    ctx.stroke();
+    ctx.fillStyle = '#d8e3e8';
+    for (let i=0;i<10;i++) {
+      const x = i*W/9;
+      ctx.fillRect(x-10*DPR, baseY-30*DPR, 20*DPR, 58*DPR);
+      ctx.fillStyle = '#b7c7cf';
+      ctx.fillRect(x-8*DPR, baseY-26*DPR, 16*DPR, 50*DPR);
+      ctx.fillStyle = '#d8e3e8';
+    }
+  }
+
+  function drawTree(x,y,s) {
+    ctx.fillStyle = '#7a4d25';
+    ctx.fillRect(x-4*s, y, 8*s, 28*s);
+    ctx.fillStyle = '#2f8f3d';
+    ctx.beginPath(); ctx.arc(x, y-6*s, 22*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x-14*s, y+1*s, 16*s, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x+15*s, y+2*s, 16*s, 0, Math.PI*2); ctx.fill();
+  }
+
+  function drawPole(x,y,s) {
+    ctx.fillStyle = '#6f7680';
+    ctx.fillRect(x-2*s, y-56*s, 4*s, 56*s);
+    ctx.fillRect(x-18*s, y-52*s, 36*s, 3*s);
+    ctx.strokeStyle = '#4e555d';
+    ctx.lineWidth = 1.5*s;
+    ctx.beginPath(); ctx.moveTo(x, y-52*s); ctx.lineTo(x+18*s, y-24*s); ctx.stroke();
+    ctx.fillStyle = '#f8d94b';
+    ctx.beginPath(); ctx.arc(x+18*s, y-24*s, 4*s, 0, Math.PI*2); ctx.fill();
+  }
+
+  function drawStall(x,y,s) {
+    ctx.fillStyle = '#f3e2b3';
+    ctx.fillRect(x-20*s, y-20*s, 40*s, 20*s);
+    ctx.fillStyle = '#bf3b3b';
+    ctx.fillRect(x-24*s, y-26*s, 48*s, 8*s);
+    ctx.fillStyle = '#ffd166';
+    ctx.fillRect(x-18*s, y-6*s, 12*s, 6*s);
+    ctx.fillRect(x+2*s, y-6*s, 12*s, 6*s);
+    ctx.fillStyle = '#5c3b22';
+    ctx.fillRect(x-17*s, y, 8*s, 18*s);
+    ctx.fillRect(x+9*s, y, 8*s, 18*s);
+  }
+
+  function drawBillboard(x,y,s,text) {
+    ctx.fillStyle = '#e8edf2';
+    ctx.fillRect(x-38*s, y-46*s, 76*s, 46*s);
+    ctx.fillStyle = '#455a64';
+    ctx.fillRect(x-42*s, y-50*s, 84*s, 6*s);
+    ctx.fillRect(x-2*s, y, 4*s, 28*s);
+    ctx.fillRect(x-28*s, y, 4*s, 28*s);
+    ctx.fillStyle = '#1e88e5';
+    ctx.fillRect(x-36*s, y-40*s, 72*s, 14*s);
+    ctx.fillStyle = '#fff';
+    ctx.font = `${10*s}px Arial`;
+    ctx.fillText(text, x-32*s, y-30*s);
+  }
+
+  function drawVehicle(o, x, y, s) {
+    const kind = o.kind;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(s, s);
+    if (kind==='bus') {
+      ctx.fillStyle = '#c62828'; ctx.fillRect(-32,-14,64,24);
+      ctx.fillStyle = '#f8f8f8'; ctx.fillRect(-26,-10,34,12);
+      ctx.fillStyle = '#263238'; ctx.fillRect(12,-10,16,12);
+      ctx.fillStyle = '#1b1b1b'; ctx.fillRect(-24,12,12,8); ctx.fillRect(12,12,12,8);
+      ctx.fillRect(-30,12,12,8); ctx.fillRect(18,12,12,8);
+      ctx.fillStyle = '#ffd54f'; ctx.fillRect(-30,-6,60,3);
+    } else if (kind==='auto') {
+      ctx.fillStyle = '#f4b23a'; ctx.beginPath();
+      ctx.moveTo(-18,10); ctx.lineTo(18,10); ctx.lineTo(12,-10); ctx.lineTo(-12,-10); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#2b2b2b'; ctx.fillRect(-20,8,10,6); ctx.fillRect(10,8,10,6);
+      ctx.fillStyle = '#3e4a52'; ctx.fillRect(-10,-16,20,8);
+      ctx.fillStyle = '#8fd3ff'; ctx.fillRect(-8,-13,16,5);
+    } else if (kind==='truck') {
+      ctx.fillStyle = '#7f8c8d'; ctx.fillRect(-30,-12,50,22);
+      ctx.fillStyle = '#d9d9d9'; ctx.fillRect(12,-12,18,16);
+      ctx.fillStyle = '#3c3c3c'; ctx.fillRect(-26,10,10,8); ctx.fillRect(-8,10,10,8); ctx.fillRect(14,10,10,8);
+      ctx.fillStyle = '#b0bec5'; ctx.fillRect(-26,-8,40,8);
+    } else if (kind==='bike') {
+      ctx.strokeStyle = '#1f2933'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(-10,10,6,0,Math.PI*2); ctx.arc(12,10,6,0,Math.PI*2); ctx.stroke();
+      ctx.fillStyle = '#1565c0'; ctx.fillRect(-4,-10,8,16);
+      ctx.fillStyle = '#263238'; ctx.fillRect(-2,-20,4,10);
+      ctx.beginPath(); ctx.strokeStyle = '#263238'; ctx.moveTo(-10,10); ctx.lineTo(0,-4); ctx.lineTo(12,10); ctx.stroke();
+    } else if (kind==='cow') {
+      ctx.fillStyle = '#f2efe9'; ctx.beginPath(); ctx.ellipse(0,0,18,12,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#8d6e63'; ctx.beginPath(); ctx.ellipse(-5,-2,6,4,0,0,Math.PI*2); ctx.fill();
+      ctx.fillRect(-12,10,3,12); ctx.fillRect(-2,10,3,12); ctx.fillRect(8,10,3,12); ctx.fillRect(18,10,3,12);
+      ctx.fillStyle = '#6d4c41'; ctx.fillRect(12,-10,4,6); ctx.fillRect(15,-11,4,6);
+    }
+    ctx.restore();
+  }
+
+  function drawCar() {
+    const baseY = H*0.84;
+    const carX = W*0.5 + steer*W*0.18;
+    ctx.save();
+    ctx.translate(carX, baseY);
+    ctx.scale(1.1*DPR, 1.1*DPR);
+    ctx.fillStyle = '#0b1b2b';
+    ctx.beginPath();
+    ctx.moveTo(-46,8); ctx.lineTo(-38,-18); ctx.lineTo(-14,-28); ctx.lineTo(18,-28); ctx.lineTo(38,-18); ctx.lineTo(46,8); ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#e53935';
+    ctx.beginPath();
+    ctx.moveTo(-42,10); ctx.lineTo(-34,-14); ctx.lineTo(-12,-22); ctx.lineTo(16,-22); ctx.lineTo(34,-14); ctx.lineTo(42,10); ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#d9edf7';
+    ctx.beginPath();
+    ctx.moveTo(-22,-20); ctx.lineTo(-10,-34); ctx.lineTo(10,-34); ctx.lineTo(22,-20); ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#263238';
+    ctx.fillRect(-42,7,84,10);
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(-28,14,10,0,Math.PI*2); ctx.arc(28,14,10,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#666'; ctx.beginPath(); ctx.arc(-28,14,5,0,Math.PI*2); ctx.arc(28,14,5,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#ffeb3b';
+    ctx.fillRect(-38,-4,10,4); ctx.fillRect(28,-4,10,4);
+    ctx.restore();
+  }
+
+  function drawScene() {
+    drawSky();
+    drawMetro();
+    drawFlyover();
+    drawRoad();
+
+    const sortedDeco = [...deco].sort((a,b)=>b.z-a.z);
+    for (const o of sortedDeco) {
+      const z = (o.z - (t*0.02)) % 1000;
+      if (z < 0 || z > 260) continue;
+      const side = o.side;
+      const p = project(z, side*1.1, side*0.65, 0);
+      const s = Math.max(0.15, p.s * 1.3) * DPR;
+      if (o.kind==='tree') drawTree(p.x, H*0.62 + (1-p.s)*120*DPR, 0.8*s);
+      else if (o.kind==='pole') drawPole(p.x, H*0.64 + (1-p.s)*120*DPR, 0.9*s);
+      else if (o.kind==='stall') drawStall(p.x, H*0.67 + (1-p.s)*120*DPR, 0.9*s);
+      else if (o.kind==='billboard') drawBillboard(p.x, H*0.55 + (1-p.s)*120*DPR, 0.9*s, choice(signs));
+      else if (o.kind==='divider') {
+        ctx.fillStyle = '#d9bf4b';
+        const x = W*0.5 + Math.sin(z*0.05)*4*DPR;
+        const y = H*0.43 + (z%30)/30 * H*0.54;
+        ctx.fillRect(x-14*DPR, y, 28*DPR, 9*DPR);
+      }
+    }
+
+    for (const o of traffic) {
+      const z = (o.z - (t*0.12)) % 420;
+      if (z < 0 || z > 250) continue;
+      const p = project(z, o.side*0.58 + o.laneOffset, 0, 0);
+      const s = Math.max(0.18, p.s * 1.8) * DPR;
+      let y = p.y + (o.side<0 ? 4 : 0) * DPR;
+      drawVehicle(o, p.x, y, s);
+    }
+
+    camShake = Math.max(0, camShake - 0.02);
+    drawCar();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(0, H*0.39, W, 2*DPR);
+    ctx.fillStyle = 'rgba(0,0,0,0.08)';
+    ctx.fillRect(0, H*0.56, W, 5*DPR);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.font = `${12*DPR}px Arial`;
+    ctx.fillText('Indian Left-Side Driving Layout', 12*DPR, H - 12*DPR);
+  }
+
+  function update() {
+    t += 16.7;
+    const target = (keys.left ? -1 : 0) + (keys.right ? 1 : 0);
+    steer += (target - steer) * 0.08;
+    if (Math.abs(target) > 0.1) camShake = Math.min(1, camShake + 0.05);
+    drawScene();
+    requestAnimationFrame(update);
+  }
+  update();
+})();
+</script>
+</body>
+</html>

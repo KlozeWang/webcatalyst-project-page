@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lansana Games</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Arial', sans-serif;
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    color: white;
+  }
+  #gameContainer {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    max-width: 800px;
+    max-height: 600px;
+    background: #000;
+    overflow: hidden;
+    box-shadow: 0 0 50px rgba(255, 0, 150, 0.5);
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+  .overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 20px;
+    z-index: 10;
+  }
+  .overlay h1 {
+    font-size: 3rem;
+    background: linear-gradient(90deg, #ff006e, #8338ec, #3a86ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 10px;
+    animation: pulse 2s infinite;
+  }
+  .overlay h2 { font-size: 2rem; margin-bottom: 20px; color: #ff006e; }
+  .overlay p { font-size: 1.1rem; margin-bottom: 20px; max-width: 500px; line-height: 1.6; }
+  button {
+    padding: 15px 40px;
+    font-size: 1.2rem;
+    background: linear-gradient(90deg, #ff006e, #8338ec);
+    border: none;
+    color: white;
+    border-radius: 50px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  button:hover { transform: scale(1.05); box-shadow: 0 0 30px rgba(255, 0, 110, 0.7); }
+  #hud {
+    position: absolute;
+    top: 10px; left: 10px; right: 10px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 1.2rem;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+    z-index: 5;
+    pointer-events: none;
+  }
+  .hidden { display: none !important; }
+  @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+  .controls { font-size: 0.9rem; color: #aaa; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <canvas id="game"></canvas>
+  <div id="hud" class="hidden">
+    <div>Pontos: <span id="score">0</span></div>
+    <div>Vidas: <span id="lives">3</span></div>
+    <div>Nível: <span id="level">1</span></div>
+  </div>
+  <div id="startScreen" class="overlay">
+    <h1>🎮 LANSANA GAMES 🎮</h1>
+    <p>Pilote sua nave através do espaço! Destrua os inimigos, colete power-ups e sobreviva o máximo que puder!</p>
+    <button onclick="startGame()">INICIAR JOGO</button>
+    <p class="controls">🖱️ Mouse/Toque para mover • Clique/Toque para atirar<br>⌨️ Setas ou WASD + Espaço para atirar</p>
+  </div>
+  <div id="gameOverScreen" class="overlay hidden">
+    <h2>GAME OVER</h2>
+    <p>Pontuação Final: <span id="finalScore">0</span></p>
+    <button onclick="startGame()">JOGAR NOVAMENTE</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = W = rect.width;
+  canvas.height = H = rect.height;
+}
+window.addEventListener('resize', resize);
+resize();
+
+let player, bullets, enemies, particles, stars, powerups, keys, score, lives, level, gameState, lastShot, enemySpawnTimer, audioCtx;
+
+function initAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+function beep(freq, dur, type='square', vol=0.1) {
+  if (!audioCtx) return;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime + dur);
+}
+
+function startGame() {
+  initAudio();
+  player = { x: W/2, y: H-60, w: 40, h: 40, speed: 6 };
+  bullets = []; enemies = []; particles = []; powerups = [];
+  stars = Array.from({length: 80}, () => ({x: Math.random()*W, y: Math.random()*H, s: Math.random()*2+0.5}));
+  keys = {}; score = 0; lives = 3; level = 1;
+  lastShot = 0; enemySpawnTimer = 0;
+  gameState = 'playing';
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('gameOverScreen').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  updateHUD();
+}
+
+function updateHUD() {
+  document.getElementById('score').textContent = score;
+  document.getElementById('lives').textContent = lives;
+  document.getElementById('level').textContent = level;
+}
+
+function gameOver() {
+  gameState = 'over';
+  document.getElementById('finalScore').textContent = score;
+  document.getElementById('gameOverScreen').classList.remove('hidden');
+  document.getElementById('hud').classList.add('hidden');
+}
+
+function shoot() {
+  const now = Date.now();
+  if (now - lastShot < 200) return;
+  lastShot = now;
+  bullets.push({x: player.x, y: player.y - 20, vy: -10, w: 4, h: 12});
+  beep(800, 0.08, 'square', 0.05);
+}
+
+function spawnEnemy() {
+  const type = Math.random() < 0.15 ? 'big' : 'normal';
+  const w = type === 'big' ? 50 : 30;
+  enemies.push({
+    x: Math.random()*(W-w) + w/2,
+    y: -30,
+    w: w, h: w,
+    vy: 1.5 + Math.random()*1.5 + level*0.3,
+    vx: (Math.random()-0.5)*2,
+    hp: type === 'big' ? 3 : 1,
+    type: type
+  });
+}
+
+function spawnParticles(x, y, color, count=15) {
+  for (let i=0; i<count; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random()-0.5)*6,
+      vy: (Math.random()-0.5)*6,
+      life: 30,
+      color
+    });
+  }
+}
+
+document.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if (e.key === ' ') e.preventDefault(); });
+document.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+canvas.addEventListener('mousemove', e => {
+  if (gameState !== 'playing') return;
+  const rect = canvas.getBoundingClientRect();
+  player.x = (e.clientX - rect.left) * (W / rect.width);
+});
+canvas.addEventListener('mousedown', () => { if (gameState === 'playing') shoot(); });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (gameState !== 'playing') return;
+  const rect = canvas.getBoundingClientRect();
+  const t = e.touches[0];
+  player.x = (t.clientX - rect.left) * (W / rect.width);
+  player.y = Math.min(H-30, (t.clientY - rect.top) * (H / rect.height));
+}, {passive: false});
+canvas.addEventListener('touchstart', e => { e.preventDefault(); if (gameState === 'playing') shoot(); }, {passive: false});
+
+function update() {
+  if (gameState !== 'playing') return;
+
+  if (keys['arrowleft'] || keys['a']) player.x -= player.speed;
+  if (keys['arrowright'] || keys['d']) player.x += player.speed;
+  if (keys['arrowup'] || keys['w']) player.y -= player.speed;
+  if (keys['arrowdown'] || keys['s']) player.y += player.speed;
+  if (keys[' ']) shoot();
+  player.x = Math.max(20, Math.min(W-20, player.x));
+  player.y = Math.max(20, Math.min(H-20, player.y));
+
+  stars.forEach(s => { s.y += s.s; if (s.y > H) s.y = 0; });
+
+  bullets = bullets.filter(b => { b.y += b.vy; return b.y > -20; });
+
+  enemySpawnTimer++;
+  if (enemySpawnTimer > Math.max(30, 70 - level*5)) {
+    spawnEnemy();
+    enemySpawnTimer = 0;
+  }
+
+  enemies.forEach(e => {
+    e.y += e.vy;
+    e.x += e.vx;
+    if (e.x < e.w/2 || e.x > W - e.w/2) e.vx *= -1;
+  });
+
+  // Bullet-enemy collision
+  bullets.forEach(b => {
+    enemies.forEach(e => {
+      if (Math.abs(b.x - e.x) < e.w/2 && Math.abs(b.y - e.y) < e.h/2) {
+        e.hp--;
+        b.y = -100;
+        spawnParticles(b.x, b.y, '#ffaa00', 5);
+        if (e.hp <= 0) {
+          spawnParticles(e.x, e.y, e.type === 'big' ? '#ff00ff' : '#ff4444', 20);
+          score += e.type === 'big' ? 50 : 10;
+          beep(200, 0.2, 'sawtooth', 0.08);
+          if (Math.random() < 0.1) powerups.push({x: e.x, y: e.y, vy: 2, w: 20, h: 20});
+          e.y = H+100;
+        } else {
+          beep(400, 0.05);
+        }
+      }
+    });
+  });
+
+  // Enemy-player collision
+  enemies.forEach(e => {
+    if (Math.abs(e.x - player.x) < (e.w + player.w)/2 - 5 && Math.abs(e.y - player.y) < (e.h + player.h)/2 - 5) {
+      lives--;
+      spawnParticles(player.x, player.y, '#00ffff', 30);
+      beep(100, 0.3, 'sawtooth', 0.15);
+      e.y = H+100;
+      if (lives <= 0) gameOver();
+    }
+    if (e.y > H + 30) e.y = H+100;
+  });
+
+  // Powerups
+  powerups.forEach(p => {
+    p.y += p.vy;
+    if (Math.abs(p.x - player.x) < 25 && Math.abs(p.y - player.y) < 25) {
+      score += 25;
+      if (lives < 5) lives++;
+      beep(1200, 0.2, 'sine', 0.1);
+      p.y = H+100;
+    }
+  });
+
+  enemies = enemies.filter(e => e.y < H+50 && e.hp > 0);
+  powerups = powerups.filter(p => p.y < H+30);
+  particles = particles.filter(p => { p.x += p.vx; p.y += p.vy; p.life--; return p.life > 0; });
+
+  level = Math.floor(score / 200) + 1;
+  updateHUD();
+}
+
+function draw() {
+  ctx.fillStyle = '#000010';
+  ctx.fillRect(0, 0, W, H);
+
+  // Stars
+  ctx.fillStyle = '#fff';
+  stars.forEach(s => { ctx.globalAlpha = s.s/2.5; ctx.fillRect(s.x, s.y, s.s, s.s); });
+  ctx.globalAlpha = 1;
+
+  if (gameState !== 'playing') return;
+
+  // Player
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const grad = ctx.createLinearGradient(0, -20, 0, 20);
+  grad.addColorStop(0, '#00ffff');
+  grad.addColorStop(1, '#0066ff');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(0, -20);
+  ctx.lineTo(15, 15);
+  ctx.lineTo(0, 8);
+  ctx.lineTo(-15, 15);
+  ctx.closePath();
+  ctx.fill();
+  // Thruster
+  ctx.fillStyle = '#ffaa00';
+  ctx.beginPath();
+  ctx.moveTo(-6, 10);
+  ctx.lineTo(0, 18 + Math.random()*6);
+  ctx.lineTo(6, 10);
+  ctx.fill();
+  ctx.restore();
+
+  // Bullets
+  ctx.fillStyle = '#ffff00';
+  bullets.forEach(b => {
+    ctx.shadowBlur = 10; ctx.shadowColor = '#ffff00';
+    ctx.fillRect(b.x-2, b.y-6, 4, 12);
+  });
+  ctx.shadowBlur = 0;
+
+  // Enemies
+  enemies.forEach(e => {
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    ctx.fillStyle = e.type === 'big' ? '#ff00ff' : '#ff3333';
+    ctx.beginPath();
+    ctx.moveTo(0, e.h/2);
+    ctx.lineTo(e.w/2, -e.h/4);
+    ctx.lineTo(0, -e.h/2);
+    ctx.lineTo(-e.w/2, -e.h/4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(0, 0, 4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  });
+
+  // Powerups
+  powerups.forEach(p => {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(Date.now()/200);
+    ctx.fillStyle = '#00ff88';
+    ctx.shadowBlur = 15; ctx.shadowColor = '#00ff88';
+    ctx.fillRect(-10, -10, 20, 20);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('+', 0, 1);
+    ctx.restore();
+  });
+
+  // Particles
+  particles.forEach(p => {
+    ctx.globalAlpha = p.life/30;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x-2, p.y-2, 4, 4);
+  });
+  ctx.globalAlpha = 1;
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>

@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Metro: Tunnel Survivor</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#000; font-family: 'Courier New', monospace; color:#c8b48c; user-select:none; }
+  #game { position:relative; width:100vw; height:100vh; cursor:crosshair; }
+  canvas { display:block; width:100%; height:100%; }
+  .overlay {
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center;
+    background: radial-gradient(circle, rgba(20,10,5,0.85), rgba(0,0,0,0.95));
+    z-index:10; padding:20px;
+  }
+  .overlay h1 { font-size: clamp(28px,5vw,56px); color:#e6c98a; letter-spacing:4px; text-shadow:0 0 20px #ff6622; margin-bottom:10px; }
+  .overlay h2 { font-size: clamp(20px,3vw,32px); color:#aa5522; margin-bottom:20px; letter-spacing:2px; }
+  .overlay p { max-width:600px; margin:8px 0; color:#b09872; line-height:1.5; font-size:clamp(13px,1.6vw,16px); }
+  .btn {
+    margin-top:25px; padding:14px 38px; background:#3a2410; border:2px solid #c8884a;
+    color:#e6c98a; font-family:inherit; font-size:18px; letter-spacing:3px; cursor:pointer;
+    transition: all 0.2s; text-transform:uppercase;
+  }
+  .btn:hover { background:#5a3818; box-shadow:0 0 20px #ff6622; }
+  .hidden { display:none !important; }
+  #hud {
+    position:absolute; left:0; right:0; bottom:0; padding:14px 20px;
+    display:flex; justify-content:space-between; align-items:flex-end;
+    pointer-events:none; z-index:5;
+    background:linear-gradient(transparent, rgba(0,0,0,0.7));
+    font-size:14px; letter-spacing:1px;
+  }
+  .stat { background:rgba(20,10,5,0.6); padding:8px 14px; border:1px solid #663311; min-width:120px; }
+  .stat span { color:#e6c98a; font-weight:bold; }
+  .bar { height:8px; background:#2a1a0a; border:1px solid #663311; margin-top:4px; }
+  .bar-fill { height:100%; transition: width 0.2s; }
+  #hp .bar-fill { background:#c83333; }
+  #gas .bar-fill { background:#33c8c8; }
+  #crosshair {
+    position:absolute; left:50%; top:50%; width:24px; height:24px;
+    transform:translate(-50%,-50%); pointer-events:none; z-index:4;
+  }
+  #crosshair::before, #crosshair::after {
+    content:''; position:absolute; background:#e6c98a; box-shadow:0 0 4px #000;
+  }
+  #crosshair::before { left:50%; top:0; width:2px; height:100%; transform:translateX(-50%); }
+  #crosshair::after { top:50%; left:0; height:2px; width:100%; transform:translateY(-50%); }
+  #flash {
+    position:absolute; inset:0; background:#ff3300; opacity:0; pointer-events:none;
+    z-index:6; transition: opacity 0.3s;
+  }
+  #vignette {
+    position:absolute; inset:0; pointer-events:none; z-index:3;
+    background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.85) 100%);
+  }
+  #msg {
+    position:absolute; top:20%; left:50%; transform:translateX(-50%);
+    color:#ffaa44; font-size:20px; letter-spacing:2px; text-shadow:0 0 10px #000;
+    z-index:5; opacity:0; transition: opacity 0.4s; text-align:center;
+  }
+  #controls { color:#998866; font-size:13px; margin-top:20px; line-height:1.8; }
+  #controls b { color:#e6c98a; }
+  @media (max-width:600px) {
+    #hud { flex-direction:column; gap:6px; align-items:stretch; }
+    .stat { min-width:auto; font-size:12px; padding:6px 10px; }
+  }
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="c"></canvas>
+  <div id="vignette"></div>
+  <div id="crosshair"></div>
+  <div id="flash"></div>
+  <div id="msg"></div>
+
+  <div id="hud">
+    <div class="stat" id="hp">HEALTH: <span id="hpv">100</span><div class="bar"><div class="bar-fill" id="hpbar" style="width:100%"></div></div></div>
+    <div class="stat">AMMO: <span id="ammo">12</span> / <span id="reserve">36</span></div>
+    <div class="stat" id="gas">FILTER: <span id="gasv">100</span>s<div class="bar"><div class="bar-fill" id="gasbar" style="width:100%"></div></div></div>
+    <div class="stat">KILLS: <span id="kills">0</span> / WAVE <span id="wave">1</span></div>
+  </div>
+
+  <div class="overlay" id="start">
+    <h1>METRO: TUNNEL SURVIVOR</h1>
+    <h2>~ Year 2036 ~</h2>
+    <p>The surface is poisoned. Mutants stalk the abandoned tunnels.</p>
+    <p>Survive as long as you can. Watch your filter — the air will kill you.</p>
+    <div id="controls">
+      <b>WASD / Arrows</b> — Move &nbsp;|&nbsp; <b>Mouse</b> — Aim<br/>
+      <b>Click</b> — Shoot &nbsp;|&nbsp; <b>R</b> — Reload &nbsp;|&nbsp; <b>Shift</b> — Sprint
+    </div>
+    <button class="btn" id="startBtn">Enter the Tunnels</button>
+  </div>
+
+  <div class="overlay hidden" id="end">
+    <h1 id="endTitle">YOU DIED</h1>
+    <p id="endText">The tunnels claimed another soul.</p>
+    <p>Waves Survived: <span id="finalWave">1</span></p>
+    <p>Total Kills: <span id="finalKills">0</span></p>
+    <button class="btn" id="restartBtn">Try Again</button>
+  </div>
+</div>
+
+<script>
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+let W, H;
+function resize(){ W = cv.width = innerWidth; H = cv.height = innerHeight; }
+resize(); addEventListener('resize', resize);
+
+// Audio
+const AC = window.AudioContext || window.webkitAudioContext;
+let actx = null;
+function audio(){ if(!actx) actx = new AC(); return actx; }
+function beep(freq, dur, type='square', vol=0.1){
+  const a = audio(); const o=a.createOscillator(), g=a.createGain();
+  o.type=type; o.frequency.value=freq; g.gain.value=vol;
+  o.connect(g); g.connect(a.destination); o.start();
+  g.gain.exponentialRampToValueAtTime(0.001, a.currentTime+dur);
+  o.stop(a.currentTime+dur);
+}
+function shootSound(){ beep(180,0.08,'square',0.15); beep(80,0.15,'sawtooth',0.1); }
+function hitSound(){ beep(120,0.1,'square',0.12); }
+function growl(){ beep(80+Math.random()*40,0.3,'sawtooth',0.08); }
+function reloadSound(){ beep(400,0.05,'square',0.08); setTimeout(()=>beep(300,0.05,'square',0.08),100); }
+
+// Game state
+let state = 'start';
+let player, bullets, enemies, particles, keys, mouse, kills, wave, enemiesInWave, spawnTimer, gameTime, msgTimer;
+
+function showMsg(t, dur=2000){
+  const m = document.getElementById('msg');
+  m.textContent = t; m.style.opacity = 1;
+  clearTimeout(msgTimer);
+  msgTimer = setTimeout(()=>m.style.opacity=0, dur);
+}
+
+function initGame(){
+  player = { x: W/2, y: H/2, r: 14, angle:0, hp:100, maxHp:100,
+             ammo:12, mag:12, reserve:48, reloading:false, reloadT:0,
+             filter:100, speed:3, fireDelay:0 };
+  bullets = []; enemies = []; particles = [];
+  keys = {}; mouse = {x:W/2, y:H/2, down:false};
+  kills = 0; wave = 1; enemiesInWave = 5; spawnTimer = 0; gameTime = 0;
+  updateHUD();
+  showMsg('WAVE 1', 1800);
+}
+
+function spawnEnemy(){
+  // Spawn off-screen
+  const side = Math.floor(Math.random()*4);
+  let x, y;
+  if(side===0){ x = -30; y = Math.random()*H; }
+  else if(side===1){ x = W+30; y = Math.random()*H; }
+  else if(side===2){ x = Math.random()*W; y = -30; }
+  else { x = Math.random()*W; y = H+30; }
+  const tier = Math.min(3, 1+Math.floor(wave/3));
+  enemies.push({
+    x, y, r: 13+tier*2, hp: 20+wave*8+tier*10, maxHp: 20+wave*8+tier*10,
+    speed: 0.9 + Math.random()*0.5 + wave*0.05, dmg: 8+tier*3,
+    type: tier, attackT: 0, anim: Math.random()*Math.PI*2
+  });
+  if(Math.random()<0.3) growl();
+}
+
+function shoot(){
+  if(player.reloading || player.ammo<=0 || player.fireDelay>0) {
+    if(player.ammo<=0 && !player.reloading) reload();
+    return;
+  }
+  player.ammo--;
+  player.fireDelay = 8;
+  const a = player.angle + (Math.random()-0.5)*0.06;
+  bullets.push({ x: player.x+Math.cos(a)*18, y: player.y+Math.sin(a)*18,
+                 vx: Math.cos(a)*14, vy: Math.sin(a)*14, life: 60, dmg: 35 });
+  // muzzle flash particles
+  for(let i=0;i<6;i++){
+    particles.push({x:player.x+Math.cos(a)*22, y:player.y+Math.sin(a)*22,
+      vx:Math.cos(a)*4+(Math.random()-0.5)*2, vy:Math.sin(a)*4+(Math.random()-0.5)*2,
+      life:10, color:'#ffaa33', size:3+Math.random()*2});
+  }
+  shootSound();
+  updateHUD();
+}
+
+function reload(){
+  if(player.reloading || player.ammo===player.mag || player.reserve<=0) return;
+  player.reloading = true; player.reloadT = 90;
+  reloadSound();
+  showMsg('RELOADING...', 1200);
+}
+
+function damagePlayer(d){
+  player.hp -= d;
+  const f = document.getElementById('flash');
+  f.style.opacity = 0.5;
+  setTimeout(()=>f.style.opacity=0, 150);
+  hitSound();
+  if(player.hp<=0){ player.hp=0; endGame('YOU DIED','The tunnels claimed another soul.'); }
+  updateHUD();
+}
+
+function endGame(title, text){
+  state = 'end';
+  document.getElementById('endTitle').textContent = title;
+  document.getElementById('endText').textContent = text;
+  document.getElementById('finalWave').textContent = wave;
+  document.getElementById('finalKills').textContent = kills;
+  document.getElementById('end').classList.remove('hidden');
+}
+
+function updateHUD(){
+  document.getElementById('hpv').textContent = Math.ceil(player.hp);
+  document.getElementById('hpbar').style.width = (player.hp/player.maxHp*100)+'%';
+  document.getElementById('ammo').textContent = player.ammo;
+  document.getElementById('reserve').textContent = player.reserve;
+  document.getElementById('gasv').textContent = Math.ceil(player.filter);
+  document.getElementById('gasbar').style.width = (player.filter/100*100)+'%';
+  document.getElementById('kills').textContent = kills;
+  document.getElementById('wave').textContent = wave;
+}
+
+// Input
+addEventListener('keydown', e=>{
+  keys[e.key.toLowerCase()] = true;
+  if(e.key.toLowerCase()==='r') reload();
+});
+addEventListener('keyup', e=> keys[e.key.toLowerCase()] = false);
+cv.addEventListener('mousemove', e=>{
+  const r = cv.getBoundingClientRect();
+  mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top;
+});
+cv.addEventListener('mousedown', e=>{ mouse.down = true; if(state==='play') shoot(); });
+cv.addEventListener('mouseup', ()=> mouse.down = false);
+cv.addEventListener('touchstart', e=>{
+  e.preventDefault();
+  const r = cv.getBoundingClientRect(), t = e.touches[0];
+  mouse.x = t.clientX-r.left; mouse.y = t.clientY-r.top;
+  if(state==='play') shoot();
+}, {passive:false});
+cv.addEventListener('touchmove', e=>{
+  e.preventDefault();
+  const r = cv.getBoundingClientRect(), t = e.touches[0];
+  mouse.x = t.clientX-r.left; mouse.y = t.clientY-r.top;
+}, {passive:false});
+
+document.getElementById('startBtn').onclick = ()=>{
+  audio();
+  document.getElementById('start').classList.add('hidden');
+  initGame(); state='play';
+};
+document.getElementById('restartBtn').onclick = ()=>{
+  document.getElementById('end').classList.add('hidden');
+  initGame(); state='play';
+};
+
+// Tunnel background tiles
+const tunnelSeed = [];
+for(let i=0;i<200;i++) tunnelSeed.push({x:Math.random(), y:Math.random(), s:Math.random()});
+
+function drawBackground(){
+  // dark floor gradient
+  const g = ctx.createRadialGradient(player.x, player.y, 30, player.x, player.y, 400);
+  g.addColorStop(0, '#3a2818');
+  g.addColorStop(0.5, '#1a1208');
+  g.addColorStop(1, '#000');
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+  // grid pattern (tiles)
+  ctx.strokeStyle = 'rgba(80,50,25,0.3)';
+  ctx.lineWidth = 1;
+  const tile = 60;
+  const offX = (player.x % tile);
+  const offY = (player.y % tile);
+  for(let x=-offX; x<W; x+=tile){
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+  }
+  for(let y=-offY; y<H; y+=tile){
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  }
+
+  // debris
+  ctx.fillStyle = 'rgba(60,40,20,0.4)';
+  for(const s of tunnelSeed){
+    const x = s.x*W, y = s.y*H;
+    ctx.fillRect(x, y, 2+s.s*4, 2+s.s*4);
+  }
+
+  // dust
+  ctx.fillStyle = 'rgba(200,180,140,0.04)';
+  ctx.fillRect(0,0,W,H);
+}
+
+function drawPlayer(){
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  ctx.rotate(player.angle);
+  // body
+  ctx.fillStyle = '#5a4028';
+  ctx.beginPath(); ctx.arc(0,0,player.r,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#8a6038';
+  ctx.beginPath(); ctx.arc(0,0,player.r-3,0,Math.PI*2); ctx.fill();
+  // gas mask snout
+  ctx.fillStyle = '#2a1810';
+  ctx.fillRect(4, -5, 12, 10);
+  // gun
+  ctx.fillStyle = '#222';
+  ctx.fillRect(8, -2, 18, 4);
+  ctx.restore();
+
+  // headlamp cone
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  ctx.rotate(player.angle);
+  const grd = ctx.createRadialGradient(0,0,20,0,0,260);
+  grd.addColorStop(0, 'rgba(255,220,160,0.25)');
+  grd.addColorStop(1, 'rgba(255,220,160,0)');
+  ctx.fillStyle = grd;
+  ctx.beginPath();
+  ctx.moveTo(0,0);
+  ctx.arc(0,0,260,-0.45,0.45);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawEnemy(e){
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  const ang = Math.atan2(player.y-e.y, player.x-e.x);
+  ctx.rotate(ang);
+  const wobble = Math.sin(e.anim)*2;
+  // body
+  const colors = ['#3a1a1a','#4a2020','#5a2828','#7a2828'];
+  ctx.fillStyle = colors[e.type] || '#3a1a1a';
+  ctx.beginPath(); ctx.arc(0,wobble,e.r,0,Math.PI*2); ctx.fill();
+  // claws/teeth
+  ctx.fillStyle = '#ddd';
+  ctx.beginPath();
+  ctx.moveTo(e.r-2, -4);
+  ctx.lineTo(e.r+6, 0);
+  ctx.lineTo(e.r-2, 4);
+  ctx.fill();
+  // eyes
+  ctx.fillStyle = '#ff3322';
+  ctx.beginPath(); ctx.arc(e.r-4, -4, 2, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(e.r-4, 4, 2, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+  // HP bar
+  if(e.hp < e.maxHp){
+    ctx.fillStyle = '#400'; ctx.fillRect(e.x-15, e.y-e.r-8, 30, 4);
+    ctx.fillStyle = '#c33'; ctx.fillRect(e.x-15, e.y-e.r-8, 30*(e.hp/e.maxHp), 4);
+  }
+}
+
+function update(){
+  if(state!=='play') return;
+  gameTime++;
+
+  // movement
+  let vx=0, vy=0;
+  if(keys['w']||keys['arrowup']) vy-=1;
+  if(keys['s']||keys['arrowdown']) vy+=1;
+  if(keys['a']||keys['arrowleft']) vx-=1;
+  if(keys['d']||keys['arrowright']) vx+=1;
+  const sprint = keys['shift'] ? 1.6 : 1;
+  const len = Math.hypot(vx,vy);
+  if(len>0){ vx/=len; vy/=len; }
+  player.x += vx*player.speed*sprint;
+  player.y += vy*player.speed*sprint;
+  player.x = Math.max(player.r, Math.min(W-player.r, player.x));
+  player.y = Math.max(player.r, Math.min(H-player.r, player.y));
+  player.angle = Math.atan2(mouse.y-player.y, mouse.x-player.x);
+
+  // auto-fire if holding
+  if(mouse.down) shoot();
+  if(player.fireDelay>0) player.fireDelay--;
+
+  // reload
+  if(player.reloading){
+    player.reloadT--;
+    if(player.reloadT<=0){
+      const need = player.mag - player.ammo;
+      const take = Math.min(need, player.reserve);
+      player.ammo += take; player.reserve -= take;
+      player.reloading = false;
+      updateHUD();
+    }
+  }
+
+  // filter ticks down
+  player.filter -= 1/60;
+  if(player.filter<=0){
+    player.filter=0;
+    if(gameTime % 30 === 0) damagePlayer(2);
+  }
+
+  // bullets
+  for(let i=bullets.length-1;i>=0;i--){
+    const b = bullets[i];
+    b.x += b.vx; b.y += b.vy; b.life--;
+    if(b.life<=0||b.x<0||b.x>W||b.y<0||b.y>H){ bullets.splice(i,1); continue; }
+    for(let j=enemies.length-1;j>=0;j--){
+      const e = enemies[j];
+      if(Math.hypot(b.x-e.x,b.y-e.y) < e.r){
+        e.hp -= b.dmg;
+        for(let k=0;k<5;k++) particles.push({x:b.x,y:b.y,
+          vx:(Math.random()-0.5)*4, vy:(Math.random()-0.5)*4,
+          life:15, color:'#aa2222', size:2+Math.random()*2});
+        bullets.splice(i,1);
+        if(e.hp<=0){
+          // death
+          for(let k=0;k<15;k++) particles.push({x:e.x,y:e.y,
+            vx:(Math.random()-0.5)*6, vy:(Math.random()-0.5)*6,
+            life:25, color:'#661111', size:3+Math.random()*3});
+          enemies.splice(j,1);
+          kills++; enemiesInWave--;
+          // drops
+          if(Math.random()<0.4){ player.reserve = Math.min(player.reserve+8, 200); showMsg('+ AMMO',900); }
+          if(Math.random()<0.2){ player.filter = Math.min(player.filter+20, 100); showMsg('+ FILTER',900); }
+          if(Math.random()<0.15){ player.hp = Math.min(player.hp+15, player.maxHp); showMsg('+ MEDKIT',900); }
+          updateHUD();
+        }
+        break;
+      }
+    }
+  }
+
+  // enemies
+  for(const e of enemies){
+    const dx = player.x-e.x, dy=player.y-e.y;
+    const d = Math.hypot(dx,dy) || 1;
+    e.x += dx/d * e.speed;
+    e.y += dy/d * e.speed;
+    e.anim += 0.2;
+    if(e.attackT>0) e.attackT--;
+    if(d < e.r+player.r+2 && e.attackT<=0){
+      damagePlayer(e.dmg);
+      e.attackT = 40;
+    }
+  }
+
+  // particles
+  for(let i=particles.length-1;i>=0;i--){
+    const p = particles[i];
+    p.x+=p.vx; p.y+=p.vy; p.vx*=0.92; p.vy*=0.92; p.life--;
+    if(p.life<=0) particles.splice(i,1);
+  }
+
+  // spawning
+  spawnTimer--;
+  if(spawnTimer<=0 && enemies.length < 8 + wave){
+    if(enemiesInWave > enemies.length){
+      spawnEnemy();
+      spawnTimer = Math.max(20, 80 - wave*4);
+    }
+  }
+
+  // wave complete
+  if(enemiesInWave<=0 && enemies.length===0){
+    wave++;
+    enemiesInWave = 4 + wave*2;
+    player.reserve = Math.min(player.reserve+20, 200);
+    player.filter = Math.min(player.filter+30, 100);
+    showMsg('WAVE '+wave+' — Supplies recovered', 2200);
+    spawnTimer = 120;
+    updateHUD();
+  }
+
+  updateHUD();
+}
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+  drawBackground();
+
+  // particles (under)
+  for(const p of particles){
+    ctx.globalAlpha = Math.max(0, p.life/25);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x-p.size/2, p.y-p.size/2, p.size, p.size);
+  }
+  ctx.globalAlpha = 1;
+
+  // bullets
+  for(const b of bullets){
+    ctx.strokeStyle = '#ffcc66'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x-b.vx*1.5, b.y-b.vy*1.5);
+    ctx.stroke();
+  }
+
+  for(const e of enemies) drawEnemy(e);
+  drawPlayer();
+
+  // gas tint when filter low
+  if(player.filter < 30){
+    ctx.fillStyle = 'rgba(80,180,40,'+(0.15*(1-player.filter/30))+')';
+    ctx.fillRect(0,0,W,H);
+  }
+}
+
+function loop(){
+  update();
+  render();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>

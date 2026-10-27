@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>BR-8x8 Prototype</title>
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; background:#0a0f14; font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif; color:#e8eef5; }
+  #game { display:block; width:100vw; height:100vh; background:#101820; cursor:crosshair; }
+  #hud {
+    position:fixed; left:12px; top:10px; font-size:13px; line-height:1.25; pointer-events:none;
+    text-shadow:0 1px 2px rgba(0,0,0,.9);
+    max-width:420px;
+  }
+  #msg {
+    position:fixed; left:50%; top:18px; transform:translateX(-50%);
+    padding:8px 12px; background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.15);
+    border-radius:8px; font-weight:600; pointer-events:none; opacity:0; transition:opacity .2s;
+  }
+  #killfeed {
+    position:fixed; right:12px; top:12px; width:320px; font-size:12px; text-align:right; pointer-events:none;
+    text-shadow:0 1px 2px rgba(0,0,0,.9);
+  }
+  .bar {
+    height:8px; border-radius:5px; overflow:hidden; background:rgba(255,255,255,.14); margin:3px 0 6px;
+    border:1px solid rgba(255,255,255,.12);
+  }
+  .fill { height:100%; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud"></div>
+<div id="msg"></div>
+<div id="killfeed"></div>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const hud = document.getElementById('hud');
+  const msgEl = document.getElementById('msg');
+  const killfeedEl = document.getElementById('killfeed');
+
+  const WORLD = 8000;
+  const HALF_WORLD = WORLD * 0.5;
+  const TICK = 1 / 60;
+  let cw = innerWidth, ch = innerHeight;
+  canvas.width = cw; canvas.height = ch;
+
+  const keys = Object.create(null);
+  const mouse = { x: cw/2, y: ch/2, down:false, right:false };
+
+  const rand = (a,b)=>Math.random()*(b-a)+a;
+  const randi = (a,b)=>Math.floor(rand(a,b+1));
+  const clamp = (v,a,b)=>v<a?a:v>b?b:v;
+  const dist = (ax,ay,bx,by)=>Math.hypot(ax-bx, ay-by);
+  const lerp = (a,b,t)=>a+(b-a)*t;
+  const angleTo = (ax,ay,bx,by)=>Math.atan2(by-ay,bx-ax);
+
+  function showMsg(t, ms=1400){
+    msgEl.textContent = t;
+    msgEl.style.opacity = 1;
+    clearTimeout(showMsg._t);
+    showMsg._t = setTimeout(()=>msgEl.style.opacity=0, ms);
+  }
+
+  const killfeed = [];
+  function feed(t){
+    killfeed.unshift({t, ttl:6});
+    if(killfeed.length>8) killfeed.pop();
+  }
+
+  // Biomes
+  const biomes = [
+    { name:'Urban', color:'#58646e', x:2800, y:2500, w:2400, h:2200, moveMul:1, vis:1 },
+    { name:'Forest', color:'#2e6b3b', x:450, y:500, w:2800, h:2500, moveMul:0.93, vis:0.9 },
+    { name:'Desert', color:'#b59858', x:4700, y:500, w:2800, h:2300, moveMul:1.02, vis:1 },
+    { name:'Coastal', color:'#3b758f', x:0, y:6000, w:8000, h:2000, moveMul:0.86, vis:0.95, water:true },
+    { name:'Mountains', color:'#6a6a72', x:350, y:3000, w:2200, h:2600, moveMul:0.85, vis:0.85 }
+  ];
+  function biomeAt(x,y){
+    for(const b of biomes){
+      if(x>=b.x && x<=b.x+b.w && y>=b.y && y<=b.y+b.h) return b;
+    }
+    return {name:'Grassland', color:'#3f7d4d', moveMul:1, vis:1};
+  }
+
+  // POIs
+  const poiNames = ['Military Base','City','Airfield','Hospital','Farms','Power Plant','Docks','Resort','Quarry','Lumberyard','School','Prison','Temple','Radar','Mansion','Shipyard','Refinery','Village'];
+  const pois = [];
+  for(let i=0;i<18;i++){
+    pois.push({
+      name: poiNames[i%poiNames.length],
+      x: rand(500, WORLD-500),
+      y: rand(500, WORLD-500)
+    });
+  }
+
+  // Buildings / cover / foliage
+  const buildings = [];
+  const foliage = [];
+  const hardCover = [];
+  function generateWorld(){
+    for(const p of pois){
+      const count = randi(10, 20);
+      for(let i=0;i<count;i++){
+        const w = rand(60,180), h=rand(60,180);
+        const x = clamp(p.x + rand(-450,450), 20, WORLD-w-20);
+        const y = clamp(p.y + rand(-450,450), 20, WORLD-h-20);
+        buildings.push({x,y,w,h,lootSpots:randi(1,4)});
+      }
+    }
+    for(let i=0;i<1200;i++){
+      const x=rand(0,WORLD), y=rand(0,WORLD);
+      const b=biomeAt(x,y);
+      if(b.name==='Forest' || b.name==='Mountains'){
+        foliage.push({x,y,r:rand(8,18), type:'tree'});
+      } else if(Math.random()<0.15) {
+        hardCover.push({x,y,r:rand(10,22), type:'rock'});
+      }
+    }
+  }
+
+  const weaponDefs = [
+    {id:'P92', cat:'Pistol', ammo:'9mm', dmg:22, rpm:380, v:880, spread:0.05, recoil:[0.6,0.9,1.2], mag:15, reload:1.2},
+    {id:'UMP45', cat:'SMG', ammo:'.45', dmg:28, rpm:650, v:780, spread:0.08, recoil:[0.8,1.2,1.8,2], mag:30, reload:1.9},
+    {id:'M416', cat:'AR', ammo:'5.56', dmg:40, rpm:700, v:980, spread:0.045, recoil:[1.1,1.4,1.8,2.2,2.6,3.0], mag:30, reload:2.1},
+    {id:'AKM', cat:'AR', ammo:'7.62', dmg:47, rpm:600, v:930, spread:0.055, recoil:[1.4,2,2.6,3.2,3.8], mag:30, reload:2.3},
+    {id:'SCAR-L', cat:'AR', ammo:'5.56', dmg:41, rpm:625, v:960, spread:0.05, recoil:[1.2,1.6,2.1,2.4], mag:30, reload:2.2},
+    {id:'Kar98k', cat:'Sniper', ammo:'7.62', dmg:79, rpm:42, v:1180, spread:0.012, recoil:[6], mag:5, reload:2.8},
+    {id:'Mini14', cat:'DMR', ammo:'5.56', dmg:48, rpm:450, v:1100, spread:0.025, recoil:[1.8,2.4,3.1], mag:20, reload:2.4},
+    {id:'S1897', cat:'Shotgun', ammo:'12g', dmg:16, pellets:9, rpm:60, v:700, spread:0.18, recoil:[5], mag:5, reload:3.2},
+    {id:'M249', cat:'LMG', ammo:'5.56', dmg:44, rpm:750, v:990, spread:0.065, recoil:[1.6,2.2,3,3.5], mag:75, reload:4.5},
+    {id:'Vector', cat:'SMG', ammo:'9mm', dmg:24, rpm:1000, v:760, spread:0.07, recoil:[0.9,1.1,1.4,1.8], mag:19, reload:1.8}
+  ];
+
+  const allWeaponNames = [
+    'M416','AKM','SCAR-L','AUG','FAMAS','Groza','QBZ','G36C','MK47','AN94',
+    'Kar98k','M24','AWM','Mosin','Win94','Mini14','SKS','SLR','MK12','VSS',
+    'UMP45','Vector','Uzi','MP5K','P90','S1897','S686','DBS','M249','DP28',
+    'P92','1911','Deagle','R1895','Pan'
+  ];
+
+  const tierWeights = [
+    {tier:'Common', p:0.52, color:'#d8d8d8'},
+    {tier:'Rare', p:0.27, color:'#69a8ff'},
+    {tier:'Epic', p:0.15, color:'#b26bff'},
+    {tier:'Legendary', p:0.06, color:'#ffbe54'}
+  ];
+  function pickTier(){
+    let r = Math.random(), a=0;
+    for(const t of tierWeights){ a+=t.p; if(r<=a) return t; }
+    return tierWeights[0];
+  }
+
+  const loot = [];
+  function spawnLoot(){
+    for(const b of buildings){
+      for(let i=0;i<b.lootSpots;i++){
+        const t = pickTier();
+        const x = b.x + rand(12,b.w-12);
+        const y = b.y + rand(12,b.h-12);
+        let item;
+        const r = Math.random();
+        if(r<0.28){
+          const w = weaponDefs[randi(0,weaponDefs.length-1)];
+          item = {type:'weapon', weapon:w.id, tier:t.tier, color:t.color, weight:16};
+        } else if(r<0.52){
+          const ammos = ['9mm','5.56','7.62','.45','12g'];
+          item = {type:'ammo', ammo:ammos[randi(0,ammos.length-1)], amount:randi(20,90), tier:t.tier, color:t.color, weight:8};
+        } else if(r<0.62){
+          item = {type:'heal', heal:Math.random()<0.55?'Bandage':'Medkit', amount:1, tier:t.tier, color:t.color, weight:10};
+        } else if(r<0.72){
+          item = {type:'boost', boost:Math.random()<0.5?'Energy Drink':'Painkiller', amount:1, tier:t.tier, color:t.color, weight:6};
+        } else if(r<0.82){
+          item = {type:'armor', slot:'vest', level:randi(1,3), tier:t.tier, color:t.color, weight:12};
+        } else if(r<0.92){
+          item = {type:'armor', slot:'helmet', level:randi(1,3), tier:t.tier, color:t.color, weight:8};
+        } else {
+          item = {type:'bag', level:randi(1,3), tier:t.tier, color:t.color, weight:0};
+        }
+        loot.push({x,y,item});
+      }
+    }
+  }
+
+  const player = {
+    id:'You',
+    x: rand(1000,7000), y: rand(1000,7000),
+    vx:0, vy:0,
+    angle:0,
+    hp:100, boost:0,
+    dbno:false, bleed:0,
+    mode:'walk',
+    vest:0, helmet:0, backpack:1,
+    inventoryWeight:0,
+    ammo:{'9mm':90,'5.56':30,'7.62':0,'.45':0,'12g':0},
+    heals:{Bandage:3, Medkit:0},
+    boosts:{'Energy Drink':1,'Painkiller':0},
+    throwables:{Frag:2,Smoke:1,Molotov:1,Stun:1},
+    weapons:[{name:'P92', mag:15, chamber:15, attachments:[]}, null],
+    activeW:0,
+    fireCD:0, reloadCD:0, recoilIndex:0,
+    inVehicle:null,
+    reviveTarget:null, reviveProgress:0,
+    alive:true
+  };
+
+  const teammates = [];
+  for(let i=0;i<2;i++){
+    teammates.push({
+      id:'Ally'+(i+1), x:player.x+rand(-50,50), y:player.y+rand(-50,50), hp:100, dbno:false, bleed:0,
+      fireCD:0, dir:rand(0,Math.PI*2), reviveTimer:0
+    });
+  }
+
+  const bots = [];
+  for(let i=0;i<74;i++){
+    bots.push({
+      id:'Bot'+(i+1),
+      x:rand(200,WORLD-200), y:rand(200,WORLD-200),
+      hp:100, dbno:false, bleed:0, alive:true,
+      vest:randi(0,3), helmet:randi(0,3),
+      weapon:weaponDefs[randi(0,weaponDefs.length-1)].id,
+      ammo:300, fireCD:rand(0,1), think:0, dir:rand(0,Math.PI*2), squad:randi(1,25),
+      target:null
+    });
+  }
+
+  const bullets = [];
+  const grenades = [];
+  const smokeClouds = [];
+  const fires = [];
+  const fx = [];
+  const airdrops = [];
+  const vehicles = [];
+  const redZones = [];
+
+  const vehicleTypes = [
+    {name:'Jeep', speed:240, hp:420, fuel:100},
+    {name:'Sedan', speed:260, hp:320, fuel:100},
+    {name:'Buggy', speed:290, hp:270, fuel:90},
+    {name:'Motorcycle', speed:340, hp:220, fuel:80},
+    {name:'Truck', speed:210, hp:520, fuel:130},
+    {name:'Boat', speed:260, hp:300, fuel:100},
+    {name:'Jet Ski', speed:320, hp:180, fuel:85},
+    {name:'Armored', speed:200, hp:760, fuel:120}
+  ];
+  for(let i=0;i<16;i++){
+    const t = vehicleTypes[randi(0,vehicleTypes.length-1)];
+    vehicles.push({
+      ...JSON.parse(JSON.stringify(t)),
+      x:rand(120,WORLD-120), y:rand(120,WORLD-120), vx:0, vy:0, angle:rand(0,Math.PI*2),
+      tires:[40,40,40,40], burning:false, smoking:false, exploded:false, occupants:[]
+    });
+  }
+
+  // Zone system
+  const phaseR = [3600, 3000, 2450, 1900, 1400, 980, 680, 420, 220];
+  const phaseDPS = [0.4, 0.7, 1.2, 2.2, 4, 7, 11, 16, 20];
+  let phase = 0, phaseTimer = 0, phaseDuration = 58;
+  let safeNow = {x:HALF_WORLD, y:HALF_WORLD, r:phaseR[0]};
+  let safeNext = {x:HALF_WORLD+rand(-500,500), y:HALF_WORLD+rand(-500,500), r:phaseR[1]};
+  let redZoneTimer = 10;
+  let airdropTimer = 28;
+  let weatherTimer = 0;
+  const weathers = [
+    {name:'Clear', vis:1, sound:1, rain:0, fog:0},
+    {name:'Rain', vis:0.87, sound:0.8, rain:1, fog:0.05},
+    {name:'Fog', vis:0.62, sound:0.92, rain:0, fog:0.34},
+    {name:'Storm', vis:0.5, sound:0.65, rain:1, fog:0.23}
+  ];
+  let weather = weathers[0];
+  let stormFlash = 0;
+
+  function newPhase(){
+    if(phase >= phaseR.length-1) return;
+    phase++;
+    safeNow = {...safeNext};
+    const nr = phaseR[Math.min(phase+1, phaseR.length-1)];
+    const shift = Math.max(180, safeNow.r*0.38);
+    safeNext = {
+      x: clamp(safeNow.x + rand(-shift,shift), nr+50, WORLD-nr-50),
+      y: clamp(safeNow.y + rand(-shift,shift), nr+50, WORLD-nr-50),
+      r: nr
+    };
+    phaseTimer = 0;
+    showMsg(`Phase ${phase+1}: Zone shrinking`, 1500);
+  }
+
+  function currentSafe(){
+    if(phase>=phaseR.length-1) return safeNow;
+    const t = clamp(phaseTimer/phaseDuration,0,1);
+    return {
+      x: lerp(safeNow.x,safeNext.x,t),
+      y: lerp(safeNow.y,safeNext.y,t),
+      r: lerp(safeNow.r,safeNext.r,t)
+    };
+  }
+
+  function inBuilding(x,y){
+    for(const b of buildings){
+      if(x>b.x && x<b.x+b.w && y>b.y && y<b.y+b.h) return true;
+    }
+    return false;
+  }
+
+  function lineBlocked(ax,ay,bx,by){
+    for(const b of buildings){
+      if(lineRect(ax,ay,bx,by,b.x,b.y,b.w,b.h)) return true;
+    }
+    return false;
+  }
+
+  function lineRect(x1,y1,x2,y2,rx,ry,rw,rh){
+    const left = lineLine(x1,y1,x2,y2,rx,ry,rx,ry+rh);
+    const right= lineLine(x1,y1,x2,y2,rx+rw,ry,rx+rw,ry+rh);
+    const top  = lineLine(x1,y1,x2,y2,rx,ry,rx+rw,ry);
+    const bot  = lineLine(x1,y1,x2,y2,rx,ry+rh,rx+rw,ry+rh);
+    return left||right||top||bot;
+  }
+  function lineLine(x1,y1,x2,y2,x3,y3,x4,y4){
+    const den = (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
+    if(den===0) return false;
+    const t = ((x1-x3)*(y3-y4)-(y1-y3)*(x3-x4))/den;
+    const u = -((x1-x2)*(y1-y3)-(y1-y2)*(x1-x3))/den;
+    return t>=0&&t<=1&&u>=0&&u<=1;
+  }
+
+  function armorReduction(level){
+    if(level===1) return 0.30;
+    if(level===2) return 0.40;
+    if(level===3) return 0.55;
+    return 0;
+  }
+
+  function getWeapon(entity){
+    const slot = entity.weapons[entity.activeW];
+    if(!slot) return null;
+    return weaponDefs.find(w=>w.id===slot.name) || weaponDefs[0];
+  }
+
+  function spawnBullet(shooter, angle, overrideDmg=0, spreadAdd=0){
+    const w = shooter===player ? getWeapon(player) : weaponDefs.find(v=>v.id===shooter.weapon);
+    if(!w) return;
+    const recoilMul = shooter===player
+      ? ((player.mode==='crouch'||player.mode==='prone')?0.72:1)
+      : 1;
+    const spread = w.spread + spreadAdd + (Math.random()-0.5)*0.02;
+    const a = angle + (Math.random()-0.5)*spread;
+    const speed = w.v;
+    bullets.push({
+      x: shooter.x, y: shooter.y,
+      vx: Math.cos(a)*speed, vy: Math.sin(a)*speed,
+      life: 2.3, owner: shooter, dmg: overrideDmg||w.dmg,
+      weapon: w.id, pen: w.cat==='Sniper'||w.cat==='DMR'?2:(w.cat==='AR'?1:0),
+      gravity: w.cat==='Sniper'?10:w.cat==='DMR'?16:22,
+      recoilMul
+    });
+  }
+
+  function fire(shooter, targetAngle){
+    const w = shooter===player ? getWeapon(player) : weaponDefs.find(v=>v.id===shooter.weapon);
+    if(!w) return;
+    if(shooter===player){
+      const slot = player.weapons[player.activeW];
+      if(!slot || slot.chamber<=0 || player.reloadCD>0) return;
+      slot.chamber--;
+      const recPattern = w.recoil[player.recoilIndex % w.recoil.length] || 1;
+      player.recoilIndex++;
+      const modeSpread = player.mode==='prone'? -0.02 : player.mode==='crouch'? -0.01 : 0;
+      const speedSpread = Math.hypot(player.vx,player.vy) > 120 ? 0.03 : 0;
+      if(w.pellets){
+        for(let i=0;i<w.pellets;i++) spawnBullet(player, targetAngle, w.dmg, 0.12 + speedSpread + modeSpread);
+      } else spawnBullet(player, targetAngle, 0, speedSpread + modeSpread + recPattern*0.002);
+      player.fireCD = 60 / w.rpm;
+      fx.push({x:player.x,y:player.y,r:12,ttl:0.06,c:'#ffd28a'});
+    } else {
+      if(shooter.ammo<=0) return;
+      shooter.ammo--;
+      if(w.pellets){
+        for(let i=0;i<w.pellets;i++) spawnBullet(shooter, targetAngle, w.dmg, 0.12);
+      } else spawnBullet(shooter, targetAngle);
+      shooter.fireCD = 60 / w.rpm;
+    }
+  }
+
+  function applyDamage(target, raw, zone='body', attacker='Zone'){
+    if(!target.alive && !target.dbno) return;
+    let mult = zone==='head'?2.5:zone==='limbs'?0.75:1;
+    let dmg = raw*mult;
+    if(zone==='head') dmg *= (1-armorReduction(target.helmet||0));
+    else if(zone==='body') dmg *= (1-armorReduction(target.vest||0));
+
+    if(target.dbno){
+      target.bleed -= dmg*0.35;
+      if(target.bleed<=0){ target.alive=false; target.dbno=false; feed(`${target.id} finished (${attacker})`); }
+      return;
+    }
+
+    target.hp -= dmg;
+    if(target.hp<=0){
+      if(target===player){
+        const aliveAlly = teammates.some(t=>t.hp>0 && !t.dbno);
+        if(aliveAlly){
+          target.dbno=true; target.bleed=90; target.hp=1; target.mode='prone';
+          showMsg('DBNO - wait for revive!', 1800);
+        } else {
+          target.alive=false;
+          showMsg('Eliminated');
+        }
+      } else if(teammates.includes(target)){
+        target.dbno = true; target.bleed=90; target.hp=1;
+      } else {
+        const squadAlive = bots.some(b=>b!==target && b.squad===target.squad && b.alive && !b.dbno);
+        if(squadAlive && Math.random()<0.45){
+          target.dbno=true; target.bleed=90; target.hp=1;
+        } else {
+          target.alive=false;
+          feed(`${attacker} eliminated ${target.id}`);
+          if(attacker==='You' && Math.random()<0.3){
+            player.boost = clamp(player.boost+18,0,100);
+          }
+        }
+      }
+    }
+  }
+
+  function tryReload(){
+    const slot = player.weapons[player.activeW];
+    if(!slot || player.reloadCD>0) return;
+    const w = getWeapon(player);
+    const need = w.mag - slot.chamber;
+    if(need<=0) return;
+    const have = player.ammo[w.ammo]||0;
+    if(have<=0) return;
+    player.reloadCD = w.reload;
+    player.recoilIndex=0;
+  }
+
+  function finishReload(){
+    const slot = player.weapons[player.activeW];
+    const w = getWeapon(player);
+    if(!slot||!w) return;
+    const need = w.mag-slot.chamber;
+    const take = Math.min(need, player.ammo[w.ammo]||0);
+    slot.chamber += take;
+    player.ammo[w.ammo]-=take;
+  }
+
+  function spawnAirdrop(){
+    const x = rand(300,WORLD-300), y=rand(300,WORLD-300);
+    airdrops.push({x,y,landed:false,h:900,smoke:0,loot:false});
+    showMsg('Air drop inbound');
+  }
+
+  function nearestLoot(){
+    let best=null, bd=1e9;
+    for(let i=0;i<loot.length;i++){
+      const L=loot[i]; const d=dist(player.x,player.y,L.x,L.y);
+      if(d<bd){bd=d;best={i,L,d};}
+    }
+    return best;
+  }
+
+  function weightCap(){ return 60 + player.backpack*30; }
+
+  function pickupLoot(){
+    const n=nearestLoot();
+    if(!n||n.d>42) return false;
+    const it=n.L.item;
+    if(player.inventoryWeight + (it.weight||0) > weightCap()){
+      showMsg('Backpack full');
+      return false;
+    }
+    if(it.type==='ammo') player.ammo[it.ammo]=(player.ammo[it.ammo]||0)+it.amount;
+    else if(it.type==='heal') player.heals[it.heal]=(player.heals[it.heal]||0)+it.amount;
+    else if(it.type==='boost') player.boosts[it.boost]=(player.boosts[it.boost]||0)+it.amount;
+    else if(it.type==='armor'){
+      if(it.slot==='vest') player.vest=Math.max(player.vest,it.level);
+      else player.helmet=Math.max(player.helmet,it.level);
+    } else if(it.type==='bag'){
+      player.backpack=Math.max(player.backpack,it.level);
+    } else if(it.type==='weapon'){
+      const slot = player.weapons.findIndex(w=>w===null);
+      const obj = {name:it.weapon, chamber:weaponDefs.find(w=>w.id===it.weapon).mag, attachments:[]};
+      if(slot!==-1) player.weapons[slot]=obj;
+      else player.weapons[player.activeW]=obj;
+      showMsg(`${it.weapon} acquired`);
+    }
+    player.inventoryWeight += (it.weight||0);
+    loot.splice(n.i,1);
+    return true;
+  }
+
+  function throwGrenade(kind){
+    if((player.throwables[kind]||0)<=0) return;
+    player.throwables[kind]--;
+    const ang = player.angle;
+    grenades.push({
+      kind, x:player.x, y:player.y, vx:Math.cos(ang)*390, vy:Math.sin(ang)*390, t:kind==='Smoke'?1.2:1.6
+    });
+  }
+
+  function nearestVehicle(){
+    let best=null, bd=1e9;
+    for(const v of vehicles){
+      if(v.exploded) continue;
+      const d=dist(player.x,player.y,v.x,v.y);
+      if(d<bd){bd=d; best=v;}
+    }
+    return {v:best,d:bd};
+  }
+
+  function toggleVehicle(){
+    if(player.inVehicle){
+      const v = player.inVehicle;
+      player.inVehicle=null;
+      v.occupants = v.occupants.filter(o=>o!==player);
+      player.x = v.x + rand(-24,24); player.y = v.y + rand(-24,24);
+      showMsg(`Exited ${v.name}`);
+      return;
+    }
+    const n = nearestVehicle();
+    if(!n.v||n.d>56) return;
+    player.inVehicle=n.v;
+    n.v.occupants.push(player);
+    showMsg(`Entered ${n.v.name}`);
+  }
+
+  function visible(a,b,range){
+    const base = range * weather.vis;
+    if(dist(a.x,a.y,b.x,b.y)>base) return false;
+    for(const s of smokeClouds){
+      if(dist((a.x+b.x)/2,(a.y+b.y)/2,s.x,s.y)<s.r) return false;
+    }
+    return !lineBlocked(a.x,a.y,b.x,b.y);
+  }
+
+  function useHeal(){
+    if(player.heals.Medkit>0){
+      player.heals.Medkit--; player.hp=clamp(player.hp+70,0,100); showMsg('Used Medkit'); return;
+    }
+    if(player.heals.Bandage>0){
+      player.heals.Bandage--; player.hp=clamp(player.hp+18,0,100); showMsg('Used Bandage'); return;
+    }
+  }
+  function useBoost(){
+    if(player.boosts['Painkiller']>0){ player.boosts['Painkiller']--; player.boost=clamp(player.boost+60,0,100); showMsg('Painkiller'); return; }
+    if(player.boosts['Energy Drink']>0){ player.boosts['Energy Drink']--; player.boost=clamp(player.boost+35,0,100); showMsg('Energy Drink'); return; }
+  }
+
+  generateWorld();
+  spawnLoot();
+
+  addEventListener('resize',()=>{
+    cw=innerWidth; ch=innerHeight; canvas.width=cw; canvas.height=ch;
+  });
+  addEventListener('keydown',e=>{
+    keys[e.key.toLowerCase()]=true;
+    if(e.key==='1') player.activeW=0;
+    if(e.key==='2') player.activeW=1;
+    if(e.key.toLowerCase()==='r') tryReload();
+    if(e.key.toLowerCase()==='f'){
+      if(!toggleRevive()) {
+        if(!pickupLoot()) toggleVehicle();
+      }
+    }
+    if(e.key.toLowerCase()==='g') throwGrenade('Frag');
+    if(e.key.toLowerCase()==='h') throwGrenade('Smoke');
+    if(e.key.toLowerCase()==='j') throwGrenade('Molotov');
+    if(e.key.toLowerCase()==='k') throwGrenade('Stun');
+    if(e.key.toLowerCase()==='4') useHeal();
+    if(e.key.toLowerCase()==='b') useBoost();
+  });
+  addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+  canvas.addEventListener('mousemove',e=>{ mouse.x=e.clientX; mouse.y=e.clientY; });
+  canvas.addEventListener('mousedown',e=>{ if(e.button===0) mouse.down=true; if(e.button===2) mouse.right=true; });
+  canvas.addEventListener('mouseup',e=>{ if(e.button===0) mouse.down=false; if(e.button===2) mouse.right=false; });
+  canvas.addEventListener('contextmenu',e=>e.preventDefault());
+
+  function toggleRevive(){
+    let candidate = null;
+    for(const t of teammates){
+      if(t.dbno && dist(player.x,player.y,t.x,t.y)<60) candidate=t;
+    }
+    if(player.dbno){
+      for(const t of teammates){
+        if(t.hp>0&&!t.dbno&&dist(player.x,player.y,t.x,t.y)<70) candidate=player;
+      }
+    }
+    if(candidate){
+      player.reviveTarget = candidate;
+      player.reviveProgress = 0;
+      return true;
+    }
+    return false;
+  }
+
+  function moveEntity(ent, mx,my,spd,dt){
+    ent.vx = mx*spd;
+    ent.vy = my*spd;
+    ent.x = clamp(ent.x + ent.vx*dt, 6, WORLD-6);
+    ent.y = clamp(ent.y + ent.vy*dt, 6, WORLD-6);
+  }
+
+  let acc=0, last=performance.now();
+  function frame(now){
+    const dtSec = Math.min(0.05, (now-last)/1000); last=now; acc += dtSec;
+    while(acc>=TICK){ update(TICK); acc-=TICK; }
+    render();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  function update(dt){
+    // weather
+    weatherTimer += dt;
+    if(weatherTimer > 72){
+      weatherTimer = 0;
+      weather = weathers[randi(0,weathers.length-1)];
+      showMsg(`Weather: ${weather.name}`);
+    }
+    if(weather.name==='Storm' && Math.random()<0.01){ stormFlash=0.25; }
+    stormFlash = Math.max(0,stormFlash-dt);
+
+    // zone
+    phaseTimer += dt;
+    if(phaseTimer>=phaseDuration && phase<phaseR.length-1) newPhase();
+    const safe = currentSafe();
+
+    // red zone
+    redZoneTimer -= dt;
+    if(redZoneTimer<=0){
+      redZoneTimer = rand(23,34);
+      redZones.push({x:rand(400,WORLD-400), y:rand(400,WORLD-400), r:rand(220,420), t:11, shell:0});
+      showMsg('Red Zone Incoming',1000);
+    }
+    for(let i=redZones.length-1;i>=0;i--){
+      const rz=redZones[i];
+      rz.t-=dt; rz.shell-=dt;
+      if(rz.shell<=0){
+        rz.shell=rand(0.4,1);
+        const a=rand(0,Math.PI*2), rr=rand(0,rz.r);
+        const ex=rz.x+Math.cos(a)*rr, ey=rz.y+Math.sin(a)*rr;
+        fx.push({x:ex,y:ey,r:58,ttl:0.35,c:'#ff6a2e'});
+        if(dist(player.x,player.y,ex,ey)<78 && !inBuilding(player.x,player.y)) applyDamage(player,65,'body','Red Zone');
+        for(const t of teammates){
+          if(t.hp>0 && dist(t.x,t.y,ex,ey)<78 && !inBuilding(t.x,t.y)) applyDamage(t,80,'body','Red Zone');
+        }
+        for(const b of bots){
+          if((b.alive||b.dbno)&&dist(b.x,b.y,ex,ey)<78 && !inBuilding(b.x,b.y)) applyDamage(b,100,'body','Red Zone');
+        }
+      }
+      if(rz.t<=0) redZones.splice(i,1);
+    }
+
+    // airdrops
+    airdropTimer -= dt;
+    if(airdropTimer<=0){ airdropTimer = rand(45,70); spawnAirdrop(); }
+    for(const a of airdrops){
+      if(!a.landed){ a.h-=360*dt; if(a.h<=0){a.h=0;a.landed=true; a.smoke=50; showMsg('Air drop landed');} }
+      else if(!a.loot){
+        const high = {type:'weapon', weapon:allWeaponNames[randi(0,allWeaponNames.length-1)], tier:'Legendary', color:'#ffbe54', weight:16};
+        loot.push({x:a.x+rand(-20,20), y:a.y+rand(-20,20), item:high});
+        loot.push({x:a.x+rand(-20,20), y:a.y+rand(-20,20), item:{type:'armor',slot:'vest',level:3,tier:'Legendary',color:'#ffbe54',weight:12}});
+        loot.push({x:a.x+rand(-20,20), y:a.y+rand(-20,20), item:{type:'armor',slot:'helmet',level:3,tier:'Legendary',color:'#ffbe54',weight:8}});
+        a.loot=true;
+      }
+    }
+
+    // player
+    if(player.alive){
+      const camWX = player.x, camWY = player.y;
+      player.angle = Math.atan2(mouse.y - ch/2, mouse.x - cw/2);
+      const b = biomeAt(player.x,player.y);
+      let speed = 150;
+      if(keys['shift']) { player.mode='sprint'; speed=245; }
+      else if(keys['c']) { player.mode='crouch'; speed=105; }
+      else if(keys['z']) { player.mode='prone'; speed=62; }
+      else player.mode='walk';
+
+      if(player.dbno){ player.mode='prone'; speed=42; player.bleed -= dt; if(player.bleed<=0){player.alive=false; player.dbno=false; showMsg('Eliminated');} }
+
+      speed *= (1 + (player.boost/100)*0.14) * b.moveMul;
+      if(b.water) speed *= 0.68; // swim
+      let mx = (keys['d']?1:0) - (keys['a']?1:0);
+      let my = (keys['s']?1:0) - (keys['w']?1:0);
+      const ml = Math.hypot(mx,my)||1; mx/=ml; my/=ml;
+
+      if(player.inVehicle){
+        const v=player.inVehicle;
+        let vmx=mx, vmy=my;
+        const tMul = (v.tires.reduce((a,c)=>a+c,0)/160);
+        const vs = v.speed * clamp(tMul,0.35,1);
+        v.vx = lerp(v.vx, vmx*vs, 0.12);
+        v.vy = lerp(v.vy, vmy*vs, 0.12);
+        v.x = clamp(v.x + v.vx*dt, 8, WORLD-8);
+        v.y = clamp(v.y + v.vy*dt, 8, WORLD-8);
+        player.x = v.x; player.y = v.y;
+        v.fuel = Math.max(0,v.fuel - (Math.abs(v.vx)+Math.abs(v.vy))*0.00003);
+        if(v.fuel<=0){ v.vx*=0.98; v.vy*=0.98; }
+        if(v.hp<170) v.smoking=true;
+        if(v.hp<85) v.burning=true;
+        if(v.hp<=0 && !v.exploded){
+          v.exploded=true;
+          fx.push({x:v.x,y:v.y,r:120,ttl:0.65,c:'#ff5c1f'});
+          applyDamage(player,100,'body','Vehicle Explosion');
+          showMsg('Vehicle destroyed');
+        }
+      } else {
+        moveEntity(player,mx,my,speed,dt);
+        // simple vault
+        if(keys['v']){
+          for(const bld of buildings){
+            const cx=clamp(player.x,bld.x,bld.x+bld.w);
+            const cy=clamp(player.y,bld.y,bld.y+bld.h);
+            const d=dist(player.x,player.y,cx,cy);
+            if(d<30){ player.x += Math.cos(player.angle)*34; player.y += Math.sin(player.angle)*34; break; }
+          }
+        }
+      }
+
+      // boost regen
+      if(player.boost>0){
+        player.boost = Math.max(0,player.boost - dt*1.2);
+        player.hp = Math.min(100, player.hp + dt*0.9);
+      }
+
+      // zone damage
+      if(dist(player.x,player.y,safe.x,safe.y) > safe.r){
+        applyDamage(player, phaseDPS[phase]*dt, 'body', 'Blue Zone');
+      }
+
+      // combat
+      player.fireCD = Math.max(0, player.fireCD-dt);
+      if(player.reloadCD>0){ player.reloadCD -= dt; if(player.reloadCD<=0) finishReload(); }
+
+      if(mouse.down && player.fireCD<=0 && player.alive && !player.dbno){
+        fire(player, player.angle);
+      }
+
+      // revive
+      if(player.reviveTarget && keys['f']){
+        const tgt = player.reviveTarget;
+        if(tgt===player){
+          player.reviveProgress += dt;
+          if(player.reviveProgress>=10){
+            player.dbno=false; player.hp=38; player.bleed=0;
+            player.reviveTarget=null; player.reviveProgress=0;
+            showMsg('Revived');
+          }
+        } else if(tgt.dbno && dist(player.x,player.y,tgt.x,tgt.y)<65){
+          player.reviveProgress += dt;
+          if(player.reviveProgress>=10){
+            tgt.dbno=false; tgt.hp=38; tgt.bleed=0;
+            player.reviveTarget=null; player.reviveProgress=0;
+            showMsg(`${tgt.id} revived`);
+          }
+        } else { player.reviveTarget=null; player.reviveProgress=0; }
+      } else {
+        player.reviveTarget=null; player.reviveProgress=0;
+      }
+    }
+
+    // teammates
+    for(const t of teammates){
+      if(t.hp<=0 && !t.dbno) continue;
+      if(t.dbno){
+        t.bleed -= dt;
+        if(t.bleed<=0){ t.hp=0; t.dbno=false; }
+        continue;
+      }
+      const d = dist(t.x,t.y,player.x,player.y);
+      if(d>120){ const a=angleTo(t.x,t.y,player.x,player.y); t.x+=Math.cos(a)*120*dt; t.y+=Math.sin(a)*120*dt; }
+
+      let nearest=null, nd=1e9;
+      for(const b of bots){
+        if(!b.alive || b.dbno) continue;
+        const db=dist(t.x,t.y,b.x,b.y);
+        if(db<nd && visible(t,b,530)){ nd=db; nearest=b; }
+      }
+      t.fireCD=Math.max(0,t.fireCD-dt);
+      if(nearest && t.fireCD<=0){
+        const a=angleTo(t.x,t.y,nearest.x,nearest.y);
+        bullets.push({x:t.x,y:t.y,vx:Math.cos(a)*980,vy:Math.sin(a)*980,life:1.6,owner:t,dmg:28,weapon:'Ally',pen:0,gravity:18});
+        t.fireCD = 0.17;
+      }
+      if(dist(t.x,t.y,safe.x,safe.y)>safe.r) applyDamage(t,phaseDPS[phase]*dt,'body','Blue Zone');
+    }
+
+    // bots
+    for(const b of bots){
+      if(!b.alive && !b.dbno) continue;
+      if(b.dbno){ b.bleed -= dt; if(b.bleed<=0){ b.alive=false; b.dbno=false; } continue; }
+      b.fireCD=Math.max(0,b.fireCD-dt);
+      b.think-=dt;
+      if(b.think<=0){
+        b.think=rand(0.25,0.7);
+        let target=null, best=1e9;
+        if(player.alive && visible(b,player,700)){ target=player; best=dist(b.x,b.y,player.x,player.y); }
+        for(const t of teammates){
+          if(t.hp>0 && !t.dbno && visible(b,t,620)){
+            const dtm=dist(b.x,b.y,t.x,t.y);
+            if(dtm<best){ best=dtm; target=t; }
+          }
+        }
+        b.target=target;
+        if(!target) b.dir += rand(-0.8,0.8);
+      }
+
+      const bb = biomeAt(b.x,b.y);
+      const ms = 110*bb.moveMul;
+      if(b.target){
+        const a=angleTo(b.x,b.y,b.target.x,b.target.y);
+        const d=dist(b.x,b.y,b.target.x,b.target.y);
+        if(d>220){ b.x += Math.cos(a)*ms*dt; b.y += Math.sin(a)*ms*dt; }
+        else if(d<120){ b.x -= Math.cos(a)*ms*0.45*dt; b.y -= Math.sin(a)*ms*0.45*dt; }
+        if(b.fireCD<=0 && !lineBlocked(b.x,b.y,b.target.x,b.target.y)) fire(b,a);
+      } else {
+        b.x += Math.cos(b.dir)*ms*0.5*dt;
+        b.y += Math.sin(b.dir)*ms*0.5*dt;
+      }
+
+      b.x = clamp(b.x,8,WORLD-8); b.y=clamp(b.y,8,WORLD-8);
+      if(dist(b.x,b.y,safe.x,safe.y)>safe.r) applyDamage(b,phaseDPS[phase]*dt,'body','Blue Zone');
+    }
+
+    // bullets
+    for(let i=bullets.length-1;i>=0;i--){
+      const bl=bullets[i];
+      bl.life -= dt;
+      bl.vy += bl.gravity*dt;
+      const ox=bl.x, oy=bl.y;
+      bl.x += bl.vx*dt;
+      bl.y += bl.vy*dt;
+      if(bl.life<=0 || bl.x<0||bl.y<0||bl.x>WORLD||bl.y>WORLD){ bullets.splice(i,1); continue; }
+
+      // building collision / penetration
+      let hitWall=false;
+      for(const bd of buildings){
+        if(bl.x>bd.x&&bl.x<bd.x+bd.w&&bl.y>bd.y&&bl.y<bd.y+bd.h){ hitWall=true; break; }
+      }
+      if(hitWall){
+        if(bl.pen>0){ bl.pen--; bl.dmg*=0.65; }
+        else { bullets.splice(i,1); continue; }
+      }
+
+      // foliage penetration
+      for(const f of foliage){
+        if(dist(bl.x,bl.y,f.x,f.y)<f.r){
+          bl.dmg*=0.85;
+          if(bl.dmg<8){ bullets.splice(i,1); break; }
+        }
+      }
+      if(!bullets[i]) continue;
+
+      // vehicle hits
+      for(const v of vehicles){
+        if(v.exploded) continue;
+        if(dist(bl.x,bl.y,v.x,v.y)<24){
+          v.hp -= bl.dmg*0.9;
+          const ta = Math.atan2(bl.y-v.y, bl.x-v.x);
+          const idx = ((Math.round((ta+Math.PI)/(Math.PI/2)))%4+4)%4;
+          v.tires[idx]=Math.max(0,v.tires[idx]-bl.dmg*0.25);
+          bullets.splice(i,1);
+          break;
+        }
+      }
+      if(!bullets[i]) continue;
+
+      // player
+      if(bl.owner!==player && player.alive){
+        if(dist(bl.x,bl.y,player.x,player.y)<14){
+          const zone = hitZone(player,bl.x,bl.y);
+          applyDamage(player, bl.dmg, zone, bl.owner.id||'Bot');
+          bullets.splice(i,1); continue;
+        }
+      }
+      // teammates
+      for(const t of teammates){
+        if(bl.owner===t) continue;
+        if(t.hp>0 && dist(bl.x,bl.y,t.x,t.y)<12){
+          const zone = hitZone(t,bl.x,bl.y);
+          applyDamage(t, bl.dmg, zone, bl.owner.id||'Bot');
+          bullets.splice(i,1); break;
+        }
+      }
+      if(!bullets[i]) continue;
+      // bots
+      for(const b of bots){
+        if(!b.alive || b.dbno || bl.owner===b) continue;
+        if(dist(bl.x,bl.y,b.x,b.y)<14){
+          const zone = hitZone(b,bl.x,bl.y);
+          applyDamage(b, bl.dmg, zone, bl.owner.id||'You');
+          bullets.splice(i,1);
+          break;
+        }
+      }
+    }
+
+    // grenades
+    for(let i=grenades.length-1;i>=0;i--){
+      const g=grenades[i];
+      g.t-=dt;
+      g.vx*=0.992; g.vy*=0.992;
+      g.x+=g.vx*dt; g.y+=g.vy*dt;
+      if(g.t<=0){
+        if(g.kind==='Frag'){
+          fx.push({x:g.x,y:g.y,r:95,ttl:0.45,c:'#ff8a3b'});
+          areaDamage(g.x,g.y,115,84,'Frag');
+        } else if(g.kind==='Smoke'){
+          smokeClouds.push({x:g.x,y:g.y,r:140,t:18});
+        } else if(g.kind==='Molotov'){
+          fires.push({x:g.x,y:g.y,r:90,t:12});
+        } else if(g.kind==='Stun'){
+          if(dist(player.x,player.y,g.x,g.y)<160) stormFlash=0.35;
+        }
+        grenades.splice(i,1);
+      }
+    }
+
+    for(let i=smokeClouds.length-1;i>=0;i--){
+      const s=smokeClouds[i]; s.t-=dt; if(s.t<=0) smokeClouds.splice(i,1);
+    }
+    for(let i=fires.length-1;i>=0;i--){
+      const f=fires[i]; f.t-=dt;
+      if(player.alive && dist(player.x,player.y,f.x,f.y)<f.r) applyDamage(player,18*dt,'limbs','Molotov');
+      for(const t of teammates){ if(t.hp>0&&dist(t.x,t.y,f.x,f.y)<f.r) applyDamage(t,18*dt,'limbs','Molotov'); }
+      for(const b of bots){ if((b.alive||b.dbno)&&dist(b.x,b.y,f.x,f.y)<f.r) applyDamage(b,22*dt,'limbs','Molotov'); }
+      if(f.t<=0) fires.splice(i,1);
+    }
+
+    // fx
+    for(let i=fx.length-1;i>=0;i--){ fx[i].ttl-=dt; if(fx[i].ttl<=0) fx.splice(i,1); }
+
+    // killfeed decay
+    for(let i=killfeed.length-1;i>=0;i--){ killfeed[i].ttl-=dt; if(killfeed[i].ttl<=0) killfeed.splice(i,1); }
+  }
+
+  function hitZone(entity, x, y){
+    const hx = entity.x, hy = entity.y - 9;
+    if(dist(x,y,hx,hy)<6) return 'head';
+    if(Math.abs(x-entity.x)>8 || Math.abs(y-entity.y)>8) return 'limbs';
+    return 'body';
+  }
+
+  function areaDamage(x,y,r,dmg,source){
+    if(player.alive && dist(player.x,player.y,x,y)<r) applyDamage(player,dmg*(1-dist(player.x,player.y,x,y)/r),'body',source);
+    for(const t of teammates){
+      if(t.hp>0 && dist(t.x,t.y,x,y)<r) applyDamage(t,dmg*(1-dist(t.x,t.y,x,y)/r),'body',source);
+    }
+    for(const b of bots){
+      if((b.alive||b.dbno) && dist(b.x,b.y,x,y)<r) applyDamage(b,dmg*(1-dist(b.x,b.y,x,y)/r),'body',source);
+    }
+  }
+
+  function worldToScreen(x,y,cx,cy){ return {x:x-cx+cw/2,y:y-cy+ch/2}; }
+
+  function drawCircle(x,y,r,c,a=1){
+    ctx.globalAlpha=a; ctx.fillStyle=c; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1;
+  }
+
+  function render(){
+    ctx.clearRect(0,0,cw,ch);
+    const camX = player.x, camY = player.y;
+    const view = {x:camX-cw/2,y:camY-ch/2,w:cw,h:ch};
+
+    // ground
+    ctx.fillStyle = '#3f7d4d';
+    ctx.fillRect(0,0,cw,ch);
+    for(const b of biomes){
+      const p=worldToScreen(b.x,b.y,camX,camY);
+      ctx.fillStyle=b.color; ctx.globalAlpha=0.74;
+      ctx.fillRect(p.x,p.y,b.w,b.h);
+      ctx.globalAlpha=1;
+    }
+
+    // coastline water stripes
+    if(biomes[3]){
+      for(let i=0;i<25;i++){
+        const yy = biomes[3].y + i*75;
+        const p=worldToScreen(0,yy,camX,camY);
+        ctx.fillStyle=`rgba(120,180,215,${0.04 + (i%2)*0.03})`;
+        ctx.fillRect(p.x,p.y,WORLD,38);
+      }
+    }
+
+    // buildings
+    for(const b of buildings){
+      const p=worldToScreen(b.x,b.y,camX,camY);
+      if(p.x+b.w<0||p.y+b.h<0||p.x>cw||p.y>ch) continue;
+      ctx.fillStyle='#6f6f75';
+      ctx.fillRect(p.x,p.y,b.w,b.h);
+      ctx.strokeStyle='rgba(0,0,0,.35)'; ctx.strokeRect(p.x,p.y,b.w,b.h);
+    }
+
+    // foliage / cover
+    for(const f of foliage){
+      const p=worldToScreen(f.x,f.y,camX,camY);
+      if(p.x<-f.r||p.y<-f.r||p.x>cw+f.r||p.y>ch+f.r) continue;
+      drawCircle(p.x,p.y,f.r,'#2b5f36');
+    }
+    for(const r of hardCover){
+      const p=worldToScreen(r.x,r.y,camX,camY);
+      if(p.x<-r.r||p.y<-r.r||p.x>cw+r.r||p.y>ch+r.r) continue;
+      drawCircle(p.x,p.y,r.r,'#777a7e');
+    }
+
+    // POI labels
+    ctx.fillStyle='rgba(255,255,255,.45)';
+    ctx.font='12px Segoe UI';
+    for(const p of pois){
+      const sp=worldToScreen(p.x,p.y,camX,camY);
+      if(sp.x<0||sp.y<0||sp.x>cw||sp.y>ch) continue;
+      ctx.fillText(p.name,sp.x+6,sp.y-6);
+    }
+
+    // zone
+    const safe=currentSafe();
+    const sz=worldToScreen(safe.x,safe.y,camX,camY);
+    ctx.strokeStyle='rgba(85,175,255,.95)'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(sz.x,sz.y,safe.r,0,Math.PI*2); ctx.stroke();
+
+    // blue outside overlay
+    ctx.save();
+    ctx.fillStyle='rgba(40,110,220,.16)';
+    ctx.beginPath();
+    ctx.rect(0,0,cw,ch);
+    ctx.arc(sz.x,sz.y,safe.r,0,Math.PI*2,true);
+    ctx.fill('evenodd');
+    ctx.restore();
+
+    // red zones
+    for(const rz of redZones){
+      const p=worldToScreen(rz.x,rz.y,camX,camY);
+      ctx.strokeStyle='rgba(255,70,45,.7)';
+      ctx.lineWidth=2; ctx.setLineDash([7,7]);
+      ctx.beginPath(); ctx.arc(p.x,p.y,rz.r,0,Math.PI*2); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // loot
+    for(const L of loot){
+      const p=worldToScreen(L.x,L.y,camX,camY);
+      if(p.x<-6||p.y<-6||p.x>cw+6||p.y>ch+6) continue;
+      ctx.fillStyle=L.item.color||'#fff';
+      ctx.fillRect(p.x-3,p.y-3,6,6);
+    }
+
+    // airdrops
+    for(const a of airdrops){
+      const p=worldToScreen(a.x,a.y,camX,camY);
+      if(!a.landed){
+        ctx.strokeStyle='rgba(255,255,255,.4)';
+        ctx.beginPath(); ctx.moveTo(p.x,p.y-a.h*0.1); ctx.lineTo(p.x,p.y); ctx.stroke();
+        ctx.fillStyle='#d4a950'; ctx.fillRect(p.x-9,p.y-a.h*0.1-9,18,18);
+      } else {
+        ctx.fillStyle='#b07d2d'; ctx.fillRect(p.x-12,p.y-12,24,24);
+        ctx.fillStyle='rgba(255,80,55,.25)';
+        drawCircle(p.x,p.y,42,'#ff6d53',0.2);
+        for(let i=0;i<3;i++) drawCircle(p.x+rand(-8,8),p.y-rand(20,75),rand(16,25),'rgba(180,180,180,.18)');
+      }
+    }
+
+    // smoke/fire
+    for(const s of smokeClouds){
+      const p=worldToScreen(s.x,s.y,camX,camY);
+      drawCircle(p.x,p.y,s.r,'#8f97a1',0.22);
+      drawCircle(p.x+15,p.y-12,s.r*0.75,'#a8b0ba',0.14);
+    }
+    for(const f of fires){
+      const p=worldToScreen(f.x,f.y,camX,camY);
+      drawCircle(p.x,p.y,f.r,'#ff6b2e',0.22);
+    }
+
+    // vehicles
+    for(const v of vehicles){
+      if(v.exploded) continue;
+      const p=worldToScreen(v.x,v.y,camX,camY);
+      if(p.x<-35||p.y<-35||p.x>cw+35||p.y>ch+35) continue;
+      ctx.save();
+      ctx.translate(p.x,p.y);
+      ctx.rotate(Math.atan2(v.vy,v.vx)||0);
+      ctx.fillStyle=v.smoking?'#64686f':'#858b95';
+      ctx.fillRect(-18,-10,36,20);
+      if(v.burning) ctx.fillStyle='#ff8b35', ctx.fillRect(-8,-3,16,6);
+      ctx.restore();
+    }
+
+    // bullets
+    ctx.fillStyle='#ffe7a3';
+    for(const b of bullets){
+      const p=worldToScreen(b.x,b.y,camX,camY);
+      if(p.x<0||p.y<0||p.x>cw||p.y>ch) continue;
+      ctx.fillRect(p.x-1,p.y-1,2,2);
+    }
+
+    // bots
+    for(const b of bots){
+      if(!b.alive && !b.dbno) continue;
+      const p=worldToScreen(b.x,b.y,camX,camY);
+      if(p.x<-20||p.y<-20||p.x>cw+20||p.y>ch+20) continue;
+      ctx.fillStyle=b.dbno?'#a66':'#d44'; drawCircle(p.x,p.y,10,ctx.fillStyle);
+      drawCircle(p.x,p.y-9,4,'#f0c0b0');
+    }
+
+    // allies
+    for(const t of teammates){
+      if(t.hp<=0 && !t.dbno) continue;
+      const p=worldToScreen(t.x,t.y,camX,camY);
+      ctx.fillStyle=t.dbno?'#668':'#67a8ff'; drawCircle(p.x,p.y,10,ctx.fillStyle);
+      drawCircle(p.x,p.y-9,4,'#dceaff');
+    }
+
+    // player
+    if(player.alive){
+      const pp=worldToScreen(player.x,player.y,camX,camY);
+      drawCircle(pp.x,pp.y,11,player.dbno?'#999':'#ffffff');
+      drawCircle(pp.x,pp.y-9,4,'#cdd7e0');
+      ctx.strokeStyle='#7ad2ff'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(pp.x,pp.y); ctx.lineTo(pp.x+Math.cos(player.angle)*24,pp.y+Math.sin(player.angle)*24); ctx.stroke();
+      if(player.mode==='crouch'||player.mode==='prone'){
+        ctx.fillStyle='rgba(120,200,255,.2)';
+        ctx.fillRect(pp.x-16,pp.y+12,32,3);
+      }
+    }
+
+    // effects
+    for(const e of fx){
+      const p=worldToScreen(e.x,e.y,camX,camY);
+      drawCircle(p.x,p.y,e.r*(1-e.ttl*0.9),e.c,Math.max(0,e.ttl*2));
+    }
+
+    // weather overlays
+    if(weather.rain){
+      ctx.strokeStyle='rgba(170,190,220,.22)';
+      for(let i=0;i<130;i++){
+        const x=Math.random()*cw, y=Math.random()*ch;
+        ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-4,y+11); ctx.stroke();
+      }
+    }
+    if(weather.fog>0){
+      ctx.fillStyle=`rgba(200,210,220,${weather.fog})`;
+      ctx.fillRect(0,0,cw,ch);
+    }
+    if(stormFlash>0){
+      ctx.fillStyle=`rgba(255,255,255,${stormFlash*0.7})`;
+      ctx.fillRect(0,0,cw,ch);
+    }
+
+    renderHUD();
+  }
+
+  function renderHUD(){
+    const aliveBots = bots.filter(b=>b.alive||b.dbno).length;
+    const safe=currentSafe();
+    const dZone = Math.max(0, dist(player.x,player.y,safe.x,safe.y)-safe.r).toFixed(0);
+    const slot = player.weapons[player.activeW];
+    const w = getWeapon(player);
+    const biome = biomeAt(player.x,player.y).name;
+    const veh = player.inVehicle ? `${player.inVehicle.name} Fuel:${player.inVehicle.fuel.toFixed(0)} HP:${player.inVehicle.hp.toFixed(0)}` : 'On Foot';
+
+    const hpP = clamp(player.hp,0,100);
+    const bP = clamp(player.boost,0,100);
+    const rv = player.reviveTarget ? `${player.reviveProgress.toFixed(1)}/10s` : '—';
+
+    hud.innerHTML = `
+      <div><b>BR Prototype (60Hz Sim)</b> | Players Alive: <b>${aliveBots + (player.alive?1:0) + teammates.filter(t=>t.hp>0||t.dbno).length}</b> | Queue MMR/Bot Fill: ON</div>
+      <div>Biome: <b>${biome}</b> | Weather: <b>${weather.name}</b> | ${veh}</div>
+      <div>Mode: ${player.mode.toUpperCase()} ${player.dbno?'<span style="color:#ff9898">DBNO</span>':''}</div>
+      <div class="bar"><div class="fill" style="width:${hpP}%;background:#ff5252"></div></div>
+      <div>HP ${player.hp.toFixed(0)} | Vest L${player.vest} Helmet L${player.helmet} | Backpack L${player.backpack} (${player.inventoryWeight}/${weightCap()})</div>
+      <div class="bar"><div class="fill" style="width:${bP}%;background:#57c6ff"></div></div>
+      <div>Boost ${player.boost.toFixed(0)} | Revive: ${rv}</div>
+      <div>Weapon: <b>${slot?slot.name:'None'}</b> ${slot&&w?`(${slot.chamber}/${(player.ammo[w.ammo]||0)} ${w.ammo})`:''} ${player.reloadCD>0?`| Reload ${player.reloadCD.toFixed(1)}s`:''}</div>
+      <div>Throwables: Frag ${player.throwables.Frag} | Smoke ${player.throwables.Smoke} | Molotov ${player.throwables.Molotov} | Stun ${player.throwables.Stun}</div>
+      <div>Heals: Bandage ${player.heals.Bandage} / Medkit ${player.heals.Medkit} | Boosts: ED ${player.boosts['Energy Drink']} / PK ${player.boosts['Painkiller']}</div>
+      <div>Zone Phase ${phase+1}/9 | DPS ${phaseDPS[phase]}/s | Dist Outside ${dZone}</div>
+      <div style="opacity:.8">Controls: WASD Move, Shift Sprint, C Crouch, Z Prone, V Vault, F Loot/Vehicle/Revive, R Reload, 1/2 Weapon, Click Fire, G/H/J/K Throwables, 4 Heal, B Boost</div>
+    `;
+
+    killfeedEl.innerHTML = killfeed.map(k=>`<div style="opacity:${clamp(k.ttl/6,0,1)}">${k.t}</div>`).join('');
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gallery Photo Puzzle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            touch-action: manipulation; /* Prevent double-tap zoom on mobile */
+            overflow: hidden; /* Prevent scrolling while playing */
+        }
+        #puzzle-board {
+            position: relative;
+            background-color: #1f2937;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+        .tile {
+            position: absolute;
+            background-repeat: no-repeat;
+            cursor: pointer;
+            transition: transform 0.2s ease-in-out;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+            user-select: none;
+        }
+        .tile.empty {
+            background: none !important;
+            cursor: default;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+        .custom-file-upload {
+            display: inline-block;
+            cursor: pointer;
+        }
+        input[type="file"] {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white font-sans h-screen w-screen flex flex-col items-center justify-center">
+
+    <!-- Audio Context for simple sounds -->
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSlideSound() {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+        function playWinSound() {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+            osc.frequency.setValueAtTime(600, audioCtx.currentTime + 0.1);
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.5);
+        }
+    </script>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="flex flex-col items-center w-full max-w-md p-6 bg-gray-800 rounded-xl shadow-2xl">
+        <h1 class="text-4xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Photo Puzzle</h1>
+        <p class="text-gray-400 mb-8 text-center">Turn your gallery photos into a sliding puzzle!</p>
+
+        <div class="w-full mb-6 relative">
+            <label class="custom-file-upload w-full flex flex-col items-center px-4 py-6 bg-gray-700 text-blue-400 rounded-lg shadow-lg tracking-wide uppercase border border-blue-400 border-dashed hover:bg-blue-500 hover:text-white transition duration-300">
+                <svg class="w-8 h-8 mb-2" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                    <path d="M16.88 9.1A4 4 0 0 1 16 17H5a5 5 0 0 1-1-9.9V7a3 3 0 0 1 4.52-2.59A4.98 4.98 0 0 1 17 8c0 .38-.04.74-.12 1.1zM11 11h3l-4-4-4 4h3v3h2v-3z" />
+                </svg>
+                <span id="file-name" class="mt-2 text-sm leading-normal">Select an Image</span>
+                <input type="file" id="image-input" accept="image/*" />
+            </label>
+        </div>
+
+        <div class="mb-6 w-full">
+            <label class="block text-gray-400 text-sm font-bold mb-2" for="grid-size">
+                Difficulty
+            </label>
+            <select id="grid-size" class="block appearance-none w-full bg-gray-700 border border-gray-600 text-white py-3 px-4 pr-8 rounded leading-tight focus:outline-none focus:bg-gray-600 focus:border-blue-500">
+                <option value="3">Easy (3x3)</option>
+                <option value="4" selected>Medium (4x4)</option>
+                <option value="5">Hard (5x5)</option>
+            </select>
+        </div>
+
+        <button id="start-btn" class="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline disabled:opacity-50 disabled:cursor-not-allowed transition duration-300" disabled>
+            Start Game
+        </button>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="game-screen" class="hidden flex-col items-center w-full">
+        <div class="flex justify-between w-full max-w-md px-4 mb-4 text-lg font-semibold">
+            <div class="bg-gray-800 px-4 py-2 rounded-lg"><span class="text-gray-400">Moves:</span> <span id="moves-display">0</span></div>
+            <div class="bg-gray-800 px-4 py-2 rounded-lg"><span class="text-gray-400">Time:</span> <span id="time-display">00:00</span></div>
+        </div>
+        
+        <div id="puzzle-board-container" class="p-2 bg-gray-800 rounded-xl">
+            <div id="puzzle-board"></div>
+        </div>
+
+        <button id="quit-btn" class="mt-6 text-gray-400 hover:text-white transition">Quit Game</button>
+    </div>
+
+    <!-- Win Screen -->
+    <div id="win-screen" class="hidden flex-col items-center w-full max-w-md p-8 bg-gray-800 rounded-xl shadow-2xl text-center z-50">
+        <h2 class="text-5xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">Solved!</h2>
+        <div class="text-xl mb-6 flex flex-col gap-2">
+            <p>Moves: <span id="final-moves" class="font-bold text-white"></span></p>
+            <p>Time: <span id="final-time" class="font-bold text-white"></span></p>
+        </div>
+        <button id="play-again-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded transition duration-300">
+            Play Again
+        </button>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const screens = {
+            start: document.getElementById('start-screen'),
+            game: document.getElementById('game-screen'),
+            win: document.getElementById('win-screen')
+        };
+        const imageInput = document.getElementById('image-input');
+        const fileNameDisplay = document.getElementById('file-name');
+        const startBtn = document.getElementById('start-btn');
+        const gridSizeSelect = document.getElementById('grid-size');
+        const puzzleBoard = document.getElementById('puzzle-board');
+        const movesDisplay = document.getElementById('moves-display');
+        const timeDisplay = document.getElementById('time-display');
+        const quitBtn = document.getElementById('quit-btn');
+        const playAgainBtn = document.getElementById('play-again-btn');
+
+        // --- Game State ---
+        let processedImageUrl = null;
+        let gridSize = 4;
+        let boardSizePx = 0;
+        let tileSizePx = 0;
+        let tiles = []; // Array representing current grid state
+        let emptyIndex = 0;
+        let moves = 0;
+        let timerInterval;
+        let startTime;
+        let isPlaying = false;
+
+        // --- Utility Functions ---
+        function switchScreen(screenName) {
+            Object.values(screens).forEach(s => s.classList.add('hidden'));
+            screens[screenName].classList.remove('hidden');
+            screens[screenName].classList.add('flex');
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const s = (seconds % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        // --- Image Processing ---
+        imageInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            fileNameDisplay.textContent = file.name;
+            startBtn.disabled = true;
+            startBtn.textContent = "Processing...";
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    // Crop to square via canvas
+                    const canvas = document.createElement('canvas');
+                    const size = Math.min(img.width, img.height);
+                    canvas.width = size;
+                    canvas.height = size;
+                    const ctx = canvas.getContext('2d');
+                    
+                    const startX = (img.width - size) / 2;
+                    const startY = (img.height - size) / 2;
+                    
+                    ctx.drawImage(img, startX, startY, size, size, 0, 0, size, size);
+                    processedImageUrl = canvas.toDataURL('image/jpeg', 0.8);
+                    
+                    startBtn.disabled = false;
+                    startBtn.textContent = "Start Game";
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // --- Game Logic ---
+        function initGame() {
+            gridSize = parseInt(gridSizeSelect.value);
+            moves = 0;
+            movesDisplay.textContent = moves;
+            timeDisplay.textContent = "00:00";
+            
+            // Calculate sizes based on screen width
+            const containerWidth = Math.min(window.innerWidth - 32, 500); // Max 500px, 32px padding
+            boardSizePx = containerWidth;
+            tileSizePx = boardSizePx / gridSize;
+
+            puzzleBoard.style.width = `${boardSizePx}px`;
+            puzzleBoard.style.height = `${boardSizePx}px`;
+            puzzleBoard.innerHTML = '';
+
+            tiles = [];
+            const totalTiles = gridSize * gridSize;
+
+            for (let i = 0; i < totalTiles; i++) {
+                tiles.push(i);
+                
+                const tileEl = document.createElement('div');
+                tileEl.classList.add('tile');
+                tileEl.id = `tile-${i}`;
+                tileEl.style.width = `${tileSizePx}px`;
+                tileEl.style.height = `${tileSizePx}px`;
+
+                if (i === totalTiles - 1) {
+                    tileEl.classList.add('empty');
+                    emptyIndex = i;
+                } else {
+                    tileEl.style.backgroundImage = `url(${processedImageUrl})`;
+                    tileEl.style.backgroundSize = `${boardSizePx}px ${boardSizePx}px`;
+                    
+                    // Calculate background position
+                    const row = Math.floor(i / gridSize);
+                    const col = i % gridSize;
+                    tileEl.style.backgroundPosition = `-${col * tileSizePx}px -${row * tileSizePx}px`;
+                    
+                    // Click event
+                    tileEl.addEventListener('click', () => handleTileClick(i));
+                }
+                
+                puzzleBoard.appendChild(tileEl);
+            }
+
+            renderBoard(false);
+            shuffleBoard();
+        }
+
+        function renderBoard(animate = true) {
+            for (let i = 0; i < tiles.length; i++) {
+                const originalIndex = tiles[i];
+                const tileEl = document.getElementById(`tile-${originalIndex}`);
+                
+                const row = Math.floor(i / gridSize);
+                const col = i % gridSize;
+                
+                if (!animate) {
+                    tileEl.style.transition = 'none';
+                } else {
+                    tileEl.style.transition = 'transform 0.2s ease-in-out';
+                }
+                
+                tileEl.style.transform = `translate(${col * tileSizePx}px, ${row * tileSizePx}px)`;
+                
+                // Force reflow to apply 'none' transition before turning it back on
+                if(!animate) tileEl.offsetHeight; 
+            }
+        }
+
+        function getValidMoves(emptyIdx) {
+            const moves = [];
+            const row = Math.floor(emptyIdx / gridSize);
+            const col = emptyIdx % gridSize;
+
+            if (row > 0) moves.push(emptyIdx - gridSize); // Up
+            if (row < gridSize - 1) moves.push(emptyIdx + gridSize); // Down
+            if (col > 0) moves.push(emptyIdx - 1); // Left
+            if (col < gridSize - 1) moves.push(emptyIdx + 1); // Right
+
+            return moves;
+        }
+
+        function shuffleBoard() {
+            // Simulate random moves to ensure solvability
+            let currentEmpty = tiles.length - 1;
+            const shuffleMoves = gridSize * gridSize * 10; // e.g., 160 moves for 4x4
+            
+            for (let i = 0; i < shuffleMoves; i++) {
+                const validMoves = getValidMoves(currentEmpty);
+                const randomMove = validMoves[Math.floor(Math.random() * validMoves.length)];
+                
+                // Swap
+                const temp = tiles[currentEmpty];
+                tiles[currentEmpty] = tiles[randomMove];
+                tiles[randomMove] = temp;
+                currentEmpty = randomMove;
+            }
+            emptyIndex = currentEmpty;
+            
+            renderBoard(false);
+            
+            // Start Timer
+            startTime = Date.now();
+            clearInterval(timerInterval);
+            timerInterval = setInterval(updateTimer, 1000);
+            isPlaying = true;
+        }
+
+        function handleTileClick(originalIndex) {
+            if (!isPlaying) return;
+
+            const currentIndex = tiles.indexOf(originalIndex);
+            const validMoves = getValidMoves(emptyIndex);
+
+            if (validMoves.includes(currentIndex)) {
+                // Swap in array
+                tiles[emptyIndex] = originalIndex;
+                tiles[currentIndex] = tiles.length - 1; // The empty tile's original index is length-1
+                emptyIndex = currentIndex;
+
+                moves++;
+                movesDisplay.textContent = moves;
+                playSlideSound();
+                renderBoard(true);
+                checkWin();
+            }
+        }
+
+        function checkWin() {
+            for (let i = 0; i < tiles.length; i++) {
+                if (tiles[i] !== i) return; // Not solved
+            }
+
+            // Solved!
+            isPlaying = false;
+            clearInterval(timerInterval);
+            playWinSound();
+
+            // Fill empty spot briefly
+            const emptyTile = document.querySelector('.empty');
+            emptyTile.style.backgroundImage = `url(${processedImageUrl})`;
+            emptyTile.style.backgroundSize = `${boardSizePx}px ${boardSizePx}px`;
+            const row = Math.floor((tiles.length - 1) / gridSize);
+            const col = (tiles.length - 1) % gridSize;
+            emptyTile.style.backgroundPosition = `-${col * tileSizePx}px -${row * tileSizePx}px`;
+            emptyTile.classList.remove('empty');
+
+            setTimeout(() => {
+                document.getElementById('final-moves').textContent = moves;
+                document.getElementById('final-time').textContent = timeDisplay.textContent;
+                switchScreen('win');
+            }, 1000);
+        }
+
+        function updateTimer() {
+            if(!isPlaying) return;
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            timeDisplay.textContent = formatTime(elapsed);
+        }
+
+        // --- Event Listeners ---
+        startBtn.addEventListener('click', () => {
+            if (processedImageUrl) {
+                switchScreen('game');
+                // Small delay to ensure container is visible before calculating sizes
+                setTimeout(initGame, 50); 
+            }
+        });
+
+        quitBtn.addEventListener('click', () => {
+            isPlaying = false;
+            clearInterval(timerInterval);
+            switchScreen('start');
+        });
+
+        playAgainBtn.addEventListener('click', () => {
+            switchScreen('start');
+        });
+
+        // Initialize
+        switchScreen('start');
+
+    </script>
+</body>
+</html>

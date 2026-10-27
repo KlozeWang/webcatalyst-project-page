@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wein Dart Game</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at center, #2a1b1f 0%, #120b0e 45%, #070406 100%);
+      font-family: Arial, Helvetica, sans-serif;
+      color: #fff;
+      user-select: none;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: crosshair;
+    }
+    .hud {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.12);
+      backdrop-filter: blur(8px);
+      padding: 12px 14px;
+      border-radius: 12px;
+      line-height: 1.35;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      max-width: 320px;
+    }
+    .hud h1 {
+      margin: 0 0 6px 0;
+      font-size: 18px;
+      color: #ffd7d7;
+    }
+    .hud .small {
+      font-size: 13px;
+      opacity: 0.9;
+    }
+    .score {
+      font-size: 15px;
+      margin-top: 8px;
+      color: #ffe9a8;
+    }
+    .centerMsg {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      text-align: center;
+    }
+    .panel {
+      background: rgba(10, 8, 10, 0.65);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 18px;
+      padding: 20px 24px;
+      box-shadow: 0 12px 34px rgba(0,0,0,0.35);
+      transform: translateY(-10px);
+      opacity: 0;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      max-width: 420px;
+    }
+    .panel.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .panel .big {
+      font-size: 30px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #ffd7d7;
+    }
+    .panel .sub {
+      font-size: 15px;
+      color: #eee;
+    }
+    .footer {
+      position: fixed;
+      bottom: 14px;
+      left: 14px;
+      font-size: 12px;
+      opacity: 0.75;
+      background: rgba(0,0,0,0.22);
+      padding: 6px 10px;
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div class="hud">
+    <h1>Wein Dart Game</h1>
+    <div class="small">Klicke oder tippe, um die Darts zu werfen.</div>
+    <div class="score" id="score">Punkte: 0 | Treffer: 0/10</div>
+    <div class="small" id="info">Triff das Weinglas in der Mitte.</div>
+  </div>
+  <div class="centerMsg">
+    <div class="panel" id="panel">
+      <div class="big" id="panelTitle">Los geht's!</div>
+      <div class="sub" id="panelSub">Ziele auf das Weinglas und sammle Punkte.</div>
+    </div>
+  </div>
+  <div class="footer">Wein Dart Game • HTML5 Canvas</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const infoEl = document.getElementById('info');
+  const panel = document.getElementById('panel');
+  const panelTitle = document.getElementById('panelTitle');
+  const panelSub = document.getElementById('panelSub');
+
+  let W = 0, H = 0, dpr = 1;
+  let throws = 0;
+  let hits = 0;
+  let points = 0;
+  let gameOver = false;
+  let showPanelTimer = 0;
+
+  const darts = [];
+  const particles = [];
+
+  const glass = {
+    x: 0,
+    y: 0,
+    r: 58,
+    bob: 0
+  };
+
+  function resize() {
+    dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    glass.x = W * 0.5;
+    glass.y = H * 0.48;
+  }
+
+  window.addEventListener('resize', resize);
+
+  function rand(min, max) { return Math.random() * (max - min) + min; }
+
+  function showPanel(title, sub, duration = 1600) {
+    panelTitle.textContent = title;
+    panelSub.textContent = sub;
+    panel.classList.add('show');
+    clearTimeout(showPanelTimer);
+    showPanelTimer = setTimeout(() => panel.classList.remove('show'), duration);
+  }
+
+  function updateHUD() {
+    scoreEl.textContent = `Punkte: ${points} | Treffer: ${hits}/10`;
+    infoEl.textContent = gameOver ? 'Spiel vorbei. Tippe zum Neustart.' : 'Triff das Weinglas in der Mitte.';
+  }
+
+  function spawnParticles(x, y, color, count = 16) {
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x, y,
+        vx: rand(-3.2, 3.2),
+        vy: rand(-3.2, 3.2),
+        life: rand(25, 45),
+        color
+      });
+    }
+  }
+
+  function throwDart(tx, ty) {
+    if (gameOver) {
+      restart();
+      return;
+    }
+    if (throws >= 10) return;
+    throws++;
+
+    const startX = W * 0.5 + rand(-100, 100);
+    const startY = H + 30;
+    const dx = tx - startX;
+    const dy = ty - startY;
+    const dist = Math.hypot(dx, dy) || 1;
+    const speed = 12;
+    darts.push({
+      x: startX, y: startY,
+      vx: dx / dist * speed,
+      vy: dy / dist * speed,
+      rot: Math.atan2(dy, dx),
+      stuck: false,
+      life: 0
+    });
+
+    if (throws >= 10) {
+      setTimeout(() => {
+        if (!gameOver) {
+          gameOver = true;
+          showPanel('Runde beendet', `Punkte: ${points} • Treffer: ${hits}/10`, 2500);
+          updateHUD();
+        }
+      }, 900);
+    }
+    updateHUD();
+  }
+
+  function restart() {
+    darts.length = 0;
+    particles.length = 0;
+    throws = 0;
+    hits = 0;
+    points = 0;
+    gameOver = false;
+    updateHUD();
+    showPanel('Neustart', 'Noch eine Runde!', 1200);
+  }
+
+  function hitTestDart(d, gx, gy, gr) {
+    const tipX = d.x + Math.cos(d.rot) * 18;
+    const tipY = d.y + Math.sin(d.rot) * 18;
+    return Math.hypot(tipX - gx, tipY - gy) < gr * 0.9;
+  }
+
+  function update() {
+    glass.bob += 0.03;
+    glass.y = H * 0.48 + Math.sin(glass.bob) * 8;
+
+    for (let i = darts.length - 1; i >= 0; i--) {
+      const d = darts[i];
+      if (!d.stuck) {
+        d.x += d.vx;
+        d.y += d.vy;
+        d.rot = Math.atan2(d.vy, d.vx);
+        d.vy += 0.05;
+
+        if (hitTestDart(d, glass.x, glass.y - 20, glass.r)) {
+          d.stuck = true;
+          const angle = Math.atan2((d.y - glass.y), (d.x - glass.x));
+          d.x = glass.x + Math.cos(angle) * (glass.r - 10);
+          d.y = glass.y - 20 + Math.sin(angle) * (glass.r - 10);
+          points += Math.max(10, 100 - throws * 4);
+          hits++;
+          spawnParticles(d.x, d.y, '#ffcc66', 20);
+          showPanel('Treffer!', `+${Math.max(10, 100 - throws * 4)} Punkte`, 700);
+          updateHUD();
+        }
+
+        if (d.x < -100 || d.x > W + 100 || d.y > H + 120 || d.y < -120) {
+          darts.splice(i, 1);
+        }
+      }
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.08;
+      p.life -= 1;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+  }
+
+  function drawBackground() {
+    const grad = ctx.createRadialGradient(W * 0.5, H * 0.4, 80, W * 0.5, H * 0.5, Math.max(W, H) * 0.8);
+    grad.addColorStop(0, '#3a1e27');
+    grad.addColorStop(0.45, '#1a1015');
+    grad.addColorStop(1, '#070406');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    for (let i = 0; i < 80; i++) {
+      const x = (i * 97 + (performance.now() * 0.01)) % (W + 120) - 60;
+      const y = (i * 53) % H;
+      ctx.beginPath();
+      ctx.arc(x, y, (i % 3) + 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawTarget() {
+    const x = glass.x;
+    const y = glass.y;
+    const r = glass.r;
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.moveTo(-70, 70);
+    ctx.lineTo(70, 70);
+    ctx.stroke();
+
+    ctx.fillStyle = '#c9d2df';
+    ctx.strokeStyle = '#eef4ff';
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+    ctx.moveTo(0, -r - 55);
+    ctx.lineTo(0, r + 5);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.ellipse(0, -r - 25, 34, 45, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    ctx.beginPath();
+    ctx.ellipse(-10, -r - 35, 12, 26, -0.35, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#f4f7fb';
+    ctx.beginPath();
+    ctx.moveTo(-r + 10, -18);
+    ctx.quadraticCurveTo(-r - 10, 20, -16, 48);
+    ctx.quadraticCurveTo(0, 58, 16, 48);
+    ctx.quadraticCurveTo(r + 10, 20, r - 10, -18);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    const wineGrad = ctx.createLinearGradient(0, -20, 0, 50);
+    wineGrad.addColorStop(0, '#8a1132');
+    wineGrad.addColorStop(1, '#5d0a1f');
+    ctx.fillStyle = wineGrad;
+    ctx.beginPath();
+    ctx.moveTo(-r + 18, -10);
+    ctx.quadraticCurveTo(-r - 2, 22, -8, 42);
+    ctx.lineTo(8, 42);
+    ctx.quadraticCurveTo(r + 2, 22, r - 18, -10);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#fff';
+    ctx.globalAlpha = 0.12;
+    ctx.beginPath();
+    ctx.ellipse(-18, 8, 16, 26, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = '#ffd7d7';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('WEIN', 0, 10);
+    ctx.font = '14px Arial';
+    ctx.fillText('DART', 0, 30);
+
+    ctx.restore();
+  }
+
+  function drawDarts() {
+    for (const d of darts) {
+      ctx.save();
+      ctx.translate(d.x, d.y);
+      ctx.rotate(d.rot);
+
+      ctx.fillStyle = '#2b2b2b';
+      ctx.fillRect(-18, -2, 26, 4);
+
+      ctx.fillStyle = '#d9d9d9';
+      ctx.beginPath();
+      ctx.moveTo(8, 0);
+      ctx.lineTo(18, -3);
+      ctx.lineTo(18, 3);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#ff5f6d';
+      ctx.fillRect(-22, -4, 8, 8);
+
+      ctx.fillStyle = '#f4f4f4';
+      ctx.beginPath();
+      ctx.moveTo(-20, -4);
+      ctx.lineTo(-28, -10);
+      ctx.lineTo(-24, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-20, 4);
+      ctx.lineTo(-28, 10);
+      ctx.lineTo(-24, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+    }
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      ctx.globalAlpha = Math.max(0, p.life / 45);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function loop() {
+    update();
+    drawBackground();
+    drawTarget();
+    drawDarts();
+    drawParticles();
+
+    if (!gameOver && throws < 10) {
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.font = '16px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('Klicke irgendwo auf den Bildschirm, um zu werfen', W * 0.5, 32);
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    throwDart(e.clientX - rect.left, e.clientY - rect.top);
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' || e.code === 'Enter') {
+      e.preventDefault();
+      if (gameOver) restart();
+      else throwDart(glass.x, glass.y);
+    }
+  });
+
+  resize();
+  updateHUD();
+  showPanel('Wein Dart Game', 'Ziele auf das Weinglas und wirf 10 Darts!', 2200);
+  loop();
+})();
+</script>
+</body>
+</html>

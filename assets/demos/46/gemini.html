@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Football Card Duel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; touch-action: manipulation; }
+        .card { 
+            transition: all 0.2s; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            background: linear-gradient(135deg, #d4af37 0%, #aa7700 100%);
+            border: 2px solid #fff5cc;
+        }
+        .card-silver { background: linear-gradient(135deg, #e0e0e0 0%, #999999 100%); border-color: #ffffff; }
+        .card-bronze { background: linear-gradient(135deg, #cd7f32 0%, #8a5a19 100%); border-color: #ffcc99; }
+        
+        .card:hover:not(.disabled) { transform: translateY(-5px) scale(1.05); }
+        .selected { outline: 3px solid #00ff00; transform: translateY(-5px) scale(1.05); z-index: 10; }
+        .targetable { outline: 3px solid #ff0000; cursor: crosshair; animation: pulse 1s infinite; }
+        .slot { border: 2px dashed rgba(255,255,255,0.3); background: rgba(255,255,255,0.05); }
+        .slot:hover { background: rgba(255,255,255,0.1); }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 0, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
+        }
+        
+        @keyframes attack {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(-50px) scale(1.1); z-index: 20; }
+            100% { transform: translateY(0); }
+        }
+        @keyframes attackDown {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(50px) scale(1.1); z-index: 20; }
+            100% { transform: translateY(0); }
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        
+        .anim-attack { animation: attack 0.5s ease-in-out; }
+        .anim-attack-down { animation: attackDown 0.5s ease-in-out; }
+        .anim-shake { animation: shake 0.3s ease-in-out; background: #ff4444 !important; }
+        .exhausted { filter: grayscale(0.8) brightness(0.7); pointer-events: none; }
+        
+        #game-board { display: none; }
+        #game-over { display: none; }
+    </style>
+</head>
+<body class="bg-green-900 text-white h-screen w-screen overflow-hidden flex flex-col relative bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
+
+    <!-- Audio (Using synthesized sounds via Web Audio API in JS) -->
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-90 z-50">
+        <h1 class="text-5xl font-black mb-2 text-yellow-400 italic text-center">FOOTBALL<br>CARD DUEL</h1>
+        <p class="mb-8 text-gray-300 text-center max-w-sm">Place players, attack the opponent's line. Score 3 goals to win!</p>
+        <button onclick="startGame()" class="px-8 py-4 bg-green-600 hover:bg-green-500 rounded-full font-bold text-xl transition-transform hover:scale-110 shadow-lg shadow-green-900">PLAY MATCH</button>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over" class="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-90 z-50">
+        <h1 id="result-title" class="text-6xl font-black mb-4 text-center">YOU WIN!</h1>
+        <p id="result-score" class="text-2xl mb-8 text-gray-300">3 - 1</p>
+        <button onclick="resetGame()" class="px-8 py-4 bg-blue-600 hover:bg-blue-500 rounded-full font-bold text-xl transition-transform hover:scale-110 shadow-lg shadow-blue-900">PLAY AGAIN</button>
+    </div>
+
+    <!-- Main Game Board -->
+    <div id="game-board" class="flex-1 flex flex-col w-full max-w-md mx-auto relative h-full">
+        
+        <!-- AI Stats & Field -->
+        <div class="h-[40%] flex flex-col relative border-b-4 border-white border-opacity-20">
+            <div class="flex justify-between items-center px-4 py-2 bg-black bg-opacity-50 text-red-400">
+                <span class="font-bold">OPPONENT</span>
+                <span class="text-2xl font-black">GOALS: <span id="ai-goals">0</span>/3</span>
+            </div>
+            
+            <!-- AI Slots -->
+            <div class="flex-1 flex justify-center items-center gap-2 p-2" id="ai-slots">
+                <div class="slot w-24 h-32 rounded-lg relative" onclick="targetSlot(0)"></div>
+                <div class="slot w-24 h-32 rounded-lg relative" onclick="targetSlot(1)"></div>
+                <div class="slot w-24 h-32 rounded-lg relative" onclick="targetSlot(2)"></div>
+            </div>
+        </div>
+
+        <!-- Center Divider & Controls -->
+        <div class="h-[10%] flex items-center justify-between px-4 bg-black bg-opacity-80 relative z-30 shadow-lg">
+            <div id="turn-indicator" class="font-bold text-green-400 text-lg">YOUR TURN</div>
+            <button id="end-turn-btn" onclick="endTurn()" class="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded shadow transition-colors disabled:opacity-50 disabled:cursor-not-allowed">END TURN</button>
+        </div>
+
+        <!-- Player Field & Hand -->
+        <div class="h-[50%] flex flex-col relative">
+            <!-- Player Slots -->
+            <div class="flex-1 flex justify-center items-center gap-2 p-2" id="player-slots">
+                <div class="slot w-24 h-32 rounded-lg relative" onclick="selectSlot(0)"></div>
+                <div class="slot w-24 h-32 rounded-lg relative" onclick="selectSlot(1)"></div>
+                <div class="slot w-24 h-32 rounded-lg relative" onclick="selectSlot(2)"></div>
+            </div>
+
+            <!-- Hand Area -->
+            <div class="h-40 bg-black bg-opacity-70 p-2 flex flex-col">
+                <div class="flex justify-between items-center px-2 pb-2 text-green-400">
+                    <span class="font-bold text-sm">YOUR HAND (<span id="deck-count">0</span>)</span>
+                    <span class="text-xl font-black">GOALS: <span id="player-goals">0</span>/3</span>
+                </div>
+                <div class="flex-1 flex justify-center gap-1 overflow-x-auto pb-2" id="player-hand">
+                    <!-- Cards injected here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card Template (Hidden) -->
+    <template id="card-template">
+        <div class="card rounded-lg p-1 w-20 h-28 md:w-24 md:h-32 flex flex-col justify-between cursor-pointer flex-shrink-0 text-black shadow-md">
+            <div class="flex justify-between items-start">
+                <div class="card-name text-[10px] md:text-xs font-bold leading-tight uppercase overflow-hidden whitespace-nowrap text-ellipsis w-3/4"></div>
+                <div class="card-pos text-[10px] font-bold bg-black text-white px-1 rounded opacity-80"></div>
+            </div>
+            <div class="card-ovr text-xl md:text-2xl font-black text-center leading-none my-1 drop-shadow-md"></div>
+            <div class="flex justify-between text-[10px] md:text-xs font-bold bg-white bg-opacity-40 rounded px-1">
+                <span>⚔️ <span class="card-atk"></span></span>
+                <span>🛡️ <span class="card-def"></span></span>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        // Audio Context
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        function playSound(type) {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            if (type === 'play') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'hit') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + 0.2);
+                gainNode.gain.setValueAtTime(0.8, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+            } else if (type === 'goal') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                osc.frequency.setValueAtTime(554, audioCtx.currentTime + 0.1);
+                osc.frequency.setValueAtTime(659, audioCtx.currentTime + 0.2);
+                gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+            } else if (type === 'whistle') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(1400, audioCtx.currentTime + 0.3);
+                gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+            }
+        }
+
+        // Database
+        const CARD_DB = [
+            { id: 1, name: 'Lionel', pos: 'ATT', ovr: 93, atk: 95, def: 40, rarity: 'gold' },
+            { id: 2, name: 'Cris', pos: 'ATT', ovr: 91, atk: 93, def: 35, rarity: 'gold' },
+            { id: 3, name: 'Kylian', pos: 'ATT', ovr: 91, atk: 96, def: 38, rarity: 'gold' },
+            { id: 4, name: 'Kevin', pos: 'MID', ovr: 91, atk: 86, def: 65, rarity: 'gold' },
+            { id: 5, name: 'Virgil', pos: 'DEF', ovr: 90, atk: 60, def: 91, rarity: 'gold' },
+            { id: 6, name: 'Erling', pos: 'ATT', ovr: 89, atk: 92, def: 45, rarity: 'gold' },
+            { id: 7, name: 'Luka', pos: 'MID', ovr: 88, atk: 80, def: 70, rarity: 'gold' },
+            { id: 8, name: 'Ruben', pos: 'DEF', ovr: 88, atk: 55, def: 89, rarity: 'gold' },
+            { id: 9, name: 'Bruno', pos: 'MID', ovr: 86, atk: 85, def: 60, rarity: 'silver' },
+            { id: 10, name: 'Marcus', pos: 'ATT', ovr: 85, atk: 88, def: 40, rarity: 'silver' },
+            { id: 11, name: 'Phil', pos: 'MID', ovr: 85, atk: 82, def: 55, rarity: 'silver' },
+            { id: 12, name: 'Trent', pos: 'DEF', ovr: 85, atk: 75, def: 80, rarity: 'silver' },
+            { id: 13, name: 'Bukayo', pos: 'ATT', ovr: 84, atk: 85, def: 50, rarity: 'silver' },
+            { id: 14, name: 'Declan', pos: 'MID', ovr: 84, atk: 70, def: 85, rarity: 'silver' },
+            { id: 15, name: 'John', pos: 'DEF', ovr: 83, atk: 50, def: 84, rarity: 'silver' },
+            { id: 16, name: 'Reece', pos: 'DEF', ovr: 83, atk: 70, def: 81, rarity: 'silver' },
+            { id: 17, name: 'Ollie', pos: 'ATT', ovr: 79, atk: 80, def: 30, rarity: 'bronze' },
+            { id: 18, name: 'Conor', pos: 'MID', ovr: 78, atk: 72, def: 70, rarity: 'bronze' },
+            { id: 19, name: 'Marc', pos: 'DEF', ovr: 78, atk: 45, def: 79, rarity: 'bronze' },
+            { id: 20, name: 'Ebere', pos: 'MID', ovr: 77, atk: 78, def: 40, rarity: 'bronze' }
+        ];
+
+        // State
+        let state = {
+            deck: [],
+            hand: [],
+            field: [null, null, null],
+            aiField: [null, null, null],
+            goals: 0,
+            aiGoals: 0,
+            turn: 'player', // 'player' or 'ai'
+            selectedHandIdx: -1,
+            selectedFieldIdx: -1,
+            gameActive: false
+        };
+
+        const WIN_SCORE = 3;
+
+        // Init
+        function initDeck() {
+            let deck = [];
+            for(let i=0; i<30; i++) {
+                let r = Math.random();
+                let rarity = r < 0.1 ? 'gold' : r < 0.4 ? 'silver' : 'bronze';
+                let pool = CARD_DB.filter(c => c.rarity === rarity);
+                let card = Object.assign({}, pool[Math.floor(Math.random() * pool.length)]);
+                card.uid = Math.random().toString(36).substr(2, 9);
+                card.exhausted = false;
+                deck.push(card);
+            }
+            return deck;
+        }
+
+        function startGame() {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            playSound('whistle');
+            
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('game-over').style.display = 'none';
+            document.getElementById('game-board').style.display = 'flex';
+
+            state = {
+                deck: initDeck(),
+                hand: [],
+                field: [null, null, null],
+                aiField: [null, null, null],
+                goals: 0,
+                aiGoals: 0,
+                turn: 'player',
+                selectedHandIdx: -1,
+                selectedFieldIdx: -1,
+                gameActive: true
+            };
+
+            // Draw initial cards
+            for(let i=0; i<4; i++) drawCard();
+            for(let i=0; i<2; i++) {
+                let aiCard = state.deck.pop();
+                aiCard.exhausted = true;
+                state.aiField[i] = aiCard;
+            }
+
+            render();
+        }
+
+        function resetGame() {
+            startGame();
+        }
+
+        function drawCard() {
+            if(state.deck.length > 0 && state.hand.length < 5) {
+                state.hand.push(state.deck.pop());
+            }
+        }
+
+        // Interaction
+        function selectHandCard(idx) {
+            if(state.turn !== 'player' || !state.gameActive) return;
+            if(state.selectedHandIdx === idx) {
+                state.selectedHandIdx = -1; // deselect
+            } else {
+                state.selectedHandIdx = idx;
+                state.selectedFieldIdx = -1; // clear field selection
+            }
+            render();
+        }
+
+        function selectSlot(idx) {
+            if(state.turn !== 'player' || !state.gameActive) return;
+            
+            // Place card from hand
+            if(state.selectedHandIdx !== -1) {
+                if(!state.field[idx]) {
+                    playSound('play');
+                    let card = state.hand.splice(state.selectedHandIdx, 1)[0];
+                    card.exhausted = true; // Summoning sickness
+                    state.field[idx] = card;
+                    state.selectedHandIdx = -1;
+                    render();
+                }
+            } 
+            // Select field card to attack
+            else {
+                let card = state.field[idx];
+                if(card && !card.exhausted) {
+                    if(state.selectedFieldIdx === idx) {
+                        state.selectedFieldIdx = -1;
+                    } else {
+                        state.selectedFieldIdx = idx;
+                    }
+                    render();
+                }
+            }
+        }
+
+        function targetSlot(idx) {
+            if(state.turn !== 'player' || !state.gameActive || state.selectedFieldIdx === -1) return;
+            
+            // The selected slot is always directly opposite to the target, force straight line attacks
+            if (state.selectedFieldIdx !== idx) {
+                // To keep simple, can only attack directly ahead
+                return; 
+            }
+
+            resolveCombat('player', idx);
+        }
+
+        function resolveCombat(attacker, slotIdx) {
+            let pCard = state.field[slotIdx];
+            let aiCard = state.aiField[slotIdx];
+            
+            let attCard = attacker === 'player' ? pCard : aiCard;
+            let defCard = attacker === 'player' ? aiCard : pCard;
+
+            if(!attCard || attCard.exhausted) return;
+
+            attCard.exhausted = true;
+            
+            let pDom = document.getElementById('player-slots').children[slotIdx].querySelector('.card');
+            let aiDom = document.getElementById('ai-slots').children[slotIdx].querySelector('.card');
+            let attDom = attacker === 'player' ? pDom : aiDom;
+            let defDom = attacker === 'player' ? aiDom : pDom;
+
+            if(attDom) {
+                attDom.classList.add(attacker === 'player' ? 'anim-attack' : 'anim-attack-down');
+            }
+            playSound('play');
+
+            setTimeout(() => {
+                if(!defCard) {
+                    // Direct attack to goal
+                    playSound('goal');
+                    if(attacker === 'player') state.goals++;
+                    else state.aiGoals++;
+                    
+                    let targetGoal = document.getElementById(attacker === 'player' ? 'ai-slots' : 'player-slots').children[slotIdx];
+                    targetGoal.classList.add('anim-shake');
+                    setTimeout(() => targetGoal.classList.remove('anim-shake'), 300);
+                    
+                } else {
+                    // Combat
+                    playSound('hit');
+                    if(defDom) {
+                        defDom.classList.add('anim-shake');
+                        setTimeout(() => defDom.classList.remove('anim-shake'), 300);
+                    }
+                    
+                    let atkVal = attCard.atk;
+                    let defVal = defCard.def;
+
+                    if(atkVal >= defVal) {
+                        // Defender destroyed
+                        if(attacker === 'player') state.aiField[slotIdx] = null;
+                        else state.field[slotIdx] = null;
+                    } 
+                    if(defVal >= atkVal) {
+                        // Attacker destroyed (if tie, both die)
+                        if(attacker === 'player') state.field[slotIdx] = null;
+                        else state.aiField[slotIdx] = null;
+                    }
+                }
+
+                if(attDom) {
+                    attDom.classList.remove('anim-attack', 'anim-attack-down');
+                }
+                
+                state.selectedFieldIdx = -1;
+                render();
+                checkWin();
+            }, 300);
+        }
+
+        function endTurn() {
+            if(state.turn !== 'player' || !state.gameActive) return;
+            state.selectedHandIdx = -1;
+            state.selectedFieldIdx = -1;
+            state.turn = 'ai';
+            render();
+            
+            setTimeout(processAITurn, 1000);
+        }
+
+        function processAITurn() {
+            if(!state.gameActive) return;
+
+            // AI Logic
+            // 1. Draw card (abstracted, just picks from deck)
+            let drawn = state.deck.pop();
+            
+            // 2. Play cards to empty slots
+            let emptySlots = [0, 1, 2].filter(i => state.aiField[i] === null);
+            if(emptySlots.length > 0 && drawn) {
+                let slot = emptySlots[Math.floor(Math.random() * emptySlots.length)];
+                drawn.exhausted = true; // Sick
+                state.aiField[slot] = drawn;
+                playSound('play');
+            }
+
+            render();
+
+            // 3. Attack with ready cards
+            let attackQueue = [];
+            for(let i=0; i<3; i++) {
+                if(state.aiField[i] && !state.aiField[i].exhausted) {
+                    attackQueue.push(i);
+                }
+            }
+
+            let delay = 1000;
+            attackQueue.forEach((slotIdx, i) => {
+                setTimeout(() => {
+                    resolveCombat('ai', slotIdx);
+                }, delay + (i * 800));
+            });
+
+            setTimeout(() => {
+                if(state.gameActive) {
+                    // Reset Player cards
+                    state.field.forEach(c => { if(c) c.exhausted = false; });
+                    drawCard();
+                    state.turn = 'player';
+                    render();
+                }
+            }, delay + (attackQueue.length * 800) + 500);
+        }
+
+        function checkWin() {
+            if(state.goals >= WIN_SCORE || state.aiGoals >= WIN_SCORE) {
+                state.gameActive = false;
+                setTimeout(() => {
+                    playSound('whistle');
+                    document.getElementById('game-over').style.display = 'flex';
+                    let title = document.getElementById('result-title');
+                    title.innerText = state.goals >= WIN_SCORE ? "YOU WIN!" : "YOU LOSE!";
+                    title.className = state.goals >= WIN_SCORE ? "text-6xl font-black mb-4 text-center text-green-400" : "text-6xl font-black mb-4 text-center text-red-500";
+                    document.getElementById('result-score').innerText = `${state.goals} - ${state.aiGoals}`;
+                }, 500);
+            }
+        }
+
+        // Rendering
+        function createCardElement(card, index, context) {
+            let tmpl = document.getElementById('card-template').content.cloneNode(true);
+            let div = tmpl.querySelector('.card');
+            
+            if(card.rarity === 'silver') div.classList.add('card-silver');
+            else if(card.rarity === 'bronze') div.classList.add('card-bronze');
+
+            div.querySelector('.card-name').textContent = card.name;
+            div.querySelector('.card-pos').textContent = card.pos;
+            div.querySelector('.card-ovr').textContent = card.ovr;
+            div.querySelector('.card-atk').textContent = card.atk;
+            div.querySelector('.card-def').textContent = card.def;
+
+            if(context === 'hand') {
+                div.onclick = () => selectHandCard(index);
+                if(state.selectedHandIdx === index) div.classList.add('selected');
+            }
+
+            if(card.exhausted && context !== 'hand') {
+                div.classList.add('exhausted');
+            }
+
+            if(context === 'player-field' && state.selectedFieldIdx === index) {
+                div.classList.add('selected');
+            }
+
+            return div;
+        }
+
+        function render() {
+            document.getElementById('deck-count').innerText = state.deck.length;
+            document.getElementById('player-goals').innerText = state.goals;
+            document.getElementById('ai-goals').innerText = state.aiGoals;
+
+            let turnInd = document.getElementById('turn-indicator');
+            let endBtn = document.getElementById('end-turn-btn');
+            if(state.turn === 'player') {
+                turnInd.innerText = "YOUR TURN";
+                turnInd.className = "font-bold text-green-400 text-lg";
+                endBtn.disabled = false;
+            } else {
+                turnInd.innerText = "OPPONENT'S TURN";
+                turnInd.className = "font-bold text-red-400 text-lg";
+                endBtn.disabled = true;
+            }
+
+            // Hand
+            let handContainer = document.getElementById('player-hand');
+            handContainer.innerHTML = '';
+            state.hand.forEach((card, i) => {
+                handContainer.appendChild(createCardElement(card, i, 'hand'));
+            });
+
+            // Player Field
+            let pSlots = document.getElementById('player-slots').children;
+            for(let i=0; i<3; i++) {
+                pSlots[i].innerHTML = '';
+                if(state.field[i]) {
+                    pSlots[i].appendChild(createCardElement(state.field[i], i, 'player-field'));
+                }
+            }
+
+            // AI Field
+            let aiSlots = document.getElementById('ai-slots').children;
+            for(let i=0; i<3; i++) {
+                aiSlots[i].innerHTML = '';
+                aiSlots[i].classList.remove('targetable');
+                if(state.aiField[i]) {
+                    aiSlots[i].appendChild(createCardElement(state.aiField[i], i, 'ai-field'));
+                }
+                
+                // Highlight targetable slots
+                if(state.selectedFieldIdx !== -1 && state.selectedFieldIdx === i) {
+                    aiSlots[i].classList.add('targetable');
+                }
+            }
+        }
+
+    </script>
+</body>
+</html>

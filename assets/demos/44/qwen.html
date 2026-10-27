@@ -1,0 +1,612 @@
+lua
+-- Stellwerk Shop System
+-- Parent: ServerScriptService
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+-- DataStore für gespeicherte Stellwerke
+local DataStoreService = game:GetService("DataStoreService")
+local StellwerkDataStore = DataStoreService:GetDataStore("StellwerkeData")
+
+-- Stellwerke Datenbank
+local Stellwerke = {
+	{
+		Name = "Köln-Düsseldorf",
+		Price = 500,
+		Position = Vector3.new(0, 1, 0),
+		Orientation = Vector3.new(0, 90, 0),
+		Color = Color3.fromRGB(255, 80, 80)
+	},
+	{
+		Name = "Hamburg-München",
+		Price = 750,
+		Position = Vector3.new(0, 1, 0),
+		Orientation = Vector3.new(0, 180, 0),
+		Color = Color3.fromRGB(80, 180, 255)
+	},
+	{
+		Name = "Berlin-Frankfurt",
+		Price = 1000,
+		Position = Vector3.new(0, 1, 0),
+		Orientation = Vector3.new(0, 270, 0),
+		Color = Color3.fromRGB(80, 255, 120)
+	},
+	{
+		Name = "Stuttgart-Nürnberg",
+		Price = 1200,
+		Position = Vector3.new(0, 1, 0),
+		Orientation = Vector3.new(0, 45, 0),
+		Color = Color3.fromRGB(255, 200, 50)
+	},
+	{
+		Name = "Leipzig-Dresden",
+		Price = 600,
+		Position = Vector3.new(0, 1, 0),
+		Orientation = Vector3.new(0, 135, 0),
+		Color = Color3.fromRGB(200, 80, 255)
+	}
+}
+
+-- GUI Creator Funktion
+local function createMainMenuGui(player)
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "StellwerkMainMenu"
+	screenGui.ResetOnSpawn = false
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+	local frame = Instance.new("Frame")
+	frame.Name = "MainFrame"
+	frame.Size = UDim2.new(0, 350, 0, 250)
+	frame.Position = UDim2.new(0.5, -175, 0.5, -125)
+	frame.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+	frame.BorderSizePixel = 2
+	frame.BorderColor3 = Color3.fromRGB(100, 100, 200)
+	frame.Parent = screenGui
+
+	-- Hintergrund-Transparenz Animation
+	local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local tween = TweenService:Create(frame, tweenInfo, {BackgroundTransparency = 0})
+	frame.BackgroundTransparency = 1
+	tween:Play()
+
+	-- Titel
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.Size = UDim2.new(1, 0, 0, 50)
+	title.Position = UDim2.new(0, 0, 0, 0)
+	title.BackgroundColor3 = Color3.fromRGB(50, 50, 100)
+	title.Text = "🚆 Stellwerk System"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextSize = 22
+	title.Font = Enum.Font.GothamBold
+	title.Parent = frame
+
+	-- Buttons
+	local buttons = {}
+	local buttonLabels = {"Stellwerke", "Shop", "Creator"}
+	local buttonColors = {
+		Color3.fromRGB(60, 120, 200),
+		Color3.fromRGB(60, 180, 100),
+		Color3.fromRGB(200, 150, 50)
+	}
+
+	for i = 1, 3 do
+		local btn = Instance.new("TextButton")
+		btn.Name = buttonLabels[i]
+		btn.Size = UDim2.new(0.8, 0, 0, 45)
+		btn.Position = UDim2.new(0.1, 0, 0, 60 + (i - 1) * 55)
+		btn.BackgroundColor3 = buttonColors[i]
+		btn.Text = buttonLabels[i]
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.TextSize = 18
+		btn.Font = Enum.Font.GothamBold
+		btn.Parent = frame
+
+		table.insert(buttons, btn)
+
+		btn.MouseButton1Click:Connect(function()
+			if buttonLabels[i] == "Stellwerke" then
+				screenGui:Destroy()
+				openStellwerkList(player)
+			elseif buttonLabels[i] == "Shop" then
+				screenGui:Destroy()
+				openShop(player)
+			elseif buttonLabels[i] == "Creator" then
+				screenGui:Destroy()
+				openCreator(player)
+			end
+		end)
+
+		-- Hover Effekt
+		btn.MouseEnter:Connect(function()
+			TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = buttonColors[i] + Color3.new(0.15, 0.15, 0.15)}):Play()
+		end)
+		btn.MouseLeave:Connect(function()
+			TweenService:Create(btn, TweenInfo.new(0.15), {BackgroundColor3 = buttonColors[i]}):Play()
+		end)
+	end
+
+	screenGui.Parent = player:WaitForChild("PlayerGui")
+	return screenGui
+end
+
+-- Stellwerke Liste GUI
+local function openStellwerkList(player)
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "StellwerkListGui"
+	screenGui.ResetOnSpawn = false
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+	local frame = Instance.new("Frame")
+	frame.Name = "StellwerkListFrame"
+	frame.Size = UDim2.new(0, 400, 0, 500)
+	frame.Position = UDim2.new(0.5, -200, 0.5, -250)
+	frame.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+	frame.BorderSizePixel = 2
+	frame.BorderColor3 = Color3.fromRGB(100, 100, 200)
+	frame.Parent = screenGui
+
+	-- Titel
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.Size = UDim2.new(1, 0, 0, 50)
+	title.BackgroundColor3 = Color3.fromRGB(50, 50, 100)
+	title.Text = "🚦 Stellwerke auswählen"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextSize = 20
+	title.Font = Enum.Font.GothamBold
+	title.Parent = frame
+
+	-- Zurück Button
+	local backBtn = Instance.new("TextButton")
+	backBtn.Name = "BackButton"
+	backBtn.Size = UDim2.new(0, 120, 0, 40)
+	backBtn.Position = UDim2.new(0, 10, 0, 450)
+	backBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+	backBtn.Text = "← Zurück"
+	backBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	backBtn.TextSize = 16
+	backBtn.Font = Enum.Font.GothamBold
+	backBtn.Parent = frame
+
+	backBtn.MouseButton1Click:Connect(function()
+		screenGui:Destroy()
+		createMainMenuGui(player)
+	end)
+
+	-- Scrollable Frame für Liste
+	local scrollFrame = Instance.new("ScrollingFrame")
+	scrollFrame.Name = "StellwerkList"
+	scrollFrame.Size = UDim2.new(0.9, 0, 0.75, 0)
+	scrollFrame.Position = UDim2.new(0.05, 0, 0, 55)
+	scrollFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+	scrollFrame.BorderSizePixel = 0
+	scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #Stellwerke * 70)
+	scrollFrame.ScrollBarThickness = 6
+	scrollFrame.Parent = frame
+
+	for i, stellwerk in ipairs(Stellwerke) do
+		local itemFrame = Instance.new("Frame")
+		itemFrame.Name = "StellwerkItem" .. i
+		itemFrame.Size = UDim2.new(0.9, 0, 0, 60)
+		itemFrame.Position = UDim2.new(0, 0, 0, (i - 1) * 70)
+		itemFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 80)
+		itemFrame.BorderSizePixel = 0
+		itemFrame.Parent = scrollFrame
+
+		-- Farbakzent
+		local accent = Instance.new("Frame")
+		accent.Name = "Accent"
+		accent.Size = UDim2.new(0, 5, 1, 0)
+		accent.BackgroundColor3 = stellwerk.Color
+		accent.Parent = itemFrame
+
+		-- Name
+		local nameLabel = Instance.new("TextLabel")
+		nameLabel.Name = "Name"
+		nameLabel.Size = UDim2.new(0.5, 0, 1, 0)
+		nameLabel.Position = UDim2.new(0.05, 0, 0, 0)
+		nameLabel.BackgroundTransparency = 1
+		nameLabel.Text = stellwerk.Name
+		nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		nameLabel.TextSize = 18
+		nameLabel.Font = Enum.Font.GothamBold
+		nameLabel.Parent = itemFrame
+
+		-- Preis
+		local priceLabel = Instance.new("TextLabel")
+		priceLabel.Name = "Price"
+		priceLabel.Size = UDim2.new(0.4, 0, 0.5, 0)
+		priceLabel.Position = UDim2.new(0.55, 0, 0.1, 0)
+		priceLabel.BackgroundTransparency = 1
+		priceLabel.Text = "💰 " .. stellwerk.Price .. " Coins"
+		priceLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+		priceLabel.TextSize = 16
+		priceLabel.Font = Enum.Font.Gotham
+		priceLabel.Parent = itemFrame
+
+		-- Kaufen Button
+		local buyBtn = Instance.new("TextButton")
+		buyBtn.Name = "BuyButton"
+		buyBtn.Size = UDim2.new(0.4, 0, 0.35, 0)
+		buyBtn.Position = UDim2.new(0.55, 0, 0.6, 0)
+		buyBtn.BackgroundColor3 = Color3.fromRGB(60, 180, 100)
+		buyBtn.Text = "Kaufen"
+		buyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		buyBtn.TextSize = 14
+		buyBtn.Font = Enum.Font.GothamBold
+		buyBtn.Parent = itemFrame
+
+		buyBtn.MouseButton1Click:Connect(function()
+			local playerData = getPlayerData(player)
+			if playerData.Coins >= stellwerk.Price then
+				if not tableContains(playerData.OwnedStellwerke, stellwerk.Name) then
+					playerData.Coins -= stellwerk.Price
+					table.insert(playerData.OwnedStellwerke, stellwerk.Name)
+					savePlayerData(player, playerData)
+
+					-- Stellwerk erstellen
+					spawnStellwerk(player, stellwerk)
+
+					-- Feedback
+					showNotification(player, "✅ " .. stellwerk.Name .. " gekauft!", Color3.fromRGB(60, 200, 100))
+
+					-- GUI aktualisieren
+					buyBtn.Text = "✅ Gekauft"
+					buyBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+					buyBtn.Enabled = false
+				else
+					showNotification(player, "⚠️ Du hast dieses Stellwerk schon!", Color3.fromRGB(255, 180, 50))
+				end
+			else
+				showNotification(player, "❌ Nicht genug Coins!", Color3.fromRGB(255, 80, 80))
+			end
+		end)
+	end
+
+	screenGui.Parent = player:WaitForChild("PlayerGui")
+end
+
+-- Shop GUI
+local function openShop(player)
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "ShopGui"
+	screenGui.ResetOnSpawn = false
+
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(0, 400, 0, 400)
+	frame.Position = UDim2.new(0.5, -200, 0.5, -200)
+	frame.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+	frame.BorderSizePixel = 2
+	frame.BorderColor3 = Color3.fromRGB(100, 100, 200)
+	frame.Parent = screenGui
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, 0, 0, 50)
+	title.BackgroundColor3 = Color3.fromRGB(50, 50, 100)
+	title.Text = "🛒 Shop"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextSize = 22
+	title.Font = Enum.Font.GothamBold
+	title.Parent = frame
+
+	local backBtn = Instance.new("TextButton")
+	backBtn.Size = UDim2.new(0, 120, 0, 40)
+	backBtn.Position = UDim2.new(0.3, 0, 0, 340)
+	backBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+	backBtn.Text = "← Zurück"
+	backBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	backBtn.TextSize = 16
+	backBtn.Font = Enum.Font.GothamBold
+	backBtn.Parent = frame
+
+	backBtn.MouseButton1Click:Connect(function()
+		screenGui:Destroy()
+		createMainMenuGui(player)
+	end)
+
+	-- Coins anzeigen
+	local playerData = getPlayerData(player)
+	local coinsLabel = Instance.new("TextLabel")
+	coinsLabel.Size = UDim2.new(0.8, 0, 0, 40)
+	coinsLabel.Position = UDim2.new(0.1, 0, 0, 60)
+	coinsLabel.BackgroundTransparency = 1
+	coinsLabel.Text = "💰 Deine Coins: " .. playerData.Coins
+	coinsLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+	coinsLabel.TextSize = 18
+	coinsLabel.Font = Enum.Font.GothamBold
+	coinsLabel.Parent = frame
+
+	screenGui.Parent = player:WaitForChild("PlayerGui")
+end
+
+-- Creator GUI
+local function openCreator(player)
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "CreatorGui"
+	screenGui.ResetOnSpawn = false
+
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(0, 400, 0, 400)
+	frame.Position = UDim2.new(0.5, -200, 0.5, -200)
+	frame.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+	frame.BorderSizePixel = 2
+	frame.BorderColor3 = Color3.fromRGB(100, 100, 200)
+	frame.Parent = screenGui
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, 0, 0, 50)
+	title.BackgroundColor3 = Color3.fromRGB(50, 50, 100)
+	title.Text = "🎨 Creator"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextSize = 22
+	title.Font = Enum.Font.GothamBold
+	title.Parent = frame
+
+	local backBtn = Instance.new("TextButton")
+	backBtn.Size = UDim2.new(0, 120, 0, 40)
+	backBtn.Position = UDim2.new(0.3, 0, 0, 340)
+	backBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+	backBtn.Text = "← Zurück"
+	backBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	backBtn.TextSize = 16
+	backBtn.Font = Enum.Font.GothamBold
+	backBtn.Parent = frame
+
+	backBtn.MouseButton1Click:Connect(function()
+		screenGui:Destroy()
+		createMainMenuGui(player)
+	end)
+
+	local infoLabel = Instance.new("TextLabel")
+	infoLabel.Size = UDim2.new(0.8, 0, 0, 80)
+	infoLabel.Position = UDim2.new(0.1, 0, 0, 70)
+	infoLabel.BackgroundTransparency = 1
+	infoLabel.Text = "Hier kannst du eigene Stellwerke erstellen!\nKommende Funktion..."
+	infoLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
+	infoLabel.TextSize = 16
+	infoLabel.Font = Enum.Font.Gotham
+	infoLabel.TextWrapped = true
+	infoLabel.Parent = frame
+
+	screenGui.Parent = player:WaitForChild("PlayerGui")
+end
+
+-- Stellwerk erstellen
+local function spawnStellwerk(player, stellwerk)
+	local workspace = game:GetService("Workspace")
+
+	local stellwerkModel = Instance.new("Model")
+	stellwerkModel.Name = stellwerk.Name
+
+	-- Basis
+	local base = Instance.new("Part")
+	base.Name = "Base"
+	base.Size = Vector3.new(3, 0.5, 3)
+	base.Position = stellwerk.Position
+	base.Anchored = true
+	base.Material = Enum.Material.Metal
+	base.Color = Color3.fromRGB(80, 80, 80)
+	base.Parent = stellwerkModel
+
+	-- Turm
+	local tower = Instance.new("Part")
+	tower.Name = "Tower"
+	tower.Size = Vector3.new(1, 4, 1)
+	tower.Position = stellwerk.Position + Vector3.new(0, 2.5, 0)
+	tower.Anchored = true
+	tower.Material = Enum.Material.Metal
+	tower.Color = stellwerk.Color
+	tower.Parent = stellwerkModel
+
+	-- Dach
+	local roof = Instance.new("Part")
+	roof.Name = "Roof"
+	roof.Size = Vector3.new(2, 0.5, 2)
+	roof.Position = stellwerk.Position + Vector3.new(0, 4.75, 0)
+	roof.Anchored = true
+	roof.Material = Enum.Material.Metal
+	roof.Color = Color3.fromRGB(60, 60, 60)
+	roof.Parent = stellwerkModel
+
+	-- Signallichter
+	for i = 1, 3 do
+		local light = Instance.new("Part")
+		light.Name = "Signal" .. i
+		light.Size = Vector3.new(0.4, 0.4, 0.3)
+		light.Position = stellwerk.Position + Vector3.new(-0.6 + (i - 1) * 0.6, 3, 0.6)
+		light.Anchored = true
+		light.Material = Enum.Material.Neon
+		local colors = {Color3.fromRGB(255, 0, 0), Color3.fromRGB(255, 255, 0), Color3.fromRGB(0, 255, 0)}
+		light.Color = colors[i]
+		light.Parent = stellwerkModel
+	end
+
+	-- Name Tag
+	local nameTag = Instance.new("BillboardGui")
+	nameTag.Name = "NameTag"
+	nameTag.Size = UDim2.new(0, 150, 0, 30)
+	nameTag.StudsOffset = Vector3.new(0, 6, 0)
+	nameTag.Adornee = tower
+	nameTag.Parent = stellwerkModel
+
+	local tagLabel = Instance.new("TextLabel")
+	tagLabel.Size = UDim2.new(1, 0, 1, 0)
+	tagLabel.BackgroundTransparency = 1
+	tagLabel.Text = stellwerk.Name
+	tagLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	tagLabel.TextScaled = true
+	tagLabel.Font = Enum.Font.GothamBold
+	tagLabel.Parent = nameTag
+
+	stellwerkModel.Parent = workspace
+
+	-- Stellwerk-Position speichern
+	local playerData = getPlayerData(player)
+	if not playerData.StellwerkPositions then
+		playerData.StellwerkPositions = {}
+	end
+	table.insert(playerData.StellwerkPositions, {
+		Name = stellwerk.Name,
+		Position = stellwerk.Position,
+		Orientation = stellwerk.Orientation
+	})
+	savePlayerData(player, playerData)
+end
+
+-- Notification System
+local function showNotification(player, text, color)
+	local playerGui = player:WaitForChild("PlayerGui")
+
+	local notification = Instance.new("ScreenGui")
+	notification.Name = "Notification"
+	notification.ResetOnSpawn = false
+
+	local notifFrame = Instance.new("Frame")
+	notifFrame.Name = "NotificationFrame"
+	notifFrame.Size = UDim2.new(0, 300, 0, 50)
+	notifFrame.Position = UDim2.new(0.5, -150, 0.05, 0)
+	notifFrame.BackgroundColor3 = color
+	notifFrame.BorderSizePixel = 0
+	notifFrame.Parent = notification
+
+	local notifLabel = Instance.new("TextLabel")
+	notifLabel.Size = UDim2.new(1, 0, 1, 0)
+	notifLabel.BackgroundTransparency = 1
+	notifLabel.Text = text
+	notifLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	notifLabel.TextSize = 16
+	notifLabel.Font = Enum.Font.GothamBold
+	notifLabel.Parent = notifFrame
+
+	notification.Parent = playerGui
+
+	task.delay(2.5, function()
+		notification:Destroy()
+	end)
+end
+
+-- DataStore Funktionen
+local function getPlayerData(player)
+	local playerKey = "Player_" .. player.UserId
+	local data
+	local success, err = pcall(function()
+		data = StellwerkDataStore:GetAsync(playerKey)
+	end)
+
+	if success and data then
+		return data
+	else
+		return {
+			Coins = 1000,
+			OwnedStellwerke = {},
+			StellwerkPositions = {}
+		}
+	end
+end
+
+local function savePlayerData(player, data)
+	local playerKey = "Player_" .. player.UserId
+	local success, err = pcall(function()
+		StellwerkDataStore:SetAsync(playerKey, data)
+	end)
+
+	if not success then
+		warn("Fehler beim Speichern: " .. tostring(err))
+	end
+end
+
+-- Helper
+local function tableContains(tbl, value)
+	for _, v in ipairs(tbl) do
+		if v == value then
+			return true
+		end
+	end
+	return false
+end
+
+-- Sitz-Interaktion (Place)
+-- Dieser Teil muss in einem Script im Sitz (Part) sein oder über einen RemoteEvent gesteuert werden
+-- Hier ist ein Beispiel für einen Touch-Interaktions-Bereich:
+
+-- Erstelle einen Touch-Bereich für den Sitz
+local function createSeatInteraction(seatPart, player)
+	local mainGui = createMainMenuGui(player)
+	return mainGui
+end
+
+-- RemoteEvent für Server-Client Kommunikation
+local remoteEvent = Instance.new("RemoteEvent")
+remoteEvent.Name = "StellwerkRemote"
+remoteEvent.Parent = ReplicatedStorage
+
+-- Client Script (muss in StarterPlayerScripts sein)
+-- =====================================================
+-- Client Script - StarterPlayerScripts
+-- =====================================================
+
+--[[
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+local remoteEvent = ReplicatedStorage:WaitForChild("StellwerkRemote")
+
+remoteEvent.OnClientEvent:Connect(function(action, data)
+	if action == "openMainMenu" then
+		-- Hauptmenü öffnen (wird vom Server erstellt)
+	end
+end)
+]]
+
+-- Server Event Handler
+remoteEvent.OnServerEvent:Connect(function(player, action, data)
+	if action == "openMainMenu" then
+		createMainMenuGui(player)
+	elseif action == "buyStellwerk" then
+		-- Wird über die GUI Buttons gehandhabt
+	end
+end)
+
+-- Spieler Beitreten
+Players.PlayerAdded:Connect(function(player)
+	-- Daten laden
+	getPlayerData(player)
+
+	-- Platzieren eines Interaktions-Parts (Sitz)
+	local seatPart = Instance.new("Part")
+	seatPart.Name = "StellwerkSitz"
+	seatPart.Size = Vector3.new(4, 1, 4)
+	seatPart.Position = Vector3.new(0, 0.5, 0)
+	seatPart.Anchored = true
+	seatPart.Color = Color3.fromRGB(100, 100, 150)
+	seatPart.Material = Enum.Material.Neon
+	seatPart.Transparency = 0.5
+	seatPart.Parent = workspace
+
+	-- Touch-Bereich für Interaktion
+	local touchPart = seatPart:Clone()
+	touchPart.Name = "TouchArea"
+	touchPart.Transparency = 1
+	touchPart.Size = Vector3.new(6, 3, 6)
+	touchPart.Position = Vector3.new(0, 2, 0)
+	touchPart.Anchored = true
+	touchPart.CanCollide = false
+	touchPart.Parent = seatPart
+
+	-- Touch Events
+	touchPart.Touched:Connect(function(hit)
+		local player = Players:GetPlayerFromCharacter(hit.Parent)
+		if player then
+			createMainMenuGui(player)
+		end
+	end)
+
+	touchPart.TouchEnded:Connect(function(hit)
+		-- Optional: GUI schließen wenn Spieler den Bereich verlässt
+	end)
+end)
+
+print("🚆 Stellwerk System geladen!")

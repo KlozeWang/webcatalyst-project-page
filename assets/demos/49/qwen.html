@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Rabbit Race</title>
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+body {
+    background: #1a1a2e;
+    overflow: hidden;
+    touch-action: none;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+canvas {
+    display: block;
+}
+#ui-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 10;
+}
+#hud {
+    position: absolute;
+    top: 10px; left: 10px; right: 10px;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+}
+.hud-box {
+    background: rgba(0,0,0,0.6);
+    border-radius: 12px;
+    padding: 8px 14px;
+    color: #fff;
+    font-size: 14px;
+    backdrop-filter: blur(5px);
+    border: 1px solid rgba(255,255,255,0.1);
+}
+.hud-box .label { color: #aaa; font-size: 11px; }
+.hud-box .value { font-weight: bold; font-size: 18px; }
+.speed-bar-bg {
+    width: 100%;
+    height: 6px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 3px;
+    margin-top: 4px;
+    overflow: hidden;
+}
+.speed-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.1s, background 0.3s;
+}
+#start-screen, #win-screen {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.85);
+    z-index: 20;
+    pointer-events: auto;
+}
+#start-screen h1 {
+    font-size: 42px;
+    color: #ff6b35;
+    text-shadow: 2px 2px 0 #c0392b;
+    margin-bottom: 10px;
+}
+#start-screen .subtitle {
+    color: #ccc;
+    font-size: 16px;
+    margin-bottom: 30px;
+    text-align: center;
+    padding: 0 20px;
+}
+.btn {
+    background: linear-gradient(135deg, #ff6b35, #e74c3c);
+    color: white;
+    border: none;
+    padding: 16px 48px;
+    font-size: 22px;
+    border-radius: 30px;
+    cursor: pointer;
+    font-weight: bold;
+    box-shadow: 0 4px 15px rgba(231,76,60,0.4);
+    transition: transform 0.15s;
+    pointer-events: auto;
+}
+.btn:active { transform: scale(0.95); }
+#win-screen h1 {
+    font-size: 36px;
+    color: #f1c40f;
+    text-shadow: 2px 2px 0 #e67e22;
+    margin-bottom: 10px;
+}
+#win-screen .result {
+    color: #fff;
+    font-size: 20px;
+    margin-bottom: 20px;
+}
+#win-screen .stats {
+    color: #aaa;
+    font-size: 16px;
+    margin-bottom: 25px;
+    text-align: center;
+    line-height: 1.8;
+}
+.rabbit-select {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 25px;
+}
+.rabbit-option {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 3px solid #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: rgba(255,255,255,0.05);
+}
+.rabbit-option.selected {
+    border-color: #ff6b35;
+    background: rgba(255,107,53,0.2);
+    transform: scale(1.1);
+}
+.instructions {
+    color: #888;
+    font-size: 13px;
+    margin-top: 20px;
+    text-align: center;
+    padding: 0 30px;
+    line-height: 1.6;
+}
+#minimap {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%;
+    height: 30px;
+    background: rgba(0,0,0,0.5);
+    border-radius: 15px;
+    border: 1px solid rgba(255,255,255,0.2);
+    pointer-events: none;
+    overflow: hidden;
+}
+.minimap-rabbit {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+    transition: left 0.1s;
+}
+#boost-indicator {
+    position: absolute;
+    bottom: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #f1c40f;
+    font-size: 16px;
+    font-weight: bold;
+    text-shadow: 0 0 10px rgba(241,196,15,0.5);
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui-overlay">
+    <div id="hud" style="display:none;">
+        <div class="hud-box">
+            <div class="label">SPEED</div>
+            <div class="value" id="speed-val">0</div>
+            <div class="speed-bar-bg"><div class="speed-bar" id="speed-bar"></div></div>
+        </div>
+        <div class="hud-box">
+            <div class="label">DISTANCE</div>
+            <div class="value" id="dist-val">0m</div>
+        </div>
+        <div class="hud-box">
+            <div class="label">CARROTS</div>
+            <div class="value" id="carrot-val">0</div>
+        </div>
+    </div>
+    <div id="minimap" style="display:none;">
+        <div class="minimap-rabbit" id="mm-player">🐰</div>
+        <div class="minimap-rabbit" id="mm-r1" style="font-size:12px;">🐇</div>
+        <div class="minimap-rabbit" id="mm-r2" style="font-size:12px;">🐇</div>
+    </div>
+    <div id="boost-indicator">⚡ BOOST ⚡</div>
+</div>
+
+<div id="start-screen">
+    <h1>🐰 Rabbit Race 🐰</h1>
+    <p class="subtitle">Race to the finish line! Collect carrots & vegetables for speed boosts. Avoid obstacles!</p>
+    <div class="rabbit-select">
+        <div class="rabbit-option selected" data-rabbit="0" onclick="selectRabbit(0)">🐰</div>
+        <div class="rabbit-option" data-rabbit="1" onclick="selectRabbit(1)">🐇</div>
+        <div class="rabbit-option" data-rabbit="2" onclick="selectRabbit(2)">🐾</div>
+    </div>
+    <button class="btn" onclick="startGame()">START RACE</button>
+    <p class="instructions">Tap left/right side of screen to change lanes.<br>Collect carrots 🥕 for speed! Avoid rocks 🪨 and thorns 🌿!</p>
+</div>
+
+<div id="win-screen" style="display:none;">
+    <h1 id="win-title">🏆 Winner! 🏆</h1>
+    <div class="result" id="win-result"></div>
+    <div class="stats" id="win-stats"></div>
+    <button class="btn" onclick="restartGame()">RACE AGAIN</button>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Game constants
+const TRACK_LENGTH = 5000;
+const LANE_COUNT = 3;
+const BASE_SPEED = 3;
+const BOOST_DURATION = 180; // frames
+const BOOST_MULTIPLIER = 1.8;
+const HIT_SLOW_DURATION = 60;
+const HIT_SLOW_FACTOR = 0.4;
+const LANE_WIDTH_RATIO = 0.22;
+
+// Game state
+let game = {
+    running: false,
+    finished: false,
+    playerRabbit: 0,
+    cameraX: 0,
+    time: 0,
+    particles: [],
+    collectibles: [],
+    obstacles: [],
+    rabbits: [],
+    playerCarrots: 0,
+    playerMaxSpeed: 0,
+    frameCount: 0
+};
+
+let selectedRabbitIndex = 0;
+
+function selectRabbit(idx) {
+    selectedRabbitIndex = idx;
+    document.querySelectorAll('.rabbit-option').forEach((el, i) => {
+        el.classList.toggle('selected', i === idx);
+    });
+}
+
+function createRabbits() {
+    const emojis = ['🐰', '🐇', '🐾'];
+    const names = ['Player', 'Bun-Bun', 'Speedy'];
+    const colors = ['#ff6b35', '#3498db', '#2ecc71'];
+    
+    game.rabbits = [];
+    for (let i = 0; i < 3; i++) {
+        game.rabbits.push({
+            x: 0,
+            lane: 1,
+            y: 0,
+            speed: BASE_SPEED,
+            baseSpeed: BASE_SPEED,
+            emoji: emojis[i],
+            name: names[i],
+            color: colors[i],
+            isPlayer: i === selectedRabbitIndex,
+            boostTimer: 0,
+            hitTimer: 0,
+            carrots: 0,
+            finished: false,
+            finishTime: 0,
+            jumpY: 0,
+            jumpVel: 0,
+            jumping: false,
+            laneChangeAnim: 0,
+            targetLane: 1,
+            wobble: Math.random() * Math.PI * 2,
+            trail: []
+        });
+    }
+}
+
+function generateTrack() {
+    game.collectibles = [];
+    game.obstacles = [];
+    
+    const lanePositions = getLaneCenters();
+    
+    // Generate collectibles
+    for (let x = 300; x < TRACK_LENGTH - 200; x += 80 + Math.random() * 120) {
+        const lane = Math.floor(Math.random() * LANE_COUNT);
+        const type = Math.random();
+        let collectible;
+        
+        if (type < 0.5) {
+            collectible = { x, lane, type: 'carrot', emoji: '🥕', value: 25, size: 28 };
+        } else if (type < 0.75) {
+            collectible = { x, lane, type: 'vegetable', emoji: '🥬', value: 15, size: 28 };
+        } else if (type < 0.9) {
+            collectible = { x, lane, type: 'super_carrot', emoji: '🌟', value: 40, size: 32 };
+        } else {
+            collectible = { x, lane, type: 'watermelon', emoji: '🍉', value: 35, size: 30 };
+        }
+        
+        // Avoid overlap with obstacles
+        let overlap = false;
+        for (let obs of game.obstacles) {
+            if (Math.abs(obs.x - x) < 60 && obs.lane === lane) {
+                overlap = true;
+                break;
+            }
+        }
+        if (!overlap) game.collectibles.push(collectible);
+    }
+    
+    // Generate obstacles
+    for (let x = 400; x < TRACK_LENGTH - 200; x += 150 + Math.random() * 200) {
+        const lane = Math.floor(Math.random() * LANE_COUNT);
+        const type = Math.random();
+        let obstacle;
+        
+        if (type < 0.4) {
+            obstacle = { x, lane, type: 'rock', emoji: '🪨', size: 30, damage: 30 };
+        } else if (type < 0.7) {
+            obstacle = { x, lane, type: 'thorn', emoji: '🌿', size: 26, damage: 20 };
+        } else {
+            obstacle = { x, lane, type: 'cactus', emoji: '🌵', size: 34, damage: 35 };
+        }
+        
+        game.obstacles.push(obstacle);
+    }
+}
+
+function getLaneCenters() {
+    const trackLeft = W * 0.1;
+    const trackRight = W * 0.9;
+    const trackWidth = trackRight - trackLeft;
+    const laneW = trackWidth / LANE_COUNT;
+    const centers = [];
+    for (let i = 0; i < LANE_COUNT; i++) {
+        centers.push(trackLeft + laneW * i + laneW / 2);
+    }
+    return centers;
+}
+
+function getLaneX(lane) {
+    const centers = getLaneCenters();
+    return centers[Math.max(0, Math.min(LANE_COUNT - 1, lane))];
+}
+
+// Input handling
+let touchStartX = 0;
+let touchStartY = 0;
+
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (!game.running || game.finished) return;
+    
+    const touch = e.touches[0];
+    const player = game.rabbits.find(r => r.isPlayer);
+    if (!player) return;
+    
+    if (touch.clientX < W / 2) {
+        // Left side - move left
+        if (player.targetLane > 0) {
+            player.targetLane--;
+            player.laneChangeAnim = 1;
+        }
+    } else {
+        // Right side - move right
+        if (player.targetLane < LANE_COUNT - 1) {
+            player.targetLane++;
+            player.laneChangeAnim = 1;
+        }
+    }
+    
+    // Jump on tap (double tap detection)
+    const now = Date.now();
+    if (now - (canvas.lastTap || 0) < 300) {
+        if (!player.jumping) {
+            player.jumping = true;
+            player.jumpVel = -8;
+        }
+    }
+    canvas.lastTap = now;
+}, { passive: false });
+
+canvas.addEventListener('mousedown', (e) => {
+    if (!game.running || game.finished) return;
+    const player = game.rabbits.find(r => r.isPlayer);
+    if (!player) return;
+    
+    if (e.clientX < W / 2) {
+        if (player.targetLane > 0) { player.targetLane--; player.laneChangeAnim = 1; }
+    } else {
+        if (player.targetLane < LANE_COUNT - 1) { player.targetLane++; player.laneChangeAnim = 1; }
+    }
+    
+    const now = Date.now();
+    if (now - (canvas.lastTap || 0) < 300) {
+        if (!player.jumping) { player.jumping = true; player.jumpVel = -8; }
+    }
+    canvas.lastTap = now;
+});
+
+// AI logic
+function updateAI(rabbit, dt) {
+    if (rabbit.finished) return;
+    
+    // Look ahead for collectibles and obstacles
+    const lookAhead = 200;
+    let bestLane = rabbit.targetLane;
+    let bestScore = -999;
+    
+    for (let lane = 0; lane < LANE_COUNT; lane++) {
+        let score = 0;
+        
+        // Check for collectibles in this lane
+        for (let c of game.collectibles) {
+            const dx = c.x - rabbit.x;
+            if (dx > 0 && dx < lookAhead && c.lane === lane) {
+                score += c.value * 2;
+            }
+        }
+        
+        // Check for obstacles in this lane
+        for (let o of game.obstacles) {
+            const dx = o.x - rabbit.x;
+            if (dx > 0 && dx < lookAhead && o.lane === lane) {
+                score -= o.damage * 3;
+            }
+        }
+        
+        // Prefer lanes with higher scores
+        if (score > bestScore) {
+            bestScore = score;
+            bestLane = lane;
+        }
+    }
+    
+    // Smooth lane change
+    if (bestLane !== rabbit.targetLane) {
+        rabbit.targetLane = bestLane;
+        rabbit.laneChangeAnim = 1;
+    }
+    
+    // Random speed variation
+    let speedVar = 0.8 + Math.random() * 0.4;
+    rabbit.speed = rabbit.baseSpeed * speedVar;
+    
+    if (rabbit.boostTimer > 0) {
+        rabbit.speed *= BOOST_MULTIPLIER;
+        rabbit.boostTimer--;
+    }
+    if (rabbit.hitTimer > 0) {
+        rabbit.speed *= HIT_SLOW_FACTOR;
+        rabbit.hitTimer--;
+    }
+}
+
+function updatePlayer(rabbit, dt) {
+    if (rabbit.finished) return;
+    
+    // Smooth lane transition
+    if (rabbit.laneChangeAnim > 0) {
+        rabbit.laneChangeAnim -= 0.15;
+        if (rabbit.laneChangeAnim <= 0) {
+            rabbit.lane = rabbit.targetLane;
+            rabbit.laneChangeAnim = 0;
+        }
+    }
+    
+    // Jump physics
+    if (rabbit.jumping) {
+        rabbit.jumpY += rabbit.jumpVel;
+        rabbit.jumpVel += 0.5;
+        if (rabbit.jumpY >= 0) {
+            rabbit.jumpY = 0;
+            rabbit.jumping = false;
+            rabbit.jumpVel = 0;
+        }
+    }
+    
+    // Speed based on boosts
+    rabbit.speed = rabbit.baseSpeed;
+    if (rabbit.boostTimer > 0) {
+        rabbit.speed *= BOOST_MULTIPLIER;
+        rabbit.boostTimer--;
+    }
+    if (rabbit.hitTimer > 0) {
+        rabbit.speed *= HIT_SLOW_FACTOR;
+        rabbit.hitTimer--;
+    }
+}
+
+function checkCollisions(rabbit) {
+    const rabbitX = rabbit.x + rabbit.laneChangeAnim * (getLaneX(rabbit.targetLane) - getLaneX(rabbit.lane));
+    const rabbitY = rabbit.jumpY;
+    const rabbitRadius = 20;
+    
+    // Collectibles
+    for (let i = game.collectibles.length - 1; i >= 0; i--) {
+        const c = game.collectibles[i];
+        const cx = getLaneX(c.lane);
+        const dx = Math.abs(rabbitX - cx);
+        const dy = Math.abs(rabbitY);
+        
+        if (dx < 30 && dy < 30) {
+            // Collected!
+            rabbit.speed += c.value * 0.1;
+            rabbit.boostTimer = Math.max(rabbit.boostTimer, BOOST_DURATION);
+            rabbit.carrots++;
+            game.playerCarrots = rabbit.carrots;
+            
+            // Spawn particles
+            for (let p = 0; p < 8; p++) {
+                game.particles.push({
+                    x: rabbitX,
+                    y: H * 0.6 + rabbitY,
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: -Math.random() * 4 - 2,
+                    life: 30,
+                    maxLife: 30,
+                    emoji: c.emoji,
+                    size: 16
+                });
+            }
+            
+            game.collectibles.splice(i, 1);
+        }
+    }
+    
+    // Obstacles
+    for (let i = game.obstacles.length - 1; i >= 0; i--) {
+        const o = game.obstacles[i];
+        const ox = getLaneX(o.lane);
+        const dx = Math.abs(rabbitX - ox);
+        const dy = Math.abs(rabbitY);
+        
+        if (dx < 28 && dy < 28) {
+            // Hit obstacle!
+            rabbit.speed = Math.max(rabbit.baseSpeed * 0.3, rabbit.speed - o.damage * 0.15);
+            rabbit.hitTimer = HIT_SLOW_DURATION;
+            
+            // Spawn particles
+            for (let p = 0; p < 6; p++) {
+                game.particles.push({
+                    x: rabbitX,
+                    y: H * 0.6 + rabbitY,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: -Math.random() * 3,
+                    life: 20,
+                    maxLife: 20,
+                    emoji: '💥',
+                    size: 20
+                });
+            }
+            
+            game.obstacles.splice(i, 1);
+        }
+    }
+}
+
+function updateParticles() {
+    for (let i = game.particles.length - 1; i >= 0; i--) {
+        const p = game.particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.15;
+        p.life--;
+        if (p.life <= 0) game.particles.splice(i, 1);
+    }
+}
+
+function drawBackground() {
+    // Sky gradient
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, H);
+    skyGrad.addColorStop(0, '#87CEEB');
+    skyGrad.addColorStop(0.5, '#98D8C8');
+    skyGrad.addColorStop(1, '#7CB342');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, W, H);
+    
+    // Clouds
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    for (let i = 0; i < 8; i++) {
+        const cx = ((i * 300 + 100) - game.cameraX * 0.1) % (W + 200) - 100;
+        const cy = 40 + (i % 3) * 30;
+        drawCloud(cx, cy, 30 + i * 5);
+    }
+    
+    // Mountains
+    ctx.fillStyle = '#5D8A3C';
+    for (let i = 0; i < 12; i++) {
+        const mx = ((i * 250 + 50) - game.cameraX * 0.2) % (W + 300) - 150;
+        drawMountain(mx, H * 0.35, 80 + i * 10, 60 + i * 5);
+    }
+    
+    // Ground
+    const groundY = H * 0.55;
+    const groundGrad = ctx.createLinearGradient(0, groundY, 0, H);
+    groundGrad.addColorStop(0, '#8BC34A');
+    groundGrad.addColorStop(0.3, '#689F38');
+    groundGrad.addColorStop(1, '#558B2F');
+    ctx.fillStyle = groundGrad;
+    ctx.fillRect(0, groundY, W, H - groundY);
+    
+    // Grass tufts
+    ctx.fillStyle = '#7CB342';
+    for (let i = 0; i < 30; i++) {
+        const gx = ((i * 80 + 20) - game.cameraX * 0.5) % (W + 100) - 50;
+        const gy = groundY + 5 + (i % 5) * 15;
+        ctx.beginPath();
+        ctx.ellipse(gx, gy, 8, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function drawCloud(x, y, size) {
+    ctx.beginPath();
+    ctx.arc(x, y, size, 0, Math.PI * 2);
+    ctx.arc(x + size * 0.8, y - size * 0.2, size * 0.7, 0, Math.PI * 2);
+    ctx.arc(x + size * 1.4, y, size * 0.6, 0, Math.PI * 2);
+    ctx.arc(x - size * 0.5, y + size * 0.1, size * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+function drawMountain(x, baseY, width, height) {
+    ctx.beginPath();
+    ctx.moveTo(x, baseY);
+    ctx.lineTo(x + width / 2, baseY - height);
+    ctx.lineTo(x + width, baseY);
+    ctx.closePath();
+    ctx.fill();
+}
+
+function drawTrack() {
+    const trackLeft = W * 0.1;
+    const trackRight = W * 0.9;
+    const trackWidth = trackRight - trackLeft;
+    const laneW = trackWidth / LANE_COUNT;
+    const groundY = H * 0.55;
+    const trackBottom = H * 0.85;
+    
+    // Track surface
+    const trackGrad = ctx.createLinearGradient(0, groundY, 0, trackBottom);
+    trackGrad.addColorStop(0, '#D2B48C');
+    trackGrad.addColorStop(1, '#C4A882');
+    ctx.fillStyle = trackGrad;
+    ctx.fillRect(trackLeft, groundY, trackWidth, trackBottom - groundY);
+    
+    // Track borders
+    ctx.strokeStyle = '#8B7355';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(trackLeft, groundY);
+    ctx.lineTo(trackLeft, trackBottom);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(trackRight, groundY);
+    ctx.lineTo(trackRight, trackBottom);
+    ctx.stroke();
+    
+    // Lane dividers (dashed)
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([20, 15]);
+    for (let i = 1; i < LANE_COUNT; i++) {
+        const lx = trackLeft + laneW * i;
+        ctx.beginPath();
+        ctx.moveTo(lx, groundY);
+        ctx.lineTo(lx, trackBottom);
+        ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    
+    // Distance markers
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    for (let d = 500; d < TRACK_LENGTH; d += 500) {
+        const screenX = d - game.cameraX + W * 0.5;
+        if (screenX > trackLeft && screenX < trackRight) {
+            ctx.fillText(d + 'm', screenX, trackBottom + 15);
+            ctx.fillStyle = 'rgba(255,255,255,0.15)';
+            ctx.fillRect(screenX - 1, groundY, 2, trackBottom - groundY);
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        }
+    }
+    
+    // Finish line
+    const finishX = TRACK_LENGTH - game.cameraX + W * 0.5;
+    if (finishX > trackLeft - 50 && finishX < trackRight + 50) {
+        drawFinishLine(finishX, groundY, trackWidth);
+    }
+}
+
+function drawFinishLine(x, top, width) {
+    const checkerSize = 15;
+    const rows = 4;
+    const cols = Math.ceil(width / checkerSize);
+    
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            ctx.fillStyle = (r + c) % 2 === 0 ? '#fff' : '#000';
+            ctx.fillRect(x - width/2 + c * checkerSize, top + r * checkerSize, checkerSize, checkerSize);
+        }
+    }
+    
+    // Flag pole
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(x - width/2 - 5, top - 40, 4, 40 + rows * checkerSize);
+    
+    // Flag
+    ctx.fillStyle = '#e74c3c';
+    ctx.beginPath();
+    ctx.moveTo(x - width/2 - 1, top - 40);
+    ctx.lineTo(x - width/2 - 35, top - 25);
+    ctx.lineTo(x - width/2 - 1, top - 10);
+    ctx.closePath();
+    ctx.fill();
+    
+    // "FINISH" text
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🏁 FINISH 🏁', x, top - 45);
+}
+
+function drawCollectible(c) {
+    const screenX = c.x - game.cameraX + W * 0.5;
+    const laneX = getLaneX(c.lane);
+    const groundY = H * 0.7;
+    
+    if (screenX < -50 || screenX > W + 50) return;
+    
+    // Glow effect
+    const glowColor = c.type === 'super_carrot' ? 'rgba(255,215,0,0.3)' : 
+                      c.type === 'watermelon' ? 'rgba(255,50,50,0.3)' : 'rgba(255,165,0,0.3)';
+    ctx.beginPath();
+    ctx.arc(screenX, groundY - 5, 22, 0, Math.PI * 2);
+    ctx.fillStyle = glowColor;
+    ctx.fill();
+    
+    // Bobbing animation
+    const bob = Math.sin(game.frameCount * 0.05 + c.x * 0.01) * 4;
+    
+    ctx.font = `${c.size}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(c.emoji, screenX, groundY - 5 + bob);
+}
+
+function drawObstacle(o) {
+    const screenX = o.x - game.cameraX + W * 0.5;
+    const groundY = H * 0.7;
+    
+    if (screenX < -50 || screenX > W + 50) return;
+    
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(screenX, groundY + 5, 15, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.font = `${o.size}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(o.emoji, screenX, groundY - 2);
+}
+
+function drawRabbit(rabbit) {
+    const laneX = getLaneX(rabbit.lane);
+    const targetX = getLaneX(rabbit.targetLane);
+    const currentX = rabbit.laneChangeAnim > 0 ? 
+        laneX + (targetX - laneX) * (1 - rabbit.laneChangeAnim) : targetX;
+    
+    const groundY = H * 0.7;
+    const screenX = currentX - game.cameraX + W * 0.5;
+    const screenY = groundY + rabbit.jumpY;
+    
+    if (screenX < -50 || screenX > W + 50) return;
+    
+    // Trail effect when boosting
+    if (rabbit.boostTimer > 0) {
+        for (let t = 0; t < 3; t++) {
+            ctx.globalAlpha = 0.3 - t * 0.1;
+            ctx.font = `${28 - t * 4}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillText(rabbit.emoji, screenX - (t + 1) * 15, screenY + t * 3);
+        }
+        ctx.globalAlpha = 1;
+    }
+    
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(screenX, groundY + 5, 18, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Speed lines when boosting
+    if (rabbit.boostTimer > 0) {
+        ctx.strokeStyle = 'rgba(255,200,0,0.5)';
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 3; i++) {
+            const ly = screenY - 15 + i * 10;
+            ctx.beginPath();
+            ctx.moveTo(screenX - 25 - Math.random() * 10, ly);
+            ctx.lineTo(screenX - 40 - Math.random() * 15, ly);
+            ctx.stroke();
+        }
+    }
+    
+    // Hit flash
+    if (rabbit.hitTimer > 0 && Math.floor(game.frameCount / 4) % 2 === 0) {
+        ctx.globalAlpha = 0.5;
+    }
+    
+    // Rabbit emoji
+    ctx.font = '36px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // Slight tilt based on speed
+    ctx.save();
+    ctx.translate(screenX, screenY);
+    const tilt = (rabbit.speed - rabbit.baseSpeed) * 0.02;
+    ctx.rotate(tilt);
+    ctx.fillText(rabbit.emoji, 0, 0);
+    ctx.restore();
+    
+    ctx.globalAlpha = 1;
+    
+    // Name tag
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    const nameWidth = ctx.measureText(rabbit.name).width;
+    ctx.fillRect(screenX - nameWidth/2 - 4, screenY - 30, nameWidth + 8, 18);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText(rabbit.name, screenX, screenY - 21);
+    
+    // Boost indicator
+    if (rabbit.boostTimer > 0) {
+        ctx.fillStyle = '#f1c40f';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillText('⚡', screenX, screenY - 38);
+    }
+}
+
+function drawParticles() {
+    for (let p of game.particles) {
+        ctx.globalAlpha = p.life / p.maxLife;
+        ctx.font = `${p.size * (p.life / p.maxLife)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(p.emoji, p.x, p.y);
+    }
+    ctx.globalAlpha = 1;
+}
+
+function drawMinimap() {
+    const minimap = document.getElementById('minimap');
+    const player = game.rabbits.find(r => r.isPlayer);
+    
+    for (let i = 0; i < game.rabbits.length; i++) {
+        const r = game.rabbits[i];
+        const mmEl = document.getElementById(i === selectedRabbitIndex ? 'mm-player' : `mm-r${i}`);
+        const progress = Math.min(r.x / TRACK_LENGTH, 1);
+        mmEl.style.left = `${progress * 95 + 2.5}%`;
+        mmEl.textContent = r.emoji;
+    }
+}
+
+function updateHUD() {
+    const player = game.rabbits.find(r => r.isPlayer);
+    if (!player) return;
+    
+    const speedPercent = Math.min(player.speed / (BASE_SPEED * BOOST_MULTIPLIER) * 100, 100);
+    document.getElementById('speed-val').textContent = Math.floor(player.speed * 20) + ' km/h';
+    document.getElementById('speed-bar').style.width = speedPercent + '%';
+    document.getElementById('speed-bar').style.background = 
+        player.boostTimer > 0 ? '#f1c40f' : 
+        player.hitTimer > 0 ? '#e74c3c' : '#3498db';
+    
+    document.getElementById('dist-val').textContent = Math.floor(player.x / TRACK_LENGTH * 100) + 'm';
+    document.getElementById('carrot-val').textContent = player.carrots;
+    
+    // Boost indicator
+    const boostEl = document.getElementById('boost-indicator');
+    boostEl.style.opacity = player.boostTimer > 0 ? '1' : '0';
+    if (player.boostTimer > 0) {
+        boostEl.textContent = `⚡ BOOST ${Math.ceil(player.boostTimer / 60)}s ⚡`;
+    }
+}
+
+function update() {
+    if (!game.running || game.finished) return;
+    
+    game.frameCount++;
+    
+    // Update rabbits
+    for (let rabbit of game.rabbits) {
+        rabbit.x += rabbit.speed;
+        rabbit.wobble += 0.1;
+        
+        if (rabbit.isPlayer) {
+            updatePlayer(rabbit);
+        } else {
+            updateAI(rabbit);
+        }
+        
+        checkCollisions(rabbit);
+        
+        // Check finish
+        if (rabbit.x >= TRACK_LENGTH && !rabbit.finished) {
+            rabbit.finished = true;
+            rabbit.finishTime = game.frameCount;
+        }
+    }
+    
+    // Update camera (follow player)
+    const player = game.rabbits.find(r => r.isPlayer);
+    if (player) {
+        game.cameraX = player.x - W * 0.4;
+    }
+    
+    updateParticles();
+    updateHUD();
+    drawMinimap();
+    
+    // Check if all finished or player finished
+    const allFinished = game.rabbits.every(r => r.finished);
+    if (allFinished || (player.finished && game.frameCount - player.finishTime > 120)) {
+        endGame();
+    }
+}
+
+function draw() {
+    ctx.clearRect(0, 0, W, H);
+    
+    drawBackground();
+    drawTrack();
+    
+    // Draw collectibles
+    for (let c of game.collectibles) {
+        drawCollectible(c);
+    }
+    
+    // Draw obstacles
+    for (let o of game.obstacles) {
+        drawObstacle(o);
+    }
+    
+    // Sort rabbits by Y for proper layering
+    const sortedRabbits = [...game.rabbits].sort((a, b) => a.jumpY - b.jumpY);
+    for (let rabbit of sortedRabbits) {
+        drawRabbit(rabbit);
+    }
+    
+    drawParticles();
+    
+    // Distance progress bar at top
+    if (game.running && !game.finished) {
+        drawProgressTop();
+    }
+}
+
+function drawProgressTop() {
+    const barWidth = W * 0.6;
+    const barHeight = 8;
+    const barX = (W - barWidth) / 2;
+    const barY = 50;
+    
+    // Background
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barWidth, barHeight, 4);
+    ctx.fill();
+    
+    // Player progress
+    const player = game.rabbits.find(r => r.isPlayer);
+    if (player) {
+        const progress = Math.min(player.x / TRACK_LENGTH, 1);
+        ctx.fillStyle = '#ff6b35';
+        ctx.beginPath();
+        ctx.roundRect(barX, barY, barWidth * progress, barHeight, 4);
+        ctx.fill();
+    }
+    
+    // Rabbit markers
+    for (let i = 0; i < game.rabbits.length; i++) {
+        const r = game.rabbits[i];
+        const progress = Math.min(r.x / TRACK_LENGTH, 1);
+        const mx = barX + barWidth * progress;
+        ctx.font = '16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(r.emoji, mx, barY + 22);
+    }
+}
+
+function endGame() {
+    game.finished = true;
+    game.running = false;
+    
+    const player = game.rabbits.find(r => r.isPlayer);
+    const sorted = [...game.rabbits].sort((a, b) => a.finishTime - b.finishTime);
+    const playerRank = sorted.findIndex(r => r.isPlayer) + 1;
+    
+    const winScreen = document.getElementById('win-screen');
+    const winTitle = document.getElementById('win-title');
+    const winResult = document.getElementById('win-result');
+    const winStats = document.getElementById('win-stats');
+    
+    if (playerRank === 1) {
+        winTitle.textContent = '🏆 You Win! 🏆';
+        winResult.textContent = '🥇 First Place!';
+    } else {
+        winTitle.textContent = 'Race Complete!';
+        winResult.textContent = `🏅 ${playerRank}${playerRank === 2 ? 'nd' : playerRank === 3 ? 'rd' : 'th'} Place`;
+    }
+    
+    winStats.innerHTML = `
+        Carrots Collected: ${player.carrots}<br>
+        Max Speed: ${Math.floor(player.speed * 20)} km/h<br>
+        Distance: ${Math.floor(player.x / TRACK_LENGTH * 100)}m / ${TRACK_LENGTH}m
+    `;
+    
+    winScreen.style.display = 'flex';
+    document.getElementById('hud').style.display = 'none';
+    document.getElementById('minimap').style.display = 'none';
+}
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+function startGame() {
+    document.getElementById('start-screen').style.display = 'none';
+    document.getElementById('win-screen').style.display = 'none';
+    document.getElementById('hud').style.display = 'flex';
+    document.getElementById('minimap').style.display = 'block';
+    
+    game.running = true;
+    game.finished = false;
+    game.cameraX = 0;
+    game.frameCount = 0;
+    game.particles = [];
+    game.playerCarrots = 0;
+    
+    createRabbits();
+    generateTrack();
+}
+
+function restartGame() {
+    startGame();
+}
+
+// Start the game loop
+gameLoop();
+</script>
+</body>
+</html>

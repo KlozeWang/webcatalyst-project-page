@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stellwerk Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            background-color: #111827;
+            color: white;
+            user-select: none;
+        }
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #111827;
+            transition: opacity 0.3s;
+        }
+        .hidden {
+            display: none !important;
+        }
+        .btn {
+            background-color: #3b82f6;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 1.25rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            margin: 10px;
+            border: none;
+            outline: none;
+        }
+        .btn:hover {
+            background-color: #2563eb;
+        }
+        .btn:active {
+            transform: scale(0.95);
+        }
+        .btn-red { background-color: #ef4444; }
+        .btn-red:hover { background-color: #dc2626; }
+        
+        #game-area {
+            position: relative;
+            width: 90%;
+            max-width: 800px;
+            height: 300px;
+            background-color: #1f2937;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 4px solid #374151;
+        }
+        .track {
+            position: absolute;
+            bottom: 40px;
+            width: 100%;
+            height: 10px;
+            background-color: #4b5563;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        .train {
+            position: absolute;
+            bottom: 50px;
+            width: 80px;
+            height: 40px;
+            background-color: #f3f4f6;
+            border-radius: 6px 6px 0 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #111827;
+            font-weight: bold;
+            font-size: 12px;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.3);
+            border: 2px solid #9ca3af;
+        }
+        .train::after {
+            content: '';
+            position: absolute;
+            right: -10px;
+            bottom: 5px;
+            width: 10px;
+            height: 10px;
+            background-color: #ef4444;
+            border-radius: 50%;
+        }
+        .signal-post {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            width: 8px;
+            height: 100px;
+            background-color: #6b7280;
+            transform: translateX(-50%);
+        }
+        .signal-head {
+            position: absolute;
+            bottom: 130px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 60px;
+            background-color: #111827;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-evenly;
+            border: 2px solid #374151;
+        }
+        .light {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #374151;
+            transition: all 0.2s;
+        }
+        .light.red.active { background-color: #ef4444; box-shadow: 0 0 15px #ef4444; }
+        .light.green.active { background-color: #10b981; box-shadow: 0 0 15px #10b981; }
+
+        .control-panel {
+            margin-top: 20px;
+            display: flex;
+            gap: 20px;
+            background-color: #374151;
+            padding: 20px;
+            border-radius: 12px;
+            align-items: center;
+        }
+        .switch {
+            width: 60px;
+            height: 30px;
+            background-color: #ef4444;
+            border-radius: 15px;
+            position: relative;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .switch.green { background-color: #10b981; }
+        .switch-knob {
+            width: 26px;
+            height: 26px;
+            background-color: white;
+            border-radius: 50%;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            transition: left 0.3s;
+        }
+        .switch.green .switch-knob { left: 32px; }
+    </style>
+</head>
+<body>
+
+    <!-- State 1: Seat interaction -->
+    <div id="screen-seat" class="screen">
+        <h1 class="text-4xl font-bold mb-8">Roblox Simulation</h1>
+        <div class="w-32 h-32 bg-gray-800 border-4 border-gray-600 rounded-lg flex items-center justify-center mb-8 cursor-pointer hover:bg-gray-700 transition" onclick="showScreen('screen-main')">
+            <svg class="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+        </div>
+        <p class="text-xl text-gray-400 animate-pulse">Klicke auf den Sitz, um das GUI zu öffnen</p>
+    </div>
+
+    <!-- State 2: Main Menu -->
+    <div id="screen-main" class="screen hidden">
+        <div class="bg-gray-800 p-8 rounded-xl border border-gray-700 shadow-2xl text-center w-96">
+            <h2 class="text-3xl font-bold mb-6 text-blue-400">Hauptmenü</h2>
+            <div class="flex flex-col gap-4">
+                <button class="btn" onclick="showScreen('screen-stellwerke')">Stellwerke</button>
+                <button class="btn" onclick="showScreen('screen-shop')">Shop</button>
+                <button class="btn" onclick="showScreen('screen-creator')">Creator</button>
+            </div>
+            <button class="btn btn-red mt-8 text-sm" onclick="showScreen('screen-seat')">Aufstehen</button>
+        </div>
+    </div>
+
+    <!-- State 3: Shop / Creator (Placeholders) -->
+    <div id="screen-shop" class="screen hidden">
+        <h2 class="text-4xl font-bold mb-4 text-yellow-400">Shop</h2>
+        <p class="text-xl mb-8">Kommt bald!</p>
+        <button class="btn" onclick="showScreen('screen-main')">Zurück</button>
+    </div>
+    <div id="screen-creator" class="screen hidden">
+        <h2 class="text-4xl font-bold mb-4 text-purple-400">Creator</h2>
+        <p class="text-xl mb-8">Entwickelt von KI</p>
+        <button class="btn" onclick="showScreen('screen-main')">Zurück</button>
+    </div>
+
+    <!-- State 4: Stellwerke List -->
+    <div id="screen-stellwerke" class="screen hidden">
+        <div class="bg-gray-800 p-8 rounded-xl border border-gray-700 shadow-2xl text-center w-96">
+            <h2 class="text-3xl font-bold mb-6 text-green-400">Streckennetz</h2>
+            <div class="flex flex-col gap-4 max-h-64 overflow-y-auto pr-2">
+                <button class="btn bg-green-600 hover:bg-green-500" onclick="startGame('Köln-Düsseldorf')">Köln-Düsseldorf</button>
+                <button class="btn bg-gray-600 cursor-not-allowed opacity-50">München-Augsburg</button>
+                <button class="btn bg-gray-600 cursor-not-allowed opacity-50">Berlin-Leipzig</button>
+            </div>
+            <button class="btn btn-red mt-8" onclick="showScreen('screen-main')">Zurück</button>
+        </div>
+    </div>
+
+    <!-- State 5: Game View (Stellwerk) -->
+    <div id="screen-game" class="screen hidden">
+        <h2 id="game-title" class="text-3xl font-bold mb-2">Stellwerk: Köln-Düsseldorf</h2>
+        <div class="flex justify-between w-[90%] max-w-[800px] mb-2">
+            <p class="text-xl font-bold text-green-400">Punkte: <span id="score">0</span></p>
+            <p class="text-xl font-bold text-red-400" id="game-status">Verhindere Unfälle!</p>
+        </div>
+
+        <div id="game-area">
+            <div class="track"></div>
+            <div class="signal-post"></div>
+            <div class="signal-head">
+                <div class="light red active" id="light-red"></div>
+                <div class="light green" id="light-green"></div>
+            </div>
+            <div id="trains-container"></div>
+        </div>
+
+        <div class="control-panel">
+            <span class="font-bold text-xl">Signal umschalten:</span>
+            <div class="switch" id="signal-switch" onclick="toggleSignal()">
+                <div class="switch-knob"></div>
+            </div>
+            <span class="text-sm text-gray-400 ml-4">(Oder LEERTASTE drücken)</span>
+        </div>
+
+        <button class="btn btn-red mt-8" onclick="quitGame()">Stellwerk verlassen</button>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="screen-gameover" class="screen hidden bg-red-900 bg-opacity-90 z-50">
+        <h1 class="text-6xl font-bold text-white mb-4">ZUGUNFALL!</h1>
+        <p class="text-2xl mb-8">Punkte erreicht: <span id="final-score">0</span></p>
+        <button class="btn" onclick="showScreen('screen-stellwerke')">Zurück zur Auswahl</button>
+    </div>
+
+    <script>
+        // Audio Context setup for sound effects
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+
+        function playBeep(freq, type, duration) {
+            if (!audioCtx) audioCtx = new AudioContext();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + duration);
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        // UI Management
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(el => el.classList.add('hidden'));
+            document.getElementById(screenId).classList.remove('hidden');
+        }
+
+        // Game Variables
+        let isGameRunning = false;
+        let score = 0;
+        let isSignalGreen = false;
+        let trains = [];
+        let gameLoopId;
+        let spawnTimer = 0;
+        let gameAreaWidth = 800;
+        const trainWidth = 80;
+        const signalPosition = 400; // Center of 800px area
+
+        function startGame(routeName) {
+            document.getElementById('game-title').innerText = 'Stellwerk: ' + routeName;
+            showScreen('screen-game');
+            
+            // Reset Game State
+            score = 0;
+            document.getElementById('score').innerText = score;
+            isSignalGreen = false;
+            updateSignalVisuals();
+            trains = [];
+            document.getElementById('trains-container').innerHTML = '';
+            gameAreaWidth = document.getElementById('game-area').clientWidth;
+            isGameRunning = true;
+            spawnTimer = 0;
+
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+
+            lastTime = performance.now();
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        function quitGame() {
+            isGameRunning = false;
+            cancelAnimationFrame(gameLoopId);
+            showScreen('screen-stellwerke');
+        }
+
+        function toggleSignal() {
+            if (!isGameRunning) return;
+            isSignalGreen = !isSignalGreen;
+            updateSignalVisuals();
+            playBeep(isSignalGreen ? 600 : 400, 'sine', 0.2);
+        }
+
+        function updateSignalVisuals() {
+            const sw = document.getElementById('signal-switch');
+            const lRed = document.getElementById('light-red');
+            const lGreen = document.getElementById('light-green');
+
+            if (isSignalGreen) {
+                sw.classList.add('green');
+                lRed.classList.remove('active');
+                lGreen.classList.add('active');
+            } else {
+                sw.classList.remove('green');
+                lRed.classList.add('active');
+                lGreen.classList.remove('active');
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && isGameRunning) {
+                e.preventDefault();
+                toggleSignal();
+            }
+        });
+
+        // Game Loop
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            if (!isGameRunning) return;
+            const dt = timestamp - lastTime;
+            lastTime = timestamp;
+
+            updateTrains(dt);
+            checkCollisions();
+
+            if (isGameRunning) {
+                gameLoopId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function spawnTrain() {
+            const speed = 0.05 + Math.random() * 0.05; // pixels per ms
+            const id = 'train-' + Date.now();
+            const el = document.createElement('div');
+            el.className = 'train';
+            el.id = id;
+            el.innerText = 'ICE ' + Math.floor(Math.random() * 999);
+            document.getElementById('trains-container').appendChild(el);
+
+            trains.push({
+                id: id,
+                el: el,
+                x: -trainWidth,
+                speed: speed,
+                passedSignal: false
+            });
+        }
+
+        function updateTrains(dt) {
+            spawnTimer += dt;
+            // Spawn rate gets faster as score increases
+            const spawnInterval = Math.max(1500, 4000 - (score * 50));
+            if (spawnTimer > spawnInterval) {
+                spawnTimer = 0;
+                spawnTrain();
+            }
+
+            const stopLine = (gameAreaWidth / 2) - trainWidth - 10;
+
+            for (let i = 0; i < trains.length; i++) {
+                let t = trains[i];
+                let canMove = true;
+
+                // Check signal logic
+                if (!t.passedSignal && t.x >= stopLine && t.x <= stopLine + 5) {
+                    if (!isSignalGreen) {
+                        canMove = false; // Stop at red signal
+                        t.x = stopLine; // snap to line
+                    } else {
+                        t.passedSignal = true; // Passing green
+                    }
+                }
+
+                // Check if train ahead is blocking
+                if (i > 0) {
+                    let trainAhead = trains[i-1];
+                    if (t.x + trainWidth + 10 >= trainAhead.x) {
+                        canMove = false;
+                        t.x = trainAhead.x - trainWidth - 10;
+                    }
+                }
+
+                if (canMove) {
+                    t.x += t.speed * dt;
+                }
+
+                // Update DOM
+                t.el.style.left = t.x + 'px';
+
+                // Check out of bounds / score
+                if (t.x > gameAreaWidth) {
+                    t.el.remove();
+                    trains.splice(i, 1);
+                    i--;
+                    score += 10;
+                    document.getElementById('score').innerText = score;
+                    playBeep(800, 'square', 0.1);
+                    
+                    // Auto reset signal to red for safety (Optional feature, makes it harder)
+                    if (isSignalGreen && trains.length > 0) {
+                        // isSignalGreen = false;
+                        // updateSignalVisuals();
+                    }
+                }
+            }
+        }
+
+        function checkCollisions() {
+            // Collision happens if a train touches another train too hard, 
+            // but for this simple version, if a moving train overlaps the bounds significantly.
+            // In updateTrains we prevent overlap naturally, so let's create a game over condition:
+            // If the queue backs up off the screen.
+            for (let i = 0; i < trains.length; i++) {
+                if (trains[i].x < -trainWidth && trains[i].x < trains[0].x - trainWidth) {
+                    // Queue is too long
+                }
+            }
+
+            // Alternatively, actual collision: if we let them crash.
+            // Let's modify logic: trains don't auto-stop for trains ahead, they CRASH!
+            for (let i = 1; i < trains.length; i++) {
+                let t = trains[i];
+                let ahead = trains[i-1];
+                if (t.x + trainWidth > ahead.x + 5) { // Collision margin
+                    triggerGameOver();
+                    return;
+                }
+            }
+        }
+
+        function triggerGameOver() {
+            isGameRunning = false;
+            playBeep(150, 'sawtooth', 1.0);
+            document.getElementById('final-score').innerText = score;
+            setTimeout(() => {
+                showScreen('screen-gameover');
+            }, 500);
+        }
+
+        // Handle resize
+        window.addEventListener('resize', () => {
+            if (isGameRunning) {
+                gameAreaWidth = document.getElementById('game-area').clientWidth;
+            }
+        });
+    </script>
+</body>
+</html>

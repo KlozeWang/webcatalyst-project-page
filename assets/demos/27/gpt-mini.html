@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Top-Down Grid Chase Game (HTML5 Canvas)</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #111;
+      color: #eee;
+      font-family: Arial, Helvetica, sans-serif;
+      overflow: hidden;
+      height: 100%;
+    }
+    #gameWrap {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas {
+      background: #1b1f27;
+      box-shadow: 0 0 0 2px #333, 0 12px 40px rgba(0,0,0,0.5);
+      image-rendering: pixelated;
+    }
+    #ui {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+      font-size: 16px;
+      font-weight: bold;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+    }
+    .panel {
+      background: rgba(0,0,0,0.35);
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.55);
+      flex-direction: column;
+      text-align: center;
+    }
+    #overlay.show {
+      display: flex;
+    }
+    #overlay h1 {
+      margin: 0 0 12px 0;
+      font-size: 44px;
+      color: #ff6b6b;
+    }
+    #overlay p {
+      margin: 6px 0;
+      font-size: 18px;
+      color: #fff;
+    }
+    #overlay button {
+      margin-top: 18px;
+      padding: 12px 22px;
+      font-size: 18px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      background: #4caf50;
+      color: white;
+      font-weight: bold;
+    }
+    #overlay button:hover {
+      background: #43a047;
+    }
+  </style>
+</head>
+<body>
+<div id="gameWrap">
+  <canvas id="gameCanvas" width="960" height="640"></canvas>
+
+  <div id="ui">
+    <div class="panel" id="scoreUI">Score: 0</div>
+    <div class="panel" id="infoUI">Move: WASD / Arrow Keys</div>
+  </div>
+
+  <div id="overlay">
+    <h1>Game Over</h1>
+    <p id="finalScore">Final Score: 0</p>
+    <p>Press Restart or hit R to play again</p>
+    <button id="restartBtn">Restart</button>
+  </div>
+</div>
+
+<script>
+/*
+  Top-Down Chase Game
+  --------------------
+  This is a beginner-friendly JavaScript HTML5 canvas version of the game
+  you requested. It includes:
+  - Player movement with arrow keys / WASD
+  - Grid-based walls and obstacles
+  - Multiple enemies
+  - Enemy patrol + chase behavior
+  - A* pathfinding for shortest path navigation
+  - Collision detection
+  - Game over and restart
+  - Path visualization
+*/
+
+(() => {
+  // Canvas setup
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+  const scoreUI = document.getElementById("scoreUI");
+  const overlay = document.getElementById("overlay");
+  const finalScore = document.getElementById("finalScore");
+  const restartBtn = document.getElementById("restartBtn");
+
+  // Grid/map configuration
+  const TILE = 32;
+  const COLS = Math.floor(canvas.width / TILE);
+  const ROWS = Math.floor(canvas.height / TILE);
+
+  // Game tuning
+  const PLAYER_SPEED = 180; // pixels per second
+  const ENEMY_SPEED = 120;
+  const CHASE_DISTANCE = 240; // enemy switches to chase if within this range
+  const PATH_RECALC_INTERVAL = 0.25; // seconds
+  const GAME_TITLE = "Top-Down Grid Chase";
+
+  // Input handling
+  const keys = {};
+  window.addEventListener("keydown", (e) => {
+    keys[e.key.toLowerCase()] = true;
+    if (e.key.toLowerCase() === "r" && game.gameOver) game.restart();
+  });
+  window.addEventListener("keyup", (e) => {
+    keys[e.key.toLowerCase()] = false;
+  });
+
+  // Utility helpers
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  const dist = (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1);
+  const toGrid = (x, y) => ({ c: Math.floor(x / TILE), r: Math.floor(y / TILE) });
+  const toWorld = (c, r) => ({ x: c * TILE, y: r * TILE });
+  const tileCenter = (c, r) => ({ x: c * TILE + TILE / 2, y: r * TILE + TILE / 2 });
+
+  // Map data: 0 = floor, 1 = wall
+  function createMap() {
+    const map = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+
+    // Border walls
+    for (let c = 0; c < COLS; c++) {
+      map[0][c] = 1;
+      map[ROWS - 1][c] = 1;
+    }
+    for (let r = 0; r < ROWS; r++) {
+      map[r][0] = 1;
+      map[r][COLS - 1] = 1;
+    }
+
+    // Internal obstacles - handcrafted for readability
+    const blocks = [
+      // horizontal bars
+      { x: 4, y: 3, w: 8, h: 1 },
+      { x: 14, y: 3, w: 5, h: 1 },
+      { x: 6, y: 7, w: 10, h: 1 },
+      { x: 19, y: 7, w: 5, h: 1 },
+      { x: 3, y: 11, w: 7, h: 1 },
+      { x: 13, y: 11, w: 11, h: 1 },
+
+      // vertical bars
+      { x: 3, y: 4, w: 1, h: 4 },
+      { x: 11, y: 5, w: 1, h: 5 },
+      { x: 18, y: 8, w: 1, h: 4 },
+      { x: 21, y: 4, w: 1, h: 5 },
+
+      // small clusters
+      { x: 7, y: 13, w: 3, h: 2 },
+      { x: 16, y: 13, w: 3, h: 2 },
+      { x: 24, y: 10, w: 2, h: 3 }
+    ];
+
+    for (const b of blocks) {
+      for (let r = b.y; r < b.y + b.h; r++) {
+        for (let c = b.x; c < b.x + b.w; c++) {
+          if (r > 0 && r < ROWS - 1 && c > 0 && c < COLS - 1) {
+            map[r][c] = 1;
+          }
+        }
+      }
+    }
+
+    return map;
+  }
+
+  // Basic A* pathfinding on the grid
+  function astar(map, start, goal) {
+    const inBounds = (c, r) => c >= 0 && r >= 0 && c < COLS && r < ROWS;
+    const passable = (c, r) => map[r][c] === 0;
+    const key = (c, r) => `${c},${r}`;
+
+    const open = [];
+    const cameFrom = new Map();
+    const gScore = new Map();
+    const fScore = new Map();
+    const openSet = new Set();
+
+    const h = (a, b) => Math.abs(a.c - b.c) + Math.abs(a.r - b.r);
+
+    const startKey = key(start.c, start.r);
+    gScore.set(startKey, 0);
+    fScore.set(startKey, h(start, goal));
+    open.push(start);
+    openSet.add(startKey);
+
+    while (open.length > 0) {
+      // Get node with lowest fScore
+      let bestIndex = 0;
+      let bestNode = open[0];
+      let bestScore = fScore.get(key(bestNode.c, bestNode.r)) ?? Infinity;
+      for (let i = 1; i < open.length; i++) {
+        const n = open[i];
+        const s = fScore.get(key(n.c, n.r)) ?? Infinity;
+        if (s < bestScore) {
+          bestScore = s;
+          bestNode = n;
+          bestIndex = i;
+        }
+      }
+
+      const current = bestNode;
+      const currentKey = key(current.c, current.r);
+
+      if (current.c === goal.c && current.r === goal.r) {
+        // Reconstruct path
+        const path = [];
+        let ck = currentKey;
+        while (cameFrom.has(ck)) {
+          const [pc, pr] = ck.split(",").map(Number);
+          path.push({ c: pc, r: pr });
+          ck = cameFrom.get(ck);
+        }
+        path.reverse();
+        return path;
+      }
+
+      open.splice(bestIndex, 1);
+      openSet.delete(currentKey);
+
+      const neighbors = [
+        { c: current.c + 1, r: current.r },
+        { c: current.c - 1, r: current.r },
+        { c: current.c, r: current.r + 1 },
+        { c: current.c, r: current.r - 1 }
+      ];
+
+      for (const n of neighbors) {
+        if (!inBounds(n.c, n.r) || !passable(n.c, n.r)) continue;
+
+        const nKey = key(n.c, n.r);
+        const tentativeG = (gScore.get(currentKey) ?? Infinity) + 1;
+
+        if (tentativeG < (gScore.get(nKey) ?? Infinity)) {
+          cameFrom.set(nKey, currentKey);
+          gScore.set(nKey, tentativeG);
+          fScore.set(nKey, tentativeG + h(n, goal));
+          if (!openSet.has(nKey)) {
+            open.push(n);
+            openSet.add(nKey);
+          }
+        }
+      }
+    }
+
+    return [];
+  }
+
+  // Collision helper
+  function rectHitsWall(map, x, y, size) {
+    const left = Math.floor(x / TILE);
+    const right = Math.floor((x + size - 1) / TILE);
+    const top = Math.floor(y / TILE);
+    const bottom = Math.floor((y + size - 1) / TILE);
+
+    for (let r = top; r <= bottom; r++) {
+      for (let c = left; c <= right; c++) {
+        if (r < 0 || c < 0 || r >= ROWS || c >= COLS) return true;
+        if (map[r][c] === 1) return true;
+      }
+    }
+    return false;
+  }
+
+  // Player class
+  class Player {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+      this.size = 20;
+      this.color = "#4cc9f0";
+      this.speed = PLAYER_SPEED;
+      this.anim = 0;
+    }
+
+    update(dt, map) {
+      let dx = 0, dy = 0;
+      if (keys["arrowup"] || keys["w"]) dy -= 1;
+      if (keys["arrowdown"] || keys["s"]) dy += 1;
+      if (keys["arrowleft"] || keys["a"]) dx -= 1;
+      if (keys["arrowright"] || keys["d"]) dx += 1;
+
+      // Normalize diagonal movement
+      if (dx !== 0 || dy !== 0) {
+        const len = Math.hypot(dx, dy);
+        dx /= len; dy /= len;
+        this.anim += dt * 10;
+      }
+
+      const moveX = dx * this.speed * dt;
+      const moveY = dy * this.speed * dt;
+
+      // Move separately to prevent sliding through corners
+      if (!rectHitsWall(map, this.x + moveX, this.y, this.size)) this.x += moveX;
+      if (!rectHitsWall(map, this.x, this.y + moveY, this.size)) this.y += moveY;
+
+      this.x = clamp(this.x, TILE, canvas.width - TILE - this.size);
+      this.y = clamp(this.y, TILE, canvas.height - TILE - this.size);
+    }
+
+    draw(ctx) {
+      // Simple animation: pulsing shadow and body
+      const pulse = 2 + Math.sin(this.anim) * 1.5;
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(this.x + this.size/2, this.y + this.size/2 + 10, this.size/2 + pulse, this.size/4 + pulse/2, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.roundRect(this.x, this.y, this.size, this.size, 5);
+      ctx.fill();
+
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(this.x + this.size * 0.35, this.y + this.size * 0.35, 2.5, 0, Math.PI * 2);
+      ctx.arc(this.x + this.size * 0.65, this.y + this.size * 0.35, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Enemy class
+  class Enemy {
+    constructor(x, y, patrolPoints, color) {
+      this.x = x;
+      this.y = y;
+      this.size = 20;
+      this.color = color || "#ff595e";
+      this.speed = ENEMY_SPEED;
+      this.patrolPoints = patrolPoints;
+      this.patrolIndex = 0;
+      this.path = [];
+      this.pathIndex = 0;
+      this.pathTimer = 0;
+      this.mode = "patrol";
+      this.anim = Math.random() * Math.PI * 2;
+    }
+
+    center() {
+      return { x: this.x + this.size/2, y: this.y + this.size/2 };
+    }
+
+    update(dt, map, player) {
+      this.anim += dt * 8;
+      this.pathTimer += dt;
+
+      const pc = player.x + player.size / 2;
+      const pr = player.y + player.size / 2;
+      const ec = this.x + this.size / 2;
+      const er = this.y + this.size / 2;
+      const d = dist(pc, pr, ec, er);
+
+      if (d < CHASE_DISTANCE) {
+        this.mode = "chase";
+      } else {
+        this.mode = "patrol";
+      }
+
+      let target = null;
+
+      if (this.mode === "chase") {
+        const start = toGrid(ec, er);
+        const goal = toGrid(pc, pr);
+
+        if (this.pathTimer >= PATH_RECALC_INTERVAL || this.path.length === 0) {
+          this.path = astar(map, start, goal);
+          this.pathIndex = 0;
+          this.pathTimer = 0;
+        }
+
+        target = this.path[this.pathIndex];
+        if (target) {
+          const t = tileCenter(target.c, target.r);
+          if (dist(ec, er, t.x, t.y) < 6) this.pathIndex++;
+        }
+      } else {
+        // Patrol between fixed points
+        const p = this.patrolPoints[this.patrolIndex];
+        target = toGrid(p.x, p.y);
+        const t = p;
+        if (dist(ec, er, t.x, t.y) < 8) {
+          this.patrolIndex = (this.patrolIndex + 1) % this.patrolPoints.length;
+        }
+        if (this.pathTimer >= PATH_RECALC_INTERVAL || this.path.length === 0) {
+          const start = toGrid(ec, er);
+          const goal = toGrid(t.x, t.y);
+          this.path = astar(map, start, goal);
+          this.pathIndex = 0;
+          this.pathTimer = 0;
+        }
+        target = this.path[this.pathIndex];
+        if (target) {
+          const tc = tileCenter(target.c, target.r);
+          if (dist(ec, er, tc.x, tc.y) < 6) this.pathIndex++;
+        }
+      }
+
+      if (target) {
+        const tp = this.mode === "patrol" ? tileCenter(target.c, target.r) : tileCenter(target.c, target.r);
+        let dx = tp.x - ec;
+        let dy = tp.y - er;
+        const len = Math.hypot(dx, dy);
+        if (len > 0) {
+          dx /= len; dy /= len;
+          const moveX = dx * this.speed * dt;
+          const moveY = dy * this.speed * dt;
+
+          if (!rectHitsWall(map, this.x + moveX, this.y, this.size)) this.x += moveX;
+          if (!rectHitsWall(map, this.x, this.y + moveY, this.size)) this.y += moveY;
+        }
+      }
+    }
+
+    draw(ctx, showPath = true) {
+      const bob = Math.sin(this.anim) * 2;
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(this.x + this.size/2, this.y + this.size/2 + 10, this.size/2 + 1, this.size/4 + 1, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.roundRect(this.x, this.y + bob * 0.2, this.size, this.size, 5);
+      ctx.fill();
+
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(this.x + 4, this.y + 6 + bob * 0.2, this.size - 8, this.size - 12);
+
+      if (showPath && this.path && this.path.length > 0) {
+        ctx.save();
+        ctx.globalAlpha = 0.75;
+        ctx.strokeStyle = this.mode === "chase" ? "#ffd166" : "#90be6d";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        const start = this.center();
+        ctx.moveTo(start.x, start.y);
+        for (let i = this.pathIndex; i < this.path.length; i++) {
+          const p = tileCenter(this.path[i].c, this.path[i].r);
+          ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  // Game class
+  class Game {
+    constructor() {
+      this.map = createMap();
+      this.player = new Player(TILE + 8, TILE + 8);
+      this.enemies = [];
+      this.score = 0;
+      this.gameOver = false;
+      this.time = 0;
+      this.spawnEnemies();
+    }
+
+    spawnEnemies() {
+      const enemiesData = [
+        { x: 28 * TILE, y: 2 * TILE, color: "#ff595e", patrol: [{x: 28*TILE, y:2*TILE}, {x: 24*TILE, y:2*TILE}, {x: 24*TILE, y:5*TILE}, {x: 28*TILE, y:5*TILE}] },
+        { x: 2 * TILE, y: 15 * TILE, color: "#f72585", patrol: [{x: 2*TILE, y:15*TILE}, {x: 6*TILE, y:15*TILE}, {x: 6*TILE, y:12*TILE}, {x: 2*TILE, y:12*TILE}] },
+        { x: 26 * TILE, y: 14 * TILE, color: "#ffca3a", patrol: [{x: 26*TILE, y:14*TILE}, {x: 22*TILE, y:14*TILE}, {x: 22*TILE, y:10*TILE}, {x: 26*TILE, y:10*TILE}] }
+      ];
+      this.enemies = enemiesData.map(d => new Enemy(d.x, d.y, d.patrol, d.color));
+    }
+
+    restart() {
+      this.map = createMap();
+      this.player = new Player(TILE + 8, TILE + 8);
+      this.score = 0;
+      this.gameOver = false;
+      this.time = 0;
+      this.spawnEnemies();
+      overlay.classList.remove("show");
+    }
+
+    update(dt) {
+      if (this.gameOver) return;
+
+      this.time += dt;
+      this.score = Math.floor(this.time * 10);
+      this.player.update(dt, this.map);
+
+      for (const enemy of this.enemies) {
+        enemy.update(dt, this.map, this.player);
+        if (dist(
+          this.player.x + this.player.size/2,
+          this.player.y + this.player.size/2,
+          enemy.x + enemy.size/2,
+          enemy.y + enemy.size/2
+        ) < (this.player.size + enemy.size) * 0.45) {
+          this.gameOver = true;
+          finalScore.textContent = `Final Score: ${this.score}`;
+          overlay.classList.add("show");
+        }
+      }
+
+      scoreUI.textContent = `Score: ${this.score}`;
+    }
+
+    draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw map
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const x = c * TILE;
+          const y = r * TILE;
+
+          // Floor
+          ctx.fillStyle = (r + c) % 2 === 0 ? "#232937" : "#202532";
+          ctx.fillRect(x, y, TILE, TILE);
+
+          // Grid lines
+          ctx.strokeStyle = "rgba(255,255,255,0.04)";
+          ctx.strokeRect(x, y, TILE, TILE);
+
+          // Wall
+          if (this.map[r][c] === 1) {
+            ctx.fillStyle = "#3a3f51";
+            ctx.fillRect(x, y, TILE, TILE);
+            ctx.fillStyle = "rgba(255,255,255,0.06)";
+            ctx.fillRect(x + 4, y + 4, TILE - 8, TILE - 8);
+          }
+        }
+      }
+
+      // Draw path lines and entities
+      for (const enemy of this.enemies) enemy.draw(ctx, true);
+      this.player.draw(ctx);
+
+      // Small title
+      ctx.fillStyle = "rgba(255,255,255,0.65)";
+      ctx.font = "14px Arial";
+      ctx.fillText(GAME_TITLE, 12, canvas.height - 12);
+    }
+  }
+
+  // Start game
+  const game = new Game();
+
+  restartBtn.addEventListener("click", () => game.restart());
+
+  // Main loop
+  let last = performance.now();
+  function loop(now) {
+    const dt = Math.min(0.033, (now - last) / 1000);
+    last = now;
+
+    game.update(dt);
+    game.draw();
+
+    requestAnimationFrame(loop);
+  }
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

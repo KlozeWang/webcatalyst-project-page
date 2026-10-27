@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Sky Runner - Aviation Endless Runner</title>
+<style>
+  :root {
+    --primary: #ff6b35;
+    --secondary: #004e89;
+    --accent: #ffd166;
+    --dark: #1a1a2e;
+    --light: #f0f4f8;
+    --font: 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; touch-action: none; user-select: none; }
+  body { overflow: hidden; background: #000; font-family: var(--font); color: var(--light); }
+  #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+  
+  /* UI Overlay Base */
+  .ui-layer {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 10;
+    transition: opacity 0.3s;
+  }
+  .hidden { opacity: 0; pointer-events: none; }
+  
+  /* HUD */
+  #hud {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 5; display: none;
+  }
+  .hud-panel {
+    position: absolute; background: rgba(0,0,0,0.4); padding: 8px 12px;
+    border-radius: 8px; font-weight: bold; font-size: 14px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  #score-panel { top: 20px; left: 20px; }
+  #fuel-panel { top: 20px; right: 20px; }
+  #altitude-panel { bottom: 20px; left: 20px; }
+  #currency-panel { top: 60px; left: 20px; }
+  
+  .bar-container { width: 100px; height: 10px; background: #333; border-radius: 5px; overflow: hidden; margin-top: 4px; }
+  .bar-fill { height: 100%; background: var(--primary); width: 100%; transition: width 0.2s; }
+  
+  /* Menus */
+  .menu-box {
+    background: linear-gradient(135deg, var(--secondary), var(--dark));
+    padding: 30px; border-radius: 16px; text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5); max-width: 90%; width: 320px;
+    border: 2px solid rgba(255,255,255,0.1);
+  }
+  h1 { font-size: 32px; margin-bottom: 10px; color: var(--accent); text-transform: uppercase; letter-spacing: 2px; }
+  h2 { font-size: 24px; margin-bottom: 20px; color: var(--light); }
+  p { margin-bottom: 20px; color: #ccc; line-height: 1.4; }
+  
+  button {
+    background: var(--primary); color: white; border: none; padding: 12px 24px;
+    font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer;
+    margin: 8px; transition: transform 0.1s, background 0.2s; width: 100%;
+    text-transform: uppercase; letter-spacing: 1px;
+  }
+  button:hover { background: #e85a25; transform: scale(1.02); }
+  button:active { transform: scale(0.98); }
+  button.secondary { background: transparent; border: 2px solid var(--accent); color: var(--accent); }
+  
+  /* Shop Grid */
+  .shop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; }
+  .shop-item {
+    background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px;
+    cursor: pointer; border: 2px solid transparent; transition: all 0.2s;
+  }
+  .shop-item.selected { border-color: var(--accent); background: rgba(255,215,100,0.2); }
+  .shop-item.locked { opacity: 0.5; cursor: not-allowed; }
+  .plane-icon { width: 40px; height: 40px; background: #555; margin: 0 auto 5px; border-radius: 50%; }
+  
+  /* Controls Hint */
+  .controls-hint {
+    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.5); padding: 8px 16px; border-radius: 20px;
+    font-size: 12px; color: #aaa; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<div id="game-container"></div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hud-panel" id="score-panel">🏆 <span id="score-val">0</span></div>
+  <div class="hud-panel" id="fuel-panel">⛽ <div class="bar-container"><div class="bar-fill" id="fuel-bar"></div></div></div>
+  <div class="hud-panel" id="altitude-panel">📈 <span id="alt-val">0</span>m</div>
+  <div class="hud-panel" id="currency-panel">🪙 <span id="coin-val">0</span></div>
+  <div class="controls-hint">Swipe: Move | Double Tap/Space: Barrel Roll</div>
+</div>
+
+<!-- Main Menu -->
+<div id="main-menu" class="ui-layer">
+  <div class="menu-box">
+    <h1>Sky Runner</h1>
+    <p>Pilot through the skies, dodge storms, collect fuel & cargo!</p>
+    <button id="btn-play">Take Flight</button>
+    <button id="btn-shop" class="secondary">Hangar / Shop</button>
+  </div>
+</div>
+
+<!-- Shop -->
+<div id="shop-menu" class="ui-layer hidden">
+  <div class="menu-box">
+    <h2>Aircraft Hangar</h2>
+    <div class="shop-grid" id="plane-grid"></div>
+    <p>Currency: 🪙 <span id="shop-coins">0</span></p>
+    <button id="btn-close-shop">Back to Menu</button>
+  </div>
+</div>
+
+<!-- Game Over -->
+<div id="game-over" class="ui-layer hidden">
+  <div class="menu-box">
+    <h2>Flight Terminated</h2>
+    <p>Distance: <span id="go-score">0</span>m</p>
+    <p>Coins Earned: <span id="go-coins">0</span></p>
+    <button id="btn-restart">Retry Flight</button>
+    <button id="btn-menu" class="secondary">Main Menu</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/**
+ * SKY RUNNER - AVIATION ENDLESS RUNNER
+ * Modular Architecture: Game, Player, World, Input, UI, SaveSystem
+ * Target: 60FPS, Mobile/Desktop, Three.js r128
+ */
+
+// ================= CONFIGURATION =================
+const CONFIG = {
+  lanes: [-2.5, 0, 2.5],
+  altitudes: [0, 1.5, 3],
+  laneWidth: 5,
+  altitudeStep: 1.5,
+  playerSpeed: 0.4,
+  maxSpeed: 0.8,
+  spawnDistance: 80,
+  despawnDistance: 20,
+  fuelDrain: 0.8, // per second
+  fuelRestore: 20,
+  obstacleTypes: ['storm', 'bird', 'tower', 'plane'],
+  collectibleTypes: ['fuel', 'cargo', 'prop'],
+  colors: {
+    sky: 0x87CEEB,
+    fog: 0x87CEEB,
+    ground: 0x1a472a,
+    obstacle: 0xff4444,
+    collectible: 0x44ff44
+  }
+};
+
+// ================= SAVE SYSTEM =================
+class SaveSystem {
+  constructor() {
+    this.key = 'skyRunner_v1';
+    this.data = this.load();
+  }
+  load() {
+    const raw = localStorage.getItem(this.key);
+    return raw ? JSON.parse(raw) : {
+      coins: 0,
+      highScore: 0,
+      unlockedPlanes: ['C1'],
+      selectedPlane: 'C1',
+      planes: {
+        'C1': { name: 'Piper Cub', cost: 0, color: 0xff6b35 },
+        'C2': { name: 'SR-71', cost: 100, color: 0x333333 },
+        'C3': { name: 'Jet Star', cost: 250, color: 0x00aaff },
+        'C4': { name: 'Gold Wing', cost: 500, color: 0xffd700 }
+      }
+    };
+  }
+  save() { localStorage.setItem(this.key, JSON.stringify(this.data)); }
+  addCoins(amount) { this.data.coins += amount; this.save(); }
+  unlockPlane(id) { 
+    if(this.data.planes[id] && !this.data.unlockedPlanes.includes(id)) {
+      if(this.data.coins >= this.data.planes[id].cost) {
+        this.data.coins -= this.data.planes[id].cost;
+        this.data.unlockedPlanes.push(id);
+        this.save();
+        return true;
+      }
+    }
+    return false;
+  }
+  selectPlane(id) { if(this.data.unlockedPlanes.includes(id)) { this.data.selectedPlane = id; this.save(); } }
+}
+
+// ================= INPUT HANDLER =================
+class InputHandler {
+  constructor() {
+    this.keys = {};
+    this.swipe = { x: 0, y: 0, active: false, startTime: 0 };
+    this.doubleTap = false;
+    this.lastTap = 0;
+    
+    window.addEventListener('keydown', e => this.keys[e.code] = true);
+    window.addEventListener('keyup', e => this.keys[e.code] = false);
+    
+    document.addEventListener('touchstart', e => {
+      this.swipe.x = e.touches[0].clientX;
+      this.swipe.y = e.touches[0].clientY;
+      this.swipe.active = true;
+      this.swipe.startTime = Date.now();
+    }, {passive: false});
+    
+    document.addEventListener('touchend', e => {
+      if(!this.swipe.active) return;
+      const dx = e.changedTouches[0].clientX - this.swipe.x;
+      const dy = e.changedTouches[0].clientY - this.swipe.y;
+      const dt = Date.now() - this.swipe.startTime;
+      
+      if(Math.abs(dx) > 30 || Math.abs(dy) > 30) {
+        this.swipe.x = dx > 0 ? 1 : -1;
+        this.swipe.y = dy > 0 ? -1 : 1; // Inverted for screen coords
+      } else if(dt < 300) {
+        this.doubleTap = true;
+      }
+      this.swipe.active = false;
+    }, {passive: false});
+  }
+  
+  getLaneInput() {
+    if(this.keys['ArrowLeft'] || this.keys['KeyA'] || this.swipe.x < 0) return -1;
+    if(this.keys['ArrowRight'] || this.keys['KeyD'] || this.swipe.x > 0) return 1;
+    return 0;
+  }
+  
+  getAltInput() {
+    if(this.keys['ArrowUp'] || this.keys['KeyW'] || this.swipe.y > 0) return 1;
+    if(this.keys['ArrowDown'] || this.keys['KeyS'] || this.swipe.y < 0) return -1;
+    return 0;
+  }
+  
+  getRollInput() {
+    if(this.keys['Space']) { this.keys['Space'] = false; return true; }
+    if(this.doubleTap) { this.doubleTap = false; return true; }
+    return false;
+  }
+  
+  reset() { this.swipe = {x:0, y:0, active:false, startTime:0}; this.doubleTap=false; }
+}
+
+// ================= PLAYER CONTROLLER =================
+class Player {
+  constructor(scene) {
+    this.scene = scene;
+    this.mesh = new THREE.Group();
+    this.laneIndex = 1;
+    this.altIndex = 1;
+    this.targetX = CONFIG.lanes[1];
+    this.targetY = CONFIG.altitudes[1];
+    this.currentX = this.targetX;
+    this.currentY = this.targetY;
+    this.speed = 0.15;
+    this.isRolling = false;
+    this.rollAngle = 0;
+    this.shielded = false;
+    this.fuel = 100;
+    this.score = 0;
+    this.distance = 0;
+    this.isDead = false;
+    
+    this.buildMesh();
+    scene.add(this.mesh);
+  }
+  
+  buildMesh() {
+    const planeData = game.save.data.planes[game.save.data.selectedPlane];
+    const color = planeData.color;
+    
+    // Fuselage
+    const body = new THREE.Mesh(
+      new THREE.ConeGeometry(0.3, 1.2, 8),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.6 })
+    );
+    body.rotation.x = Math.PI / 2;
+    this.mesh.add(body);
+    
+    // Wings
+    const wings = new THREE.Mesh(
+      new THREE.BoxGeometry(2.2, 0.05, 0.6),
+      new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.3 })
+    );
+    wings.position.z = 0.1;
+    this.mesh.add(wings);
+    
+    // Tail
+    const tail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, 0.05, 0.4),
+      new THREE.MeshStandardMaterial({ color: 0xdddddd })
+    );
+    tail.position.z = 0.5;
+    this.mesh.add(tail);
+    
+    const rudder = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.5, 0.3),
+      new THREE.MeshStandardMaterial({ color: 0xdddddd })
+    );
+    rudder.position.set(0, 0.2, 0.5);
+    this.mesh.add(rudder);
+    
+    // Engine glow
+    const glow = new THREE.PointLight(0xffaa00, 1, 3);
+    glow.position.z = 0.6;
+    this.mesh.add(glow);
+    
+    this.mesh.position.set(this.targetX, this.targetY, 0);
+  }
+  
+  update(dt, input) {
+    if(this.isDead) return;
+    
+    // Lane switching
+    const laneDelta = input.getLaneInput();
+    if(laneDelta !== 0) {
+      this.laneIndex = Math.max(0, Math.min(2, this.laneIndex + laneDelta));
+      this.targetX = CONFIG.lanes[this.laneIndex];
+      input.keys['ArrowLeft'] = false; input.keys['ArrowRight'] = false;
+      input.keys['KeyA'] = false; input.keys['KeyD'] = false;
+    }
+    
+    // Altitude switching
+    const altDelta = input.getAltInput();
+    if(altDelta !== 0) {
+      this.altIndex = Math.max(0, Math.min(2, this.altIndex + altDelta));
+      this.targetY = CONFIG.altitudes[this.altIndex];
+      input.keys['ArrowUp'] = false; input.keys['ArrowDown'] = false;
+      input.keys['KeyW'] = false; input.keys['KeyS'] = false;
+    }
+    
+    // Smooth movement
+    this.currentX += (this.targetX - this.currentX) * this.speed * dt * 60;
+    this.currentY += (this.targetY - this.currentY) * this.speed * dt * 60;
+    this.mesh.position.x = this.currentX;
+    this.mesh.position.y = this.currentY;
+    
+    // Banking effect
+    const bankTarget = -laneDelta * 0.4;
+    this.mesh.rotation.z += (bankTarget - this.mesh.rotation.z) * 0.1;
+    
+    // Barrel Roll
+    if(input.getRollInput() && !this.isRolling) {
+      this.isRolling = true;
+      this.shielded = true;
+      this.rollTimer = 0;
+    }
+    
+    if(this.isRolling) {
+      this.rollTimer += dt;
+      this.mesh.rotation.z += 15 * dt;
+      if(this.rollTimer > 0.6) {
+        this.isRolling = false;
+        this.shielded = false;
+        this.mesh.rotation.z = 0;
+      }
+    }
+    
+    // Fuel & Distance
+    this.fuel -= CONFIG.fuelDrain * dt;
+    this.distance += CONFIG.playerSpeed * dt * 10;
+    this.score = Math.floor(this.distance);
+    
+    if(this.fuel <= 0) game.gameOver();
+  }
+  
+  reset() {
+    this.laneIndex = 1; this.altIndex = 1;
+    this.targetX = CONFIG.lanes[1]; this.targetY = CONFIG.altitudes[1];
+    this.currentX = this.targetX; this.currentY = this.targetY;
+    this.fuel = 100; this.distance = 0; this.score = 0;
+    this.isDead = false; this.isRolling = false; this.shielded = false;
+    this.mesh.rotation.set(0,0,0);
+    this.mesh.position.set(this.targetX, this.targetY, 0);
+  }
+}
+
+// ================= WORLD & SPAWNER =================
+class World {
+  constructor(scene) {
+    this.scene = scene;
+    this.obstacles = [];
+    this.collectibles = [];
+    this.spawnTimer = 0;
+    this.spawnInterval = 1.2;
+    this.speedMultiplier = 1;
+    this.dayTime = 0;
+    
+    // Object Pooling setup
+    this.poolObstacles = [];
+    this.poolCollectibles = [];
+    
+    this.createPool();
+    this.skyColor = new THREE.Color(CONFIG.colors.sky);
+    this.fogColor = new THREE.Color(CONFIG.colors.fog);
+  }
+  
+  createPool() {
+    // Obstacles
+    for(let i=0; i<20; i++) {
+      const mesh = this.createObstacleMesh();
+      mesh.visible = false;
+      this.scene.add(mesh);
+      this.poolObstacles.push({ mesh, active: false });
+    }
+    // Collectibles
+    for(let i=0; i<30; i++) {
+      const mesh = this.createCollectibleMesh();
+      mesh.visible = false;
+      this.scene.add(mesh);
+      this.poolCollectibles.push({ mesh, active: false });
+    }
+  }
+  
+  createObstacleMesh() {
+    const group = new THREE.Group();
+    const type = CONFIG.obstacleTypes[Math.floor(Math.random() * CONFIG.obstacleTypes.length)];
+    const mat = new THREE.MeshStandardMaterial({ color: 0xcc3333, roughness: 0.7 });
+    
+    if(type === 'storm') {
+      group.add(new THREE.Mesh(new THREE.DodecahedronGeometry(1.2, 0), new THREE.MeshStandardMaterial({ color: 0x6666aa, transparent:true, opacity:0.8 })));
+    } else if(type === 'bird') {
+      group.add(new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.6, 4), mat));
+      group.add(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.05, 0.2), mat));
+    } else if(type === 'tower') {
+      group.add(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 2, 6), mat));
+      const top = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.5, 6), mat);
+      top.position.y = 1.25;
+      group.add(top);
+    } else {
+      // Enemy plane
+      group.add(new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.3, 0.8), mat));
+      group.add(new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.6, 4), mat));
+    }
+    return group;
+  }
+  
+  createCollectibleMesh() {
+    const group = new THREE.Group();
+    const type = CONFIG.collectibleTypes[Math.floor(Math.random() * CONFIG.collectibleTypes.length)];
+    const mat = new THREE.MeshStandardMaterial({ color: 0x44ff88, emissive: 0x22aa44, emissiveIntensity: 0.5 });
+    
+    if(type === 'fuel') {
+      group.add(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.6, 8), mat));
+      const label = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.61), new THREE.MeshBasicMaterial({color:0xff0000}));
+      group.add(label);
+    } else if(type === 'cargo') {
+      group.add(new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), new THREE.MeshStandardMaterial({ color: 0x885522 })));
+    } else {
+      group.add(new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.1, 8, 16), new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.8, roughness: 0.2 })));
+    }
+    return group;
+  }
+  
+  update(dt, player) {
+    if(player.isDead) return;
+    
+    this.dayTime += dt * 0.05;
+    const dayFactor = (Math.sin(this.dayTime) + 1) / 2; // 0 to 1
+    this.skyColor.lerpColors(new THREE.Color(0x000022), new THREE.Color(0x87CEEB), dayFactor);
+    this.fogColor.copy(this.skyColor);
+    game.scene.background = this.skyColor;
+    game.scene.fog.color = this.fogColor;
+    
+    this.speedMultiplier = 1 + (player.distance / 5000);
+    const moveSpeed = CONFIG.playerSpeed * this.speedMultiplier * dt * 60;
+    
+    // Spawn logic
+    this.spawnTimer -= dt;
+    if(this.spawnTimer <= 0) {
+      this.spawnRow();
+      this.spawnTimer = this.spawnInterval / this.speedMultiplier;
+    }
+    
+    // Move & check objects
+    [...this.poolObstacles, ...this.poolCollectibles].forEach(obj => {
+      if(!obj.active) return;
+      obj.mesh.position.z += moveSpeed;
+      obj.mesh.rotation.y += dt * 2;
+      
+      if(obj.mesh.position.z > CONFIG.despawnDistance) {
+        obj.active = false;
+        obj.mesh.visible = false;
+      }
+    });
+  }
+  
+  spawnRow() {
+    const laneCount = 3;
+    const rowZ = -CONFIG.spawnDistance;
+    const types = [...CONFIG.obstacleTypes, ...CONFIG.collectibleTypes];
+    
+    for(let i=0; i<laneCount; i++) {
+      const type = types[Math.floor(Math.random() * types.length)];
+      const x = CONFIG.lanes[i];
+      const y = CONFIG.altitudes[Math.floor(Math.random() * 3)];
+      
+      if(CONFIG.obstacleTypes.includes(type)) {
+        this.activateObstacle(x, y, rowZ, type);
+      } else {
+        this.activateCollectible(x, y, rowZ, type);
+      }
+    }
+  }
+  
+  activateObstacle(x, y, z, type) {
+    const obj = this.poolObstacles.find(o => !o.active);
+    if(!obj) return;
+    obj.active = true;
+    obj.mesh.visible = true;
+    obj.mesh.position.set(x, y, z);
+    obj.type = type;
+    obj.radius = type === 'storm' ? 1.2 : 0.8;
+  }
+  
+  activateCollectible(x, y, z, type) {
+    const obj = this.poolCollectibles.find(o => !o.active);
+    if(!obj) return;
+    obj.active = true;
+    obj.mesh.visible = true;
+    obj.mesh.position.set(x, y, z);
+    obj.type = type;
+    obj.radius = 0.6;
+  }
+  
+  reset() {
+    [...this.poolObstacles, ...this.poolCollectibles].forEach(o => {
+      o.active = false; o.mesh.visible = false; o.mesh.position.z = -CONFIG.spawnDistance;
+    });
+    this.spawnTimer = 0;
+    this.speedMultiplier = 1;
+  }
+}
+
+// ================= COLLISION MANAGER =================
+class CollisionManager {
+  constructor() {
+    this.player = null;
+    this.world = null;
+  }
+  
+  setRefs(player, world) {
+    this.player = player;
+    this.world = world;
+  }
+  
+  check() {
+    if(this.player.isDead) return;
+    
+    const pPos = this.player.mesh.position;
+    const pRadius = 0.8;
+    
+    // Check obstacles
+    this.world.poolObstacles.forEach(obj => {
+      if(!obj.active) return;
+      const dist = pPos.distanceTo(obj.mesh.position);
+      if(dist < pRadius + obj.radius) {
+        if(this.player.shielded) {
+          obj.active = false; obj.mesh.visible = false;
+          this.player.shielded = false;
+          this.player.mesh.rotation.z = 0;
+        } else {
+          this.player.fuel -= 30;
+          obj.active = false; obj.mesh.visible = false;
+          // Screen shake effect placeholder
+        }
+      }
+    });
+    
+    // Check collectibles
+    this.world.poolCollectibles.forEach(obj => {
+      if(!obj.active) return;
+      const dist = pPos.distanceTo(obj.mesh.position);
+      if(dist < pRadius + obj.radius) {
+        obj.active = false; obj.mesh.visible = false;
+        if(obj.type === 'fuel') {
+          this.player.fuel = Math.min(100, this.player.fuel + CONFIG.fuelRestore);
+        } else if(obj.type === 'cargo') {
+          this.player.score += 500;
+          game.save.addCoins(5);
+        } else if(obj.type === 'prop') {
+          game.save.addCoins(10);
+        }
+      }
+    });
+  }
+}
+
+// ================= UI MANAGER =================
+class UIManager {
+  constructor() {
+    this.hud = document.getElementById('hud');
+    this.menu = document.getElementById('main-menu');
+    this.shop = document.getElementById('shop-menu');
+    this.gameOver = document.getElementById('game-over');
+    
+    this.scoreEl = document.getElementById('score-val');
+    this.fuelBar = document.getElementById('fuel-bar');
+    this.altEl = document.getElementById('alt-val');
+    this.coinEl = document.getElementById('coin-val');
+    
+    this.goScore = document.getElementById('go-score');
+    this.goCoins = document.getElementById('go-coins');
+    this.shopCoins = document.getElementById('shop-coins');
+    
+    this.bindEvents();
+  }
+  
+  bindEvents() {
+    document.getElementById('btn-play').onclick = () => game.start();
+    document.getElementById('btn-shop').onclick = () => this.openShop();
+    document.getElementById('btn-close-shop').onclick = () => this.closeShop();
+    document.getElementById('btn-restart').onclick = () => game.start();
+    document.getElementById('btn-menu').onclick = () => { this.showMenu(); game.state = 'MENU'; };
+    
+    // Shop grid generation
+    const grid = document.getElementById('plane-grid');
+    grid.innerHTML = '';
+    Object.entries(game.save.data.planes).forEach(([id, data]) => {
+      const div = document.createElement('div');
+      div.className = `shop-item ${game.save.data.unlockedPlanes.includes(id) ? '' : 'locked'} ${game.save.data.selectedPlane === id ? 'selected' : ''}`;
+      div.innerHTML = `<div class="plane-icon" style="background:#${data.color.toString(16).padStart(6,'0')}"></div><div>${data.name}</div><div>${game.save.data.unlockedPlanes.includes(id) ? 'Owned' : data.cost + ' 🪙'}</div>`;
+      div.onclick = () => {
+        if(game.save.data.unlockedPlanes.includes(id)) {
+          game.save.selectPlane(id);
+          this.openShop(); // refresh
+        } else {
+          if(game.save.unlockPlane(id)) {
+            this.openShop();
+          } else {
+            alert('Not enough coins!');
+          }
+        }
+      };
+      grid.appendChild(div);
+    });
+    this.shopCoins.textContent = game.save.data.coins;
+  }
+  
+  showMenu() { this.menu.classList.remove('hidden'); this.hud.style.display = 'none'; this.gameOver.classList.add('hidden'); this.shop.classList.add('hidden'); }
+  showHUD() { this.menu.classList.add('hidden'); this.gameOver.classList.add('hidden'); this.shop.classList.add('hidden'); this.hud.style.display = 'block'; }
+  showGameOver() { this.hud.style.display = 'none'; this.gameOver.classList.remove('hidden'); }
+  openShop() { this.menu.classList.add('hidden'); this.shop.classList.remove('hidden'); this.bindEvents(); }
+  closeShop() { this.showMenu(); }
+  
+  update(player) {
+    this.scoreEl.textContent = Math.floor(player.distance);
+    this.fuelBar.style.width = `${Math.max(0, player.fuel)}%`;
+    this.fuelBar.style.background = player.fuel < 30 ? '#ff3333' : '#ff6b35';
+    this.altEl.textContent = Math.floor(player.currentY * 100);
+    this.coinEl.textContent = game.save.data.coins;
+  }
+  
+  showGameOverScreen(player) {
+    this.goScore.textContent = Math.floor(player.distance);
+    this.goCoins.textContent = game.save.data.coins;
+    this.showGameOver();
+  }
+}
+
+// ================= MAIN GAME CLASS =================
+class Game {
+  constructor() {
+    this.container = document.getElementById('game-container');
+    this.state = 'MENU'; // MENU, PLAYING, GAMEOVER
+    this.save = new SaveSystem();
+    this.ui = new UIManager();
+    this.input = new InputHandler();
+    
+    // Three.js Setup
+    this.scene = new THREE.Scene();
+    this.scene.fog = new THREE.Fog(CONFIG.colors.fog, 20, 90);
+    this.scene.background = new THREE.Color(CONFIG.colors.sky);
+    
+    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+    this.camera.position.set(0, 5, 12);
+    this.camera.lookAt(0, 1, 0);
+    
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.shadowMap.enabled = true;
+    this.container.appendChild(this.renderer.domElement);
+    
+    // Lighting
+    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+    this.scene.add(ambient);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(10, 20, 10);
+    dirLight.castShadow = true;
+    this.scene.add(dirLight);
+    
+    // Ground plane (visual reference)
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(200, 200),
+      new THREE.MeshStandardMaterial({ color: CONFIG.colors.ground, roughness: 0.9 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -2;
+    this.scene.add(ground);
+    
+    // Systems
+    this.player = new Player(this.scene);
+    this.world = new World(this.scene);
+    this.collision = new CollisionManager();
+    this.collision.setRefs(this.player, this.world);
+    
+    // Resize handler
+    window.addEventListener('resize', () => {
+      this.camera.aspect = window.innerWidth / window.innerHeight;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    
+    this.lastTime = performance.now();
+    this.animate = this.animate.bind(this);
+    requestAnimationFrame(this.animate);
+  }
+  
+  start() {
+    this.state = 'PLAYING';
+    this.player.reset();
+    this.world.reset();
+    this.input.reset();
+    this.ui.showHUD();
+  }
+  
+  gameOver() {
+    this.state = 'GAMEOVER';
+    this.player.isDead = true;
+    this.ui.showGameOverScreen(this.player);
+    game.save.save();
+  }
+  
+  animate() {
+    requestAnimationFrame(this.animate);
+    
+    const now = performance.now();
+    const dt = Math.min((now - this.lastTime) / 1000, 0.1); // Cap dt
+    this.lastTime = now;
+    
+    if(this.state === 'PLAYING') {
+      this.player.update(dt, this.input);
+      this.world.update(dt, this.player);
+      this.collision.check();
+      this.ui.update(this.player);
+    }
+    
+    this.renderer.render(this.scene, this.camera);
+  }
+}
+
+// Initialize
+let game;
+window.addEventListener('DOMContentLoaded', () => {
+  game = new Game();
+  game.ui.showMenu();
+});
+</script>
+</body>
+</html>

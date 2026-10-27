@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Eldoria: The Sacred Crystals</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Georgia',serif}
+body{background:#000;overflow:hidden;color:#fff;user-select:none}
+#game{position:relative;width:100vw;height:100vh;overflow:hidden;background:linear-gradient(180deg,#1a0033 0%,#330055 50%,#1a0022 100%)}
+canvas{display:block;position:absolute;top:0;left:0}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:20px;z-index:10;background:radial-gradient(circle,rgba(50,0,80,0.85),rgba(0,0,0,0.95))}
+h1{font-size:clamp(28px,5vw,56px);color:#ffd700;text-shadow:0 0 20px #ff00ff,0 0 40px #8800ff;margin-bottom:20px;letter-spacing:3px}
+p{max-width:700px;font-size:clamp(14px,2vw,18px);line-height:1.6;margin-bottom:15px;color:#e0d0ff}
+button{margin-top:20px;padding:14px 40px;font-size:20px;background:linear-gradient(45deg,#8800ff,#ff00aa);color:#fff;border:2px solid #ffd700;border-radius:30px;cursor:pointer;font-weight:bold;letter-spacing:2px;box-shadow:0 0 20px #ff00ff;transition:.2s}
+button:hover{transform:scale(1.08);box-shadow:0 0 40px #ffd700}
+#hud{position:absolute;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;z-index:5;pointer-events:none;text-shadow:2px 2px 4px #000}
+#hud div{background:rgba(0,0,0,0.5);padding:8px 14px;border-radius:10px;border:1px solid #ffd700;font-size:18px}
+.hidden{display:none!important}
+#controls{position:absolute;bottom:10px;left:10px;color:#aaa;font-size:13px;text-shadow:1px 1px 2px #000;z-index:5}
+.crystal-icon{display:inline-block;color:#0ff;font-size:22px;animation:glow 1s infinite alternate}
+@keyframes glow{from{text-shadow:0 0 5px #0ff}to{text-shadow:0 0 20px #0ff,0 0 30px #fff}}
+#mobile{position:absolute;bottom:20px;width:100%;display:none;justify-content:space-between;padding:0 30px;z-index:6}
+.btn-m{width:60px;height:60px;background:rgba(255,215,0,0.3);border:2px solid #ffd700;border-radius:50%;color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;touch-action:none}
+@media(max-width:768px){#mobile{display:flex}}
+.story{font-style:italic;color:#ffcc88}
+</style>
+</head>
+<body>
+<div id="game">
+<canvas id="c"></canvas>
+<div id="hud" class="hidden">
+  <div>❤️ Lives: <span id="lives">3</span></div>
+  <div><span class="crystal-icon">💎</span> <span id="crystals">0</span>/5</div>
+  <div>⭐ Score: <span id="score">0</span></div>
+</div>
+<div id="controls" class="hidden">← → Move | ↑/SPACE Jump | Z Attack</div>
+
+<div id="startScreen" class="overlay">
+  <h1>⚔ ELDORIA ⚔</h1>
+  <h2 style="color:#ff6688;margin-bottom:15px">The Sacred Crystals</h2>
+  <p class="story">Long ago, the peaceful kingdom of Eldoria fell to the Dark Lord Vexar. Before the kingdom was destroyed, ancient guardians hid five Sacred Crystals across the land...</p>
+  <p class="story">You are the last hero. Collect all 5 Sacred Crystals, defeat Vexar's minions, and restore the light to Eldoria!</p>
+  <button onclick="startGame()">BEGIN QUEST</button>
+</div>
+
+<div id="endScreen" class="overlay hidden">
+  <h1 id="endTitle">VICTORY!</h1>
+  <p id="endMsg" class="story"></p>
+  <p>Final Score: <span id="finalScore" style="color:#ffd700;font-size:24px"></span></p>
+  <button onclick="startGame()">PLAY AGAIN</button>
+</div>
+
+<div id="mobile">
+  <div style="display:flex;gap:10px">
+    <div class="btn-m" id="mL">◀</div>
+    <div class="btn-m" id="mR">▶</div>
+  </div>
+  <div style="display:flex;gap:10px">
+    <div class="btn-m" id="mA">⚔</div>
+    <div class="btn-m" id="mJ">⤴</div>
+  </div>
+</div>
+</div>
+
+<script>
+const cvs=document.getElementById('c'),ctx=cvs.getContext('2d');
+let W,H;function resize(){W=cvs.width=innerWidth;H=cvs.height=innerHeight}resize();onresize=resize;
+
+const AC=window.AudioContext||window.webkitAudioContext;let actx;
+function beep(f,d,t='square',v=.1){if(!actx)actx=new AC();const o=actx.createOscillator(),g=actx.createGain();o.type=t;o.frequency.value=f;g.gain.value=v;o.connect(g);g.connect(actx.destination);o.start();g.gain.exponentialRampToValueAtTime(0.001,actx.currentTime+d);o.stop(actx.currentTime+d);}
+
+let keys={},player,enemies,crystals,platforms,particles,camX,gameState,stars;
+
+function initLevel(){
+  player={x:100,y:300,vx:0,vy:0,w:30,h:40,onGround:false,facing:1,attackT:0,invuln:0,lives:3,crystals:0,score:0};
+  platforms=[
+    {x:0,y:H-60,w:600,h:60},
+    {x:700,y:H-60,w:400,h:60},
+    {x:1200,y:H-60,w:500,h:60},
+    {x:1800,y:H-60,w:600,h:60},
+    {x:2500,y:H-60,w:800,h:60},
+    {x:400,y:H-180,w:150,h:20},
+    {x:650,y:H-280,w:120,h:20},
+    {x:900,y:H-200,w:150,h:20},
+    {x:1300,y:H-220,w:140,h:20},
+    {x:1550,y:H-320,w:130,h:20},
+    {x:1900,y:H-180,w:150,h:20},
+    {x:2200,y:H-280,w:150,h:20},
+    {x:2700,y:H-200,w:200,h:20},
+    {x:3000,y:H-300,w:150,h:20},
+  ];
+  crystals=[
+    {x:460,y:H-220,c:0},
+    {x:710,y:H-320,c:1},
+    {x:1610,y:H-360,c:2},
+    {x:2270,y:H-320,c:3},
+    {x:3070,y:H-340,c:4},
+  ];
+  enemies=[
+    {x:800,y:H-100,vx:1,minX:720,maxX:1080,hp:1,alive:true},
+    {x:1400,y:H-100,vx:1.2,minX:1220,maxX:1680,hp:1,alive:true},
+    {x:2000,y:H-100,vx:1,minX:1820,maxX:2380,hp:1,alive:true},
+    {x:2700,y:H-100,vx:1.5,minX:2520,maxX:3280,hp:2,alive:true},
+    {x:3150,y:H-340,vx:.8,minX:3020,maxX:3140,hp:1,alive:true},
+  ];
+  particles=[];
+  stars=[];for(let i=0;i<80;i++)stars.push({x:Math.random()*3400,y:Math.random()*H*.6,r:Math.random()*1.5+.3});
+  camX=0;
+}
+
+function startGame(){
+  initLevel();gameState='play';
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('endScreen').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('controls').classList.remove('hidden');
+  updateHUD();
+}
+
+function updateHUD(){
+  document.getElementById('lives').textContent=player.lives;
+  document.getElementById('crystals').textContent=player.crystals;
+  document.getElementById('score').textContent=player.score;
+}
+
+function endGame(win){
+  gameState='end';
+  document.getElementById('endScreen').classList.remove('hidden');
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('controls').classList.add('hidden');
+  document.getElementById('endTitle').textContent=win?'⭐ ELDORIA RESTORED! ⭐':'💀 DARKNESS PREVAILS 💀';
+  document.getElementById('endTitle').style.color=win?'#ffd700':'#ff3366';
+  document.getElementById('endMsg').textContent=win?'The Sacred Crystals shine once more! Light returns to the kingdom, and Dark Lord Vexar is banished forever. You are the hero of legend!':'The hero has fallen... but hope is not lost. Rise again, champion!';
+  document.getElementById('finalScore').textContent=player.score;
+}
+
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))e.preventDefault()});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false});
+
+function setBtn(id,k){const el=document.getElementById(id);['touchstart','mousedown'].forEach(ev=>el.addEventListener(ev,e=>{e.preventDefault();keys[k]=true}));['touchend','mouseup','mouseleave','touchcancel'].forEach(ev=>el.addEventListener(ev,e=>{e.preventDefault();keys[k]=false}))}
+setBtn('mL','arrowleft');setBtn('mR','arrowright');setBtn('mJ',' ');setBtn('mA','z');
+
+function spawnParticles(x,y,col,n=10){for(let i=0;i<n;i++)particles.push({x,y,vx:(Math.random()-.5)*6,vy:(Math.random()-.5)*6-2,life:30,col})}
+
+const CRYSTAL_COLORS=['#ff3366','#33ff66','#3399ff','#ffcc00','#cc33ff'];
+
+function update(){
+  if(gameState!=='play')return;
+  
+  // Input
+  if(keys['arrowleft']||keys['a']){player.vx=-5;player.facing=-1}
+  else if(keys['arrowright']||keys['d']){player.vx=5;player.facing=1}
+  else player.vx*=.8;
+  
+  if((keys[' ']||keys['arrowup']||keys['w'])&&player.onGround){player.vy=-14;player.onGround=false;beep(400,.1,'square',.08)}
+  
+  if(keys['z']&&player.attackT<=0){player.attackT=15;beep(600,.08,'sawtooth',.1)}
+  if(player.attackT>0)player.attackT--;
+  
+  // Physics
+  player.vy+=.7;if(player.vy>15)player.vy=15;
+  player.x+=player.vx;player.y+=player.vy;
+  
+  player.onGround=false;
+  for(const p of platforms){
+    if(player.x+player.w>p.x&&player.x<p.x+p.w&&player.y+player.h>p.y&&player.y+player.h<p.y+p.h+20&&player.vy>=0){
+      player.y=p.y-player.h;player.vy=0;player.onGround=true;
+    }
+  }
+  if(player.x<0)player.x=0;
+  if(player.y>H){player.lives--;player.invuln=60;if(player.lives<=0)return endGame(false);player.x=100;player.y=200;player.vy=0;updateHUD()}
+  
+  if(player.invuln>0)player.invuln--;
+  
+  // Camera
+  camX=Math.max(0,Math.min(player.x-W/2,3400-W));
+  
+  // Crystals
+  crystals=crystals.filter(c=>{
+    if(Math.abs(c.x-player.x-15)<30&&Math.abs(c.y-player.y-20)<35){
+      player.crystals++;player.score+=500;spawnParticles(c.x,c.y,CRYSTAL_COLORS[c.c],20);beep(800,.2,'sine',.15);setTimeout(()=>beep(1200,.2,'sine',.15),100);updateHUD();
+      if(player.crystals>=5)endGame(true);
+      return false;
+    }return true;
+  });
+  
+  // Enemies
+  for(const e of enemies){
+    if(!e.alive)continue;
+    e.x+=e.vx;if(e.x<e.minX||e.x>e.maxX)e.vx*=-1;
+    if(Math.abs(e.x-player.x-15)<30&&Math.abs(e.y-player.y-20)<35){
+      if(player.attackT>10){
+        e.hp--;e.x+=player.facing*20;spawnParticles(e.x,e.y,'#ff3366',8);beep(200,.15,'sawtooth',.1);
+        if(e.hp<=0){e.alive=false;player.score+=100;updateHUD();spawnParticles(e.x,e.y,'#ff00ff',15)}
+      }else if(player.invuln<=0){
+        player.lives--;player.invuln=90;player.vy=-8;player.vx=-player.facing*8;beep(150,.3,'sawtooth',.15);
+        if(player.lives<=0)return endGame(false);
+        updateHUD();
+      }
+    }
+  }
+  
+  // Particles
+  particles=particles.filter(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.2;p.life--;return p.life>0});
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  
+  // Stars
+  ctx.fillStyle='#fff';
+  for(const s of stars){const sx=s.x-camX*.3;if(sx>-5&&sx<W+5){ctx.globalAlpha=.5+Math.sin(Date.now()*.001+s.x)*.3;ctx.beginPath();ctx.arc(sx,s.y,s.r,0,7);ctx.fill()}}
+  ctx.globalAlpha=1;
+  
+  // Distant castle silhouette
+  ctx.fillStyle='rgba(20,0,40,.7)';
+  const mx=-camX*.5;
+  for(let i=0;i<8;i++){const x=mx+i*500;ctx.fillRect(x,H-300,80,250);ctx.fillRect(x+30,H-340,30,40)}
+  
+  ctx.save();ctx.translate(-camX,0);
+  
+  // Platforms
+  for(const p of platforms){
+    const grad=ctx.createLinearGradient(0,p.y,0,p.y+p.h);
+    grad.addColorStop(0,'#4a2c5a');grad.addColorStop(1,'#1a0a2a');
+    ctx.fillStyle=grad;ctx.fillRect(p.x,p.y,p.w,p.h);
+    ctx.fillStyle='#6a3c7a';ctx.fillRect(p.x,p.y,p.w,4);
+  }
+  
+  // Crystals
+  for(const c of crystals){
+    const t=Date.now()*.003;const y=c.y+Math.sin(t+c.x)*5;
+    ctx.save();ctx.translate(c.x,y);ctx.rotate(t*.5);
+    ctx.shadowBlur=20;ctx.shadowColor=CRYSTAL_COLORS[c.c];
+    ctx.fillStyle=CRYSTAL_COLORS[c.c];
+    ctx.beginPath();ctx.moveTo(0,-15);ctx.lineTo(10,0);ctx.lineTo(0,15);ctx.lineTo(-10,0);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#fff';ctx.globalAlpha=.6;ctx.beginPath();ctx.moveTo(0,-15);ctx.lineTo(5,-2);ctx.lineTo(0,0);ctx.closePath();ctx.fill();
+    ctx.restore();
+  }
+  
+  // Enemies
+  for(const e of enemies){
+    if(!e.alive)continue;
+    ctx.fillStyle='#330011';ctx.fillRect(e.x,e.y,30,40);
+    ctx.fillStyle='#ff0033';ctx.fillRect(e.x+5,e.y+8,6,6);ctx.fillRect(e.x+19,e.y+8,6,6);
+    ctx.fillStyle='#660022';ctx.fillRect(e.x-3,e.y-8,36,10);
+    // horns
+    ctx.fillStyle='#000';ctx.beginPath();ctx.moveTo(e.x,e.y-8);ctx.lineTo(e.x-5,e.y-18);ctx.lineTo(e.x+5,e.y-8);ctx.fill();
+    ctx.beginPath();ctx.moveTo(e.x+25,e.y-8);ctx.lineTo(e.x+35,e.y-18);ctx.lineTo(e.x+20,e.y-8);ctx.fill();
+  }
+  
+  // Player
+  if(!(player.invuln>0&&Math.floor(Date.now()/80)%2)){
+    // body
+    ctx.fillStyle='#3366cc';ctx.fillRect(player.x+5,player.y+15,20,25);
+    // head
+    ctx.fillStyle='#ffd1a1';ctx.fillRect(player.x+8,player.y,14,15);
+    // helmet
+    ctx.fillStyle='#ffcc00';ctx.fillRect(player.x+6,player.y-3,18,6);
+    // eyes
+    ctx.fillStyle='#000';ctx.fillRect(player.x+10+(player.facing>0?2:0),player.y+6,2,2);ctx.fillRect(player.x+16+(player.facing>0?2:0),player.y+6,2,2);
+    // legs
+    ctx.fillStyle='#222266';ctx.fillRect(player.x+6,player.y+35,8,5);ctx.fillRect(player.x+16,player.y+35,8,5);
+    // sword
+    if(player.attackT>0){
+      ctx.fillStyle='#fff';ctx.shadowBlur=15;ctx.shadowColor='#0ff';
+      const sx=player.facing>0?player.x+30:player.x-25;
+      ctx.fillRect(sx,player.y+10,25,5);
+      ctx.shadowBlur=0;
+    }else{
+      ctx.fillStyle='#aaa';const sx=player.facing>0?player.x+25:player.x-5;
+      ctx.fillRect(sx,player.y+18,5,15);
+    }
+  }
+  
+  // Particles
+  for(const p of particles){ctx.fillStyle=p.col;ctx.globalAlpha=p.life/30;ctx.fillRect(p.x,p.y,4,4)}ctx.globalAlpha=1;
+  
+  ctx.restore();
+}
+
+function loop(){update();draw();requestAnimationFrame(loop)}
+gameState='menu';loop();
+</script>
+</body>
+</html>

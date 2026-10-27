@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Packet Stream - Remote Desktop Game</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0a0e27; color:#0ff; font-family:'Courier New',monospace; overflow:hidden; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  h1 { font-size:clamp(20px,4vw,32px); margin-bottom:10px; text-shadow:0 0 10px #0ff; }
+  #hud { display:flex; gap:20px; margin-bottom:10px; font-size:14px; flex-wrap:wrap; justify-content:center; }
+  .stat { background:#111a3a; padding:6px 12px; border:1px solid #0ff; border-radius:4px; }
+  #game { display:flex; gap:20px; align-items:center; }
+  .device { width:clamp(120px,20vw,180px); height:clamp(200px,32vw,300px); border:3px solid #0ff; border-radius:15px; background:#000; position:relative; overflow:hidden; box-shadow:0 0 20px #0ff5; }
+  .device.tv { width:clamp(220px,35vw,340px); height:clamp(150px,22vw,210px); border-radius:8px; border-color:#f0f; box-shadow:0 0 20px #f0f5; }
+  .label { position:absolute; top:-22px; left:50%; transform:translateX(-50%); font-size:12px; color:#fff; white-space:nowrap; }
+  #cable { width:clamp(40px,8vw,80px); height:4px; background:linear-gradient(90deg,#0ff,#f0f); position:relative; overflow:hidden; }
+  .packet { position:absolute; width:14px; height:14px; border-radius:50%; top:-5px; box-shadow:0 0 8px currentColor; }
+  canvas { display:block; width:100%; height:100%; background:#001; }
+  #controls { margin-top:15px; text-align:center; font-size:13px; opacity:.8; }
+  #msg { margin-top:10px; font-size:18px; color:#ff0; min-height:24px; text-align:center; }
+  button { background:#0ff; color:#000; border:none; padding:10px 24px; font-family:inherit; font-weight:bold; cursor:pointer; border-radius:4px; font-size:16px; margin:5px; }
+  button:hover { background:#fff; box-shadow:0 0 15px #0ff; }
+  #overlay { position:fixed; inset:0; background:#0a0e27ee; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:10; padding:20px; text-align:center; }
+  #overlay.hidden { display:none; }
+  .bar { width:120px; height:8px; background:#222; border-radius:4px; overflow:hidden; display:inline-block; vertical-align:middle; margin-left:6px; }
+  .bar > div { height:100%; background:linear-gradient(90deg,#0f0,#ff0,#f00); transition:width .2s; }
+</style>
+</head>
+<body>
+
+<div id="overlay">
+  <h1>📱➡️📺 PACKET STREAM</h1>
+  <p style="max-width:500px; margin:15px; line-height:1.6;">
+    You're a Remote Desktop engineer! Route data packets from the Mobile to the TV.
+    Catch <span style="color:#0ff">cyan video packets</span> (stream) with <b>A</b> key or click LEFT.<br>
+    Catch <span style="color:#f0f">magenta input packets</span> (remote control) with <b>L</b> key or click RIGHT.<br>
+    Miss packets = dropped frames = lag! Survive 60 seconds.
+  </p>
+  <button onclick="startGame()">▶ CONNECT</button>
+</div>
+
+<h1>📱 ⟷ 📺 Packet Stream Relay</h1>
+<div id="hud">
+  <div class="stat">📱 CPU: <span id="mcpu">0</span>% <span class="bar"><div id="mbar" style="width:0"></div></span></div>
+  <div class="stat">📺 CPU: <span id="tcpu">0</span>% <span class="bar"><div id="tbar" style="width:0"></div></span></div>
+  <div class="stat">⏱ <span id="time">60</span>s</div>
+  <div class="stat">🏆 <span id="score">0</span></div>
+  <div class="stat">💔 <span id="drops">0</span>/10</div>
+</div>
+
+<div id="game">
+  <div class="device"><div class="label">📱 MOBILE (Encoder)</div><canvas id="mob"></canvas></div>
+  <div id="cable"></div>
+  <div class="device tv"><div class="label">📺 ANDROID TV (Decoder)</div><canvas id="tv"></canvas></div>
+</div>
+
+<div id="msg"></div>
+<div id="controls">[A] Catch Video Stream &nbsp;|&nbsp; [L] Catch Input Command &nbsp;|&nbsp; Tap LEFT/RIGHT on mobile</div>
+
+<script>
+const cable = document.getElementById('cable');
+const mob = document.getElementById('mob'), tv = document.getElementById('tv');
+const mctx = mob.getContext('2d'), tctx = tv.getContext('2d');
+let packets=[], score=0, drops=0, time=60, running=false, mcpu=0, tcpu=0;
+let audioCtx;
+
+function resize(){ [mob,tv].forEach(c=>{c.width=c.clientWidth;c.height=c.clientHeight;}); }
+window.addEventListener('resize',resize);
+
+function beep(freq,dur=0.08){
+  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+  o.frequency.value=freq; o.connect(g); g.connect(audioCtx.destination);
+  g.gain.setValueAtTime(.2,audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+dur);
+  o.start(); o.stop(audioCtx.currentTime+dur);
+}
+
+function spawnPacket(){
+  const type = Math.random()<0.5?'video':'input';
+  const dir = type==='video'?1:-1; // video: mobile->tv, input: tv->mobile
+  const p = document.createElement('div');
+  p.className='packet';
+  p.style.background = type==='video'?'#0ff':'#f0f';
+  p.style.color = type==='video'?'#0ff':'#f0f';
+  p.dataset.type=type; p.dataset.dir=dir;
+  p.dataset.pos = dir===1?0:100;
+  p.dataset.speed = (0.8 + Math.random()*1.2).toString();
+  cable.appendChild(p);
+  packets.push(p);
+}
+
+function updatePackets(){
+  for(let i=packets.length-1;i>=0;i--){
+    const p=packets[i];
+    let pos=parseFloat(p.dataset.pos), sp=parseFloat(p.dataset.speed), dir=parseFloat(p.dataset.dir);
+    pos += sp*dir;
+    p.dataset.pos=pos;
+    p.style.left = pos+'%';
+    if(pos>100 || pos<0){
+      drops++; document.getElementById('drops').textContent=drops;
+      beep(120,.15);
+      flash('DROPPED!','#f00');
+      p.remove(); packets.splice(i,1);
+      if(drops>=10) endGame(false);
+    }
+  }
+}
+
+function catchPacket(type){
+  // find closest packet at end zone
+  let best=null, bestIdx=-1, bestDist=Infinity;
+  packets.forEach((p,i)=>{
+    if(p.dataset.type!==type) return;
+    const pos=parseFloat(p.dataset.pos);
+    const target = type==='video'?100:0;
+    const d=Math.abs(pos-target);
+    if(d<bestDist){bestDist=d; best=p; bestIdx=i;}
+  });
+  if(best && bestDist<25){
+    const pts = Math.max(1, Math.floor(20-bestDist));
+    score+=pts;
+    document.getElementById('score').textContent=score;
+    beep(type==='video'?880:660);
+    flash('+'+pts,type==='video'?'#0ff':'#f0f');
+    best.remove(); packets.splice(bestIdx,1);
+  } else {
+    beep(200,.05);
+    score=Math.max(0,score-2);
+    document.getElementById('score').textContent=score;
+  }
+}
+
+function flash(txt,col){
+  const m=document.getElementById('msg');
+  m.textContent=txt; m.style.color=col;
+  setTimeout(()=>{if(m.textContent===txt)m.textContent='';},500);
+}
+
+let phase=0;
+function drawMobile(){
+  mctx.fillStyle='#001022'; mctx.fillRect(0,0,mob.width,mob.height);
+  // simulate UI
+  for(let i=0;i<5;i++){
+    mctx.fillStyle=`hsl(${(phase*2+i*60)%360},70%,50%)`;
+    mctx.fillRect(10, 15+i*25, mob.width-20, 18);
+  }
+  mctx.fillStyle='#fff'; mctx.font='10px monospace';
+  mctx.fillText('ENCODING H.265',8,mob.height-10);
+  mctx.fillStyle='#0f0';
+  mctx.fillRect(8,mob.height-25, (mob.width-16)*(mcpu/100), 4);
+}
+function drawTV(){
+  tctx.fillStyle='#000010'; tctx.fillRect(0,0,tv.width,tv.height);
+  for(let i=0;i<5;i++){
+    tctx.fillStyle=`hsl(${(phase*2+i*60)%360},70%,50%)`;
+    tctx.fillRect(15, 12+i*18, tv.width-30, 12);
+  }
+  tctx.fillStyle='#fff'; tctx.font='10px monospace';
+  tctx.fillText('DECODING ▶',10,tv.height-10);
+  tctx.fillStyle='#f0f';
+  tctx.fillRect(10,tv.height-25,(tv.width-20)*(tcpu/100),4);
+}
+
+function updateCPU(){
+  const targetM = 85 + Math.random()*10;
+  const targetT = 3 + Math.random()*3 + packets.length*0.3;
+  mcpu += (targetM-mcpu)*0.1;
+  tcpu += (targetT-tcpu)*0.1;
+  document.getElementById('mcpu').textContent=mcpu.toFixed(0);
+  document.getElementById('tcpu').textContent=tcpu.toFixed(0);
+  document.getElementById('mbar').style.width=mcpu+'%';
+  document.getElementById('tbar').style.width=Math.min(tcpu*5,100)+'%';
+}
+
+let spawnTimer=0, tickTimer=0;
+function loop(ts){
+  if(!running) return;
+  phase++;
+  spawnTimer++;
+  const spawnRate = Math.max(35, 90 - (60-time)*1);
+  if(spawnTimer>spawnRate){ spawnPacket(); spawnTimer=0; }
+  updatePackets();
+  drawMobile(); drawTV();
+  updateCPU();
+  requestAnimationFrame(loop);
+}
+
+function tick(){
+  if(!running) return;
+  time--;
+  document.getElementById('time').textContent=time;
+  if(time<=0) endGame(true);
+  else setTimeout(tick,1000);
+}
+
+function startGame(){
+  document.getElementById('overlay').classList.add('hidden');
+  resize();
+  packets.forEach(p=>p.remove()); packets=[];
+  score=0; drops=0; time=60; running=true;
+  document.getElementById('score').textContent=0;
+  document.getElementById('drops').textContent=0;
+  document.getElementById('time').textContent=60;
+  requestAnimationFrame(loop);
+  tick();
+}
+
+function endGame(win){
+  running=false;
+  const o=document.getElementById('overlay');
+  o.innerHTML = `<h1>${win?'✅ STREAM STABLE':'❌ CONNECTION LOST'}</h1>
+    <p style="margin:20px; font-size:20px;">Score: <b>${score}</b> | Dropped Frames: ${drops}</p>
+    <p>${win?'Excellent latency! Mobile CPU handled the heavy lifting.':'Too many dropped packets - check your hotspot!'}</p>
+    <button onclick="startGame()">🔄 RECONNECT</button>`;
+  o.classList.remove('hidden');
+}
+
+document.addEventListener('keydown',e=>{
+  if(!running) return;
+  if(e.key==='a'||e.key==='A') catchPacket('video');
+  if(e.key==='l'||e.key==='L') catchPacket('input');
+});
+document.addEventListener('click',e=>{
+  if(!running || e.target.tagName==='BUTTON') return;
+  if(e.clientX < window.innerWidth/2) catchPacket('video');
+  else catchPacket('input');
+});
+resize();
+</script>
+</body>
+</html>

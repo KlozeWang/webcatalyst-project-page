@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Photo Puzzle Game</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    min-height: 100vh;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+  h1 { margin-bottom: 10px; text-shadow: 2px 2px 6px rgba(0,0,0,0.4); }
+  .info {
+    display: flex;
+    gap: 20px;
+    margin: 10px 0;
+    font-size: 1.1em;
+    background: rgba(0,0,0,0.3);
+    padding: 10px 20px;
+    border-radius: 10px;
+  }
+  .controls {
+    display: flex;
+    gap: 10px;
+    margin: 10px 0;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  button, select, label.file-btn {
+    background: #ffb347;
+    color: #222;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 1em;
+    transition: transform 0.1s, background 0.2s;
+  }
+  button:hover, label.file-btn:hover { background: #ffcc70; transform: scale(1.05); }
+  input[type="file"] { display: none; }
+  #puzzleWrap {
+    position: relative;
+    margin-top: 15px;
+    background: rgba(0,0,0,0.4);
+    padding: 8px;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  #puzzle {
+    display: grid;
+    gap: 2px;
+    touch-action: none;
+  }
+  .tile {
+    background-size: cover;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    border-radius: 4px;
+    position: relative;
+  }
+  .tile:hover { transform: scale(0.97); box-shadow: 0 0 10px #ffb347; }
+  .tile.empty { background: rgba(255,255,255,0.05) !important; cursor: default; }
+  .tile.empty:hover { transform: none; box-shadow: none; }
+  #preview {
+    margin-top: 10px;
+    border: 2px solid #ffb347;
+    border-radius: 8px;
+    max-width: 150px;
+    display: none;
+  }
+  #winMsg {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.9);
+    padding: 30px 50px;
+    border-radius: 20px;
+    text-align: center;
+    display: none;
+    z-index: 10;
+    border: 3px solid #ffb347;
+    animation: pop 0.5s ease;
+  }
+  @keyframes pop {
+    0% { transform: translate(-50%, -50%) scale(0); }
+    100% { transform: translate(-50%, -50%) scale(1); }
+  }
+  #winMsg h2 { color: #ffb347; margin-bottom: 10px; font-size: 2em; }
+</style>
+</head>
+<body>
+  <h1>🧩 Photo Puzzle</h1>
+  <div class="info">
+    <div>Moves: <span id="moves">0</span></div>
+    <div>Time: <span id="time">0</span>s</div>
+  </div>
+  <div class="controls">
+    <label class="file-btn">📷 Upload Photo<input type="file" id="fileInput" accept="image/*" /></label>
+    <select id="sizeSel">
+      <option value="3">3 × 3</option>
+      <option value="4" selected>4 × 4</option>
+      <option value="5">5 × 5</option>
+    </select>
+    <button id="shuffleBtn">🔀 Shuffle</button>
+    <button id="previewBtn">👁 Preview</button>
+  </div>
+  <div id="puzzleWrap">
+    <div id="puzzle"></div>
+  </div>
+  <img id="preview" alt="preview" />
+  <div id="winMsg">
+    <h2>🎉 You Win!</h2>
+    <p>Moves: <span id="winMoves"></span></p>
+    <p>Time: <span id="winTime"></span>s</p>
+    <br/>
+    <button onclick="document.getElementById('winMsg').style.display='none'; shuffle();">Play Again</button>
+  </div>
+
+<script>
+let size = 4;
+let tiles = [];
+let emptyIdx = 0;
+let moves = 0;
+let timer = 0;
+let timerInt = null;
+let imgSrc = '';
+const boardSize = Math.min(window.innerWidth - 60, 480);
+
+const puzzle = document.getElementById('puzzle');
+const movesEl = document.getElementById('moves');
+const timeEl = document.getElementById('time');
+const preview = document.getElementById('preview');
+
+// Default image (a nice gradient placeholder via canvas)
+function defaultImage() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 480;
+  const ctx = c.getContext('2d');
+  const grad = ctx.createLinearGradient(0,0,480,480);
+  grad.addColorStop(0,'#ff6e7f'); grad.addColorStop(0.5,'#bfe9ff'); grad.addColorStop(1,'#ffd86f');
+  ctx.fillStyle = grad; ctx.fillRect(0,0,480,480);
+  ctx.fillStyle='rgba(255,255,255,0.5)';
+  for(let i=0;i<30;i++){
+    ctx.beginPath();
+    ctx.arc(Math.random()*480,Math.random()*480,Math.random()*40+10,0,Math.PI*2);
+    ctx.fill();
+  }
+  ctx.fillStyle='#222';
+  ctx.font='bold 60px sans-serif';
+  ctx.textAlign='center';
+  ctx.fillText('🧩 PUZZLE', 240, 260);
+  ctx.font='24px sans-serif';
+  ctx.fillText('Upload your photo!', 240, 300);
+  return c.toDataURL();
+}
+
+imgSrc = defaultImage();
+preview.src = imgSrc;
+
+function initBoard() {
+  puzzle.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+  puzzle.style.width = boardSize + 'px';
+  puzzle.style.height = boardSize + 'px';
+  tiles = Array.from({length: size*size}, (_,i)=>i);
+  emptyIdx = size*size - 1;
+  render();
+}
+
+function render() {
+  puzzle.innerHTML = '';
+  const tileSize = boardSize / size;
+  tiles.forEach((val, pos) => {
+    const t = document.createElement('div');
+    t.className = 'tile';
+    if (val === size*size - 1) {
+      t.classList.add('empty');
+    } else {
+      const r = Math.floor(val / size);
+      const c = val % size;
+      t.style.backgroundImage = `url(${imgSrc})`;
+      t.style.backgroundSize = `${boardSize}px ${boardSize}px`;
+      t.style.backgroundPosition = `-${c*tileSize}px -${r*tileSize}px`;
+    }
+    t.addEventListener('click', () => tryMove(pos));
+    puzzle.appendChild(t);
+  });
+}
+
+function tryMove(pos) {
+  const er = Math.floor(emptyIdx / size), ec = emptyIdx % size;
+  const pr = Math.floor(pos / size), pc = pos % size;
+  if (Math.abs(er-pr) + Math.abs(ec-pc) === 1) {
+    [tiles[pos], tiles[emptyIdx]] = [tiles[emptyIdx], tiles[pos]];
+    emptyIdx = pos;
+    moves++;
+    movesEl.textContent = moves;
+    render();
+    beep(440 + Math.random()*200, 0.05);
+    if (checkWin()) win();
+  }
+}
+
+function checkWin() {
+  return tiles.every((v,i) => v === i);
+}
+
+function shuffle() {
+  // Random valid moves to ensure solvability
+  initBoard();
+  for (let i = 0; i < size*size*20; i++) {
+    const neighbors = [];
+    const er = Math.floor(emptyIdx/size), ec = emptyIdx%size;
+    if (er>0) neighbors.push(emptyIdx-size);
+    if (er<size-1) neighbors.push(emptyIdx+size);
+    if (ec>0) neighbors.push(emptyIdx-1);
+    if (ec<size-1) neighbors.push(emptyIdx+1);
+    const pick = neighbors[Math.floor(Math.random()*neighbors.length)];
+    [tiles[pick], tiles[emptyIdx]] = [tiles[emptyIdx], tiles[pick]];
+    emptyIdx = pick;
+  }
+  moves = 0; timer = 0;
+  movesEl.textContent = 0; timeEl.textContent = 0;
+  clearInterval(timerInt);
+  timerInt = setInterval(()=>{ timer++; timeEl.textContent = timer; }, 1000);
+  render();
+}
+
+function win() {
+  clearInterval(timerInt);
+  document.getElementById('winMoves').textContent = moves;
+  document.getElementById('winTime').textContent = timer;
+  document.getElementById('winMsg').style.display = 'block';
+  // Win sound
+  [523, 659, 784, 1046].forEach((f,i)=>setTimeout(()=>beep(f,0.15),i*120));
+}
+
+// Web Audio
+let audioCtx;
+function beep(freq, dur) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.frequency.value = freq;
+    o.type = 'sine';
+    o.connect(g); g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+dur);
+    o.start(); o.stop(audioCtx.currentTime+dur);
+  } catch(e){}
+}
+
+// File upload - crop to square
+document.getElementById('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 480;
+      const ctx = c.getContext('2d');
+      const s = Math.min(img.width, img.height);
+      ctx.drawImage(img, (img.width-s)/2, (img.height-s)/2, s, s, 0, 0, 480, 480);
+      imgSrc = c.toDataURL();
+      preview.src = imgSrc;
+      shuffle();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('sizeSel').addEventListener('change', e => {
+  size = parseInt(e.target.value);
+  shuffle();
+});
+document.getElementById('shuffleBtn').addEventListener('click', shuffle);
+document.getElementById('previewBtn').addEventListener('click', () => {
+  preview.style.display = preview.style.display === 'block' ? 'none' : 'block';
+});
+
+shuffle();
+</script>
+</body>
+</html>

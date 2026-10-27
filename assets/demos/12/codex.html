@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ramp Walker</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #87ceeb;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    .hud {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      color: #fff;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+      font-weight: 700;
+      z-index: 10;
+      font-size: 18px;
+      line-height: 1.35;
+      pointer-events: none;
+    }
+    .hint {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      color: rgba(255,255,255,0.95);
+      text-shadow: 0 2px 4px rgba(0,0,0,0.45);
+      font-size: 14px;
+      z-index: 10;
+      pointer-events: none;
+      text-align: right;
+    }
+    .controls {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      z-index: 20;
+      pointer-events: none;
+    }
+    .btn {
+      width: 82px;
+      height: 82px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.22);
+      border: 2px solid rgba(255,255,255,0.55);
+      color: #fff;
+      font-size: 36px;
+      display: grid;
+      place-items: center;
+      backdrop-filter: blur(2px);
+      pointer-events: auto;
+    }
+    .btn:active {
+      background: rgba(255,255,255,0.35);
+      transform: scale(0.98);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div class="hud" id="hud">Score: 0<br>Best: 0</div>
+  <div class="hint">←/A and →/D to walk<br>Collect stars on the ramp!</div>
+  <div class="controls">
+    <div class="btn" id="leftBtn">◀</div>
+    <div class="btn" id="rightBtn">▶</div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const hud = document.getElementById("hud");
+
+    let w = 0, h = 0, dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    function resize() {
+      w = window.innerWidth;
+      h = window.innerHeight;
+      dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    window.addEventListener("resize", resize);
+    resize();
+
+    // World / ramp
+    const slope = 0.42; // y = slope * x
+    const rampAngle = Math.atan(slope);
+    const normal = (() => {
+      const nx = -slope, ny = 1;
+      const len = Math.hypot(nx, ny);
+      return { x: nx / len, y: ny / len };
+    })();
+
+    // Player
+    const player = {
+      x: 0,
+      y: 0,
+      speed: 2.2,
+      autoSpeed: 2.2,
+      maxForward: 6.5,
+      maxBack: -3.2,
+      accel: 0.014,
+      dragToAuto: 0.006,
+      walkPhase: 0
+    };
+
+    // Camera
+    const cam = { x: 0, y: 0 };
+
+    // Input
+    const keys = { left: false, right: false };
+    window.addEventListener("keydown", (e) => {
+      const k = e.key.toLowerCase();
+      if (k === "arrowleft" || k === "a") keys.left = true;
+      if (k === "arrowright" || k === "d") keys.right = true;
+    });
+    window.addEventListener("keyup", (e) => {
+      const k = e.key.toLowerCase();
+      if (k === "arrowleft" || k === "a") keys.left = false;
+      if (k === "arrowright" || k === "d") keys.right = false;
+    });
+
+    // Touch controls
+    const leftBtn = document.getElementById("leftBtn");
+    const rightBtn = document.getElementById("rightBtn");
+    const bindHold = (el, setter) => {
+      const on = (ev) => { ev.preventDefault(); setter(true); };
+      const off = (ev) => { ev.preventDefault(); setter(false); };
+      el.addEventListener("pointerdown", on);
+      el.addEventListener("pointerup", off);
+      el.addEventListener("pointercancel", off);
+      el.addEventListener("pointerleave", off);
+    };
+    bindHold(leftBtn, v => keys.left = v);
+    bindHold(rightBtn, v => keys.right = v);
+
+    // Collectibles
+    const stars = [];
+    let nextStarX = 220;
+    let score = 0;
+    let best = Number(localStorage.getItem("rampWalkerBest") || 0);
+
+    const particles = [];
+
+    function rampY(x) { return slope * x; }
+
+    function spawnStarsAhead() {
+      while (nextStarX < player.x + 2600) {
+        const nDist = 28 + Math.random() * 28;
+        const x = nextStarX + (Math.random() - 0.5) * 30;
+        const y = rampY(x) + normal.y * nDist;
+        const sx = normal.x * nDist;
+        stars.push({
+          x: x + sx,
+          y,
+          r: 11 + Math.random() * 5,
+          t: Math.random() * 10
+        });
+        nextStarX += 150 + Math.random() * 140;
+      }
+      while (stars.length && stars[0].x < player.x - 500) stars.shift();
+    }
+
+    function burst(x, y, color) {
+      for (let i = 0; i < 14; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const s = 1 + Math.random() * 3.8;
+        particles.push({
+          x, y,
+          vx: Math.cos(a) * s,
+          vy: Math.sin(a) * s,
+          life: 28 + Math.random() * 18,
+          max: 46,
+          color
+        });
+      }
+    }
+
+    function worldToScreen(wx, wy) {
+      return {
+        x: (wx - cam.x) + w * 0.35,
+        y: h * 0.65 - (wy - cam.y)
+      };
+    }
+
+    function update(dt) {
+      // Movement
+      if (keys.right) player.speed += player.accel * dt;
+      if (keys.left) player.speed -= player.accel * dt;
+
+      if (!keys.left && !keys.right) {
+        player.speed += (player.autoSpeed - player.speed) * (1 - Math.pow(1 - player.dragToAuto, dt));
+      }
+
+      player.speed = Math.max(player.maxBack, Math.min(player.maxForward, player.speed));
+      player.x += player.speed * dt;
+      player.y = rampY(player.x);
+      player.walkPhase += Math.abs(player.speed) * dt * 0.055;
+
+      // Camera follows player
+      cam.x = player.x;
+      cam.y = player.y;
+
+      spawnStarsAhead();
+
+      // Collect stars
+      for (let i = stars.length - 1; i >= 0; i--) {
+        const s = stars[i];
+        const dx = s.x - player.x;
+        const dy = s.y - (player.y + normal.y * 28);
+        if (dx * dx + dy * dy < 34 * 34) {
+          burst(s.x, s.y, "#ffe066");
+          stars.splice(i, 1);
+          score++;
+          if (score > best) {
+            best = score;
+            localStorage.setItem("rampWalkerBest", String(best));
+          }
+        }
+      }
+
+      // particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx * dt * 0.16;
+        p.y += p.vy * dt * 0.16;
+        p.vy += 0.015 * dt;
+        p.life -= dt * 0.9;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+
+      hud.innerHTML = `Score: ${score}<br>Best: ${best}`;
+    }
+
+    function drawBackground() {
+      // Sky gradient
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, "#7ec9ff");
+      g.addColorStop(1, "#dff5ff");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+
+      // Parallax hills
+      const baseY = h * 0.78;
+      ctx.fillStyle = "#8fd19e";
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      for (let x = 0; x <= w; x += 12) {
+        const y = baseY + Math.sin((x + cam.x * 0.15) * 0.008) * 18;
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(w, h);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "#72b885";
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      for (let x = 0; x <= w; x += 12) {
+        const y = baseY + 40 + Math.sin((x + cam.x * 0.25) * 0.01 + 1.3) * 24;
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(w, h);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawRamp() {
+      const x0 = -180;
+      const x1 = w + 180;
+
+      const wx0 = x0 + cam.x - w * 0.35;
+      const wx1 = x1 + cam.x - w * 0.35;
+      const wy0 = rampY(wx0);
+      const wy1 = rampY(wx1);
+
+      const sy0 = h * 0.65 - (wy0 - cam.y);
+      const sy1 = h * 0.65 - (wy1 - cam.y);
+
+      // Ground fill below ramp
+      ctx.beginPath();
+      ctx.moveTo(x0, sy0);
+      ctx.lineTo(x1, sy1);
+      ctx.lineTo(w + 220, h + 120);
+      ctx.lineTo(-220, h + 120);
+      ctx.closePath();
+      ctx.fillStyle = "#5f9c4f";
+      ctx.fill();
+
+      // Ramp edge
+      ctx.strokeStyle = "#3f6f35";
+      ctx.lineWidth = 10;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x0, sy0);
+      ctx.lineTo(x1, sy1);
+      ctx.stroke();
+
+      // Dashed marks
+      ctx.strokeStyle = "rgba(255,255,255,0.45)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([10, 10]);
+      ctx.beginPath();
+      ctx.moveTo(x0, sy0 - 4);
+      ctx.lineTo(x1, sy1 - 4);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    function drawStars() {
+      for (const s of stars) {
+        const p = worldToScreen(s.x, s.y);
+        if (p.x < -50 || p.x > w + 50 || p.y < -50 || p.y > h + 50) continue;
+
+        s.t += 0.05;
+        const pulse = 1 + Math.sin(s.t) * 0.12;
+        const r = s.r * pulse;
+
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(s.t * 0.25);
+        ctx.fillStyle = "#ffd84a";
+        ctx.beginPath();
+        for (let i = 0; i < 10; i++) {
+          const ang = i * Math.PI / 5;
+          const rr = i % 2 === 0 ? r : r * 0.45;
+          const xx = Math.cos(ang - Math.PI / 2) * rr;
+          const yy = Math.sin(ang - Math.PI / 2) * rr;
+          if (i === 0) ctx.moveTo(xx, yy);
+          else ctx.lineTo(xx, yy);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    function drawParticles() {
+      for (const p of particles) {
+        const sp = worldToScreen(p.x, p.y);
+        const a = Math.max(0, p.life / p.max);
+        ctx.globalAlpha = a;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawPlayer() {
+      const p = worldToScreen(player.x, player.y);
+      const swing = Math.sin(player.walkPhase) * 0.8;
+      const swing2 = Math.sin(player.walkPhase + Math.PI) * 0.8;
+
+      ctx.save();
+      ctx.translate(p.x, p.y - 2);
+      ctx.rotate(rampAngle);
+
+      // shadow
+      ctx.fillStyle = "rgba(0,0,0,0.22)";
+      ctx.beginPath();
+      ctx.ellipse(0, 22, 14, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // body
+      ctx.strokeStyle = "#1d1d1d";
+      ctx.lineWidth = 4;
+      ctx.lineCap = "round";
+
+      // torso
+      ctx.beginPath();
+      ctx.moveTo(0, -22);
+      ctx.lineTo(0, 2);
+      ctx.stroke();
+
+      // head
+      ctx.fillStyle = "#ffd6b3";
+      ctx.beginPath();
+      ctx.arc(0, -30, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#1d1d1d";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // arms
+      ctx.strokeStyle = "#1d1d1d";
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(0, -12);
+      ctx.lineTo(11, -3 + swing * 2);
+      ctx.moveTo(0, -12);
+      ctx.lineTo(-11, -3 + swing2 * 2);
+      ctx.stroke();
+
+      // legs
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(0, 2);
+      ctx.lineTo(10, 19 + swing * 3);
+      ctx.moveTo(0, 2);
+      ctx.lineTo(-10, 19 + swing2 * 3);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    let last = performance.now();
+    function loop(t) {
+      const dt = Math.min(33, t - last);
+      last = t;
+
+      update(dt);
+      drawBackground();
+      drawRamp();
+      drawStars();
+      drawParticles();
+      drawPlayer();
+
+      requestAnimationFrame(loop);
+    }
+
+    spawnStarsAhead();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

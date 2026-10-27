@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>FIFA Card Duel</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;background:#0a0a0a;color:#fff}
+#game{position:relative;width:100vw;height:100vh;max-width:480px;margin:0 auto;background:linear-gradient(180deg,#0d2818 0%,#1a4d2e 50%,#0d2818 100%);overflow:hidden}
+.screen{position:absolute;inset:0;display:none;flex-direction:column}
+.screen.active{display:flex}
+/* Start */
+#start{justify-content:center;align-items:center;background:radial-gradient(circle at center,#1a4d2e,#000);text-align:center;padding:20px}
+#start h1{font-size:42px;background:linear-gradient(45deg,#ffd700,#ff8c00);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:900;letter-spacing:2px;margin-bottom:8px;text-shadow:0 0 30px rgba(255,215,0,0.3)}
+#start h2{font-size:18px;color:#aaa;margin-bottom:40px;letter-spacing:4px}
+.btn{padding:14px 40px;margin:8px;font-size:18px;font-weight:700;background:linear-gradient(135deg,#ffd700,#ff8c00);color:#000;border:none;border-radius:30px;cursor:pointer;box-shadow:0 4px 15px rgba(255,140,0,0.4);transition:transform .2s}
+.btn:active{transform:scale(0.95)}
+.btn.sec{background:linear-gradient(135deg,#444,#222);color:#fff}
+.energy{margin-top:30px;color:#ffd700;font-size:14px}
+/* Game */
+#hud{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(0,0,0,0.6);border-bottom:2px solid #ffd700;z-index:5}
+.player-info{display:flex;align-items:center;gap:8px}
+.avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#ff4444,#882222);display:flex;align-items:center;justify-content:center;font-weight:700;border:2px solid #fff}
+.avatar.you{background:linear-gradient(135deg,#4488ff,#224488)}
+.score{font-size:22px;font-weight:900;color:#ffd700}
+.timer{font-size:13px;color:#fff;background:rgba(255,0,0,0.3);padding:4px 10px;border-radius:12px}
+#turn-banner{position:absolute;top:50%;left:0;right:0;text-align:center;font-size:32px;font-weight:900;color:#ffd700;text-shadow:0 0 20px #000;opacity:0;pointer-events:none;z-index:20;transition:opacity .3s}
+#turn-banner.show{opacity:1}
+/* Field */
+#field{flex:1;display:flex;flex-direction:column;padding:6px;gap:6px;position:relative}
+.row{flex:1;display:flex;gap:6px;justify-content:center}
+.row.opponent{transform:rotate(180deg)}
+.row.opponent .card-slot{transform:rotate(180deg)}
+.card-slot{flex:1;max-width:80px;background:rgba(255,255,255,0.05);border:2px dashed rgba(255,255,255,0.2);border-radius:8px;display:flex;align-items:center;justify-content:center;position:relative;transition:all .2s}
+.card-slot.gk{flex:0 0 70px}
+.card-slot.targetable{border-color:#ff4444;background:rgba(255,68,68,0.2);animation:pulse 1s infinite}
+.card-slot.placeable{border-color:#44ff44;background:rgba(68,255,68,0.15)}
+@keyframes pulse{50%{box-shadow:0 0 15px #ff4444}}
+.divider{height:3px;background:linear-gradient(90deg,transparent,#ffd700,transparent);margin:2px 0}
+/* Card */
+.card{width:100%;height:100%;background:linear-gradient(135deg,#444,#222);border-radius:6px;padding:3px;display:flex;flex-direction:column;font-size:9px;cursor:pointer;position:relative;border:2px solid #888;transition:transform .15s}
+.card.bronze{background:linear-gradient(135deg,#cd7f32,#8b4513);border-color:#cd7f32}
+.card.silver{background:linear-gradient(135deg,#c0c0c0,#808080);border-color:#c0c0c0;color:#000}
+.card.gold{background:linear-gradient(135deg,#ffd700,#b8860b);border-color:#ffd700;color:#000}
+.card.special{background:linear-gradient(135deg,#ff00ff,#00ffff);border-color:#fff;color:#000;animation:shine 2s infinite}
+@keyframes shine{50%{filter:brightness(1.3)}}
+.card.exhausted{filter:grayscale(0.7) brightness(0.6)}
+.card .name{font-weight:700;font-size:9px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card .rating{font-size:18px;font-weight:900;text-align:center;line-height:1}
+.card .pos{font-size:8px;text-align:center;opacity:0.8}
+.card .stats{display:grid;grid-template-columns:1fr 1fr;font-size:7px;gap:0 2px;margin-top:auto}
+.card .stat{display:flex;justify-content:space-between}
+.card.dragging{transform:scale(1.1);z-index:100;opacity:0.85}
+.card.attacker{box-shadow:0 0 12px #ff4444}
+/* Hand */
+#hand-area{background:rgba(0,0,0,0.7);padding:8px;border-top:2px solid #ffd700;min-height:130px;position:relative}
+#hand-label{font-size:11px;color:#aaa;margin-bottom:4px;display:flex;justify-content:space-between}
+#hand{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+#hand::-webkit-scrollbar{height:4px}
+#hand::-webkit-scrollbar-thumb{background:#ffd700;border-radius:2px}
+.hand-card{flex:0 0 75px;height:105px}
+#actions{display:flex;gap:8px;padding:6px;background:rgba(0,0,0,0.5)}
+#actions .btn{flex:1;padding:10px;font-size:14px;margin:0}
+/* Game over */
+#gameover{justify-content:center;align-items:center;background:radial-gradient(circle,#000,#220000);text-align:center}
+#gameover h1{font-size:48px;margin-bottom:20px}
+#result-score{font-size:32px;color:#ffd700;margin-bottom:30px}
+/* Log */
+#log{position:absolute;bottom:140px;left:8px;right:8px;max-height:60px;overflow:hidden;pointer-events:none;z-index:10}
+.log-msg{background:rgba(0,0,0,0.8);color:#ffd700;padding:6px 12px;border-radius:6px;margin-bottom:4px;font-size:12px;animation:slideIn .3s,fadeOut .5s 2s forwards}
+@keyframes slideIn{from{transform:translateX(-100%);opacity:0}}
+@keyframes fadeOut{to{opacity:0;transform:translateY(-10px)}}
+/* Goal animation */
+#goal-fx{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:80px;font-weight:900;color:#ffd700;text-shadow:0 0 40px #ff8800,0 0 80px #ff0000;opacity:0;pointer-events:none;z-index:50}
+#goal-fx.show{animation:goalFx 2s}
+@keyframes goalFx{0%{opacity:0;transform:scale(0.5)}30%{opacity:1;transform:scale(1.3)}70%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.5)}}
+</style>
+</head>
+<body>
+<div id="game">
+
+<div id="start" class="screen active">
+  <h1>⚽ FIFA</h1>
+  <h1 style="font-size:30px">CARD DUEL</h1>
+  <h2>TURN-BASED</h2>
+  <button class="btn" onclick="startGame('quick')">⚡ Quick Match</button>
+  <button class="btn sec" onclick="startGame('ranked')">🏆 Ranked</button>
+  <button class="btn sec" onclick="startGame('draft')">📋 Draft Mode</button>
+  <div class="energy">⚡ Energy: <span id="energy">10</span>/10</div>
+  <div style="margin-top:20px;font-size:12px;color:#888;max-width:300px">Tap cards in hand to place on field. Drag your player to opponent to attack. Beat their GK to score!</div>
+</div>
+
+<div id="play" class="screen">
+  <div id="hud">
+    <div class="player-info"><div class="avatar">AI</div><div class="score" id="score-opp">0</div></div>
+    <div style="text-align:center"><div class="timer" id="timer">⏱ 90s</div><div style="font-size:10px;margin-top:2px;color:#aaa" id="turn-label">Your Turn</div></div>
+    <div class="player-info"><div class="score" id="score-you">0</div><div class="avatar you">YOU</div></div>
+  </div>
+  <div id="field">
+    <div class="row opponent" id="opp-att1"></div>
+    <div class="row opponent" id="opp-att2"></div>
+    <div class="row opponent" id="opp-mid"></div>
+    <div class="row opponent" id="opp-def"></div>
+    <div class="row opponent" id="opp-gk"></div>
+    <div class="divider"></div>
+    <div class="row" id="you-gk"></div>
+    <div class="row" id="you-def"></div>
+    <div class="row" id="you-mid"></div>
+    <div class="row" id="you-att1"></div>
+    <div class="row" id="you-att2"></div>
+  </div>
+  <div id="log"></div>
+  <div id="hand-area">
+    <div id="hand-label"><span>YOUR HAND</span><span id="deck-count">Deck: 30</span></div>
+    <div id="hand"></div>
+  </div>
+  <div id="actions">
+    <button class="btn sec" onclick="endTurn()">End Turn ➡</button>
+    <button class="btn sec" onclick="forfeit()" style="flex:0 0 80px;background:#661111">Quit</button>
+  </div>
+  <div id="turn-banner"></div>
+  <div id="goal-fx">GOAL!</div>
+</div>
+
+<div id="gameover" class="screen">
+  <h1 id="result-title">Victory!</h1>
+  <div id="result-score">3 - 1</div>
+  <div style="color:#aaa;margin-bottom:20px" id="result-reward">+25 Coins · +15 XP</div>
+  <button class="btn" onclick="location.reload()">🔁 Play Again</button>
+</div>
+
+</div>
+
+<script>
+// === Card Database (50 cards) ===
+const CARD_DB = [];
+const FIRST = ["Leo","Cristian","Kylian","Erling","Kevin","Mo","Vinicius","Robert","Harry","Karim","Luka","Sergio","Toni","Virgil","Manuel","Jude","Phil","Pedri","Gavi","Joshua","Marcus","Bukayo","Trent","Rodri","Casemiro","Antoine","Romelu","Ousmane","Heung","Son","Bruno","Paul","Eden","Thomas","Sadio","Riyad","Raheem","Jamal","Jack","Mason","Declan","Reece","Mike","Ander","Alisson","Thibaut","Jan","Nick","David","Gianluigi"];
+const LAST = ["Messi","Ronaldo","Mbappé","Haaland","De Bruyne","Salah","Junior","Lewa","Kane","Benzema","Modrić","Ramos","Kroos","van Dijk","Neuer","Bellingham","Foden","González","Páez","Kimmich","Rashford","Saka","Alexander","Hernández","Souza","Griezmann","Lukaku","Dembélé","Min","Sané","Fernandes","Pogba","Hazard","Müller","Mané","Mahrez","Sterling","Musiala","Grealish","Mount","Rice","James","Maignan","Herrera","Becker","Courtois","Oblak","Pope","De Gea","Donnarumma"];
+const CLUBS = ["PSG","RMA","BAR","MCI","LIV","BAY","JUV","CHE","ARS","MUN"];
+const NATIONS = ["ARG","POR","FRA","NOR","BEL","EGY","BRA","POL","ENG","GER","CRO","ESP","NED"];
+const POS_ALL = {GK:["GK"],DEF:["CB","LB","RB"],MID:["CM","CDM","CAM"],ATT:["ST","LW","RW"]};
+
+function rand(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+function pick(arr){return arr[Math.floor(Math.random()*arr.length)]}
+
+for(let i=0;i<50;i++){
+  const r = Math.random();
+  let rarity, base;
+  if(r<0.4){rarity='bronze';base=rand(55,68)}
+  else if(r<0.75){rarity='silver';base=rand(68,78)}
+  else if(r<0.95){rarity='gold';base=rand(78,87)}
+  else{rarity='special';base=rand(87,94)}
+  const role = pick(["GK","DEF","MID","ATT"]);
+  const pos = pick(POS_ALL[role]);
+  const stats = {
+    PAC:base+rand(-8,8),SHO:base+rand(-8,8),PAS:base+rand(-8,8),
+    DRI:base+rand(-8,8),DEF:base+rand(-8,8),PHY:base+rand(-8,8)
+  };
+  if(role==="GK"){stats.DEF=base+rand(0,8);stats.SHO=30}
+  if(role==="ATT"){stats.SHO=base+rand(0,8);stats.DEF=Math.max(30,stats.DEF-15)}
+  if(role==="DEF"){stats.DEF=base+rand(0,8)}
+  CARD_DB.push({
+    id:i,name:`${pick(FIRST)} ${pick(LAST)}`,rating:base,rarity,role,pos,
+    club:pick(CLUBS),nation:pick(NATIONS),stats,type:'player'
+  });
+}
+
+// === Game State ===
+const state = {
+  mode:null,turn:'you',
+  you:{deck:[],hand:[],field:{GK:null,DEF:[null,null,null],MID:[null,null,null],ATT1:[null,null],ATT2:[null,null]},score:0},
+  opp:{deck:[],hand:[],field:{GK:null,DEF:[null,null,null],MID:[null,null,null],ATT1:[null,null],ATT2:[null,null]},score:0},
+  selected:null,attackingCard:null,turnTime:90,turnTimer:null,turnCount:0,gameOver:false
+};
+
+const ZONES_YOU = ['you-gk','you-def','you-mid','you-att1','you-att2'];
+const ZONES_OPP = ['opp-gk','opp-def','opp-mid','opp-att1','opp-att2'];
+
+// === Audio ===
+let audioCtx;
+function beep(freq,dur,type='sine',vol=0.2){
+  try{
+    if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type=type;o.frequency.value=freq;o.connect(g);g.connect(audioCtx.destination);
+    g.gain.setValueAtTime(vol,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
+    o.start();o.stop(audioCtx.currentTime+dur);
+  }catch(e){}
+}
+function sndPlace(){beep(440,0.1,'square')}
+function sndAttack(){beep(200,0.15,'sawtooth',0.3)}
+function sndGoal(){[523,659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,0.2,'triangle',0.3),i*100))}
+function sndLose(){[400,300,200].forEach((f,i)=>setTimeout(()=>beep(f,0.2,'sawtooth'),i*150))}
+
+// === Setup ===
+function buildDeck(){
+  const deck=[];
+  const players=CARD_DB.filter(c=>c.role!=='GK');
+  const gks=CARD_DB.filter(c=>c.role==='GK');
+  deck.push({...pick(gks)});
+  for(let i=0;i<29;i++)deck.push({...pick(players)});
+  return deck.sort(()=>Math.random()-0.5);
+}
+
+function startGame(mode){
+  state.mode=mode;
+  state.you.deck=buildDeck();state.opp.deck=buildDeck();
+  // Initial hand
+  for(let i=0;i<5;i++){state.you.hand.push(state.you.deck.pop());state.opp.hand.push(state.opp.deck.pop())}
+  // Place GK automatically
+  const yGK=state.you.deck.find(c=>c.role==='GK')||state.you.hand.find(c=>c.role==='GK');
+  if(yGK){state.you.field.GK=yGK;state.you.deck=state.you.deck.filter(c=>c!==yGK);state.you.hand=state.you.hand.filter(c=>c!==yGK)}
+  else{state.you.field.GK={...pick(CARD_DB.filter(c=>c.role==='GK'))}}
+  const oGK=state.opp.deck.find(c=>c.role==='GK')||state.opp.hand.find(c=>c.role==='GK');
+  if(oGK){state.opp.field.GK=oGK;state.opp.deck=state.opp.deck.filter(c=>c!==oGK);state.opp.hand=state.opp.hand.filter(c=>c!==oGK)}
+  else{state.opp.field.GK={...pick(CARD_DB.filter(c=>c.role==='GK'))}}
+  
+  document.getElementById('start').classList.remove('active');
+  document.getElementById('play').classList.add('active');
+  state.turn='you';state.turnCount=0;
+  newTurn();
+  render();
+}
+
+function newTurn(){
+  if(state.gameOver)return;
+  state.turnCount++;
+  const side=state.turn==='you'?state.you:state.opp;
+  if(side.deck.length>0 && side.hand.length<7){side.hand.push(side.deck.pop())}
+  // Untap
+  Object.values(side.field).forEach(s=>{
+    if(Array.isArray(s))s.forEach(c=>{if(c)c.exhausted=false});
+    else if(s)s.exhausted=false;
+  });
+  state.turnTime=state.turn==='you'?90:5;
+  showBanner(state.turn==='you'?'YOUR TURN':'OPPONENT');
+  document.getElementById('turn-label').textContent=state.turn==='you'?'Your Turn':'AI Turn';
+  if(state.turnTimer)clearInterval(state.turnTimer);
+  state.turnTimer=setInterval(()=>{
+    state.turnTime--;
+    document.getElementById('timer').textContent='⏱ '+state.turnTime+'s';
+    if(state.turnTime<=0){endTurn()}
+  },1000);
+  if(state.turn==='opp')setTimeout(aiTurn,1200);
+  render();
+}
+
+function showBanner(txt){
+  const b=document.getElementById('turn-banner');
+  b.textContent=txt;b.classList.add('show');
+  setTimeout(()=>b.classList.remove('show'),1200);
+}
+
+function log(msg){
+  const el=document.createElement('div');
+  el.className='log-msg';el.textContent=msg;
+  document.getElementById('log').appendChild(el);
+  setTimeout(()=>el.remove(),3000);
+}
+
+// === Rendering ===
+function cardHTML(card,opts={}){
+  if(!card)return '';
+  const s=card.stats;
+  return `<div class="card ${card.rarity} ${card.exhausted?'exhausted':''} ${opts.attacker?'attacker':''}" data-id="${opts.id||''}">
+    <div class="rating">${card.rating}</div>
+    <div class="pos">${card.pos}</div>
+    <div class="name">${card.name.split(' ')[1]||card.name}</div>
+    <div class="stats">
+      <div class="stat"><span>PAC</span><b>${s.PAC}</b></div>
+      <div class="stat"><span>SHO</span><b>${s.SHO}</b></div>
+      <div class="stat"><span>PAS</span><b>${s.PAS}</b></div>
+      <div class="stat"><span>DRI</span><b>${s.DRI}</b></div>
+      <div class="stat"><span>DEF</span><b>${s.DEF}</b></div>
+      <div class="stat"><span>PHY</span><b>${s.PHY}</b></div>
+    </div>
+  </div>`;
+}
+
+function render(){
+  // Score
+  document.getElementById('score-you').textContent=state.you.score;
+  document.getElementById('score-opp').textContent=state.opp.score;
+  document.getElementById('deck-count').textContent='Deck: '+state.you.deck.length;
+  
+  // Field rendering helper
+  function renderRow(elId,slot,side){
+    const el=document.getElementById(elId);
+    if(Array.isArray(slot)){
+      el.innerHTML=slot.map((c,i)=>`<div class="card-slot" data-side="${side}" data-zone="${elId}" data-idx="${i}">${c?cardHTML(c):''}</div>`).join('');
+    } else {
+      el.innerHTML=`<div class="card-slot gk" data-side="${side}" data-zone="${elId}" data-idx="0">${slot?cardHTML(slot):''}</div>`;
+    }
+  }
+  renderRow('you-gk',state.you.field.GK,'you');
+  renderRow('you-def',state.you.field.DEF,'you');
+  renderRow('you-mid',state.you.field.MID,'you');
+  renderRow('you-att1',state.you.field.ATT1,'you');
+  renderRow('you-att2',state.you.field.ATT2,'you');
+  renderRow('opp-gk',state.opp.field.GK,'opp');
+  renderRow('opp-def',state.opp.field.DEF,'opp');
+  renderRow('opp-mid',state.opp.field.MID,'opp');
+  renderRow('opp-att1',state.opp.field.ATT1,'opp');
+  renderRow('opp-att2',state.opp.field.ATT2,'opp');
+  
+  // Hand
+  const handEl=document.getElementById('hand');
+  handEl.innerHTML=state.you.hand.map((c,i)=>`<div class="hand-card" data-hand="${i}">${cardHTML(c)}</div>`).join('');
+  
+  // Indicators
+  if(state.selected!==null && state.turn==='you'){
+    const card=state.you.hand[state.selected];
+    if(card){
+      const validZones=getValidZones(card.role,'you');
+      validZones.forEach(z=>{
+        document.querySelectorAll(`[data-zone="${z.zone}"][data-idx="${z.idx}"]`).forEach(el=>{
+          if(!el.querySelector('.card'))el.classList.add('placeable');
+        });
+      });
+    }
+  }
+  if(state.attackingCard){
+    // Target opponent front-most cards
+    const targets=getAttackTargets();
+    targets.forEach(t=>{
+      document.querySelector(`[data-zone="${t.zone}"][data-idx="${t.idx}"]`)?.classList.add('targetable');
+    });
+  }
+  attachEvents();
+}
+
+function getValidZones(role,side){
+  const f=state[side].field;
+  const map={GK:[{zone:side+'-gk',arr:'GK'}],DEF:[{zone:side+'-def',arr:'DEF'}],MID:[{zone:side+'-mid',arr:'MID'}],ATT:[{zone:side+'-att1',arr:'ATT1'},{zone:side+'-att2',arr:'ATT2'}]};
+  const zones=map[role]||[];
+  const valid=[];
+  zones.forEach(z=>{
+    const slot=f[z.arr];
+    if(Array.isArray(slot))slot.forEach((c,i)=>{if(!c)valid.push({zone:z.zone,idx:i,arr:z.arr})});
+    else if(!slot)valid.push({zone:z.zone,idx:0,arr:z.arr});
+  });
+  return valid;
+}
+
+function getAttackTargets(){
+  // Find front-most opponent line that has cards (defenders block deeper)
+  const f=state.opp.field;
+  const order=['ATT2','ATT1','MID','DEF','GK'];
+  for(const k of order){
+    const slot=f[k];
+    if(Array.isArray(slot)){
+      const cards=slot.map((c,i)=>c?{zone:'opp-'+k.toLowerCase().replace('1','1').replace('2','2'),idx:i,arr:k,card:c}:null).filter(Boolean);
+      // fix zone naming
+      cards.forEach(x=>{x.zone='opp-'+(k==='ATT1'?'att1':k==='ATT2'?'att2':k.toLowerCase())});
+      if(cards.length>0)return cards;
+    } else if(slot){
+      return [{zone:'opp-gk',idx:0,arr:'GK',card:slot}];
+    }
+  }
+  return [];
+}
+
+// === Events ===
+function attachEvents(){
+  document.querySelectorAll('#hand .hand-card').forEach(el=>{
+    el.onclick=()=>{
+      if(state.turn!=='you')return;
+      const i=parseInt(el.dataset.hand);
+      state.selected=state.selected===i?null:i;
+      state.attackingCard=null;
+      render();
+    };
+  });
+  document.querySelectorAll('.card-slot').forEach(el=>{
+    el.onclick=()=>{
+      const side=el.dataset.side,zone=el.dataset.zone,idx=parseInt(el.dataset.idx);
+      // Placing
+      if(state.selected!==null && side==='you' && el.classList.contains('placeable')){
+        const card=state.you.hand[state.selected];
+        const valid=getValidZones(card.role,'you').find(v=>v.zone===zone && v.idx===idx);
+        if(valid){
+          const slot=state.you.field[valid.arr];
+          if(Array.isArray(slot))slot[idx]=card;
+          else state.you.field[valid.arr]=card;
+          card.exhausted=true; // can't attack same turn placed
+          state.you.hand.splice(state.selected,1);
+          state.selected=null;
+          sndPlace();
+          log('Placed '+card.name);
+          render();
+        }
+        return;
+      }
+      // Select attacker
+      if(side==='you' && state.turn==='you' && el.querySelector('.card')){
+        const card=getCardAt('you',zone,idx);
+        if(card && !card.exhausted && card.role!=='GK'){
+          state.attackingCard={zone,idx,card};
+          state.selected=null;
+          render();
+        }
+        return;
+      }
+      // Attack
+      if(side==='opp' && state.attackingCard && el.classList.contains('targetable')){
+        const target=getCardAt('opp',zone,idx);
+        if(target)resolveCombat(state.attackingCard,{zone,idx,card:target});
+      }
+    };
+  });
+}
+
+function getCardAt(side,zone,idx){
+  const f=state[side].field;
+  if(zone.endsWith('-gk'))return f.GK;
+  if(zone.endsWith('-def'))return f.DEF[idx];
+  if(zone.endsWith('-mid'))return f.MID[idx];
+  if(zone.endsWith('-att1'))return f.ATT1[idx];
+  if(zone.endsWith('-att2'))return f.ATT2[idx];
+}
+function setCardAt(side,zone,idx,val){
+  const f=state[side].field;
+  if(zone.endsWith('-gk'))f.GK=val;
+  else if(zone.endsWith('-def'))f.DEF[idx]=val;
+  else if(zone.endsWith('-mid'))f.MID[idx]=val;
+  else if(zone.endsWith('-att1'))f.ATT1[idx]=val;
+  else if(zone.endsWith('-att2'))f.ATT2[idx]=val;
+}
+
+function resolveCombat(att,def){
+  sndAttack();
+  const aStat=Math.max(att.card.stats.SHO,att.card.stats.DRI)+att.card.rating*0.2;
+  const dStat=Math.max(def.card.stats.DEF,def.card.stats.PHY)+def.card.rating*0.2;
+  // Chemistry bonus
+  const aBonus=chemBonus(att.card,'you')?5:0;
+  const dBonus=chemBonus(def.card,'opp')?5:0;
+  const aTotal=aStat+aBonus+Math.random()*8;
+  const dTotal=dStat+dBonus+Math.random()*8;
+  
+  log(`${att.card.name.split(' ')[1]} ⚔ ${def.card.name.split(' ')[1]} (${Math.round(aTotal)}v${Math.round(dTotal)})`);
+  
+  if(aTotal>dTotal){
+    // Attacker wins, remove defender
+    if(def.card.role==='GK'){
+      // GOAL!
+      state.you.score++;
+      sndGoal();
+      const fx=document.getElementById('goal-fx');
+      fx.classList.add('show');setTimeout(()=>fx.classList.remove('show'),2000);
+      log('⚽ GOAL!');
+      // Respawn GK
+      setCardAt('opp',def.zone,def.idx,{...pick(CARD_DB.filter(c=>c.role==='GK'))});
+    } else {
+      setCardAt('opp',def.zone,def.idx,null);
+    }
+  } else {
+    // Defender wins, remove attacker
+    setCardAt('you',att.zone,att.idx,null);
+    log('Lost attacker');
+  }
+  att.card.exhausted=true;
+  state.attackingCard=null;
+  render();
+  checkWin();
+}
+
+function chemBonus(card,side){
+  // Check adjacent cards same club or nation
+  const f=state[side].field;
+  const all=[f.GK,...f.DEF,...f.MID,...f.ATT1,...f.ATT2].filter(c=>c&&c!==card);
+  return all.some(c=>c.club===card.club||c.nation===card.nation);
+}
+
+function endTurn(){
+  if(state.turn==='you')state.turn='opp';
+  else state.turn='you';
+  state.selected=null;state.attackingCard=null;
+  if(checkWin())return;
+  newTurn();
+}
+
+function checkWin(){
+  if(state.turnCount>=20 || state.you.score>=5 || state.opp.score>=5){
+    endGame();return true;
+  }
+  return false;
+}
+
+function endGame(){
+  state.gameOver=true;
+  clearInterval(state.turnTimer);
+  const won=state.you.score>state.opp.score;
+  document.getElementById('result-title').textContent=won?'🏆 Victory!':state.you.score===state.opp.score?'🤝 Draw':'😞 Defeat';
+  document.getElementById('result-score').textContent=`${state.you.score} - ${state.opp.score}`;
+  document.getElementById('result-reward').textContent=won?'+25 Coins · +15 XP':'+5 Coins · +5 XP';
+  if(!won)sndLose();
+  setTimeout(()=>{
+    document.getElementById('play').classList.remove('active');
+    document.getElementById('gameover').classList.add('active');
+  },1500);
+}
+
+function forfeit(){state.opp.score=Math.max(state.opp.score,state.you.score+1);endGame()}
+
+// === AI ===
+function aiTurn(){
+  if(state.turn!=='opp'||state.gameOver)return;
+  // Place cards
+  let placed=true;let actions=0;
+  while(placed && actions<3){
+    placed=false;
+    for(let i=0;i<state.opp.hand.length;i++){
+      const card=state.opp.hand[i];
+      const valid=getValidZones(card.role,'opp');
+      if(valid.length>0){
+        const v=valid[0];
+        const slot=state.opp.field[v.arr];
+        if(Array.isArray(slot))slot[v.idx]=card;
+        else state.opp.field[v.arr]=card;
+        card.exhausted=true;
+        state.opp.hand.splice(i,1);
+        placed=true;actions++;
+        log('AI placed '+card.name.split(' ')[1]);
+        break;
+      }
+    }
+    if(actions>=2)break;
+  }
+  render();
+  // Attack
+  setTimeout(()=>{
+    const attackers=[];
+    ['DEF','MID','ATT1','ATT2'].forEach(k=>{
+      state.opp.field[k].forEach((c,i)=>{
+        if(c && !c.exhausted)attackers.push({card:c,zone:'opp-'+k.toLowerCase(),idx:i,arr:k});
+      });
+    });
+    if(attackers.length>0){
+      const att=attackers.sort((a,b)=>b.card.stats.SHO-a.card.stats.SHO)[0];
+      // Find target (player frontmost)
+      const yf=state.you.field;
+      let targets=[];
+      ['ATT2','ATT1','MID','DEF'].forEach(k=>{
+        if(targets.length>0)return;
+        const s=yf[k];
+        if(Array.isArray(s))s.forEach((c,i)=>{if(c)targets.push({card:c,zone:'you-'+k.toLowerCase(),idx:i})});
+      });
+      if(targets.length===0 && yf.GK)targets.push({card:yf.GK,zone:'you-gk',idx:0});
+      if(targets.length>0){
+        const target=targets[0];
+        aiAttack(att,target);
+      } else { setTimeout(endTurn,500) }
+    } else { setTimeout(endTurn,500) }
+  },800);
+}
+
+function aiAttack(att,def){
+  sndAttack();
+  const aStat=Math.max(att.card.stats.SHO,att.card.stats.DRI)+att.card.rating*0.2;
+  const dStat=Math.max(def.card.stats.DEF,def.card.stats.PHY)+def.card.rating*0.2;
+  const aTotal=aStat+Math.random()*8;
+  const dTotal=dStat+Math.random()*8;
+  log(`AI: ${att.card.name.split(' ')[1]} ⚔ ${def.card.name.split(' ')[1]}`);
+  if(aTotal>dTotal){
+    if(def.card.role==='GK'){
+      state.opp.score++;
+      sndGoal();
+      const fx=document.getElementById('goal-fx');
+      fx.textContent='AI GOAL!';fx.classList.add('show');
+      setTimeout(()=>{fx.classList.remove('show');fx.textContent='GOAL!'},2000);
+      state.you.field.GK={...pick(CARD_DB.filter(c=>c.role==='GK'))};
+    } else {
+      setCardAt('you',def.zone,def.idx,null);
+    }
+  } else {
+    setCardAt('opp',att.zone,att.idx,null);
+  }
+  att.card.exhausted=true;
+  render();
+  if(checkWin())return;
+  setTimeout(endTurn,1200);
+}
+
+// Init
+render();
+</script>
+</body>
+</html>

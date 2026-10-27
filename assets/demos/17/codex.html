@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Sky Runner - Aviation Endless Runner</title>
+<style>
+  :root{
+    --bg:#0f172a;
+    --panel:#111827dd;
+    --accent:#38bdf8;
+    --accent2:#f59e0b;
+    --ok:#22c55e;
+    --danger:#ef4444;
+    --text:#e5e7eb;
+    --muted:#94a3b8;
+  }
+  *{box-sizing:border-box;user-select:none;-webkit-user-select:none}
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;color:var(--text)}
+  #app{position:relative;width:100%;height:100%}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background:#7dd3fc}
+  .screen{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(180deg,#0b1022cc,#0b1022f2);
+    backdrop-filter: blur(4px);
+    z-index:5;
+  }
+  .hidden{display:none!important}
+  .panel{
+    width:min(980px,94vw);max-height:92vh;overflow:auto;
+    border:1px solid #334155;border-radius:16px;padding:18px;background:var(--panel);
+    box-shadow:0 12px 44px #0009;
+  }
+  h1,h2,h3,p{margin:6px 0}
+  .title{font-size:clamp(28px,5vw,44px);font-weight:900;letter-spacing:1px}
+  .subtitle{color:var(--muted);margin-bottom:12px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .col{display:flex;flex-direction:column;gap:10px}
+  .btn{
+    border:1px solid #334155;background:#0b1229;color:var(--text);
+    padding:12px 16px;border-radius:12px;cursor:pointer;font-weight:700;
+    transition:.15s transform,.15s background,.15s border-color;
+  }
+  .btn:hover{transform:translateY(-1px);border-color:#64748b}
+  .btn.primary{background:linear-gradient(180deg,#0ea5e9,#0284c7);border-color:#0369a1;color:#fff}
+  .btn.warn{background:linear-gradient(180deg,#f59e0b,#d97706);border-color:#b45309;color:#fff}
+  .btn.good{background:linear-gradient(180deg,#22c55e,#16a34a);border-color:#15803d;color:#fff}
+  .btn.bad{background:linear-gradient(180deg,#ef4444,#dc2626);border-color:#b91c1c;color:#fff}
+  .tabs{display:flex;gap:8px;margin:8px 0 14px;flex-wrap:wrap}
+  .tab{padding:8px 12px;border:1px solid #334155;border-radius:10px;background:#0b1229;cursor:pointer}
+  .tab.active{background:#1d4ed8;border-color:#60a5fa}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+  .card{
+    background:#0b1229;border:1px solid #334155;border-radius:12px;padding:12px;
+  }
+  .mini{font-size:12px;color:var(--muted)}
+  .stat{display:flex;justify-content:space-between;font-size:13px;color:#cbd5e1;margin:2px 0}
+  .badge{
+    display:inline-block;padding:3px 8px;border-radius:999px;background:#1f2937;border:1px solid #334155;font-size:11px
+  }
+  #hud{
+    position:absolute;inset:0;z-index:3;pointer-events:none;color:#fff;padding:10px;display:none;
+    text-shadow:0 2px 8px #000;
+  }
+  #hudTop{display:flex;justify-content:space-between;gap:8px}
+  .hudBlock{background:#0b122999;border:1px solid #334155;border-radius:10px;padding:8px 10px;min-width:130px}
+  .meter{height:10px;background:#1f2937;border:1px solid #334155;border-radius:999px;overflow:hidden}
+  .fill{height:100%}
+  #centerMessage{
+    position:absolute;left:50%;top:18%;transform:translateX(-50%);padding:8px 12px;border-radius:10px;
+    background:#0b1229cc;border:1px solid #334155;font-weight:700;display:none
+  }
+  #controlsHint{
+    position:absolute;left:50%;bottom:12px;transform:translateX(-50%);font-size:12px;color:#dbeafe;background:#0b1229aa;border:1px solid #334155;border-radius:10px;padding:6px 10px
+  }
+  #gameOver{
+    position:absolute;inset:0;z-index:6;display:none;align-items:center;justify-content:center;background:#020617c9
+  }
+  #gameOver .panel{max-width:560px}
+  .list{padding-left:18px;margin:8px 0}
+  .small{font-size:12px;color:var(--muted)}
+  .spacer{height:8px}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="hud">
+    <div id="hudTop">
+      <div class="hudBlock">
+        <div>Score: <span id="scoreText">0</span></div>
+        <div>Distance: <span id="distanceText">0</span>m</div>
+        <div>Gold Propellers: <span id="runCoinsText">0</span></div>
+      </div>
+      <div class="hudBlock">
+        <div>Fuel</div>
+        <div class="meter"><div id="fuelFill" class="fill" style="width:100%;background:#22c55e"></div></div>
+        <div style="margin-top:5px">Health</div>
+        <div class="meter"><div id="hpFill" class="fill" style="width:100%;background:#38bdf8"></div></div>
+      </div>
+      <div class="hudBlock">
+        <div>Altitude: <span id="altText">0</span></div>
+        <div>Storm Distance: <span id="stormText">100</span>m</div>
+        <div id="weatherText">Weather: Clear</div>
+      </div>
+    </div>
+    <div id="centerMessage"></div>
+    <div id="controlsHint">Swipe / Arrow Keys: Lane + Altitude • Double Tap / Space: Barrel Roll (i-frame)</div>
+  </div>
+
+  <div id="menuScreen" class="screen">
+    <div class="panel">
+      <h1 class="title">Sky Runner</h1>
+      <p class="subtitle">Aviation Endless Runner • Low-poly Sky Lanes • Dynamic Weather</p>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="homeTab">Home</div>
+        <div class="tab" data-tab="hangarTab">Hangar</div>
+        <div class="tab" data-tab="shopTab">Shop</div>
+        <div class="tab" data-tab="challengesTab">Daily Challenges</div>
+        <div class="tab" data-tab="leaderboardTab">Leaderboard</div>
+      </div>
+
+      <div id="homeTab" class="tabPanel">
+        <div class="row">
+          <button class="btn primary" id="playBtn">▶ Start Run</button>
+          <button class="btn" id="resetSaveBtn">Reset Save</button>
+        </div>
+        <div class="spacer"></div>
+        <div class="grid">
+          <div class="card">
+            <h3>Pilot Profile</h3>
+            <div class="stat"><span>Selected Aircraft</span><span id="selectedPlaneName">-</span></div>
+            <div class="stat"><span>Total Currency</span><span id="totalCurrencyText">0</span></div>
+            <div class="stat"><span>Best Score</span><span id="bestScoreText">0</span></div>
+            <div class="stat"><span>Best Distance</span><span id="bestDistanceText">0m</span></div>
+          </div>
+          <div class="card">
+            <h3>Run Controls</h3>
+            <ul class="list mini">
+              <li>Swipe Left/Right: Change lanes</li>
+              <li>Swipe Up/Down: Climb or dive altitude</li>
+              <li>Double Tap / Space: Barrel roll invincibility</li>
+              <li>Collect Fuel, Cargo, Golden Propellers</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Features Included</h3>
+            <div class="mini">Main menu, hangar selection, procedural spawning, pooling, collision/damage, power-ups, weather, daily missions, ghost race, local cloud-save simulation.</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="hangarTab" class="tabPanel hidden">
+        <h2>Hangar - Aircraft Selection</h2>
+        <div id="planesGrid" class="grid"></div>
+      </div>
+
+      <div id="shopTab" class="tabPanel hidden">
+        <h2>Shop - Cosmetics</h2>
+        <div id="shopGrid" class="grid"></div>
+      </div>
+
+      <div id="challengesTab" class="tabPanel hidden">
+        <h2>Daily Challenges</h2>
+        <div id="dailyContent"></div>
+      </div>
+
+      <div id="leaderboardTab" class="tabPanel hidden">
+        <h2>Leaderboard</h2>
+        <div class="row">
+          <button class="btn" id="lbGlobalBtn">Global</button>
+          <button class="btn" id="lbFriendsBtn">Friends</button>
+          <button class="btn" id="lbLocalBtn">Local Best</button>
+        </div>
+        <div id="leaderboardContent" class="card" style="margin-top:10px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="gameOver">
+    <div class="panel">
+      <h2>Run Complete</h2>
+      <div class="stat"><span>Score</span><span id="goScore">0</span></div>
+      <div class="stat"><span>Distance</span><span id="goDistance">0m</span></div>
+      <div class="stat"><span>Golden Propellers</span><span id="goCoins">0</span></div>
+      <div class="stat"><span>Reason</span><span id="goReason">-</span></div>
+      <div class="spacer"></div>
+      <div class="row">
+        <button class="btn primary" id="retryBtn">Retry</button>
+        <button class="btn" id="backMenuBtn">Main Menu</button>
+      </div>
+      <p class="small">Tip: Use barrel roll during tight obstacle clusters for a short invincibility window.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // -------------------- Data / Config --------------------
+  const STORAGE_KEY = "skyRunnerSave_v1";
+  const LANE_X = [-1, 0, 1];
+  const ALT_STEP = 0.5;
+  const ALT_MIN = -1.5;
+  const ALT_MAX = 1.5;
+
+  const PLANES = [
+    { id:0, name:"Comet Sparrow", cost:0, color:"#38bdf8", speed:1.00, handling:1.00, fuelEff:1.00, model:"delta" },
+    { id:1, name:"Sunhawk Racer", cost:600, color:"#f59e0b", speed:1.12, handling:0.95, fuelEff:0.93, model:"swept" },
+    { id:2, name:"Nimbus Falcon", cost:1200, color:"#a78bfa", speed:0.98, handling:1.15, fuelEff:1.10, model:"canard" }
+  ];
+
+  const SHOP_ITEMS = [
+    { id:"trail_blue", name:"Blue Contrail", type:"trail", cost:120, color:"#60a5fa" },
+    { id:"trail_fire", name:"Fire Contrail", type:"trail", cost:260, color:"#fb7185" },
+    { id:"paint_mint", name:"Mint Paint", type:"paint", cost:200, color:"#34d399" },
+    { id:"paint_white", name:"Pearl Paint", type:"paint", cost:180, color:"#f8fafc" }
+  ];
+
+  const LEADERBOARD_GLOBAL = [
+    ["AeroAce", 183420], ["Cloud9", 171990], ["JetMira", 166300], ["RaptorFly", 151240], ["NovaWing", 145700]
+  ];
+  const LEADERBOARD_FRIENDS = [
+    ["You", 0], ["Sam", 94500], ["Lena", 121300], ["Kaito", 101250], ["Nia", 113800]
+  ];
+
+  // -------------------- Utility --------------------
+  const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+  const lerp = (a,b,t) => a + (b-a)*t;
+  const randi = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
+  const pick = arr => arr[(Math.random()*arr.length)|0];
+  const todayKey = () => {
+    const d = new Date();
+    return `${d.getUTCFullYear()}-${d.getUTCMonth()+1}-${d.getUTCDate()}`;
+  };
+
+  // -------------------- Audio Placeholder (BGM + SFX) --------------------
+  class AudioSystem {
+    constructor(){
+      this.ctx = null;
+      this.enabled = true;
+      this.bgmTimer = 0;
+      this.bpm = 118;
+      this.seq = [0,3,5,7,5,3,2,3];
+      this.step = 0;
+    }
+    ensure(){
+      if(!this.enabled) return;
+      if(!this.ctx){
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        this.ctx = Ctx ? new Ctx() : null;
+      }
+      if(this.ctx && this.ctx.state === "suspended") this.ctx.resume();
+    }
+    note(freq=440, dur=0.08, type="sine", vol=0.04){
+      if(!this.ctx || !this.enabled) return;
+      const t = this.ctx.currentTime;
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = type; o.frequency.setValueAtTime(freq,t);
+      g.gain.setValueAtTime(0,t);
+      g.gain.linearRampToValueAtTime(vol,t+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+      o.connect(g); g.connect(this.ctx.destination);
+      o.start(t); o.stop(t+dur+0.02);
+    }
+    sfx(type){
+      this.ensure();
+      if(type==="collect") this.note(980,0.06,"triangle",0.03);
+      if(type==="hit") this.note(120,0.18,"sawtooth",0.06);
+      if(type==="roll") { this.note(520,0.06,"square",0.03); setTimeout(()=>this.note(760,0.06,"square",0.03),45);}
+      if(type==="power") this.note(680,0.1,"triangle",0.05);
+      if(type==="gameover") { this.note(220,0.22,"sawtooth",0.07); setTimeout(()=>this.note(140,0.24,"sawtooth",0.07),180);}
+    }
+    update(dt, playing){
+      if(!playing || !this.ctx || !this.enabled) return;
+      this.bgmTimer += dt;
+      const beat = 60/this.bpm;
+      if(this.bgmTimer >= beat){
+        this.bgmTimer -= beat;
+        const base = 220;
+        const sem = this.seq[this.step++ % this.seq.length];
+        const freq = base * Math.pow(2, sem/12);
+        this.note(freq, 0.09, "triangle", 0.022);
+        this.note(freq*2, 0.05, "sine", 0.012);
+      }
+    }
+  }
+
+  // -------------------- Save / Progress --------------------
+  const defaultSave = () => ({
+    currency: 0,
+    selectedPlane: 0,
+    unlockedPlanes: [0],
+    ownedItems: [],
+    selectedTrail: null,
+    selectedPaint: null,
+    bestScore: 0,
+    bestDistance: 0,
+    ghostData: [],
+    stats: { totalRuns:0, totalFuel:0, birdsDodged:0, cargoCollected:0 }
+  });
+
+  function loadSave(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return defaultSave();
+      const data = JSON.parse(raw);
+      return Object.assign(defaultSave(), data);
+    }catch(e){ return defaultSave(); }
+  }
+  function saveSave(obj){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+  }
+
+  // -------------------- Daily Challenges --------------------
+  function buildDailyState(save){
+    const key = todayKey();
+    const seed = key.split("-").reduce((a,b)=>a+Number(b),0);
+    const challenges = [
+      { id:"fuel", text:"Collect 8 Fuel Orbs", target:8 },
+      { id:"birds", text:"Dodge 15 Bird Flocks", target:15 },
+      { id:"cargo", text:"Collect 10 Cargo Crates", target:10 }
+    ];
+    // deterministic shuffle-like pick
+    const c1 = challenges[seed % challenges.length];
+    const c2 = challenges[(seed+1) % challenges.length];
+    return {
+      key,
+      list: [c1,c2],
+      progress: {
+        fuel: save.dailyProgress?.fuel || 0,
+        birds: save.dailyProgress?.birds || 0,
+        cargo: save.dailyProgress?.cargo || 0
+      },
+      claimed: save.dailyClaimedKey === key
+    };
+  }
+
+  // -------------------- Object Pool --------------------
+  class Pool {
+    constructor(factory, count=40){
+      this.factory = factory;
+      this.items = Array.from({length:count}, ()=>factory());
+    }
+    obtain(){
+      let obj = this.items.find(o=>!o.active);
+      if(!obj){ obj = this.factory(); this.items.push(obj); }
+      obj.active = true;
+      return obj;
+    }
+    forEachActive(cb){ for(const o of this.items){ if(o.active) cb(o); } }
+    reset(){ for(const o of this.items) o.active=false; }
+  }
+
+  // -------------------- Core Game --------------------
+  class SkyRunnerGame {
+    constructor(canvas){
+      this.canvas = canvas;
+      this.ctx = canvas.getContext("2d");
+      this.w = 0; this.h = 0; this.dpr = Math.max(1, Math.min(2, devicePixelRatio||1));
+      this.resize();
+
+      // systems
+      this.audio = new AudioSystem();
+      this.save = loadSave();
+      this.daily = buildDailyState(this.save);
+
+      // state
+      this.mode = "menu"; // menu | playing | gameover
+      this.weather = { type:"clear", timer:0, windDir:0 };
+      this.dayTimer = 0;
+      this.messageTimer = 0;
+      this.message = "";
+      this.ghostRaceEnabled = true;
+
+      // player runtime
+      this.player = {};
+      this.speedBase = 42;
+      this.distance = 0;
+      this.score = 0;
+      this.runCurrency = 0;
+      this.gameReason = "";
+
+      // spawn/pools
+      this.obstacles = new Pool(()=>({active:false, type:"aircraft", lane:0, alt:0, z:0, w:0.8, h:0.8, passed:false}));
+      this.collects = new Pool(()=>({active:false, type:"fuel", lane:0, alt:0, z:0, w:0.6, h:0.6}));
+      this.spawnTimer = 0;
+      this.collectTimer = 0;
+
+      // ghost
+      this.runHistory = [];
+      this.historySampleTimer = 0;
+
+      // input
+      this.keys = {};
+      this.touch = {x:0,y:0,t:0,active:false,lastTap:0};
+
+      this.bindInput();
+      this.bindUI();
+      this.updateMenu();
+      this.loop(0);
+    }
+
+    resize(){
+      this.w = innerWidth;
+      this.h = innerHeight;
+      this.canvas.width = Math.floor(this.w*this.dpr);
+      this.canvas.height = Math.floor(this.h*this.dpr);
+      this.ctx.setTransform(this.dpr,0,0,this.dpr,0,0);
+    }
+
+    bindInput(){
+      addEventListener("resize", ()=>this.resize());
+
+      addEventListener("keydown", (e)=>{
+        this.keys[e.key.toLowerCase()] = true;
+        if(e.key === "ArrowLeft") this.tryLane(-1);
+        if(e.key === "ArrowRight") this.tryLane(1);
+        if(e.key === "ArrowUp") this.tryAlt(1);
+        if(e.key === "ArrowDown") this.tryAlt(-1);
+        if(e.key === " ") this.barrelRoll();
+      });
+      addEventListener("keyup", (e)=>{ this.keys[e.key.toLowerCase()] = false; });
+
+      const start = (x,y) => {
+        this.touch.active = true; this.touch.x = x; this.touch.y = y; this.touch.t = performance.now();
+        const now = performance.now();
+        if(now - this.touch.lastTap < 280) this.barrelRoll();
+        this.touch.lastTap = now;
+      };
+      const end = (x,y) => {
+        if(!this.touch.active) return;
+        const dx = x - this.touch.x, dy = y - this.touch.y;
+        const adx = Math.abs(dx), ady = Math.abs(dy);
+        if(Math.max(adx,ady) > 25){
+          if(adx > ady) this.tryLane(dx>0?1:-1);
+          else this.tryAlt(dy<0?1:-1);
+        }
+        this.touch.active = false;
+      };
+      this.canvas.addEventListener("touchstart", e=>{ const t=e.changedTouches[0]; start(t.clientX,t.clientY); this.audio.ensure(); },{passive:true});
+      this.canvas.addEventListener("touchend", e=>{ const t=e.changedTouches[0]; end(t.clientX,t.clientY); },{passive:true});
+      this.canvas.addEventListener("mousedown", e=>{ start(e.clientX,e.clientY); this.audio.ensure(); });
+      this.canvas.addEventListener("mouseup", e=>{ end(e.clientX,e.clientY); });
+
+      // prevent page scrolling on mobile
+      document.body.addEventListener("touchmove", e=>{ if(this.mode==="playing") e.preventDefault(); }, {passive:false});
+    }
+
+    bindUI(){
+      const $ = id => document.getElementById(id);
+
+      $("playBtn").onclick = ()=>this.startRun();
+      $("retryBtn").onclick = ()=>this.startRun();
+      $("backMenuBtn").onclick = ()=>this.showMenu();
+      $("resetSaveBtn").onclick = ()=>{
+        if(confirm("Reset all progress?")){
+          this.save = defaultSave(); saveSave(this.save); this.daily = buildDailyState(this.save); this.updateMenu();
+        }
+      };
+
+      const tabs = document.querySelectorAll(".tab");
+      tabs.forEach(tab=>{
+        tab.onclick = ()=>{
+          tabs.forEach(t=>t.classList.remove("active"));
+          tab.classList.add("active");
+          document.querySelectorAll(".tabPanel").forEach(p=>p.classList.add("hidden"));
+          document.getElementById(tab.dataset.tab).classList.remove("hidden");
+        };
+      });
+
+      $("lbGlobalBtn").onclick = ()=>this.renderLeaderboard("global");
+      $("lbFriendsBtn").onclick = ()=>this.renderLeaderboard("friends");
+      $("lbLocalBtn").onclick = ()=>this.renderLeaderboard("local");
+    }
+
+    updateMenu(){
+      const s = this.save;
+      document.getElementById("selectedPlaneName").textContent = PLANES[s.selectedPlane]?.name || "-";
+      document.getElementById("totalCurrencyText").textContent = s.currency;
+      document.getElementById("bestScoreText").textContent = s.bestScore|0;
+      document.getElementById("bestDistanceText").textContent = (s.bestDistance|0) + "m";
+
+      this.renderHangar();
+      this.renderShop();
+      this.renderDaily();
+      this.renderLeaderboard("local");
+    }
+
+    renderHangar(){
+      const root = document.getElementById("planesGrid");
+      root.innerHTML = "";
+      PLANES.forEach(p=>{
+        const unlocked = this.save.unlockedPlanes.includes(p.id);
+        const selected = this.save.selectedPlane === p.id;
+        const div = document.createElement("div");
+        div.className = "card";
+        div.innerHTML = `
+          <h3>${p.name}</h3>
+          <div class="mini">Model: ${p.model}</div>
+          <div class="stat"><span>Speed</span><span>${p.speed.toFixed(2)}</span></div>
+          <div class="stat"><span>Handling</span><span>${p.handling.toFixed(2)}</span></div>
+          <div class="stat"><span>Fuel Efficiency</span><span>${p.fuelEff.toFixed(2)}</span></div>
+          <div class="spacer"></div>
+          ${unlocked ? `<span class="badge">${selected ? "Selected" : "Unlocked"}</span>` : `<span class="badge">Cost: ${p.cost} ✦</span>`}
+        `;
+        const b = document.createElement("button");
+        b.className = "btn " + (selected ? "good" : "primary");
+        b.textContent = unlocked ? (selected ? "Selected" : "Select") : "Unlock";
+        b.onclick = ()=>{
+          if(unlocked){ this.save.selectedPlane = p.id; }
+          else if(this.save.currency >= p.cost){
+            this.save.currency -= p.cost;
+            this.save.unlockedPlanes.push(p.id);
+            this.save.selectedPlane = p.id;
+          } else alert("Not enough Golden Propellers.");
+          saveSave(this.save); this.updateMenu();
+        };
+        div.appendChild(document.createElement("div")).className = "spacer";
+        div.appendChild(b);
+        root.appendChild(div);
+      });
+    }
+
+    renderShop(){
+      const root = document.getElementById("shopGrid");
+      root.innerHTML = "";
+      SHOP_ITEMS.forEach(it=>{
+        const owned = this.save.ownedItems.includes(it.id);
+        const selected = (it.type==="trail" && this.save.selectedTrail===it.id) || (it.type==="paint" && this.save.selectedPaint===it.id);
+        const div = document.createElement("div");
+        div.className = "card";
+        div.innerHTML = `
+          <h3>${it.name}</h3>
+          <div class="mini">${it.type.toUpperCase()}</div>
+          <div style="width:100%;height:20px;border-radius:8px;background:${it.color};margin:8px 0;border:1px solid #334155"></div>
+          <div class="stat"><span>Price</span><span>${it.cost} ✦</span></div>
+        `;
+        const b = document.createElement("button");
+        b.className = "btn " + (selected ? "good" : "primary");
+        b.textContent = owned ? (selected ? "Equipped" : "Equip") : "Buy";
+        b.onclick = ()=>{
+          if(!owned){
+            if(this.save.currency < it.cost){ alert("Not enough currency."); return; }
+            this.save.currency -= it.cost;
+            this.save.ownedItems.push(it.id);
+          }
+          if(it.type==="trail") this.save.selectedTrail = it.id;
+          if(it.type==="paint") this.save.selectedPaint = it.id;
+          saveSave(this.save); this.updateMenu();
+        };
+        div.appendChild(b);
+        root.appendChild(div);
+      });
+    }
+
+    renderDaily(){
+      this.daily = buildDailyState(this.save);
+      const root = document.getElementById("dailyContent");
+      const doneCount = this.daily.list.filter(c=>this.daily.progress[c.id] >= c.target).length;
+      const canClaim = doneCount === this.daily.list.length && !this.daily.claimed;
+      root.innerHTML = `
+        <div class="card">
+          <div class="mini">Challenge Date Key: ${this.daily.key}</div>
+          ${this.daily.list.map(c=>{
+            const p = this.daily.progress[c.id]||0;
+            const done = p>=c.target;
+            return `<div class="stat"><span>${c.text}</span><span>${Math.min(p,c.target)}/${c.target} ${done?"✅":""}</span></div>`;
+          }).join("")}
+          <div class="spacer"></div>
+          <button id="claimDailyBtn" class="btn ${canClaim?"warn":"bad"}" ${canClaim?"":"disabled"}>
+            ${this.daily.claimed ? "Reward Claimed" : (canClaim ? "Claim 300 ✦ Reward" : "Complete Challenges")}
+          </button>
+        </div>
+      `;
+      const claimBtn = document.getElementById("claimDailyBtn");
+      if(claimBtn) claimBtn.onclick = ()=>{
+        if(!canClaim) return;
+        this.save.currency += 300;
+        this.save.dailyClaimedKey = this.daily.key;
+        saveSave(this.save);
+        this.updateMenu();
+      };
+    }
+
+    renderLeaderboard(mode="local"){
+      const root = document.getElementById("leaderboardContent");
+      if(mode==="global"){
+        root.innerHTML = "<h3>Global Top Pilots</h3>" + LEADERBOARD_GLOBAL.map((r,i)=>`<div class="stat"><span>#${i+1} ${r[0]}</span><span>${r[1]}</span></div>`).join("");
+      } else if(mode==="friends"){
+        LEADERBOARD_FRIENDS[0][1] = this.save.bestScore|0;
+        root.innerHTML = "<h3>Friends</h3>" + LEADERBOARD_FRIENDS.sort((a,b)=>b[1]-a[1]).map((r,i)=>`<div class="stat"><span>#${i+1} ${r[0]}</span><span>${r[1]}</span></div>`).join("");
+      } else {
+        root.innerHTML = `
+          <h3>Local Best</h3>
+          <div class="stat"><span>Best Score</span><span>${this.save.bestScore|0}</span></div>
+          <div class="stat"><span>Best Distance</span><span>${this.save.bestDistance|0}m</span></div>
+          <div class="mini">Ghost race enabled: ${this.save.ghostData?.length ? "Yes" : "No data yet"}</div>
+        `;
+      }
+    }
+
+    showMenu(){
+      this.mode = "menu";
+      document.getElementById("menuScreen").classList.remove("hidden");
+      document.getElementById("hud").style.display = "none";
+      document.getElementById("gameOver").style.display = "none";
+      this.updateMenu();
+    }
+
+    startRun(){
+      this.audio.ensure();
+      this.mode = "playing";
+      document.getElementById("menuScreen").classList.add("hidden");
+      document.getElementById("gameOver").style.display = "none";
+      document.getElementById("hud").style.display = "block";
+      this.resetRun();
+      this.save.stats.totalRuns++;
+      saveSave(this.save);
+    }
+
+    resetRun(){
+      const plane = PLANES[this.save.selectedPlane] || PLANES[0];
+      this.player = {
+        lane: 1, lanePos: 1,
+        targetAlt: 0, alt: 0,
+        hp: 100, fuel: 100,
+        inv: 0, roll:0,
+        shield:0, turbo:0, magnet:0,
+        laneDrift:0
+      };
+      this.speedBase = 42 * plane.speed;
+      this.distance = 0;
+      this.score = 0;
+      this.runCurrency = 0;
+      this.gameReason = "";
+      this.spawnTimer = 0;
+      this.collectTimer = 0;
+      this.obstacles.reset();
+      this.collects.reset();
+      this.weather = { type:"clear", timer:0, windDir:Math.random()<0.5?-1:1 };
+      this.dayTimer = Math.random()*30;
+      this.message = "Take Off!";
+      this.messageTimer = 1.2;
+      this.historySampleTimer = 0;
+      this.runHistory = [];
+      this.ghostRaceEnabled = !!(this.save.ghostData && this.save.ghostData.length>10);
+    }
+
+    tryLane(dir){
+      if(this.mode!=="playing") return;
+      this.player.lane = clamp(this.player.lane + dir, 0, 2);
+    }
+    tryAlt(dir){
+      if(this.mode!=="playing") return;
+      this.player.targetAlt = clamp(this.player.targetAlt + dir*ALT_STEP, ALT_MIN, ALT_MAX);
+    }
+    barrelRoll(){
+      if(this.mode!=="playing") return;
+      if(this.player.roll <= 0.05){
+        this.player.roll = 0.65;
+        this.player.inv = Math.max(this.player.inv, 0.75);
+        this.audio.sfx("roll");
+        this.flashMessage("Barrel Roll!");
+      }
+    }
+
+    spawnObstacle(){
+      const o = this.obstacles.obtain();
+      const types = ["aircraft","bird","tower","storm","turbulence"];
+      o.type = pick(types);
+      o.lane = randi(0,2);
+      o.alt = [ -1, -0.5, 0, 0.5, 1 ][randi(0,4)];
+      o.z = 140 + Math.random()*60;
+      o.passed = false;
+      if(o.type==="tower"){ o.alt = -1; o.w=0.8; o.h=1.2; }
+      else if(o.type==="aircraft"){ o.w=0.9; o.h=0.7; }
+      else if(o.type==="bird"){ o.w=0.8; o.h=0.6; }
+      else if(o.type==="storm"){ o.w=1.2; o.h=1.2; }
+      else { o.w=1.0; o.h=1.0; }
+    }
+
+    spawnCollect(){
+      const c = this.collects.obtain();
+      const types = ["fuel","cargo","propeller","power"];
+      const t = pick(types);
+      c.type = t;
+      c.lane = randi(0,2);
+      c.alt = [ -1, -0.5, 0, 0.5, 1 ][randi(0,4)];
+      c.z = 120 + Math.random()*80;
+      c.w = c.h = 0.6;
+      c.powerType = pick(["turbo","shield","magnet"]);
+    }
+
+    update(dt){
+      this.audio.update(dt, this.mode==="playing");
+      if(this.mode!=="playing") return;
+
+      const plane = PLANES[this.save.selectedPlane] || PLANES[0];
+
+      // Weather cycle
+      this.weather.timer += dt;
+      if(this.weather.timer > 24){
+        this.weather.timer = 0;
+        this.weather.type = pick(["clear","rain","wind"]);
+        this.weather.windDir = Math.random()<0.5?-1:1;
+        this.flashMessage("Weather: " + this.weather.type.toUpperCase());
+      }
+
+      // Input fallback continuous (WASD)
+      if(this.keys["a"]) this.tryLane(-1), this.keys["a"]=false;
+      if(this.keys["d"]) this.tryLane(1), this.keys["d"]=false;
+      if(this.keys["w"]) this.tryAlt(1), this.keys["w"]=false;
+      if(this.keys["s"]) this.tryAlt(-1), this.keys["s"]=false;
+
+      // Player movement smoothing
+      const handling = plane.handling * (this.weather.type==="rain" ? 0.82 : 1);
+      const targetLanePos = this.player.lane + (this.weather.type==="wind" ? this.weather.windDir*0.17*Math.sin(this.distance*0.03) : 0);
+      this.player.lanePos = lerp(this.player.lanePos, targetLanePos, dt * 8 * handling);
+      this.player.alt = lerp(this.player.alt, this.player.targetAlt, dt * 6 * handling);
+
+      // Timers
+      this.player.inv = Math.max(0, this.player.inv-dt);
+      this.player.roll = Math.max(0, this.player.roll-dt);
+      this.player.shield = Math.max(0, this.player.shield-dt);
+      this.player.turbo = Math.max(0, this.player.turbo-dt);
+      this.player.magnet = Math.max(0, this.player.magnet-dt);
+
+      // Speed + fuel + storm pursuit
+      let speed = this.speedBase + Math.min(55, this.distance*0.02);
+      if(this.player.turbo>0) speed *= 1.45;
+      if(this.weather.type==="storm") speed *= 0.9;
+      const fuelDrain = (8.5 / plane.fuelEff) * (this.player.turbo>0 ? 1.4 : 1);
+      this.player.fuel -= fuelDrain*dt;
+      this.save.stats.totalFuel += Math.max(0, fuelDrain*dt*0.02);
+
+      // Storm pursuit logic (catch-up when fuel low)
+      if(this.player.fuel < 28) this.stormDistance = (this.stormDistance || 100) - dt*12;
+      else this.stormDistance = (this.stormDistance || 100) + dt*6;
+      this.stormDistance = clamp(this.stormDistance, 0, 180);
+
+      this.distance += speed*dt;
+      this.score += (speed*dt)*3 + (this.player.turbo>0 ? 2 : 0);
+
+      // Spawning
+      this.spawnTimer += dt;
+      this.collectTimer += dt;
+      const spawnGap = Math.max(0.36, 1.0 - this.distance/2500);
+      if(this.spawnTimer > spawnGap){
+        this.spawnTimer = 0;
+        this.spawnObstacle();
+        if(Math.random()<0.42) this.spawnObstacle();
+      }
+      if(this.collectTimer > 0.55){
+        this.collectTimer = 0;
+        this.spawnCollect();
+      }
+
+      // Update entities
+      const dz = speed*dt;
+      this.obstacles.forEachActive(o=>{
+        o.z -= dz;
+        if(o.z < -8) o.active = false;
+      });
+      this.collects.forEachActive(c=>{
+        c.z -= dz;
+        if(c.z < -8) c.active = false;
+
+        // magnet attraction
+        if(this.player.magnet>0 && c.z<40){
+          if(Math.abs(c.lane - this.player.lanePos) < 1.4){
+            c.lane = lerp(c.lane, this.player.lanePos, dt*3);
+            c.alt = lerp(c.alt, this.player.alt, dt*3);
+          }
+        }
+      });
+
+      // Collision checks
+      this.obstacles.forEachActive(o=>{
+        if(o.z > 11 || o.z < 2) return;
+        const laneHit = Math.abs(o.lane - this.player.lanePos) < 0.45*o.w;
+        const altHit = Math.abs(o.alt - this.player.alt) < 0.45*o.h;
+        if(!(laneHit && altHit)) {
+          if(!o.passed && o.z < 2){
+            o.passed = true;
+            if(o.type==="bird") this.save.stats.birdsDodged++;
+          }
+          return;
+        }
+
+        // on-hit behavior
+        if(o.type==="storm"){
+          this.player.fuel -= 18*dt;
+          this.score -= 6;
+          return;
+        }
+        if(o.type==="turbulence"){
+          this.player.lanePos += (Math.random()-0.5)*0.5*dt*20;
+          return;
+        }
+
+        if(this.player.inv>0) { o.active=false; return; }
+        if(this.player.shield>0){ this.player.shield=0; o.active=false; this.flashMessage("Shield Blocked!"); return; }
+
+        let dmg = 0;
+        if(o.type==="bird") dmg = 18;
+        else if(o.type==="aircraft") dmg = 34;
+        else if(o.type==="tower") dmg = 45;
+
+        this.player.hp -= dmg;
+        this.player.fuel -= 10;
+        this.stormDistance -= 20;
+        this.audio.sfx("hit");
+        this.flashMessage(`Hit: ${o.type.toUpperCase()} -${dmg} HP`);
+        o.active = false;
+      });
+
+      this.collects.forEachActive(c=>{
+        if(c.z > 10 || c.z < 1.5) return;
+        const laneHit = Math.abs(c.lane - this.player.lanePos) < 0.5;
+        const altHit = Math.abs(c.alt - this.player.alt) < 0.5;
+        if(!(laneHit && altHit)) return;
+
+        c.active = false;
+        this.audio.sfx("collect");
+        if(c.type==="fuel"){
+          this.player.fuel = clamp(this.player.fuel + 24, 0, 100);
+          this.score += 30;
+          this.daily.progress.fuel = (this.daily.progress.fuel||0)+1;
+        } else if(c.type==="cargo"){
+          this.score += 130;
+          this.daily.progress.cargo = (this.daily.progress.cargo||0)+1;
+          this.save.stats.cargoCollected++;
+        } else if(c.type==="propeller"){
+          this.runCurrency += 1 + (Math.random()<0.2?1:0);
+          this.score += 45;
+        } else if(c.type==="power"){
+          if(c.powerType==="turbo"){ this.player.turbo = 3.0; this.flashMessage("Turbo Boost!"); }
+          if(c.powerType==="shield"){ this.player.shield = 6.0; this.flashMessage("Shield Online"); }
+          if(c.powerType==="magnet"){ this.player.magnet = 7.0; this.flashMessage("Magnet Active"); }
+          this.audio.sfx("power");
+        }
+      });
+
+      // ghost sampling
+      this.historySampleTimer += dt;
+      if(this.historySampleTimer > 0.24){
+        this.historySampleTimer = 0;
+        this.runHistory.push({
+          d:this.distance,
+          lane:this.player.lanePos,
+          alt:this.player.alt
+        });
+      }
+
+      // Message
+      this.messageTimer = Math.max(0, this.messageTimer-dt);
+
+      // Update HUD
+      this.updateHUD();
+
+      // End conditions
+      if(this.player.hp <= 0) this.endRun("Aircraft destroyed");
+      if(this.player.fuel <= 0) this.endRun("Out of fuel");
+      if(this.stormDistance <= 0) this.endRun("Storm cloud pursuit caught you");
+    }
+
+    endRun(reason){
+      if(this.mode!=="playing") return;
+      this.mode = "gameover";
+      this.gameReason = reason;
+
+      this.audio.sfx("gameover");
+
+      const finalScore = Math.max(0, Math.floor(this.score));
+      const finalDist = Math.floor(this.distance);
+      this.save.currency += this.runCurrency;
+      if(finalScore > this.save.bestScore){
+        this.save.bestScore = finalScore;
+        // Save ghost from best run
+        this.save.ghostData = this.runHistory.slice(0, 2500);
+      }
+      if(finalDist > this.save.bestDistance) this.save.bestDistance = finalDist;
+
+      // persist daily incremental progress
+      this.save.dailyProgress = Object.assign({}, this.daily.progress);
+      saveSave(this.save);
+
+      document.getElementById("goScore").textContent = finalScore;
+      document.getElementById("goDistance").textContent = `${finalDist}m`;
+      document.getElementById("goCoins").textContent = this.runCurrency;
+      document.getElementById("goReason").textContent = reason;
+      document.getElementById("gameOver").style.display = "flex";
+    }
+
+    updateHUD(){
+      document.getElementById("scoreText").textContent = Math.floor(this.score);
+      document.getElementById("distanceText").textContent = Math.floor(this.distance);
+      document.getElementById("runCoinsText").textContent = this.runCurrency;
+      document.getElementById("fuelFill").style.width = `${clamp(this.player.fuel,0,100)}%`;
+      document.getElementById("fuelFill").style.background = this.player.fuel<25 ? "#ef4444" : "#22c55e";
+      document.getElementById("hpFill").style.width = `${clamp(this.player.hp,0,100)}%`;
+      document.getElementById("altText").textContent = this.player.alt.toFixed(2);
+      document.getElementById("stormText").textContent = Math.floor(this.stormDistance||100);
+      document.getElementById("weatherText").textContent = `Weather: ${this.weather.type.toUpperCase()}`;
+      const m = document.getElementById("centerMessage");
+      if(this.messageTimer>0){
+        m.style.display = "block";
+        m.textContent = this.message;
+      } else m.style.display = "none";
+    }
+
+    flashMessage(txt){
+      this.message = txt;
+      this.messageTimer = 1.0;
+    }
+
+    // 3D-ish projection
+    proj(lane, alt, z){
+      const cx = this.w*0.5;
+      const horizon = this.h*0.24;
+      const fov = 240;
+      const zz = Math.max(1, z+25);
+      const s = fov/zz;
+      const worldX = (lane-1)*1.75;
+      const x = cx + worldX*s*140;
+      const y = horizon + (1-s)*320 - alt*s*165;
+      return {x,y,s};
+    }
+
+    drawBackground(dt){
+      // day/night cycle
+      this.dayTimer += dt*0.04;
+      const t = (Math.sin(this.dayTimer)+1)/2;
+      const c = this.ctx;
+
+      const topR = Math.floor(lerp(15,125,t));
+      const topG = Math.floor(lerp(23,211,t));
+      const topB = Math.floor(lerp(42,252,t));
+      const botR = Math.floor(lerp(2,251,t));
+      const botG = Math.floor(lerp(6,146,t));
+      const botB = Math.floor(lerp(23,60,t));
+
+      const grad = c.createLinearGradient(0,0,0,this.h);
+      grad.addColorStop(0, `rgb(${topR},${topG},${topB})`);
+      grad.addColorStop(1, `rgb(${botR},${botG},${botB})`);
+      c.fillStyle = grad;
+      c.fillRect(0,0,this.w,this.h);
+
+      // volumetric cloud blobs
+      for(let i=0;i<18;i++){
+        const x = ((i*257 + this.distance*0.6)% (this.w+300)) - 150;
+        const y = 70 + ((i*91)%230) + Math.sin((this.distance*0.002)+i)*12;
+        const r = 25 + (i%5)*12;
+        c.fillStyle = `rgba(255,255,255,${0.07 + (i%3)*0.03})`;
+        c.beginPath(); c.arc(x,y,r,0,Math.PI*2); c.fill();
+      }
+
+      // lane corridor lines
+      const lines = 24;
+      for(let i=0;i<lines;i++){
+        const z = 6 + i*8;
+        const pL = this.proj(0, -1.8, z);
+        const pR = this.proj(2, -1.8, z);
+        const alpha = clamp(1 - i/lines, 0, 1)*0.45;
+        c.strokeStyle = `rgba(255,255,255,${alpha})`;
+        c.lineWidth = 1.2;
+        c.beginPath(); c.moveTo(pL.x,pL.y); c.lineTo(pR.x,pR.y); c.stroke();
+      }
+      for(const lane of [0,1,2]){
+        c.beginPath();
+        for(let i=0;i<lines;i++){
+          const z = 6 + i*8;
+          const p = this.proj(lane, -1.8, z);
+          if(i===0) c.moveTo(p.x,p.y); else c.lineTo(p.x,p.y);
+        }
+        c.strokeStyle = "rgba(255,255,255,0.22)";
+        c.lineWidth = lane===1 ? 2.2 : 1.2;
+        c.stroke();
+      }
+
+      // weather overlays
+      if(this.weather.type==="rain"){
+        c.strokeStyle = "rgba(180,220,255,.38)";
+        c.lineWidth = 1;
+        for(let i=0;i<90;i++){
+          const x = (i*53 + this.distance*5)%this.w;
+          const y = (i*97 + this.distance*3)%this.h;
+          c.beginPath(); c.moveTo(x,y); c.lineTo(x-5,y+13); c.stroke();
+        }
+      }
+      if(this.weather.type==="wind"){
+        c.fillStyle = "rgba(255,255,255,0.08)";
+        for(let i=0;i<9;i++){
+          const y = 120 + i*55 + Math.sin(this.distance*0.02 + i)*8;
+          c.fillRect(0,y,this.w,1);
+        }
+      }
+    }
+
+    drawObstacle(o){
+      const c = this.ctx;
+      const p = this.proj(o.lane, o.alt, o.z);
+      if(p.s <= 0) return;
+      const sz = 45*p.s;
+      c.save();
+      c.translate(p.x,p.y);
+      switch(o.type){
+        case "aircraft":
+          c.fillStyle = "#94a3b8";
+          c.beginPath(); c.moveTo(0,-sz*0.55); c.lineTo(sz*0.55,0); c.lineTo(0,sz*0.55); c.lineTo(-sz*0.55,0); c.closePath(); c.fill();
+          c.fillStyle="#64748b"; c.fillRect(-sz*0.8,-sz*0.08,sz*1.6,sz*0.16);
+          break;
+        case "bird":
+          c.strokeStyle = "#111827"; c.lineWidth = Math.max(1,2.2*p.s);
+          c.beginPath(); c.moveTo(-sz*0.7,0); c.quadraticCurveTo(-sz*0.3,-sz*0.4,0,0); c.quadraticCurveTo(sz*0.3,-sz*0.4,sz*0.7,0); c.stroke();
+          break;
+        case "tower":
+          c.fillStyle = "#475569"; c.fillRect(-sz*0.24,-sz*1.1,sz*0.48,sz*1.4);
+          c.fillStyle = "#94a3b8"; c.fillRect(-sz*0.45,-sz*1.26,sz*0.9,sz*0.18);
+          break;
+        case "storm":
+          c.fillStyle = "rgba(71,85,105,.86)";
+          for(let i=0;i<5;i++){ c.beginPath(); c.arc((i-2)*sz*0.26, -sz*0.15 + Math.sin(i)*2, sz*0.3,0,Math.PI*2); c.fill(); }
+          c.strokeStyle="#93c5fd"; c.beginPath(); c.moveTo(0,sz*0.1); c.lineTo(-sz*0.15,sz*0.4); c.lineTo(sz*0.05,sz*0.35); c.stroke();
+          break;
+        case "turbulence":
+          c.strokeStyle = "rgba(248,250,252,.85)";
+          c.lineWidth = Math.max(1,2*p.s);
+          for(let i=0;i<3;i++){ c.beginPath(); c.arc(0,0,sz*(0.3+i*0.2),i,Math.PI+i); c.stroke(); }
+          break;
+      }
+      c.restore();
+    }
+
+    drawCollect(cobj){
+      const c = this.ctx;
+      const p = this.proj(cobj.lane, cobj.alt, cobj.z);
+      const sz = 33*p.s;
+      c.save(); c.translate(p.x,p.y);
+      if(cobj.type==="fuel"){
+        c.fillStyle="#22c55e";
+        c.beginPath(); c.arc(0,0,sz*0.35,0,Math.PI*2); c.fill();
+        c.fillStyle="#dcfce7"; c.fillRect(-sz*0.08,-sz*0.16,sz*0.16,sz*0.32);
+      } else if(cobj.type==="cargo"){
+        c.fillStyle="#f59e0b"; c.fillRect(-sz*0.32,-sz*0.28,sz*0.64,sz*0.56);
+        c.strokeStyle="#78350f"; c.strokeRect(-sz*0.32,-sz*0.28,sz*0.64,sz*0.56);
+      } else if(cobj.type==="propeller"){
+        c.strokeStyle="#fde047"; c.lineWidth=Math.max(1,2*p.s);
+        for(let i=0;i<3;i++){ c.beginPath(); c.moveTo(0,0); c.lineTo(Math.cos(i*2.094)*sz*0.5,Math.sin(i*2.094)*sz*0.5); c.stroke(); }
+        c.fillStyle="#fde047"; c.beginPath(); c.arc(0,0,sz*0.1,0,Math.PI*2); c.fill();
+      } else {
+        c.fillStyle = cobj.powerType==="shield" ? "#60a5fa" : (cobj.powerType==="turbo" ? "#fb7185" : "#c084fc");
+        c.beginPath(); c.moveTo(0,-sz*0.45); c.lineTo(sz*0.45,0); c.lineTo(0,sz*0.45); c.lineTo(-sz*0.45,0); c.closePath(); c.fill();
+      }
+      c.restore();
+    }
+
+    drawPlayer(){
+      const c = this.ctx;
+      const p = this.proj(this.player.lanePos, this.player.alt, 3.8);
+      const sz = 72;
+      c.save();
+      c.translate(p.x,p.y);
+      if(this.player.roll>0){
+        const r = (1-this.player.roll/0.65)*Math.PI*2*2.2;
+        c.rotate(r);
+      }
+
+      // i-frame / shield glow
+      if(this.player.inv>0 || this.player.shield>0){
+        c.fillStyle = this.player.shield>0 ? "rgba(96,165,250,.22)" : "rgba(248,250,252,.2)";
+        c.beginPath(); c.arc(0,0,sz*0.7,0,Math.PI*2); c.fill();
+      }
+
+      const plane = PLANES[this.save.selectedPlane] || PLANES[0];
+      const paint = SHOP_ITEMS.find(i=>i.id===this.save.selectedPaint);
+      const col = paint ? paint.color : plane.color;
+
+      // Low poly aircraft variants
+      c.fillStyle = col;
+      if(plane.model==="delta"){
+        c.beginPath(); c.moveTo(0,-sz*0.7); c.lineTo(sz*0.5,sz*0.6); c.lineTo(0,sz*0.35); c.lineTo(-sz*0.5,sz*0.6); c.closePath(); c.fill();
+      } else if(plane.model==="swept"){
+        c.beginPath(); c.moveTo(0,-sz*0.75); c.lineTo(sz*0.35,sz*0.1); c.lineTo(sz*0.6,sz*0.6); c.lineTo(0,sz*0.3); c.lineTo(-sz*0.6,sz*0.6); c.lineTo(-sz*0.35,sz*0.1); c.closePath(); c.fill();
+      } else {
+        c.beginPath(); c.moveTo(0,-sz*0.65); c.lineTo(sz*0.45,sz*0.4); c.lineTo(0,sz*0.2); c.lineTo(-sz*0.45,sz*0.4); c.closePath(); c.fill();
+        c.fillRect(-sz*0.25,-sz*0.75,sz*0.5,sz*0.15);
+      }
+      c.fillStyle="#e2e8f0";
+      c.fillRect(-sz*0.08,-sz*0.4,sz*0.16,sz*0.5);
+
+      // Contrail
+      const trail = SHOP_ITEMS.find(i=>i.id===this.save.selectedTrail);
+      const trailColor = trail ? trail.color : "#ffffff";
+      c.strokeStyle = trailColor + "88";
+      c.lineWidth = 3;
+      c.beginPath(); c.moveTo(-12,sz*0.55); c.lineTo(-18,sz*0.95); c.stroke();
+      c.beginPath(); c.moveTo(12,sz*0.55); c.lineTo(18,sz*0.95); c.stroke();
+
+      c.restore();
+    }
+
+    drawGhost(){
+      if(!this.ghostRaceEnabled || this.mode!=="playing") return;
+      const data = this.save.ghostData;
+      if(!data || data.length<2) return;
+      // map current distance to ghost sample
+      const gd = this.distance + 25;
+      let i = data.findIndex(s=>s.d>=gd);
+      if(i<0) return;
+      const g = data[i];
+      const z = clamp(g.d - this.distance + 10, 6, 90);
+      const p = this.proj(g.lane, g.alt, z);
+      const c = this.ctx;
+      const sz = 42*p.s + 16;
+      c.save();
+      c.translate(p.x,p.y);
+      c.globalAlpha = 0.42;
+      c.fillStyle = "#cbd5e1";
+      c.beginPath(); c.moveTo(0,-sz*0.8); c.lineTo(sz*0.6,sz*0.5); c.lineTo(-sz*0.6,sz*0.5); c.closePath(); c.fill();
+      c.restore();
+    }
+
+    draw(dt){
+      this.drawBackground(dt);
+
+      // depth-sorted simple draw by z
+      const draws = [];
+      this.obstacles.forEachActive(o=>draws.push({z:o.z, fn:()=>this.drawObstacle(o)}));
+      this.collects.forEachActive(c=>draws.push({z:c.z, fn:()=>this.drawCollect(c)}));
+      draws.sort((a,b)=>b.z-a.z);
+      draws.forEach(d=>d.fn());
+
+      this.drawGhost();
+      this.drawPlayer();
+
+      // power-up tiny indicators
+      if(this.mode==="playing"){
+        const c = this.ctx;
+        c.fillStyle = "#0b1229aa";
+        c.fillRect(10,this.h-94,220,84);
+        c.strokeStyle = "#334155"; c.strokeRect(10,this.h-94,220,84);
+        c.fillStyle = "#e2e8f0"; c.font = "12px sans-serif";
+        c.fillText(`Turbo: ${this.player.turbo.toFixed(1)}s`, 18, this.h-68);
+        c.fillText(`Shield: ${this.player.shield.toFixed(1)}s`, 18, this.h-50);
+        c.fillText(`Magnet: ${this.player.magnet.toFixed(1)}s`, 18, this.h-32);
+      }
+    }
+
+    loop(ts){
+      if(!this.prev) this.prev = ts;
+      const dt = clamp((ts - this.prev)/1000, 0, 0.033);
+      this.prev = ts;
+      this.update(dt);
+      this.draw(dt);
+      requestAnimationFrame(t=>this.loop(t));
+    }
+  }
+
+  // Boot
+  const game = new SkyRunnerGame(document.getElementById("gameCanvas"));
+  game.showMenu();
+})();
+</script>
+</body>
+</html>

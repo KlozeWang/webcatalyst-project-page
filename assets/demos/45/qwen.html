@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gesture Blocks - Google TV</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0a2e;
+  overflow: hidden;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  color: white;
+}
+#gameContainer {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start;
+  transform: scale(1.2);
+}
+#leftPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: center;
+}
+#rightPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: center;
+}
+canvas {
+  border: 3px solid #4a90d9;
+  border-radius: 8px;
+  box-shadow: 0 0 30px rgba(74, 144, 217, 0.4);
+}
+#infoPanel {
+  background: rgba(255,255,255,0.05);
+  border: 2px solid rgba(74, 144, 217, 0.3);
+  border-radius: 12px;
+  padding: 20px 30px;
+  min-width: 200px;
+  text-align: center;
+}
+#infoPanel h2 {
+  font-size: 18px;
+  color: #4a90d9;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+#infoPanel .stat {
+  font-size: 36px;
+  font-weight: bold;
+  color: #fff;
+  margin: 8px 0;
+}
+#infoPanel .label {
+  font-size: 14px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+#gestureDisplay {
+  background: rgba(255,255,255,0.05);
+  border: 2px solid rgba(74, 144, 217, 0.3);
+  border-radius: 12px;
+  padding: 15px 25px;
+  text-align: center;
+  min-width: 200px;
+}
+#gestureDisplay h3 {
+  font-size: 14px;
+  color: #4a90d9;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+}
+#gestureName {
+  font-size: 28px;
+  font-weight: bold;
+  color: #00ff88;
+  text-shadow: 0 0 15px rgba(0,255,136,0.5);
+}
+#instructions {
+  background: rgba(255,255,255,0.05);
+  border: 2px solid rgba(74, 144, 217, 0.3);
+  border-radius: 12px;
+  padding: 15px 25px;
+  min-width: 200px;
+}
+#instructions h3 {
+  font-size: 14px;
+  color: #4a90d9;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+}
+#instructions p {
+  font-size: 13px;
+  color: #aaa;
+  margin: 6px 0;
+  line-height: 1.5;
+}
+#instructions span.gesture {
+  color: #00ff88;
+  font-weight: bold;
+}
+#videoContainer {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  border: 3px solid #4a90d9;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 0 20px rgba(74, 144, 217, 0.3);
+  z-index: 100;
+}
+#webcam {
+  width: 200px;
+  height: 150px;
+  transform: scaleX(-1);
+}
+#loadingScreen {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: #0a0a2e;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  transition: opacity 0.5s;
+}
+#loadingScreen h1 {
+  font-size: 60px;
+  background: linear-gradient(135deg, #4a90d9, #00ff88);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 20px;
+}
+#loadingScreen p {
+  font-size: 20px;
+  color: #888;
+  margin-bottom: 30px;
+}
+#startBtn {
+  padding: 15px 50px;
+  font-size: 24px;
+  background: linear-gradient(135deg, #4a90d9, #357abd);
+  color: white;
+  border: none;
+  border-radius: 30px;
+  cursor: pointer;
+  transition: all 0.3s;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+}
+#startBtn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 30px rgba(74, 144, 217, 0.6);
+}
+#handCanvas {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 200px;
+  height: 150px;
+  transform: scaleX(-1);
+  z-index: 99;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 0 20px rgba(74, 144, 217, 0.3);
+  border: 3px solid #4a90d9;
+}
+#overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 500;
+}
+#overlayContent {
+  text-align: center;
+  background: rgba(10,10,46,0.95);
+  padding: 50px;
+  border-radius: 20px;
+  border: 3px solid #4a90d9;
+}
+#overlayContent h1 {
+  font-size: 50px;
+  color: #ff4444;
+  margin-bottom: 20px;
+}
+#overlayContent p {
+  font-size: 24px;
+  color: #aaa;
+  margin-bottom: 10px;
+}
+#overlayContent button {
+  margin-top: 20px;
+  padding: 12px 40px;
+  font-size: 20px;
+  background: #4a90d9;
+  color: white;
+  border: none;
+  border-radius: 25px;
+  cursor: pointer;
+}
+#pauseOverlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 500;
+}
+#pauseOverlay h1 {
+  font-size: 60px;
+  color: #4a90d9;
+  text-shadow: 0 0 30px rgba(74,144,217,0.5);
+}
+</style>
+</head>
+<body>
+
+<div id="loadingScreen">
+  <h1>🎮 Gesture Blocks</h1>
+  <p>Webcam-Controlled Tetris for Google TV</p>
+  <button id="startBtn" onclick="startGame()">Start Game</button>
+</div>
+
+<div id="gameContainer">
+  <div id="leftPanel">
+    <div id="infoPanel">
+      <h2>Score</h2>
+      <div class="stat" id="score">0</div>
+      <h2>Level</h2>
+      <div class="stat" id="level">1</div>
+      <h2>Lines</h2>
+      <div class="stat" id="lines">0</div>
+    </div>
+    <div id="instructions">
+      <h3>🖐️ Gestures</h3>
+      <p><span class="gesture">↔ Hand Left/Right</span> Move Block</p>
+      <p><span class="gesture">↑ Hand Up</span> Rotate CW</p>
+      <p><span class="gesture">↓ Hand Down</span> Rotate CCW</p>
+      <p><span class="gesture">✋ Open Hand</span> Hard Drop</p>
+      <p><span class="gesture">✊ Fist</span> Lock & Next</p>
+      <p><span class="gesture">🖐️ Palm</span> Pause</p>
+    </div>
+  </div>
+
+  <canvas id="gameCanvas" width="300" height="600"></canvas>
+
+  <div id="rightPanel">
+    <div id="infoPanel">
+      <h2>Next</h2>
+      <canvas id="nextCanvas" width="120" height="120"></canvas>
+    </div>
+    <div id="gestureDisplay">
+      <h3>Detected Gesture</h3>
+      <div id="gestureName">Waiting...</div>
+    </div>
+    <div id="infoPanel">
+      <h2>Speed</h2>
+      <div class="stat" id="speed">1.0x</div>
+    </div>
+  </div>
+</div>
+
+<video id="webcam" autoplay playsinline></video>
+<canvas id="handCanvas"></canvas>
+
+<div id="overlay">
+  <div id="overlayContent">
+    <h1>GAME OVER</h1>
+    <p>Final Score: <span id="finalScore">0</span></p>
+    <p>Lines Cleared: <span id="finalLines">0</span></p>
+    <button onclick="restartGame()">Play Again</button>
+  </div>
+</div>
+
+<div id="pauseOverlay">
+  <h1>⏸ PAUSED</h1>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.min.js"></script>
+
+<script>
+// ==================== GAME CONFIG ====================
+const COLS = 10;
+const ROWS = 20;
+const BLOCK_SIZE = 30;
+const COLORS = [
+  null,
+  '#00f0f0', // I - Cyan
+  '#0000f0', // J - Blue
+  '#f0a000', // L - Orange
+  '#f0f000', // O - Yellow
+  '#00f000', // S - Green
+  '#a000f0', // T - Purple
+  '#f00000'  // Z - Red
+];
+
+const SHAPES = [
+  null,
+  [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], // I
+  [[2,0,0],[2,2,2],[0,0,0]], // J
+  [[0,0,3],[3,3,3],[0,0,0]], // L
+  [[4,4],[4,4]], // O
+  [[0,5,5],[5,5,0],[0,0,0]], // S
+  [[0,6,0],[6,6,6],[0,0,0]], // T
+  [[7,7,0],[0,7,7],[0,0,0]]  // Z
+];
+
+// ==================== GAME STATE ====================
+let canvas, ctx, nextCanvas, nextCtx;
+let board = [];
+let currentPiece = null;
+let nextPiece = null;
+let score = 0;
+let level = 1;
+let lines = 0;
+let gameOver = false;
+let paused = false;
+let dropCounter = 0;
+let dropInterval = 1000;
+let lastTime = 0;
+let animFrame = null;
+
+// Gesture state
+let handX = 0.5;
+let handY = 0.5;
+let gesture = 'none';
+let gestureStable = 'none';
+let gestureTimer = 0;
+let moveCooldown = 0;
+let rotateCooldown = 0;
+let lastGestureTime = 0;
+
+// ==================== PIECE CLASS ====================
+class Piece {
+  constructor(type) {
+    this.type = type;
+    this.shape = SHAPES[type].map(row => [...row]);
+    this.x = Math.floor((COLS - this.shape[0].length) / 2);
+    this.y = type === 1 ? -1 : 0;
+  }
+
+  rotate(dir) {
+    const n = this.shape.length;
+    const rotated = Array.from({length: n}, () => Array(n).fill(0));
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        if (dir === 1) rotated[c][n-1-r] = this.shape[r][c];
+        else rotated[n-1-c][r] = this.shape[r][c];
+      }
+    }
+    this.shape = rotated;
+  }
+}
+
+// ==================== BOARD FUNCTIONS ====================
+function createBoard() {
+  board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+}
+
+function validMove(piece, offsetX = 0, offsetY = 0, newShape = null) {
+  const shape = newShape || piece.shape;
+  for (let r = 0; r < shape.length; r++) {
+    for (let c = 0; c < shape[r].length; c++) {
+      if (shape[r][c]) {
+        const newX = piece.x + c + offsetX;
+        const newY = piece.y + r + offsetY;
+        if (newX < 0 || newX >= COLS || newY >= ROWS) return false;
+        if (newY >= 0 && board[newY][newX]) return false;
+      }
+    }
+  }
+  return true;
+}
+
+function lockPiece() {
+  for (let r = 0; r < currentPiece.shape.length; r++) {
+    for (let c = 0; c < currentPiece.shape[r].length; c++) {
+      if (currentPiece.shape[r][c]) {
+        const y = currentPiece.y + r;
+        const x = currentPiece.x + c;
+        if (y < 0) { gameOver = true; return; }
+        board[y][x] = currentPiece.type;
+      }
+    }
+  }
+  clearLines();
+  spawnPiece();
+}
+
+function clearLines() {
+  let cleared = 0;
+  for (let r = ROWS - 1; r >= 0; r--) {
+    if (board[r].every(cell => cell !== 0)) {
+      board.splice(r, 1);
+      board.unshift(Array(COLS).fill(0));
+      cleared++;
+      r++;
+    }
+  }
+  if (cleared > 0) {
+    const points = [0, 100, 300, 500, 800];
+    score += points[cleared] * level;
+    lines += cleared;
+    level = Math.floor(lines / 10) + 1;
+    dropInterval = Math.max(100, 1000 - (level - 1) * 80);
+    updateUI();
+  }
+}
+
+function spawnPiece() {
+  currentPiece = nextPiece || new Piece(Math.floor(Math.random() * 7) + 1);
+  nextPiece = new Piece(Math.floor(Math.random() * 7) + 1);
+  if (!validMove(currentPiece)) {
+    gameOver = true;
+  }
+  drawNext();
+}
+
+function getGhostY() {
+  let ghostY = 0;
+  while (validMove(currentPiece, 0, ghostY + 1)) ghostY++;
+  return ghostY;
+}
+
+// ==================== RENDERING ====================
+function drawBlock(context, x, y, type, size = BLOCK_SIZE, ghost = false) {
+  const color = COLORS[type];
+  if (ghost) {
+    context.strokeStyle = color;
+    context.lineWidth = 2;
+    context.globalAlpha = 0.3;
+    context.strokeRect(x * size + 1, y * size + 1, size - 2, size - 2);
+    context.globalAlpha = 1;
+    return;
+  }
+  context.fillStyle = color;
+  context.fillRect(x * size, y * size, size, size);
+  // Highlight
+  context.fillStyle = 'rgba(255,255,255,0.3)';
+  context.fillRect(x * size, y * size, size, 3);
+  context.fillRect(x * size, y * size, 3, size);
+  // Shadow
+  context.fillStyle = 'rgba(0,0,0,0.3)';
+  context.fillRect(x * size + size - 3, y * size, 3, size);
+  context.fillRect(x * size, y * size + size - 3, size, 3);
+  // Border
+  context.strokeStyle = 'rgba(0,0,0,0.5)';
+  context.lineWidth = 1;
+  context.strokeRect(x * size, y * size, size, size);
+}
+
+function drawBoard() {
+  // Background
+  ctx.fillStyle = '#0d0d3b';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      ctx.strokeRect(c * BLOCK_SIZE, r * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+    }
+  }
+
+  // Board cells
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (board[r][c]) drawBlock(ctx, c, r, board[r][c]);
+    }
+  }
+
+  if (currentPiece && !gameOver) {
+    // Ghost piece
+    const ghostY = getGhostY();
+    for (let r = 0; r < currentPiece.shape.length; r++) {
+      for (let c = 0; c < currentPiece.shape[r].length; c++) {
+        if (currentPiece.shape[r][c]) {
+          drawBlock(ctx, currentPiece.x + c, currentPiece.y + r + ghostY, currentPiece.type, BLOCK_SIZE, true);
+        }
+      }
+    }
+
+    // Current piece
+    for (let r = 0; r < currentPiece.shape.length; r++) {
+      for (let c = 0; c < currentPiece.shape[r].length; c++) {
+        if (currentPiece.shape[r][c]) {
+          drawBlock(ctx, currentPiece.x + c, currentPiece.y + r, currentPiece.type);
+        }
+      }
+    }
+  }
+}
+
+function drawNext() {
+  nextCtx.fillStyle = '#0d0d3b';
+  nextCtx.fillRect(0, 0, 120, 120);
+  if (!nextPiece) return;
+  const shape = nextPiece.shape;
+  const size = 25;
+  const offsetX = (120 - shape[0].length * size) / 2;
+  const offsetY = (120 - shape.length * size) / 2;
+  for (let r = 0; r < shape.length; r++) {
+    for (let c = 0; c < shape[r].length; c++) {
+      if (shape[r][c]) {
+        const x = offsetX / size + c;
+        const y = offsetY / size + r;
+        nextCtx.fillStyle = COLORS[nextPiece.type];
+        nextCtx.fillRect(x * size, y * size, size, size);
+        nextCtx.fillStyle = 'rgba(255,255,255,0.3)';
+        nextCtx.fillRect(x * size, y * size, size, 2);
+        nextCtx.fillRect(x * size, y * size, 2, size);
+        nextCtx.strokeStyle = 'rgba(0,0,0,0.5)';
+        nextCtx.lineWidth = 1;
+        nextCtx.strokeRect(x * size, y * size, size, size);
+      }
+    }
+  }
+}
+
+function updateUI() {
+  document.getElementById('score').textContent = score;
+  document.getElementById('level').textContent = level;
+  document.getElementById('lines').textContent = lines;
+  document.getElementById('speed').textContent = (1000 / dropInterval).toFixed(1) + 'x';
+}
+
+// ==================== GESTURE DETECTION ====================
+function detectGesture(landmarks) {
+  const fingers = [];
+  const thumbTip = landmarks[4];
+  const thumbIP = landmarks[3];
+  const thumbMCP = landmarks[2];
+  const indexTip = landmarks[8];
+  const indexPIP = landmarks[6];
+  const middleTip = landmarks[12];
+  const middlePIP = landmarks[10];
+  const ringTip = landmarks[16];
+  const ringPIP = landmarks[14];
+  const pinkyTip = landmarks[20];
+  const pinkyPIP = landmarks[18];
+
+  // Check if fingers are extended (tip higher than PIP/MCP in Y)
+  fingers.push(indexTip.y < indexPIP.y);
+  fingers.push(middleTip.y < middlePIP.y);
+  fingers.push(ringTip.y < ringPIP.y);
+  fingers.push(pinkyTip.y < pinkyPIP.y);
+
+  // Thumb detection (compare x distance from index MCP)
+  const thumbExtended = Math.abs(thumbTip.x - indexMCP(landmarks).x) > Math.abs(thumbIP.x - indexMCP(landmarks).x);
+
+  const extendedCount = fingers.filter(f => f).length;
+  const handXPos = landmarks[9].x; // middle finger MCP
+  const handYPos = landmarks[9].y;
+
+  // Fist: no fingers extended
+  if (extendedCount === 0) return 'fist';
+
+  // Open hand: all 4 fingers extended
+  if (extendedCount === 4 && thumbExtended) return 'open';
+
+  // Palm: all fingers folded (including thumb)
+  if (extendedCount === 0 && !thumbExtended) return 'palm';
+
+  // Pointing: only index finger extended
+  if (extendedCount === 1 && fingers[0]) return 'pointing';
+
+  // Determine direction based on hand position
+  if (handYPos < 0.3) return 'up';
+  if (handYPos > 0.7) return 'down';
+  if (handXPos < 0.3) return 'left';
+  if (handXPos > 0.7) return 'right';
+
+  return 'center';
+}
+
+function indexMCP(landmarks) {
+  return landmarks[5];
+}
+
+function updateGestureDetection() {
+  const now = Date.now();
+
+  if (gesture === gestureStable) {
+    gestureTimer += 16;
+  } else {
+    gestureTimer = 0;
+    gestureStable = gesture;
+  }
+
+  // Cooldowns
+  if (moveCooldown > 0) moveCooldown -= 16;
+  if (rotateCooldown > 0) rotateCooldown -= 16;
+
+  // Process stable gestures
+  if (gestureTimer > 200) {
+    switch (gestureStable) {
+      case 'left':
+        if (moveCooldown <= 0 && currentPiece && validMove(currentPiece, -1, 0)) {
+          currentPiece.x--;
+          moveCooldown = 100;
+        }
+        break;
+      case 'right':
+        if (moveCooldown <= 0 && currentPiece && validMove(currentPiece, 1, 0)) {
+          currentPiece.x++;
+          moveCooldown = 100;
+        }
+        break;
+      case 'up':
+        if (rotateCooldown <= 0 && currentPiece) {
+          const original = currentPiece.shape.map(r => [...r]);
+          currentPiece.rotate(1);
+          if (!validMove(currentPiece)) {
+            currentPiece.shape = original;
+          } else {
+            // Wall kick attempts
+            if (!validMove(currentPiece)) {
+              const origX = currentPiece.x;
+              currentPiece.x++;
+              if (!validMove(currentPiece)) {
+                currentPiece.x -= 2;
+                if (!validMove(currentPiece)) {
+                  currentPiece.x = origX;
+                  currentPiece.shape = original;
+                }
+              }
+            }
+            rotateCooldown = 150;
+          }
+        }
+        break;
+      case 'down':
+        if (rotateCooldown <= 0 && currentPiece) {
+          const original = currentPiece.shape.map(r => [...r]);
+          currentPiece.rotate(-1);
+          if (!validMove(currentPiece)) {
+            currentPiece.shape = original;
+          } else {
+            rotateCooldown = 150;
+          }
+        }
+        break;
+      case 'open':
+        if (currentPiece) {
+          // Hard drop
+          while (validMove(currentPiece, 0, 1)) {
+            currentPiece.y++;
+            score += 2;
+          }
+          lockPiece();
+          updateUI();
+        }
+        break;
+      case 'fist':
+        if (currentPiece && !gameOver) {
+          lockPiece();
+          updateUI();
+        }
+        break;
+      case 'palm':
+        paused = !paused;
+        document.getElementById('pauseOverlay').style.display = paused ? 'flex' : 'none';
+        gestureTimer = 0;
+        gestureStable = 'none';
+        break;
+    }
+  }
+
+  document.getElementById('gestureName').textContent = gestureStable.toUpperCase();
+}
+
+// ==================== MEDIAPIPE SETUP ====================
+let hands;
+let camera;
+
+async function setupCamera() {
+  const video = document.getElementById('webcam');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 320, height: 240, facingMode: 'user' }
+    });
+    video.srcObject = stream;
+    await video.play();
+
+    const handCanvas = document.getElementById('handCanvas');
+    handCanvas.width = 200;
+    handCanvas.height = 150;
+    const handCtx = handCanvas.getContext('2d');
+
+    hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.5
+    });
+
+    hands.onResults((results) => {
+      // Draw hand overlay
+      handCtx.clearRect(0, 0, 200, 150);
+      handCtx.drawImage(results.image, 0, 0, 200, 150);
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const landmarks = results.multiHandLandmarks[0];
+
+        // Draw landmarks
+        handCtx.strokeStyle = '#00ff88';
+        handCtx.lineWidth = 2;
+        for (let i = 0; i < landmarks.length; i++) {
+          const x = landmarks[i].x * 200;
+          const y = landmarks[i].y * 150;
+          handCtx.beginPath();
+          handCtx.arc(x, y, 3, 0, Math.PI * 2);
+          handCtx.fillStyle = '#00ff88';
+          handCtx.fill();
+        }
+
+        // Draw connections
+        const connections = [
+          [0,1],[1,2],[2,3],[3,4],
+          [0,5],[5,6],[6,7],[7,8],
+          [5,9],[9,10],[10,11],[11,12],
+          [9,13],[13,14],[14,15],[15,16],
+          [13,17],[17,18],[18,19],[19,20],
+          [0,17]
+        ];
+        handCtx.strokeStyle = 'rgba(0,255,136,0.5)';
+        handCtx.lineWidth = 1;
+        connections.forEach(([a, b]) => {
+          handCtx.beginPath();
+          handCtx.moveTo(landmarks[a].x * 200, landmarks[a].y * 150);
+          handCtx.lineTo(landmarks[b].x * 200, landmarks[b].y * 150);
+          handCtx.stroke();
+        });
+
+        // Update hand position and gesture
+        handX = landmarks[9].x;
+        handY = landmarks[9].y;
+        gesture = detectGesture(landmarks);
+      } else {
+        gesture = 'none';
+        gestureStable = 'none';
+        gestureTimer = 0;
+      }
+    });
+
+    camera = new Camera(video, {
+      onFrame: async () => {
+        await hands.send({ image: video });
+      },
+      width: 320,
+      height: 240
+    });
+    await camera.start();
+  } catch (err) {
+    console.error('Camera error:', err);
+    document.getElementById('gestureName').textContent = 'NO SIGNAL';
+    document.getElementById('gestureName').style.color = '#ff4444';
+  }
+}
+
+// ==================== GAME LOOP ====================
+function gameLoop(time = 0) {
+  const deltaTime = time - lastTime;
+  lastTime = time;
+
+  if (!gameOver && !paused && currentPiece) {
+    dropCounter += deltaTime;
+    if (dropCounter > dropInterval) {
+      dropCounter = 0;
+      if (validMove(currentPiece, 0, 1)) {
+        currentPiece.y++;
+      } else {
+        lockPiece();
+        updateUI();
+      }
+    }
+  }
+
+  updateGestureDetection();
+  drawBoard();
+
+  if (!gameOver) {
+    animFrame = requestAnimationFrame(gameLoop);
+  } else {
+    drawBoard();
+    document.getElementById('finalScore').textContent = score;
+    document.getElementById('finalLines').textContent = lines;
+    document.getElementById('overlay').style.display = 'flex';
+  }
+}
+
+// ==================== KEYBOARD CONTROLS (fallback) ====================
+document.addEventListener('keydown', (e) => {
+  if (gameOver) return;
+
+  switch (e.key) {
+    case 'ArrowLeft':
+      if (currentPiece && validMove(currentPiece, -1, 0)) currentPiece.x--;
+      break;
+    case 'ArrowRight':
+      if (currentPiece && validMove(currentPiece, 1, 0)) currentPiece.x++;
+      break;
+    case 'ArrowUp':
+      if (currentPiece) {
+        const original = currentPiece.shape.map(r => [...r]);
+        currentPiece.rotate(1);
+        if (!validMove(currentPiece)) {
+          currentPiece.x++;
+          if (!validMove(currentPiece)) {
+            currentPiece.x -= 2;
+            if (!validMove(currentPiece)) {
+              currentPiece.x = (original === currentPiece.shape) ? currentPiece.x : currentPiece.x;
+              currentPiece.shape = original;
+            }
+          }
+        }
+      }
+      break;
+    case 'ArrowDown':
+      if (currentPiece && validMove(currentPiece, 0, 1)) {
+        currentPiece.y++;
+        score += 1;
+        updateUI();
+      }
+      break;
+    case ' ':
+      if (currentPiece) {
+        while (validMove(currentPiece, 0, 1)) {
+          currentPiece.y++;
+          score += 2;
+        }
+        lockPiece();
+        updateUI();
+      }
+      break;
+    case 'p':
+    case 'P':
+      paused = !paused;
+      document.getElementById('pauseOverlay').style.display = paused ? 'flex' : 'none';
+      break;
+  }
+});
+
+// ==================== INITIALIZATION ====================
+function startGame() {
+  document.getElementById('loadingScreen').style.opacity = '0';
+  setTimeout(() => {
+    document.getElementById('loadingScreen').style.display = 'none';
+  }, 500);
+
+  canvas = document.getElementById('gameCanvas');
+  ctx = canvas.getContext('2d');
+  nextCanvas = document.getElementById('nextCanvas');
+  nextCtx = nextCanvas.getContext('2d');
+
+  createBoard();
+  score = 0;
+  level = 1;
+  lines = 0;
+  gameOver = false;
+  paused = false;
+  dropInterval = 1000;
+  dropCounter = 0;
+  updateUI();
+  spawnPiece();
+  setupCamera();
+  gameLoop();
+}
+
+function restartGame() {
+  document.getElementById('overlay').style.display = 'none';
+  createBoard();
+  score = 0;
+  level = 1;
+  lines = 0;
+  gameOver = false;
+  paused = false;
+  dropInterval = 1000;
+  dropCounter = 0;
+  updateUI();
+  spawnPiece();
+  gameLoop();
+}
+
+// Handle window resize
+window.addEventListener('resize', () => {
+  const scale = Math.min(window.innerWidth / 800, window.innerHeight / 600, 1.5);
+  document.getElementById('gameContainer').style.transform = `scale(${Math.max(0.8, Math.min(1.5, scale))})`;
+});
+</script>
+</body>
+</html>

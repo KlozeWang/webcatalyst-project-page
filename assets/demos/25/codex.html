@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jeu de l'Imposteur</title>
+  <style>
+    :root{
+      --bg1:#0f172a;
+      --bg2:#1e293b;
+      --card:#111827;
+      --accent:#22d3ee;
+      --accent2:#a78bfa;
+      --text:#e5e7eb;
+      --muted:#94a3b8;
+      --danger:#f43f5e;
+      --ok:#10b981;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+      color:var(--text);
+      background: radial-gradient(circle at 20% 10%, #1d4ed8 0%, transparent 35%),
+                  radial-gradient(circle at 80% 90%, #7c3aed 0%, transparent 35%),
+                  linear-gradient(120deg,var(--bg1),var(--bg2));
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+    }
+    .app{
+      width:min(920px,100%);
+      background:rgba(2,6,23,.75);
+      border:1px solid rgba(148,163,184,.25);
+      border-radius:20px;
+      box-shadow:0 20px 45px rgba(0,0,0,.35);
+      overflow:hidden;
+      backdrop-filter: blur(8px);
+    }
+    .topbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      padding:16px 18px;
+      border-bottom:1px solid rgba(148,163,184,.18);
+      background:rgba(15,23,42,.65);
+    }
+    h1{
+      margin:0;
+      font-size:1.25rem;
+      letter-spacing:.2px;
+    }
+    .lang{
+      display:flex;align-items:center;gap:8px;
+    }
+    select,input,textarea,button{
+      font:inherit;
+      border-radius:12px;
+      border:1px solid rgba(148,163,184,.35);
+      background:#0b1220;
+      color:var(--text);
+      padding:10px 12px;
+    }
+    input,textarea,select{width:100%}
+    textarea{min-height:72px;resize:vertical}
+    button{
+      cursor:pointer;
+      transition:.2s transform,.2s opacity,.2s background;
+      background:linear-gradient(90deg,#0ea5e9,#6366f1);
+      border:none;
+      font-weight:600;
+    }
+    button:hover{transform:translateY(-1px)}
+    button.secondary{
+      background:#1f2937;
+      border:1px solid rgba(148,163,184,.35);
+      font-weight:500;
+    }
+    button.danger{background:linear-gradient(90deg,#e11d48,#f43f5e)}
+    .content{padding:18px}
+    .screen{display:none}
+    .screen.active{display:block}
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:12px;
+    }
+    .field label{
+      display:block;
+      font-size:.9rem;
+      color:var(--muted);
+      margin-bottom:6px;
+    }
+    .categories{
+      margin-top:10px;
+      border:1px solid rgba(148,163,184,.2);
+      border-radius:14px;
+      padding:12px;
+      background:rgba(2,6,23,.4);
+    }
+    .cat-actions{
+      display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;
+    }
+    .cat-grid{
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:8px;
+    }
+    .cat-item{
+      display:flex;align-items:center;gap:8px;
+      padding:8px 10px;border:1px solid rgba(148,163,184,.2);border-radius:10px;
+      background:rgba(15,23,42,.45);
+      user-select:none;
+    }
+    .cat-item input{width:auto}
+    .error{
+      margin-top:10px;
+      color:#fecdd3;
+      background:rgba(190,24,93,.2);
+      border:1px solid rgba(244,63,94,.5);
+      border-radius:10px;
+      padding:8px 10px;
+      display:none;
+    }
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+    .role-box{
+      margin:14px 0;
+      border-radius:16px;
+      border:2px dashed rgba(148,163,184,.35);
+      min-height:120px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      padding:16px;
+      font-size:1.2rem;
+      background:rgba(15,23,42,.55);
+      white-space:pre-line;
+    }
+    .role-box.revealed{
+      border-style:solid;
+      border-color:rgba(34,211,238,.7);
+      background:rgba(6,78,59,.24);
+    }
+    .turn{
+      color:var(--accent);
+      font-weight:700;
+      font-size:1.15rem;
+      margin:0 0 6px 0;
+    }
+    .muted{color:var(--muted)}
+    .result-list{
+      margin-top:12px;
+      padding:12px;
+      border:1px solid rgba(148,163,184,.24);
+      border-radius:12px;
+      background:rgba(15,23,42,.45);
+      line-height:1.65;
+    }
+    .pill{
+      display:inline-block;
+      padding:3px 10px;
+      border-radius:999px;
+      border:1px solid rgba(148,163,184,.35);
+      background:rgba(2,6,23,.55);
+      margin-left:6px;
+      font-size:.9rem;
+    }
+    .progress{
+      margin-top:6px;
+      font-size:.95rem;
+      color:var(--muted);
+    }
+    @media (max-width:700px){
+      .grid,.cat-grid{grid-template-columns:1fr}
+      .topbar{flex-direction:column;align-items:stretch}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <h1 data-i18n="title">Jeu de l'Imposteur</h1>
+      <div class="lang">
+        <label for="langSelect" data-i18n="language">Langue</label>
+        <select id="langSelect" aria-label="Language selector">
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+          <option value="es">Español</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="content">
+      <section id="setupScreen" class="screen active">
+        <div class="grid">
+          <div class="field">
+            <label for="playerCount" data-i18n="playersCount">Nombre de joueurs</label>
+            <input id="playerCount" type="number" min="3" max="20" value="6" />
+          </div>
+          <div class="field">
+            <label for="impostorCount" data-i18n="impostorsCount">Nombre d'imposteurs</label>
+            <input id="impostorCount" type="number" min="1" max="5" value="1" />
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:10px;">
+          <label for="nameList" data-i18n="namesOptional">Noms (optionnel, séparés par virgules)</label>
+          <textarea id="nameList" data-i18n-placeholder="namesPlaceholder" placeholder="Ali, Sara, Youssef..."></textarea>
+        </div>
+
+        <div class="categories">
+          <div class="field">
+            <label data-i18n="categories">Catégories</label>
+          </div>
+          <div class="cat-actions">
+            <button id="selectAllBtn" class="secondary" type="button" data-i18n="selectAll">Tout sélectionner</button>
+            <button id="selectNoneBtn" class="secondary" type="button" data-i18n="selectNone">Tout enlever</button>
+          </div>
+          <div id="categoryList" class="cat-grid"></div>
+        </div>
+
+        <div id="errorBox" class="error"></div>
+        <div class="actions">
+          <button id="startBtn" type="button" data-i18n="startGame">Démarrer la partie</button>
+        </div>
+      </section>
+
+      <section id="revealScreen" class="screen">
+        <p id="turnTitle" class="turn"></p>
+        <p id="revealInstruction" class="muted"></p>
+        <div id="roleCard" class="role-box"></div>
+        <div class="actions">
+          <button id="showRoleBtn" type="button" data-i18n="showRole">Afficher mon rôle</button>
+          <button id="nextBtn" type="button" class="secondary" style="display:none;"></button>
+        </div>
+        <div id="progressText" class="progress"></div>
+      </section>
+
+      <section id="resultScreen" class="screen">
+        <h2 data-i18n="roundFinished">Manche terminée !</h2>
+        <div class="result-list">
+          <div><strong data-i18n="category">Catégorie</strong>: <span id="resultCategory" class="pill"></span></div>
+          <div><strong data-i18n="secretWordLabel">Mot secret</strong>: <span id="resultWord" class="pill"></span></div>
+          <div><strong data-i18n="impostorsLabel">Imposteur(s)</strong>: <span id="resultImpostors" class="pill"></span></div>
+        </div>
+        <div class="actions">
+          <button id="playAgainBtn" type="button" data-i18n="playAgain">Rejouer</button>
+          <button id="backSetupBtn" type="button" class="secondary" data-i18n="backToSetup">Retour aux réglages</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const CATEGORY_KEYS = ["sport","joueur","country","places","nourriture","acteur_ice","voitures","animals","anime","foods"];
+
+    const I18N = {
+      fr: {
+        title:"Jeu de l'Imposteur",
+        language:"Langue",
+        playersCount:"Nombre de joueurs",
+        impostorsCount:"Nombre d'imposteurs",
+        namesOptional:"Noms (optionnel, séparés par virgules)",
+        namesPlaceholder:"Ali, Sara, Youssef...",
+        categories:"Catégories",
+        selectAll:"Tout sélectionner",
+        selectNone:"Tout enlever",
+        startGame:"Démarrer la partie",
+        showRole:"Afficher mon rôle",
+        roundFinished:"Manche terminée !",
+        category:"Catégorie",
+        secretWordLabel:"Mot secret",
+        impostorsLabel:"Imposteur(s)",
+        playAgain:"Rejouer",
+        backToSetup:"Retour aux réglages",
+        passPhone:"Passe le téléphone à {name} puis appuie sur « Afficher mon rôle ».",
+        hiddenCard:"🔒 Rôle caché",
+        memorizePass:"Mémorise puis passe le téléphone.",
+        nextPlayer:"Joueur suivant",
+        finishReveal:"Finir la révélation",
+        progress:"Joueur {current}/{total}",
+        youAreImpostor:"🕵️ Tu es l'IMPOSTEUR !",
+        categoryOnly:"Catégorie: {category}",
+        secretWord:"✅ Catégorie: {category}\nMot secret: {word}",
+        playerDefault:"Joueur",
+        errPlayers:"Le nombre de joueurs doit être entre 3 et 20.",
+        errImpostors:"Le nombre d'imposteurs doit être au moins 1 et inférieur au nombre de joueurs.",
+        errCategories:"Choisis au moins une catégorie."
+      },
+      en: {
+        title:"Impostor Game",
+        language:"Language",
+        playersCount:"Number of players",
+        impostorsCount:"Number of impostors",
+        namesOptional:"Names (optional, comma-separated)",
+        namesPlaceholder:"Ali, Sara, Youssef...",
+        categories:"Categories",
+        selectAll:"Select all",
+        selectNone:"Clear all",
+        startGame:"Start game",
+        showRole:"Show my role",
+        roundFinished:"Round finished!",
+        category:"Category",
+        secretWordLabel:"Secret word",
+        impostorsLabel:"Impostor(s)",
+        playAgain:"Play again",
+        backToSetup:"Back to setup",
+        passPhone:"Pass the phone to {name}, then tap “Show my role”.",
+        hiddenCard:"🔒 Hidden role",
+        memorizePass:"Memorize and pass the phone.",
+        nextPlayer:"Next player",
+        finishReveal:"Finish reveal",
+        progress:"Player {current}/{total}",
+        youAreImpostor:"🕵️ You are the IMPOSTOR!",
+        categoryOnly:"Category: {category}",
+        secretWord:"✅ Category: {category}\nSecret word: {word}",
+        playerDefault:"Player",
+        errPlayers:"Player count must be between 3 and 20.",
+        errImpostors:"Impostors must be at least 1 and less than players.",
+        errCategories:"Select at least one category."
+      },
+      es: {
+        title:"Juego del Impostor",
+        language:"Idioma",
+        playersCount:"Número de jugadores",
+        impostorsCount:"Número de impostores",
+        namesOptional:"Nombres (opcional, separados por comas)",
+        namesPlaceholder:"Ali, Sara, Youssef...",
+        categories:"Categorías",
+        selectAll:"Seleccionar todo",
+        selectNone:"Quitar todo",
+        startGame:"Empezar partida",
+        showRole:"Mostrar mi rol",
+        roundFinished:"¡Ronda terminada!",
+        category:"Categoría",
+        secretWordLabel:"Palabra secreta",
+        impostorsLabel:"Impostor(es)",
+        playAgain:"Jugar otra vez",
+        backToSetup:"Volver a ajustes",
+        passPhone:"Pasa el teléfono a {name} y pulsa “Mostrar mi rol”.",
+        hiddenCard:"🔒 Rol oculto",
+        memorizePass:"Memoriza y pasa el teléfono.",
+        nextPlayer:"Siguiente jugador",
+        finishReveal:"Terminar revelación",
+        progress:"Jugador {current}/{total}",
+        youAreImpostor:"🕵️ ¡Eres el IMPOSTOR!",
+        categoryOnly:"Categoría: {category}",
+        secretWord:"✅ Categoría: {category}\nPalabra secreta: {word}",
+        playerDefault:"Jugador",
+        errPlayers:"El número de jugadores debe estar entre 3 y 20.",
+        errImpostors:"Los impostores deben ser al menos 1 y menos que los jugadores.",
+        errCategories:"Elige al menos una categoría."
+      }
+    };
+
+    const CATEGORY_LABELS = {
+      fr:{
+        sport:"sport",
+        joueur:"joueur",
+        country:"country",
+        places:"places",
+        nourriture:"nourriture",
+        acteur_ice:"acteur_ice",
+        voitures:"voitures",
+        animals:"animals",
+        anime:"anime",
+        foods:"foods"
+      },
+      en:{
+        sport:"sports",
+        joueur:"players",
+        country:"country",
+        places:"places",
+        nourriture:"food_fr",
+        acteur_ice:"actor_actress",
+        voitures:"cars",
+        animals:"animals",
+        anime:"anime",
+        foods:"foods"
+      },
+      es:{
+        sport:"deportes",
+        joueur:"jugadores",
+        country:"países",
+        places:"lugares",
+        nourriture:"comida_fr",
+        acteur_ice:"actor_actriz",
+        voitures:"coches",
+        animals:"animales",
+        anime:"anime",
+        foods:"comidas"
+      }
+    };
+
+    const WORDS = {
+      fr: {
+        sport:["football","basketball","tennis","natation","cyclisme","volleyball","boxe","judo","rugby","athlétisme","handball","escrime","ski","surf","karaté"],
+        joueur:["Messi","Ronaldo","Mbappé","Zidane","LeBron James","Nadal","Djokovic","Benzema","Salah","Haaland","Kylian Mbappé","Kobe Bryant","Neymar","Modrić","Iniesta"],
+        country:["France","Maroc","Japon","Brésil","Canada","Espagne","Italie","Argentine","Mexique","Sénégal","Allemagne","Turquie","Égypte","Corée du Sud","Portugal"],
+        places:["Tour Eiffel","Machu Picchu","Sahara","Grand Canyon","Times Square","Burj Khalifa","Pyramides de Gizeh","Taj Mahal","Colisée","Muraille de Chine","Louvre","Mont Fuji","Niagara","Santorin","Bali"],
+        nourriture:["couscous","tajine","pizza","sushi","burger","paella","tacos","raclette","crêpe","ramen","lasagnes","croissant","falafel","shawarma","quiche"],
+        acteur_ice:["Leonardo DiCaprio","Scarlett Johansson","Denzel Washington","Omar Sy","Angelina Jolie","Will Smith","Meryl Streep","Tom Hanks","Natalie Portman","Keanu Reeves","Zendaya","Ryan Gosling","Penélope Cruz","Morgan Freeman","Lupita Nyong'o"],
+        voitures:["Ferrari","Lamborghini","Tesla","BMW","Audi","Mercedes","Porsche","Peugeot","Renault","Toyota","Honda","Bugatti","Nissan","Ford Mustang","Chevrolet"],
+        animals:["lion","tigre","éléphant","girafe","dauphin","requin","loup","panda","koala","aigle","hibou","zèbre","kangourou","ours","renard"],
+        anime:["Naruto","One Piece","Attack on Titan","Dragon Ball","Demon Slayer","Jujutsu Kaisen","Death Note","Bleach","My Hero Academia","Spy x Family","Tokyo Ghoul","Hunter x Hunter","Haikyuu!!","Sailor Moon","Fullmetal Alchemist"],
+        foods:["sandwich","frites","salade","hot-dog","nuggets","donut","gaufre","glace","brownie","pancake","soupe","omelette","burrito","kebab","dumplings"]
+      },
+      en: {
+        sport:["football","basketball","tennis","swimming","cycling","volleyball","boxing","judo","rugby","athletics","handball","fencing","skiing","surfing","karate"],
+        joueur:["Messi","Ronaldo","Mbappé","Zidane","LeBron James","Nadal","Djokovic","Benzema","Salah","Haaland","Kobe Bryant","Neymar","Modrić","Iniesta","Curry"],
+        country:["France","Morocco","Japan","Brazil","Canada","Spain","Italy","Argentina","Mexico","Senegal","Germany","Turkey","Egypt","South Korea","Portugal"],
+        places:["Eiffel Tower","Machu Picchu","Sahara","Grand Canyon","Times Square","Burj Khalifa","Pyramids of Giza","Taj Mahal","Colosseum","Great Wall","Louvre","Mount Fuji","Niagara Falls","Santorini","Bali"],
+        nourriture:["couscous","tagine","pizza","sushi","burger","paella","tacos","raclette","crêpe","ramen","lasagna","croissant","falafel","shawarma","quiche"],
+        acteur_ice:["Leonardo DiCaprio","Scarlett Johansson","Denzel Washington","Omar Sy","Angelina Jolie","Will Smith","Meryl Streep","Tom Hanks","Natalie Portman","Keanu Reeves","Zendaya","Ryan Gosling","Penélope Cruz","Morgan Freeman","Lupita Nyong'o"],
+        voitures:["Ferrari","Lamborghini","Tesla","BMW","Audi","Mercedes","Porsche","Peugeot","Renault","Toyota","Honda","Bugatti","Nissan","Ford Mustang","Chevrolet"],
+        animals:["lion","tiger","elephant","giraffe","dolphin","shark","wolf","panda","koala","eagle","owl","zebra","kangaroo","bear","fox"],
+        anime:["Naruto","One Piece","Attack on Titan","Dragon Ball","Demon Slayer","Jujutsu Kaisen","Death Note","Bleach","My Hero Academia","Spy x Family","Tokyo Ghoul","Hunter x Hunter","Haikyuu!!","Sailor Moon","Fullmetal Alchemist"],
+        foods:["sandwich","fries","salad","hot dog","nuggets","donut","waffle","ice cream","brownie","pancake","soup","omelette","burrito","kebab","dumplings"]
+      },
+      es: {
+        sport:["fútbol","baloncesto","tenis","natación","ciclismo","voleibol","boxeo","judo","rugby","atletismo","balonmano","esgrima","esquí","surf","karate"],
+        joueur:["Messi","Ronaldo","Mbappé","Zidane","LeBron James","Nadal","Djokovic","Benzema","Salah","Haaland","Kobe Bryant","Neymar","Modrić","Iniesta","Curry"],
+        country:["Francia","Marruecos","Japón","Brasil","Canadá","España","Italia","Argentina","México","Senegal","Alemania","Turquía","Egipto","Corea del Sur","Portugal"],
+        places:["Torre Eiffel","Machu Picchu","Sáhara","Gran Cañón","Times Square","Burj Khalifa","Pirámides de Guiza","Taj Mahal","Coliseo","Gran Muralla","Louvre","Monte Fuji","Cataratas del Niágara","Santorini","Bali"],
+        nourriture:["cuscús","tajín","pizza","sushi","hamburguesa","paella","tacos","raclette","crepe","ramen","lasaña","croissant","falafel","shawarma","quiche"],
+        acteur_ice:["Leonardo DiCaprio","Scarlett Johansson","Denzel Washington","Omar Sy","Angelina Jolie","Will Smith","Meryl Streep","Tom Hanks","Natalie Portman","Keanu Reeves","Zendaya","Ryan Gosling","Penélope Cruz","Morgan Freeman","Lupita Nyong'o"],
+        voitures:["Ferrari","Lamborghini","Tesla","BMW","Audi","Mercedes","Porsche","Peugeot","Renault","Toyota","Honda","Bugatti","Nissan","Ford Mustang","Chevrolet"],
+        animals:["león","tigre","elefante","jirafa","delfín","tiburón","lobo","panda","koala","águila","búho","cebra","canguro","oso","zorro"],
+        anime:["Naruto","One Piece","Attack on Titan","Dragon Ball","Demon Slayer","Jujutsu Kaisen","Death Note","Bleach","My Hero Academia","Spy x Family","Tokyo Ghoul","Hunter x Hunter","Haikyuu!!","Sailor Moon","Fullmetal Alchemist"],
+        foods:["sándwich","patatas fritas","ensalada","perrito caliente","nuggets","dona","gofre","helado","brownie","panqueque","sopa","tortilla","burrito","kebab","dumplings"]
+      }
+    };
+
+    const els = {
+      langSelect: document.getElementById("langSelect"),
+      playerCount: document.getElementById("playerCount"),
+      impostorCount: document.getElementById("impostorCount"),
+      nameList: document.getElementById("nameList"),
+      categoryList: document.getElementById("categoryList"),
+      selectAllBtn: document.getElementById("selectAllBtn"),
+      selectNoneBtn: document.getElementById("selectNoneBtn"),
+      startBtn: document.getElementById("startBtn"),
+      errorBox: document.getElementById("errorBox"),
+      setupScreen: document.getElementById("setupScreen"),
+      revealScreen: document.getElementById("revealScreen"),
+      resultScreen: document.getElementById("resultScreen"),
+      turnTitle: document.getElementById("turnTitle"),
+      revealInstruction: document.getElementById("revealInstruction"),
+      roleCard: document.getElementById("roleCard"),
+      showRoleBtn: document.getElementById("showRoleBtn"),
+      nextBtn: document.getElementById("nextBtn"),
+      progressText: document.getElementById("progressText"),
+      resultCategory: document.getElementById("resultCategory"),
+      resultWord: document.getElementById("resultWord"),
+      resultImpostors: document.getElementById("resultImpostors"),
+      playAgainBtn: document.getElementById("playAgainBtn"),
+      backSetupBtn: document.getElementById("backSetupBtn")
+    };
+
+    let currentLang = "fr";
+    let selectedCats = new Set(CATEGORY_KEYS);
+    let game = null;
+
+    function t(key, vars = {}) {
+      const str = (I18N[currentLang] && I18N[currentLang][key]) || I18N.en[key] || key;
+      return str.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? `{${k}}`);
+    }
+
+    function getCategoryLabel(key) {
+      return (CATEGORY_LABELS[currentLang] && CATEGORY_LABELS[currentLang][key]) ||
+             (CATEGORY_LABELS.en[key]) || key;
+    }
+
+    function updateI18n() {
+      document.documentElement.lang = currentLang;
+      document.querySelectorAll("[data-i18n]").forEach(el => {
+        el.textContent = t(el.getAttribute("data-i18n"));
+      });
+      document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+        el.placeholder = t(el.getAttribute("data-i18n-placeholder"));
+      });
+      renderCategories();
+      if (game && isScreen("revealScreen")) renderReveal();
+      if (game && isScreen("resultScreen")) renderResults();
+    }
+
+    function renderCategories() {
+      const saved = new Set(getSelectedCategories());
+      if (saved.size) selectedCats = saved;
+      els.categoryList.innerHTML = "";
+      CATEGORY_KEYS.forEach(cat => {
+        const id = `cat_${cat}`;
+        const wrap = document.createElement("label");
+        wrap.className = "cat-item";
+        wrap.htmlFor = id;
+
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.id = id;
+        input.value = cat;
+        input.checked = selectedCats.has(cat);
+        input.addEventListener("change", () => {
+          selectedCats = new Set(getSelectedCategories());
+        });
+
+        const span = document.createElement("span");
+        span.textContent = getCategoryLabel(cat);
+
+        wrap.append(input, span);
+        els.categoryList.appendChild(wrap);
+      });
+    }
+
+    function getSelectedCategories() {
+      return [...els.categoryList.querySelectorAll("input[type='checkbox']:checked")].map(i=>i.value);
+    }
+
+    function showError(msg="") {
+      if (!msg) {
+        els.errorBox.style.display = "none";
+        els.errorBox.textContent = "";
+      } else {
+        els.errorBox.style.display = "block";
+        els.errorBox.textContent = msg;
+      }
+    }
+
+    function switchScreen(screenId) {
+      ["setupScreen","revealScreen","resultScreen"].forEach(id => {
+        document.getElementById(id).classList.toggle("active", id === screenId);
+      });
+    }
+    function isScreen(screenId){ return document.getElementById(screenId).classList.contains("active"); }
+
+    function randomOf(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+    function pickUniqueIndices(total, count) {
+      const pool = [...Array(total).keys()];
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      return pool.slice(0, count);
+    }
+
+    function getWord(lang, cat) {
+      const fromLang = WORDS[lang] && WORDS[lang][cat];
+      const fallback = WORDS.en[cat] || [];
+      const list = (fromLang && fromLang.length ? fromLang : fallback);
+      return randomOf(list);
+    }
+
+    function parsePlayers(count) {
+      const raw = els.nameList.value
+        .split(/,|\n/)
+        .map(s => s.trim())
+        .filter(Boolean);
+      const players = [];
+      for (let i=0; i<count; i++) {
+        players.push(raw[i] || `${t("playerDefault")} ${i+1}`);
+      }
+      return players;
+    }
+
+    function startGame() {
+      showError();
+      const playerCount = Number(els.playerCount.value);
+      const impostorCount = Number(els.impostorCount.value);
+      const categories = getSelectedCategories();
+
+      if (!Number.isInteger(playerCount) || playerCount < 3 || playerCount > 20) {
+        showError(t("errPlayers")); return;
+      }
+      if (!Number.isInteger(impostorCount) || impostorCount < 1 || impostorCount >= playerCount) {
+        showError(t("errImpostors")); return;
+      }
+      if (categories.length < 1) {
+        showError(t("errCategories")); return;
+      }
+
+      const players = parsePlayers(playerCount);
+      const category = randomOf(categories);
+      const word = getWord(currentLang, category);
+      const impostorIdx = pickUniqueIndices(playerCount, impostorCount);
+      const impostorSet = new Set(impostorIdx);
+
+      game = {
+        players,
+        category,
+        word,
+        impostorSet,
+        current: 0,
+        revealed: false
+      };
+
+      switchScreen("revealScreen");
+      renderReveal();
+    }
+
+    function renderReveal() {
+      if (!game) return;
+      const name = game.players[game.current];
+      els.turnTitle.textContent = name;
+      els.revealInstruction.textContent = t("passPhone", {name});
+      els.roleCard.textContent = t("hiddenCard");
+      els.roleCard.classList.remove("revealed");
+      els.showRoleBtn.style.display = "inline-block";
+      els.nextBtn.style.display = "none";
+      els.nextBtn.textContent = (game.current === game.players.length - 1) ? t("finishReveal") : t("nextPlayer");
+      els.progressText.textContent = t("progress", {current: game.current + 1, total: game.players.length});
+      game.revealed = false;
+    }
+
+    function revealRole() {
+      if (!game || game.revealed) return;
+      const isImp = game.impostorSet.has(game.current);
+      if (isImp) {
+        els.roleCard.textContent = `${t("youAreImpostor")}\n${t("categoryOnly",{category:getCategoryLabel(game.category)})}`;
+      } else {
+        els.roleCard.textContent = t("secretWord",{category:getCategoryLabel(game.category), word:game.word});
+      }
+      els.roleCard.classList.add("revealed");
+      els.revealInstruction.textContent = t("memorizePass");
+      els.showRoleBtn.style.display = "none";
+      els.nextBtn.style.display = "inline-block";
+      game.revealed = true;
+    }
+
+    function nextPlayer() {
+      if (!game || !game.revealed) return;
+      game.current += 1;
+      if (game.current >= game.players.length) {
+        switchScreen("resultScreen");
+        renderResults();
+      } else {
+        renderReveal();
+      }
+    }
+
+    function renderResults() {
+      if (!game) return;
+      els.resultCategory.textContent = getCategoryLabel(game.category);
+      els.resultWord.textContent = game.word;
+      const impNames = [...game.impostorSet].map(i => game.players[i]).join(", ");
+      els.resultImpostors.textContent = impNames || "-";
+    }
+
+    els.langSelect.addEventListener("change", e => {
+      currentLang = e.target.value;
+      updateI18n();
+    });
+
+    els.selectAllBtn.addEventListener("click", () => {
+      [...els.categoryList.querySelectorAll("input[type='checkbox']")].forEach(i => i.checked = true);
+      selectedCats = new Set(CATEGORY_KEYS);
+    });
+
+    els.selectNoneBtn.addEventListener("click", () => {
+      [...els.categoryList.querySelectorAll("input[type='checkbox']")].forEach(i => i.checked = false);
+      selectedCats = new Set();
+    });
+
+    els.startBtn.addEventListener("click", startGame);
+    els.showRoleBtn.addEventListener("click", revealRole);
+    els.nextBtn.addEventListener("click", nextPlayer);
+    els.playAgainBtn.addEventListener("click", startGame);
+    els.backSetupBtn.addEventListener("click", () => switchScreen("setupScreen"));
+
+    updateI18n();
+  </script>
+</body>
+</html>

@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sword Duel</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  body {
+    background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+    color: #fff;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  #title {
+    margin-top: 10px;
+    font-size: 26px;
+    color: #ffd700;
+    text-shadow: 2px 2px 4px #000;
+    letter-spacing: 3px;
+  }
+  #arena {
+    position: relative;
+    width: 95vw;
+    max-width: 900px;
+    height: 60vh;
+    margin-top: 10px;
+    background: linear-gradient(180deg, #4a3520 0%, #2a1f10 100%);
+    border: 3px solid #ffd700;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 0 30px rgba(255,215,0,0.3);
+  }
+  #arena::before {
+    content: '';
+    position: absolute; bottom: 0; left: 0; right: 0; height: 30%;
+    background: linear-gradient(180deg, transparent, rgba(0,0,0,0.6));
+  }
+  .fighter {
+    position: absolute;
+    bottom: 10%;
+    width: 80px;
+    height: 160px;
+    transition: transform 0.15s ease-out;
+  }
+  .body {
+    position: absolute;
+    bottom: 0;
+    left: 20px;
+    width: 40px;
+    height: 100px;
+    border-radius: 10px;
+  }
+  .head {
+    position: absolute;
+    bottom: 100px;
+    left: 22px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+  }
+  .sword {
+    position: absolute;
+    bottom: 60px;
+    width: 70px;
+    height: 6px;
+    background: linear-gradient(90deg, #888, #fff, #888);
+    border-radius: 3px;
+    transform-origin: 5px center;
+    transition: transform 0.12s ease-out;
+  }
+  #player .body { background: linear-gradient(180deg, #4488ff, #224488); }
+  #player .head { background: #ffcc99; }
+  #player .sword { left: 50px; }
+  #enemy .body { background: linear-gradient(180deg, #ff4444, #882222); }
+  #enemy .head { background: #ffcc99; }
+  #enemy .sword { right: 50px; transform-origin: calc(100% - 5px) center; }
+  #enemy { transform: scaleX(-1); }
+
+  .attacking .sword { transform: rotate(-80deg); }
+  .blocking .sword { transform: rotate(-30deg) translateY(-20px); }
+  .dodging { transform: translateY(-30px) rotate(-10deg); }
+  .hurt { animation: hurt 0.3s; }
+  @keyframes hurt { 0%,100%{filter:none;} 50%{filter:brightness(2) hue-rotate(-30deg);} }
+
+  #hud {
+    width: 95vw; max-width: 900px;
+    display: flex; justify-content: space-between;
+    margin-top: 10px;
+  }
+  .hpbar {
+    width: 45%; height: 25px;
+    background: #333; border: 2px solid #fff; border-radius: 5px;
+    overflow: hidden; position: relative;
+  }
+  .hpfill { height: 100%; transition: width 0.3s; }
+  #playerHpFill { background: linear-gradient(90deg, #2ecc71, #27ae60); }
+  #enemyHpFill { background: linear-gradient(90deg, #e74c3c, #c0392b); float: right; }
+  .hplabel {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%,-50%); font-weight: bold;
+    text-shadow: 1px 1px 2px #000; font-size: 14px;
+  }
+  #controls {
+    margin-top: 10px; text-align: center; font-size: 13px;
+    color: #ccc; line-height: 1.6;
+  }
+  .key { background:#222; padding:2px 8px; border-radius:4px; border:1px solid #555; color:#ffd700; }
+  #status {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    font-size: 18px; color: #ffd700; text-shadow: 2px 2px 4px #000;
+  }
+  #telegraph {
+    position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
+    font-size: 28px; font-weight: bold; opacity: 0;
+    transition: opacity 0.1s; pointer-events: none;
+    text-shadow: 0 0 10px #fff;
+  }
+  #overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.85);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 10; text-align: center; padding: 20px;
+  }
+  #overlay h1 { font-size: 40px; color: #ffd700; margin-bottom: 20px; }
+  #overlay p { font-size: 16px; margin: 5px 0; max-width: 600px; line-height: 1.5; }
+  button {
+    margin-top: 20px; padding: 12px 30px; font-size: 18px;
+    background: #ffd700; color: #000; border: none; border-radius: 5px;
+    cursor: pointer; font-family: inherit; font-weight: bold;
+  }
+  button:hover { background: #fff; }
+  .hidden { display: none !important; }
+
+  #mobileControls {
+    display: none;
+    margin-top: 8px;
+    gap: 8px;
+  }
+  #mobileControls button {
+    margin: 0; padding: 14px 16px; font-size: 14px;
+  }
+  @media (max-width: 768px) {
+    #mobileControls { display: flex; flex-wrap: wrap; justify-content: center; }
+    #controls { display: none; }
+    #title { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<div id="title">⚔ SWORD DUEL ⚔</div>
+
+<div id="hud">
+  <div class="hpbar"><div id="playerHpFill" class="hpfill" style="width:100%"></div><div class="hplabel">YOU</div></div>
+  <div class="hpbar"><div id="enemyHpFill" class="hpfill" style="width:100%"></div><div class="hplabel">FOE</div></div>
+</div>
+
+<div id="arena">
+  <div id="status"></div>
+  <div id="telegraph"></div>
+  <div id="player" class="fighter" style="left: 15%;">
+    <div class="sword"></div>
+    <div class="body"></div>
+    <div class="head"></div>
+  </div>
+  <div id="enemy" class="fighter" style="right: 15%;">
+    <div class="sword"></div>
+    <div class="body"></div>
+    <div class="head"></div>
+  </div>
+
+  <div id="overlay">
+    <h1 id="overlayTitle">SWORD DUEL</h1>
+    <p>Face your opponent in a deadly duel. Read their movements and react!</p>
+    <p>⚠ <b style="color:#ff4">Red flash</b> = enemy is about to attack</p>
+    <p><span class="key">A</span> Attack &nbsp; <span class="key">S</span> Block &nbsp; <span class="key">D</span> Dodge &nbsp; <span class="key">F</span> Counter</p>
+    <p style="margin-top:10px; color:#aaa;">• <b>Block</b> negates damage but no counter-attack<br>
+    • <b>Dodge</b> avoids damage, perfect timing opens enemy to follow-up attack<br>
+    • <b>Counter</b> only works if timed during their swing — deals huge damage but fails badly if mistimed</p>
+    <button id="startBtn">BEGIN DUEL</button>
+  </div>
+</div>
+
+<div id="controls">
+  <span class="key">A</span> Attack &nbsp;&nbsp; <span class="key">S</span> Block &nbsp;&nbsp; <span class="key">D</span> Dodge &nbsp;&nbsp; <span class="key">F</span> Counter
+</div>
+
+<div id="mobileControls">
+  <button data-act="attack">⚔ Attack</button>
+  <button data-act="block">🛡 Block</button>
+  <button data-act="dodge">💨 Dodge</button>
+  <button data-act="counter">⚡ Counter</button>
+</div>
+
+<script>
+const player = document.getElementById('player');
+const enemy = document.getElementById('enemy');
+const playerHpFill = document.getElementById('playerHpFill');
+const enemyHpFill = document.getElementById('enemyHpFill');
+const status = document.getElementById('status');
+const telegraph = document.getElementById('telegraph');
+const overlay = document.getElementById('overlay');
+const overlayTitle = document.getElementById('overlayTitle');
+const startBtn = document.getElementById('startBtn');
+
+let state = {
+  playerHp: 100, enemyHp: 100,
+  playerBusy: false, enemyBusy: false,
+  playerAction: null,
+  enemyTelegraphing: false,
+  enemySwinging: false,
+  gameOver: false,
+  exposed: false, // enemy is open after being dodged
+};
+
+// Audio
+const AC = window.AudioContext || window.webkitAudioContext;
+let audio;
+function beep(freq, dur, type='sine', vol=0.2) {
+  if (!audio) audio = new AC();
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.value = vol;
+  g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + dur);
+  o.connect(g); g.connect(audio.destination);
+  o.start(); o.stop(audio.currentTime + dur);
+}
+const sfx = {
+  swing: () => beep(300, 0.15, 'sawtooth', 0.15),
+  hit:   () => { beep(120, 0.2, 'square', 0.3); },
+  block: () => { beep(800, 0.1, 'square', 0.2); beep(1200, 0.1, 'square', 0.15); },
+  dodge: () => beep(600, 0.2, 'sine', 0.15),
+  counter:()=> { beep(1000, 0.1, 'sawtooth', 0.3); setTimeout(()=>beep(150,0.3,'square',0.3),80); },
+  miss:  () => beep(200, 0.3, 'triangle', 0.1),
+  win:   () => { [523,659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,0.2,'sine',0.2), i*150)); },
+  lose:  () => { [400,300,200,100].forEach((f,i)=>setTimeout(()=>beep(f,0.3,'sawtooth',0.2), i*200)); },
+};
+
+function setStatus(msg, color='#ffd700') {
+  status.textContent = msg;
+  status.style.color = color;
+  clearTimeout(setStatus.t);
+  setStatus.t = setTimeout(()=>{ status.textContent=''; }, 1200);
+}
+
+function updateHp() {
+  playerHpFill.style.width = Math.max(0,state.playerHp) + '%';
+  enemyHpFill.style.width = Math.max(0,state.enemyHp) + '%';
+}
+
+function flashHurt(el) {
+  el.classList.add('hurt');
+  setTimeout(()=>el.classList.remove('hurt'), 300);
+}
+
+function damagePlayer(d) {
+  state.playerHp -= d; updateHp(); flashHurt(player); sfx.hit();
+  if (state.playerHp <= 0) endGame(false);
+}
+function damageEnemy(d) {
+  state.enemyHp -= d; updateHp(); flashHurt(enemy); sfx.hit();
+  if (state.enemyHp <= 0) endGame(true);
+}
+
+function endGame(win) {
+  state.gameOver = true;
+  overlayTitle.textContent = win ? '🏆 VICTORY!' : '💀 DEFEATED';
+  overlayTitle.style.color = win ? '#ffd700' : '#ff4444';
+  startBtn.textContent = 'DUEL AGAIN';
+  overlay.classList.remove('hidden');
+  win ? sfx.win() : sfx.lose();
+}
+
+// Enemy AI
+function enemyLoop() {
+  if (state.gameOver) return;
+  // delay before next action
+  const delay = 800 + Math.random() * 1200;
+  setTimeout(() => {
+    if (state.gameOver) return;
+    if (state.enemyBusy) { enemyLoop(); return; }
+    enemyAttack();
+  }, delay);
+}
+
+function enemyAttack() {
+  if (state.gameOver) return;
+  state.enemyBusy = true;
+  state.enemyTelegraphing = true;
+  // Telegraph
+  telegraph.textContent = '⚠ ATTACK!';
+  telegraph.style.color = '#ff4444';
+  telegraph.style.opacity = '1';
+  enemy.style.filter = 'brightness(1.5) drop-shadow(0 0 10px red)';
+  const telegraphTime = 700;
+  setTimeout(() => {
+    if (state.gameOver) return;
+    telegraph.style.opacity = '0';
+    enemy.style.filter = '';
+    state.enemyTelegraphing = false;
+    // Swing
+    state.enemySwinging = true;
+    enemy.classList.add('attacking');
+    sfx.swing();
+    setTimeout(() => {
+      if (state.gameOver) return;
+      // resolve hit
+      resolveEnemyHit();
+      enemy.classList.remove('attacking');
+      state.enemySwinging = false;
+      state.enemyBusy = false;
+      enemyLoop();
+    }, 250);
+  }, telegraphTime);
+}
+
+function resolveEnemyHit() {
+  // Check player's current state
+  const action = state.playerAction;
+  if (action === 'block') {
+    sfx.block();
+    setStatus('BLOCKED!', '#88ccff');
+  } else if (action === 'dodge') {
+    sfx.dodge();
+    setStatus('DODGED!', '#88ff88');
+    state.exposed = true;
+    setTimeout(()=>state.exposed=false, 1000);
+  } else if (action === 'counter') {
+    // Successful counter
+    sfx.counter();
+    setStatus('PERFECT COUNTER!', '#ffd700');
+    damageEnemy(35);
+  } else {
+    // Hit
+    damagePlayer(15);
+  }
+}
+
+function playerAct(act) {
+  if (state.gameOver) return;
+  if (state.playerBusy) return;
+  state.playerBusy = true;
+  state.playerAction = act;
+
+  if (act === 'attack') {
+    player.classList.add('attacking');
+    sfx.swing();
+    setTimeout(() => {
+      // resolve
+      if (state.exposed) {
+        damageEnemy(20);
+        setStatus('OPENING HIT!', '#ffd700');
+        state.exposed = false;
+      } else if (state.enemyTelegraphing || state.enemySwinging) {
+        // hits but enemy may still hit you — small damage
+        damageEnemy(8);
+      } else {
+        // enemy not busy: probably dodges
+        if (Math.random() < 0.6) {
+          setStatus('Enemy parried!', '#ff8888');
+          sfx.miss();
+        } else {
+          damageEnemy(10);
+        }
+      }
+      player.classList.remove('attacking');
+      state.playerBusy = false;
+      state.playerAction = null;
+    }, 350);
+  } else if (act === 'block') {
+    player.classList.add('blocking');
+    setTimeout(() => {
+      player.classList.remove('blocking');
+      state.playerBusy = false;
+      state.playerAction = null;
+    }, 500);
+  } else if (act === 'dodge') {
+    player.classList.add('dodging');
+    sfx.dodge();
+    setTimeout(() => {
+      player.classList.remove('dodging');
+      state.playerBusy = false;
+      state.playerAction = null;
+    }, 500);
+  } else if (act === 'counter') {
+    // Counter is timing-based: only works during enemy swing/telegraph late phase
+    player.classList.add('blocking');
+    const validWindow = state.enemyTelegraphing || state.enemySwinging;
+    setTimeout(() => {
+      player.classList.remove('blocking');
+      if (!validWindow) {
+        // mistimed - leave player open
+        setStatus('Mistimed counter!', '#ff4444');
+        sfx.miss();
+        damagePlayer(8);
+      }
+      state.playerBusy = false;
+      state.playerAction = null;
+    }, 400);
+  }
+}
+
+// Input
+const keyMap = { a:'attack', s:'block', d:'dodge', f:'counter' };
+document.addEventListener('keydown', e => {
+  const act = keyMap[e.key.toLowerCase()];
+  if (act) { e.preventDefault(); playerAct(act); }
+});
+document.querySelectorAll('#mobileControls button').forEach(b => {
+  b.addEventListener('click', () => playerAct(b.dataset.act));
+});
+
+startBtn.addEventListener('click', () => {
+  state = {
+    playerHp:100, enemyHp:100,
+    playerBusy:false, enemyBusy:false,
+    playerAction:null, enemyTelegraphing:false, enemySwinging:false,
+    gameOver:false, exposed:false
+  };
+  updateHp();
+  overlay.classList.add('hidden');
+  if (!audio) try { audio = new AC(); } catch(e){}
+  enemyLoop();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ashen Oath - Roguelike Deckbuilder</title>
+<style>
+  :root{
+    --bg:#0b0a0f;
+    --panel:#161320;
+    --panel2:#1f1a2b;
+    --ink:#e7dff8;
+    --muted:#9f96b8;
+    --blood:#b0163a;
+    --violet:#6a3bb8;
+    --gold:#d5ad54;
+    --emerald:#47b887;
+    --line:#3a334e;
+    --danger:#ff5f75;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family: "Segoe UI", Tahoma, sans-serif;
+    background: radial-gradient(circle at 20% 0%, #1a1226 0%, var(--bg) 60%);
+    color:var(--ink);
+    min-height:100vh;
+  }
+  .topbar{
+    display:flex;
+    gap:18px;
+    align-items:center;
+    padding:10px 16px;
+    border-bottom:1px solid var(--line);
+    background:rgba(10,8,15,.8);
+    position:sticky;
+    top:0;
+    z-index:10;
+    backdrop-filter: blur(3px);
+  }
+  .stat{font-size:14px;color:var(--muted)}
+  .stat b{color:var(--ink)}
+  .view{display:none;padding:16px;max-width:1100px;margin:0 auto}
+  .view.active{display:block}
+  h1,h2,h3{margin:8px 0 12px 0;font-weight:700;letter-spacing:.4px}
+  .panel{
+    background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:12px;
+  }
+  #mapContainer{
+    position:relative;
+    width:100%;
+    height:620px;
+    border-radius:12px;
+    border:1px solid var(--line);
+    background:
+      radial-gradient(circle at 80% 10%, #2a1a3d55 0%, transparent 35%),
+      radial-gradient(circle at 20% 70%, #3b163255 0%, transparent 38%),
+      #0e0c14;
+    overflow:hidden;
+  }
+  #mapSvg{position:absolute;inset:0}
+  .node{
+    position:absolute;
+    width:88px;height:42px;
+    border-radius:999px;
+    border:1px solid #584f70;
+    background:#211a31;
+    color:#ece6ff;
+    font-size:12px;
+    transform:translate(-50%,-50%);
+    cursor:pointer;
+    transition:.15s;
+    text-transform:capitalize;
+  }
+  .node:hover{transform:translate(-50%,-50%) scale(1.06)}
+  .node.locked{opacity:.28;cursor:not-allowed}
+  .node.visited{background:#2f2a40;border-color:#8880a0;opacity:.7}
+  .node.available{box-shadow:0 0 0 2px #7f6cc6,0 0 18px #6842d388}
+  .node.combat{border-color:#9a4155}
+  .node.elite{border-color:#d28334;background:#2d221a}
+  .node.rest{border-color:#3b9d7a;background:#1a2c26}
+  .node.draft{border-color:#6d56c2;background:#1d1a30}
+  .node.boss{border-color:#ff597a;background:#351424}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--muted)}
+  .chip{padding:4px 8px;border-radius:999px;border:1px solid var(--line);background:#171422}
+
+  .combat-layout{
+    display:grid;
+    grid-template-columns:1fr 320px;
+    gap:12px;
+  }
+  .arena{min-height:430px;display:flex;flex-direction:column;justify-content:space-between}
+  .enemy-wrap,.player-wrap{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    border:1px solid var(--line);border-radius:12px;padding:12px;background:#120f1b;
+  }
+  .enemy-art,.player-art{
+    width:110px;height:110px;border-radius:10px;border:1px solid var(--line);
+    display:grid;place-items:center;font-size:44px;background:#1a1525;
+  }
+  .bars{font-size:14px;color:var(--muted);line-height:1.6}
+  .bars b{color:var(--ink)}
+  .intent{
+    margin-top:6px;font-size:13px;color:#ffd2d2;background:#2e1823;border:1px solid #5f2a3d;
+    border-radius:8px;padding:5px 8px;display:inline-block
+  }
+  .hand{
+    margin-top:12px;
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .card{
+    width:145px;min-height:165px;
+    border-radius:10px;border:1px solid #655b81;
+    background:linear-gradient(180deg,#241e34,#1a1626);
+    padding:8px;
+    display:flex;flex-direction:column;
+    justify-content:space-between;
+    cursor:pointer;
+    transition:.15s;
+    text-align:left;
+    color:var(--ink);
+  }
+  .card:hover{transform:translateY(-4px)}
+  .card.unplayable{opacity:.45;cursor:not-allowed;transform:none}
+  .card .name{font-weight:700;font-size:14px}
+  .card .cost{
+    float:right;background:#2d2640;border:1px solid #7762ba;border-radius:999px;padding:1px 7px;
+    font-size:12px;color:#d8cbff
+  }
+  .card .type{font-size:11px;color:#b9aed5;text-transform:uppercase;letter-spacing:.5px}
+  .card .text{font-size:12px;color:#ddd5f2}
+  .controls{display:flex;align-items:center;gap:8px;margin-top:12px}
+  button.action, .draft-btn, .small-btn{
+    background:#2b2240;color:#efe9ff;border:1px solid #725cb8;border-radius:8px;
+    padding:8px 12px;cursor:pointer
+  }
+  button.action:hover,.draft-btn:hover,.small-btn:hover{filter:brightness(1.1)}
+  .small-btn{padding:6px 10px;font-size:12px}
+  .side .panel{margin-bottom:12px}
+  #combatLog{
+    max-height:340px;overflow:auto;font-size:12px;color:#cfc4eb;line-height:1.4
+  }
+  #draftChoices{display:flex;gap:10px;flex-wrap:wrap}
+  .draft-card{width:200px}
+  .toast{
+    position:fixed;bottom:12px;left:50%;transform:translateX(-50%);
+    background:#1f172e;border:1px solid #6b54b8;padding:8px 12px;border-radius:10px;
+    color:#f1ebff;opacity:0;pointer-events:none;transition:.25s;z-index:20;
+  }
+  .toast.show{opacity:1}
+  #endView .panel{max-width:640px;margin:80px auto;text-align:center;padding:28px}
+  .relic{display:inline-block;padding:4px 8px;border:1px solid #8d7740;background:#2f2614;border-radius:999px;color:#f3dca4;margin:2px;font-size:12px}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="stat"><b>Ashen Oath</b></div>
+    <div class="stat">HP: <b id="hudHp"></b></div>
+    <div class="stat">Gold: <b id="hudGold"></b></div>
+    <div class="stat">Deck: <b id="hudDeck"></b></div>
+    <div class="stat">Energy/Turn: <b id="hudEnergy"></b></div>
+    <div class="stat">Relics: <span id="hudRelics"></span></div>
+  </div>
+
+  <div id="mapView" class="view active">
+    <h2>The Blighted Road</h2>
+    <div id="mapContainer" class="panel"></div>
+    <div class="legend">
+      <span class="chip">Combat</span>
+      <span class="chip">Elite</span>
+      <span class="chip">Rest</span>
+      <span class="chip">Draft</span>
+      <span class="chip">Boss</span>
+    </div>
+  </div>
+
+  <div id="combatView" class="view">
+    <div class="combat-layout">
+      <div class="arena panel">
+        <div>
+          <h2 id="encounterTitle">Encounter</h2>
+          <div class="enemy-wrap">
+            <div class="enemy-art">☠</div>
+            <div class="bars" style="flex:1">
+              <div><b id="enemyName"></b></div>
+              <div>HP: <b id="enemyHp"></b></div>
+              <div>Block: <b id="enemyBlock"></b> | Strength: <b id="enemyStr"></b> | Vulnerable: <b id="enemyVuln"></b> | Bleed: <b id="enemyBleed"></b></div>
+              <div class="intent" id="enemyIntent"></div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="player-wrap">
+            <div class="player-art">🛡</div>
+            <div class="bars" style="flex:1">
+              <div><b>The Oathbound</b></div>
+              <div>HP: <b id="playerHp"></b></div>
+              <div>Block: <b id="playerBlock"></b> | Strength: <b id="playerStr"></b> | Vulnerable: <b id="playerVuln"></b></div>
+              <div>Energy: <b id="playerEnergy"></b></div>
+            </div>
+          </div>
+
+          <div class="controls">
+            <button id="endTurnBtn" class="action">End Turn</button>
+            <span class="stat">Draw: <b id="drawCount"></b> / Discard: <b id="discardCount"></b></span>
+          </div>
+          <div class="hand" id="hand"></div>
+        </div>
+      </div>
+
+      <div class="side">
+        <div class="panel">
+          <h3>Combat Log</h3>
+          <div id="combatLog"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="draftView" class="view">
+    <div class="panel">
+      <h2 id="draftTitle">Choose One Card</h2>
+      <div id="draftChoices"></div>
+      <div style="margin-top:12px">
+        <button id="skipDraft" class="action">Skip</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="endView" class="view">
+    <div class="panel">
+      <h1 id="endTitle"></h1>
+      <p id="endText"></p>
+      <button id="restartBtn" class="action">Begin New Run</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const views = ["mapView","combatView","draftView","endView"];
+
+  const CardLib = {
+    strike: {name:"Strike", cost:1, type:"Attack", text:"Deal 6 damage.", effect:(ctx)=>dealDamage(ctx.player, ctx.enemy, 6, true)},
+    defend: {name:"Defend", cost:1, type:"Skill", text:"Gain 5 Block.", effect:(ctx)=>gainBlock(ctx.player,5)},
+    bash: {name:"Bash", cost:2, type:"Attack", text:"Deal 8 damage. Apply 2 Vulnerable.", effect:(ctx)=>{dealDamage(ctx.player, ctx.enemy,8,true); applyVuln(ctx.enemy,2);}},
+    soul_drain: {name:"Soul Drain", cost:1, type:"Attack", text:"Deal 7 damage. Heal 3 HP.", effect:(ctx)=>{dealDamage(ctx.player, ctx.enemy,7,true); heal(ctx.player,3);}},
+    shadow_bolt: {name:"Shadow Bolt", cost:2, type:"Attack", text:"Deal 14 damage.", effect:(ctx)=>dealDamage(ctx.player, ctx.enemy,14,true)},
+    fortify: {name:"Fortify", cost:2, type:"Skill", text:"Gain 12 Block.", effect:(ctx)=>gainBlock(ctx.player,12)},
+    bleed_cut: {name:"Bleed Cut", cost:1, type:"Attack", text:"Deal 5 damage. Apply 3 Bleed.", effect:(ctx)=>{dealDamage(ctx.player,ctx.enemy,5,true); applyBleed(ctx.enemy,3);}},
+    ember_rite: {name:"Ember Rite", cost:0, type:"Skill", text:"Gain 1 Energy. Draw 1 card.", effect:(ctx)=>{ctx.player.energy+=1; drawCards(1);}},
+    sever: {name:"Sever", cost:1, type:"Attack", text:"Deal 9 damage.", effect:(ctx)=>dealDamage(ctx.player,ctx.enemy,9,true)},
+    iron_will: {name:"Iron Will", cost:1, type:"Skill", text:"Gain 7 Block. Draw 1 card.", effect:(ctx)=>{gainBlock(ctx.player,7); drawCards(1);}}
+  };
+
+  const DraftPool = Object.keys(CardLib);
+
+  const game = {
+    mode:"map",
+    player:null,
+    map:null,
+    currentNode:null,
+    combat:null,
+    pendingDraftDone:null,
+  };
+
+  function randInt(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+  function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+  function shuffle(arr){
+    const a = arr.slice();
+    for(let i=a.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [a[i],a[j]]=[a[j],a[i]];
+    }
+    return a;
+  }
+
+  function showView(id){
+    views.forEach(v => $(v).classList.toggle("active", v===id));
+  }
+  function toast(msg){
+    const t = $("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(()=>t.classList.remove("show"), 1900);
+  }
+
+  function init(){
+    game.player = {
+      maxHp:80, hp:80, gold:0,
+      maxEnergy:3, energy:3,
+      strength:0, vuln:0, block:0,
+      relics:[],
+      deck:[
+        "strike","strike","strike","strike","strike",
+        "defend","defend","defend","defend",
+        "soul_drain"
+      ]
+    };
+    game.map = generateMap(6);
+    game.currentNode = null;
+    game.combat = null;
+    game.mode="map";
+    updateHUD();
+    renderMap();
+    showView("mapView");
+    toast("A new oath begins in darkness.");
+  }
+
+  function updateHUD(){
+    $("hudHp").textContent = `${game.player.hp}/${game.player.maxHp}`;
+    $("hudGold").textContent = game.player.gold;
+    $("hudDeck").textContent = game.player.deck.length;
+    $("hudEnergy").textContent = game.player.maxEnergy;
+    $("hudRelics").innerHTML = game.player.relics.length
+      ? game.player.relics.map(r=>`<span class="relic">${r}</span>`).join("")
+      : "<span class='stat'>None</span>";
+  }
+
+  function weightedType(floor, maxFloor){
+    if(floor===0) return Math.random()<0.75 ? "combat" : "draft";
+    const r = Math.random();
+    if(floor===maxFloor-2) return r<0.55?"combat":(r<0.75?"elite":(r<0.88?"rest":"draft"));
+    if(r<0.57) return "combat";
+    if(r<0.72) return "draft";
+    if(r<0.87) return "rest";
+    return "elite";
+  }
+
+  function generateMap(floorsCount){
+    const floors = [];
+    const idMap = {};
+
+    for(let f=0; f<floorsCount; f++){
+      let count;
+      if(f===floorsCount-1) count = 1;
+      else if(f===0) count = 3;
+      else count = Math.random()<0.5 ? 3 : 4;
+
+      const row = [];
+      for(let i=0;i<count;i++){
+        const node = {
+          id:`${f}-${i}`,
+          floor:f, index:i,
+          type: f===floorsCount-1 ? "boss" : weightedType(f,floorsCount),
+          links:[],
+          visited:false,
+          x:0,y:0
+        };
+        row.push(node);
+        idMap[node.id]=node;
+      }
+      floors.push(row);
+    }
+
+    // connections
+    for(let f=0; f<floorsCount-1; f++){
+      const cur = floors[f];
+      const nxt = floors[f+1];
+      const incoming = new Array(nxt.length).fill(0);
+
+      for(const n of cur){
+        const linksCount = nxt.length===1 ? 1 : (Math.random()<0.66 ? 1 : 2);
+        const picks = new Set();
+        while(picks.size < linksCount){
+          picks.add(randInt(0,nxt.length-1));
+        }
+        picks.forEach(i=>{
+          n.links.push(nxt[i].id);
+          incoming[i]++;
+        });
+      }
+      for(let i=0;i<nxt.length;i++){
+        if(incoming[i]===0){
+          const src = pick(cur);
+          src.links.push(nxt[i].id);
+        }
+      }
+    }
+
+    return {floors,idMap};
+  }
+
+  function renderMap(){
+    showView("mapView");
+    game.mode="map";
+    const wrap = $("mapContainer");
+    wrap.innerHTML = "";
+
+    const W = wrap.clientWidth;
+    const H = wrap.clientHeight;
+    const topPad = 52, botPad = 52;
+    const floorGap = (H-topPad-botPad)/(game.map.floors.length-1);
+
+    game.map.floors.forEach((row,f)=>{
+      const gapX = W/(row.length+1);
+      row.forEach((n,i)=>{
+        n.x = gapX*(i+1);
+        n.y = topPad + f*floorGap;
+      });
+    });
+
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS,"svg");
+    svg.setAttribute("id","mapSvg");
+    svg.setAttribute("width",W);
+    svg.setAttribute("height",H);
+
+    game.map.floors.forEach(row=>{
+      row.forEach(n=>{
+        n.links.forEach(id=>{
+          const b = game.map.idMap[id];
+          const line = document.createElementNS(svgNS,"line");
+          line.setAttribute("x1",n.x); line.setAttribute("y1",n.y);
+          line.setAttribute("x2",b.x); line.setAttribute("y2",b.y);
+          line.setAttribute("stroke","#3e3752");
+          line.setAttribute("stroke-width","2");
+          svg.appendChild(line);
+        });
+      });
+    });
+    wrap.appendChild(svg);
+
+    const avail = new Set(getAvailableNodes().map(n=>n.id));
+
+    game.map.floors.forEach(row=>{
+      row.forEach(n=>{
+        const btn = document.createElement("button");
+        btn.className = `node ${n.type}`;
+        btn.style.left = `${n.x}px`;
+        btn.style.top = `${n.y}px`;
+        btn.textContent = n.type;
+        const isAvailable = avail.has(n.id);
+        if(n.visited) btn.classList.add("visited");
+        else if(isAvailable) btn.classList.add("available");
+        else btn.classList.add("locked");
+        btn.disabled = !isAvailable || n.visited;
+        btn.onclick = ()=>onNodeChosen(n.id);
+        wrap.appendChild(btn);
+      });
+    });
+
+    updateHUD();
+  }
+
+  function getAvailableNodes(){
+    if(!game.currentNode) return game.map.floors[0].filter(n=>!n.visited);
+    const nextFloor = game.currentNode.floor + 1;
+    if(nextFloor >= game.map.floors.length) return [];
+    const can = new Set(game.currentNode.links);
+    return game.map.floors[nextFloor].filter(n=>can.has(n.id) && !n.visited);
+  }
+
+  function onNodeChosen(id){
+    const node = game.map.idMap[id];
+    if(!node || !getAvailableNodes().some(n=>n.id===id)) return;
+
+    if(node.type==="combat" || node.type==="elite" || node.type==="boss"){
+      startCombat(node);
+      return;
+    }
+    if(node.type==="draft"){
+      openDraft(3, "Whispers of the Crypt — choose one card", () => completeNode(node), true);
+      return;
+    }
+    if(node.type==="rest"){
+      const amt = Math.floor(game.player.maxHp*0.25);
+      heal(game.player, amt);
+      toast(`You rest at a deadfire shrine. +${amt} HP`);
+      completeNode(node);
+    }
+  }
+
+  function completeNode(node){
+    node.visited = true;
+    game.currentNode = node;
+    updateHUD();
+    renderMap();
+  }
+
+  // Combat
+  function makeEnemy(kind, floor){
+    const scale = floor * 4;
+    const list = {
+      ghoul: {
+        name:"Grave Ghoul", hp:42+scale, strength:0,
+        intents:[
+          {type:"attack", dmg:7},
+          {type:"defend", block:7},
+          {type:"attack", dmg:11}
+        ]
+      },
+      cultist: {
+        name:"Ash Cultist", hp:36+scale, strength:0,
+        intents:[
+          {type:"buff", strength:2},
+          {type:"attack", dmg:8},
+          {type:"attackDebuff", dmg:6, vuln:1}
+        ]
+      },
+      wraith: {
+        name:"Hollow Wraith", hp:46+scale, strength:1,
+        intents:[
+          {type:"attackDebuff", dmg:8, vuln:1},
+          {type:"defend", block:9},
+          {type:"attack", dmg:13}
+        ]
+      },
+      knight: {
+        name:"Blood Knight", hp:72+scale*2, strength:1,
+        intents:[
+          {type:"attack", dmg:13},
+          {type:"attackBlock", dmg:9, block:8},
+          {type:"buff", strength:2},
+          {type:"attack", dmg:18}
+        ]
+      },
+      abomination: {
+        name:"Cathedral Abomination", hp:82+scale*2, strength:0,
+        intents:[
+          {type:"multi", dmg:6, hits:2},
+          {type:"defend", block:12},
+          {type:"attackDebuff", dmg:10, vuln:1},
+          {type:"multi", dmg:7, hits:3}
+        ]
+      },
+      boss: {
+        name:"Fallen Monarch", hp:155, strength:1,
+        intents:[
+          {type:"attack", dmg:14},
+          {type:"attackDebuff", dmg:12, vuln:2},
+          {type:"buff", strength:3},
+          {type:"multi", dmg:8, hits:3},
+          {type:"defend", block:16}
+        ]
+      }
+    };
+    if(kind==="boss") return structuredCloneEnemy(list.boss);
+    if(kind==="elite") return structuredCloneEnemy(Math.random()<0.5?list.knight:list.abomination);
+    const choices = [list.ghoul,list.cultist,list.wraith];
+    return structuredCloneEnemy(pick(choices));
+  }
+
+  function structuredCloneEnemy(t){
+    return {
+      name:t.name, maxHp:t.hp, hp:t.hp,
+      block:0, strength:t.strength||0,
+      vuln:0, bleed:0,
+      intents:t.intents.slice(),
+      intentIndex:0
+    };
+  }
+
+  function startCombat(node){
+    game.mode = "combat";
+    const enemy = makeEnemy(node.type, node.floor);
+    game.combat = {
+      node,
+      enemy,
+      draw: shuffle(game.player.deck),
+      discard:[],
+      hand:[],
+      log:[],
+      phase:"player",
+      turn:1
+    };
+    appendLog(`A ${enemy.name} emerges from the dark.`);
+    $("encounterTitle").textContent = node.type==="elite" ? "Elite Encounter" : node.type==="boss" ? "Boss Encounter" : "Enemy Encounter";
+    showView("combatView");
+    startPlayerTurn(true);
+  }
+
+  function appendLog(msg){
+    if(!game.combat) return;
+    game.combat.log.unshift(msg);
+    game.combat.log = game.combat.log.slice(0,80);
+    renderCombat();
+  }
+
+  function heal(target, amt){
+    const before = target.hp;
+    target.hp = Math.min(target.maxHp, target.hp+amt);
+    return target.hp-before;
+  }
+
+  function applyVuln(target, n){
+    target.vuln += n;
+    appendLog(`${target===game.player?"You are":"Enemy is"} Vulnerable (+${n}).`);
+  }
+
+  function applyBleed(target, n){
+    target.bleed += n;
+    appendLog(`${target===game.player?"You":"Enemy"} suffer Bleed ${target.bleed}.`);
+  }
+
+  function gainBlock(target, amt){
+    target.block += amt;
+    appendLog(`${target===game.player?"You":"Enemy"} gain ${amt} Block.`);
+  }
+
+  function dealDamage(attacker, target, base, attack=true){
+    let dmg = base;
+    if(attack && attacker.strength) dmg += attacker.strength;
+    if(attack && target.vuln>0) dmg = Math.floor(dmg*1.5);
+    dmg = Math.max(0,dmg);
+
+    const absorbed = Math.min(target.block, dmg);
+    target.block -= absorbed;
+    const hpLoss = dmg - absorbed;
+    target.hp -= hpLoss;
+
+    if(target.hp<0) target.hp=0;
+    appendLog(`${target===game.player?"You":"Enemy"} take ${hpLoss} damage${absorbed?` (${absorbed} blocked)`:''}.`);
+  }
+
+  function drawCards(n){
+    const c = game.combat;
+    for(let i=0;i<n;i++){
+      if(c.draw.length===0){
+        if(c.discard.length===0) break;
+        c.draw = shuffle(c.discard);
+        c.discard = [];
+        appendLog("Shuffled discard pile.");
+      }
+      const card = c.draw.pop();
+      if(card) c.hand.push(card);
+    }
+    renderCombat();
+  }
+
+  function startPlayerTurn(first=false){
+    const c = game.combat;
+    if(!c) return;
+    c.phase = "player";
+    game.player.energy = game.player.maxEnergy;
+    game.player.block = 0;
+    c.enemy.block = 0;
+    if(!first && game.player.vuln>0) game.player.vuln--;
+    drawCards(5);
+    renderCombat();
+  }
+
+  function endTurn(){
+    const c = game.combat;
+    if(!c || c.phase!=="player") return;
+    c.discard.push(...c.hand);
+    c.hand = [];
+    c.phase = "enemy";
+    renderCombat();
+    setTimeout(enemyTurn, 400);
+  }
+
+  function intentText(intent){
+    switch(intent.type){
+      case "attack": return `Intent: Attack ${intent.dmg + (game.combat?.enemy.strength||0)}`;
+      case "defend": return `Intent: Gain ${intent.block} Block`;
+      case "buff": return `Intent: Gain ${intent.strength} Strength`;
+      case "attackDebuff": return `Intent: Attack ${intent.dmg + (game.combat?.enemy.strength||0)} + ${intent.vuln} Vulnerable`;
+      case "attackBlock": return `Intent: Attack ${intent.dmg + (game.combat?.enemy.strength||0)} + Gain ${intent.block} Block`;
+      case "multi": return `Intent: ${intent.hits}x${intent.dmg + (game.combat?.enemy.strength||0)} Attack`;
+      default: return "Intent: ?";
+    }
+  }
+
+  function enemyTurn(){
+    const c = game.combat;
+    if(!c) return;
+
+    const e = c.enemy;
+    if(e.bleed>0){
+      dealDamage(e,e,e.bleed,false);
+      appendLog(`${e.name} bleeds for ${e.bleed}.`);
+      e.bleed = Math.max(0,e.bleed-1);
+      if(e.hp<=0){ onVictory(); return; }
+    }
+
+    const intent = e.intents[e.intentIndex % e.intents.length];
+    switch(intent.type){
+      case "attack":
+        dealDamage(e, game.player, intent.dmg, true);
+        break;
+      case "defend":
+        gainBlock(e, intent.block);
+        break;
+      case "buff":
+        e.strength += intent.strength;
+        appendLog(`${e.name} gains ${intent.strength} Strength.`);
+        break;
+      case "attackDebuff":
+        dealDamage(e, game.player, intent.dmg, true);
+        applyVuln(game.player, intent.vuln);
+        break;
+      case "attackBlock":
+        dealDamage(e, game.player, intent.dmg, true);
+        gainBlock(e, intent.block);
+        break;
+      case "multi":
+        for(let i=0;i<intent.hits;i++) dealDamage(e, game.player, intent.dmg, true);
+        break;
+    }
+    e.intentIndex++;
+    if(e.vuln>0) e.vuln--;
+    if(game.player.hp<=0){ onDefeat(); return; }
+
+    c.turn++;
+    startPlayerTurn(false);
+  }
+
+  function playCard(idx){
+    const c = game.combat;
+    if(!c || c.phase!=="player") return;
+    const id = c.hand[idx];
+    const card = CardLib[id];
+    if(!card) return;
+    if(game.player.energy < card.cost) return;
+    game.player.energy -= card.cost;
+    appendLog(`You play ${card.name}.`);
+    card.effect({player:game.player, enemy:c.enemy, combat:c});
+    c.discard.push(id);
+    c.hand.splice(idx,1);
+
+    if(c.enemy.hp<=0){ onVictory(); return; }
+    renderCombat();
+  }
+
+  function onVictory(){
+    const c = game.combat;
+    if(!c) return;
+    const node = c.node;
+    let gold = node.type==="elite" ? randInt(38,52) : randInt(18,30);
+    if(node.type==="boss") gold = 120;
+    game.player.gold += gold;
+
+    if(node.type==="elite"){
+      game.player.maxEnergy = Math.min(6, game.player.maxEnergy+1);
+      game.player.relics.push("Ember Sigil");
+      toast("Relic gained: Ember Sigil (+1 Energy/turn)");
+    }
+
+    if(node.type==="boss"){
+      node.visited = true;
+      game.currentNode = node;
+      updateHUD();
+      showEnd(true);
+      return;
+    }
+
+    openDraft(3, `Victory. +${gold} gold`, () => {
+      completeNode(node);
+      game.combat = null;
+    }, true);
+  }
+
+  function onDefeat(){
+    showEnd(false);
+  }
+
+  function renderCombat(){
+    if(game.mode!=="combat" && game.mode!=="draft") return;
+    const c = game.combat;
+    if(!c) return;
+    const e = c.enemy;
+
+    $("enemyName").textContent = e.name;
+    $("enemyHp").textContent = `${e.hp}/${e.maxHp}`;
+    $("enemyBlock").textContent = e.block;
+    $("enemyStr").textContent = e.strength;
+    $("enemyVuln").textContent = e.vuln;
+    $("enemyBleed").textContent = e.bleed;
+    $("enemyIntent").textContent = intentText(e.intents[e.intentIndex % e.intents.length]);
+
+    $("playerHp").textContent = `${game.player.hp}/${game.player.maxHp}`;
+    $("playerBlock").textContent = game.player.block;
+    $("playerStr").textContent = game.player.strength;
+    $("playerVuln").textContent = game.player.vuln;
+    $("playerEnergy").textContent = game.player.energy;
+    $("drawCount").textContent = c.draw.length;
+    $("discardCount").textContent = c.discard.length;
+    $("endTurnBtn").disabled = c.phase!=="player";
+
+    $("combatLog").innerHTML = c.log.map(l=>`<div>• ${l}</div>`).join("");
+
+    const hand = $("hand");
+    hand.innerHTML = "";
+    c.hand.forEach((id,i)=>{
+      const card = CardLib[id];
+      const btn = document.createElement("button");
+      btn.className = "card" + (game.player.energy<card.cost || c.phase!=="player" ? " unplayable":"");
+      btn.innerHTML = `
+        <div>
+          <div class="name">${card.name}<span class="cost">${card.cost}</span></div>
+          <div class="type">${card.type}</div>
+        </div>
+        <div class="text">${card.text}</div>
+      `;
+      btn.onclick = ()=>playCard(i);
+      hand.appendChild(btn);
+    });
+
+    updateHUD();
+  }
+
+  function openDraft(count, title, onDone, allowSkip=true){
+    game.mode="draft";
+    game.pendingDraftDone = onDone;
+    $("draftTitle").textContent = title;
+
+    const pool = shuffle(DraftPool);
+    const picks = [];
+    for(const id of pool){
+      if(!picks.includes(id)) picks.push(id);
+      if(picks.length>=count) break;
+    }
+
+    const box = $("draftChoices");
+    box.innerHTML = "";
+    picks.forEach(id=>{
+      const c = CardLib[id];
+      const btn = document.createElement("button");
+      btn.className = "card draft-card draft-btn";
+      btn.innerHTML = `
+        <div>
+          <div class="name">${c.name}<span class="cost">${c.cost}</span></div>
+          <div class="type">${c.type}</div>
+        </div>
+        <div class="text">${c.text}</div>
+      `;
+      btn.onclick = ()=>{
+        game.player.deck.push(id);
+        toast(`${c.name} added to deck`);
+        finishDraft();
+      };
+      box.appendChild(btn);
+    });
+
+    $("skipDraft").style.display = allowSkip ? "inline-block" : "none";
+    showView("draftView");
+    updateHUD();
+  }
+
+  function finishDraft(){
+    const done = game.pendingDraftDone;
+    game.pendingDraftDone = null;
+    if(done) done();
+  }
+
+  function showEnd(win){
+    game.mode="end";
+    showView("endView");
+    $("endTitle").textContent = win ? "Victory in the Ashen Cathedral" : "You Have Fallen";
+    $("endText").textContent = win
+      ? "The Fallen Monarch is slain. Your oath endures, for now."
+      : "Your blood stains the stones. Another will take the oath.";
+  }
+
+  // events
+  $("endTurnBtn").addEventListener("click", endTurn);
+  $("skipDraft").addEventListener("click", ()=>finishDraft());
+  $("restartBtn").addEventListener("click", init);
+
+  init();
+})();
+</script>
+</body>
+</html>

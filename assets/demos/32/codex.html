@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IGNOU Dance Scene</title>
+  <style>
+    :root{
+      --bg1:#ffb36b;
+      --bg2:#ffd9a6;
+      --panel:#ffffffcc;
+      --text:#2a1f1a;
+      --btn:#ff6f61;
+      --btn2:#6c63ff;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: linear-gradient(160deg,var(--bg1),var(--bg2));
+      color:var(--text);
+      overflow:hidden;
+    }
+    #ui{
+      position:fixed;
+      top:12px;
+      left:12px;
+      z-index:10;
+      background:var(--panel);
+      border:1px solid #ffffffaa;
+      border-radius:14px;
+      padding:10px;
+      backdrop-filter: blur(6px);
+      box-shadow:0 8px 20px rgba(0,0,0,.15);
+      max-width:320px;
+    }
+    #ui h1{
+      font-size:16px;
+      margin:0 0 8px;
+      line-height:1.2;
+    }
+    .row{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-bottom:8px;
+    }
+    button{
+      border:none;
+      border-radius:10px;
+      padding:8px 10px;
+      font-weight:600;
+      cursor:pointer;
+      color:#fff;
+      background:var(--btn);
+      box-shadow:0 4px 10px rgba(0,0,0,.15);
+    }
+    button.secondary{ background:var(--btn2); }
+    button:disabled{ opacity:.5; cursor:not-allowed; }
+    #status{
+      font-size:12px;
+      line-height:1.35;
+      margin-top:4px;
+      min-height:32px;
+    }
+    canvas{
+      display:block;
+      width:100vw;
+      height:100vh;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <h1>💃 IGNOU Dance Scene (Pyari Si Jagah)</h1>
+    <div class="row">
+      <button id="toggleDance">Dance Pause</button>
+      <button id="toggleCam" class="secondary">Camera Move: ON</button>
+    </div>
+    <div class="row">
+      <button id="recordBtn">🎬 10s Video Record</button>
+      <button id="downloadBtn" disabled>⬇️ Download Video</button>
+    </div>
+    <div id="status">Scene ready. Dance chal raha hai ✨</div>
+  </div>
+
+  <canvas id="c"></canvas>
+
+  <script>
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    let w = 0, h = 0, dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+
+    function resize(){
+      w = window.innerWidth;
+      h = window.innerHeight;
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // UI controls
+    const toggleDanceBtn = document.getElementById('toggleDance');
+    const toggleCamBtn = document.getElementById('toggleCam');
+    const recordBtn = document.getElementById('recordBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const statusEl = document.getElementById('status');
+
+    let danceOn = true;
+    let camOn = true;
+    toggleDanceBtn.onclick = () => {
+      danceOn = !danceOn;
+      toggleDanceBtn.textContent = danceOn ? "Dance Pause" : "Dance Play";
+      statusEl.textContent = danceOn ? "Dance chal raha hai ✨" : "Dance pause hai.";
+    };
+    toggleCamBtn.onclick = () => {
+      camOn = !camOn;
+      toggleCamBtn.textContent = camOn ? "Camera Move: ON" : "Camera Move: OFF";
+    };
+
+    // Recording
+    let recorder = null;
+    let chunks = [];
+    let videoBlob = null;
+
+    recordBtn.onclick = async () => {
+      if (recorder && recorder.state === "recording") return;
+      chunks = [];
+      videoBlob = null;
+      downloadBtn.disabled = true;
+
+      const stream = canvas.captureStream(30);
+      const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+        ? "video/webm;codecs=vp9"
+        : "video/webm";
+      recorder = new MediaRecorder(stream, { mimeType: mime });
+
+      recorder.ondataavailable = e => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      recorder.onstop = () => {
+        videoBlob = new Blob(chunks, { type: "video/webm" });
+        downloadBtn.disabled = false;
+        statusEl.textContent = "Recording complete! Download button dabao.";
+      };
+
+      recorder.start();
+      statusEl.textContent = "Recording... 10 seconds 🎥";
+      recordBtn.disabled = true;
+
+      setTimeout(() => {
+        if (recorder && recorder.state === "recording") recorder.stop();
+        recordBtn.disabled = false;
+      }, 10000);
+    };
+
+    downloadBtn.onclick = () => {
+      if (!videoBlob) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(videoBlob);
+      a.download = "ignou-dance-scene.webm";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+    };
+
+    // Decorative stars/fireflies
+    const dots = Array.from({length: 80}, () => ({
+      x: Math.random(),
+      y: Math.random() * 0.7,
+      r: Math.random() * 2 + 0.5,
+      sp: Math.random() * 0.0007 + 0.0002,
+      o: Math.random() * 0.7 + 0.3
+    }));
+
+    function roundedRect(x, y, width, height, radius) {
+      const r = Math.min(radius, width/2, height/2);
+      ctx.beginPath();
+      ctx.moveTo(x+r, y);
+      ctx.arcTo(x+width, y, x+width, y+height, r);
+      ctx.arcTo(x+width, y+height, x, y+height, r);
+      ctx.arcTo(x, y+height, x, y, r);
+      ctx.arcTo(x, y, x+width, y, r);
+      ctx.closePath();
+    }
+
+    function drawBackground(t){
+      // Sky gradient
+      const g = ctx.createLinearGradient(0,0,0,h);
+      g.addColorStop(0, "#ff9f68");
+      g.addColorStop(0.45, "#ffc38a");
+      g.addColorStop(1, "#ffe6bd");
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,w,h);
+
+      // Sun
+      const sunX = w*0.75, sunY = h*0.22;
+      const rg = ctx.createRadialGradient(sunX, sunY, 20, sunX, sunY, 140);
+      rg.addColorStop(0, "rgba(255,240,180,0.95)");
+      rg.addColorStop(1, "rgba(255,240,180,0)");
+      ctx.fillStyle = rg;
+      ctx.beginPath();
+      ctx.arc(sunX, sunY, 140, 0, Math.PI*2);
+      ctx.fill();
+
+      // Mountains
+      function mountain(baseY, color, amp, freq, off){
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(0,h);
+        for(let x=0;x<=w;x+=8){
+          const y = baseY - Math.abs(Math.sin((x/w)*freq*Math.PI + off))*amp;
+          ctx.lineTo(x,y);
+        }
+        ctx.lineTo(w,h);
+        ctx.closePath();
+        ctx.fill();
+      }
+      mountain(h*0.63, "#9d7ea5", 120, 2.2, 0.5);
+      mountain(h*0.68, "#7f6587", 90, 3.2, 1.0);
+
+      // Lake
+      const lakeTop = h*0.70;
+      const lg = ctx.createLinearGradient(0,lakeTop,0,h);
+      lg.addColorStop(0, "rgba(106,163,196,0.7)");
+      lg.addColorStop(1, "rgba(53,107,145,0.85)");
+      ctx.fillStyle = lg;
+      ctx.fillRect(0, lakeTop, w, h-lakeTop);
+
+      // Sparkles on water
+      for(let i=0;i<dots.length;i++){
+        const d = dots[i];
+        d.x += d.sp;
+        if(d.x>1.02) d.x = -0.02;
+        const yy = lakeTop + (d.y*0.35 + 0.65)*(h-lakeTop);
+        const xx = d.x*w;
+        const tw = (Math.sin(t*0.005 + i)*0.5+0.5) * 20 + 4;
+        ctx.globalAlpha = d.o * 0.45;
+        ctx.fillStyle = "#fffbe8";
+        ctx.fillRect(xx, yy, tw, 1.4);
+      }
+      ctx.globalAlpha = 1;
+
+      // Ground
+      const gg = ctx.createLinearGradient(0,h*0.74,0,h);
+      gg.addColorStop(0, "#6ab06b");
+      gg.addColorStop(1, "#3f7f41");
+      ctx.fillStyle = gg;
+      ctx.beginPath();
+      ctx.moveTo(0,h*0.78);
+      ctx.quadraticCurveTo(w*0.25,h*0.72,w*0.5,h*0.79);
+      ctx.quadraticCurveTo(w*0.75,h*0.86,w,h*0.78);
+      ctx.lineTo(w,h);
+      ctx.lineTo(0,h);
+      ctx.closePath();
+      ctx.fill();
+
+      // Flowers
+      for(let i=0;i<55;i++){
+        const fx = (i*97 % 1000)/1000 * w;
+        const fy = h*0.80 + (Math.sin(i*11.2)*0.5+0.5)*(h*0.18);
+        const s = (i%5)/5 + 0.5;
+        const hue = (i*37)%360;
+        ctx.fillStyle = `hsl(${hue},85%,68%)`;
+        ctx.beginPath();
+        ctx.arc(fx, fy, 2.2*s, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = "#ffe98a";
+        ctx.beginPath();
+        ctx.arc(fx, fy, 1*s, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+
+    function drawPerson(x, y, scale, colors, phase, label){
+      const headR = 14*scale;
+      const bodyH = 45*scale;
+
+      // bounce + sway
+      const bounce = Math.sin(phase)*7*scale;
+      const sway = Math.sin(phase*0.8)*6*scale;
+      const arm = Math.sin(phase*1.6)*0.9;
+      const leg = Math.sin(phase*1.6 + Math.PI)*0.9;
+
+      const bx = x + sway;
+      const by = y + bounce;
+
+      // shadow
+      ctx.fillStyle = "rgba(0,0,0,0.18)";
+      ctx.beginPath();
+      ctx.ellipse(bx, y+52*scale, 20*scale + Math.abs(sway)*0.6, 7*scale, 0, 0, Math.PI*2);
+      ctx.fill();
+
+      // body
+      ctx.lineWidth = 5*scale;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = colors.outline;
+
+      // neck-body
+      ctx.strokeStyle = colors.shirt;
+      ctx.lineWidth = 11*scale;
+      ctx.beginPath();
+      ctx.moveTo(bx, by+headR+5*scale);
+      ctx.lineTo(bx, by+headR+bodyH);
+      ctx.stroke();
+
+      // arms
+      ctx.strokeStyle = colors.shirt;
+      ctx.lineWidth = 7*scale;
+      ctx.beginPath();
+      ctx.moveTo(bx, by+headR+15*scale);
+      ctx.lineTo(bx-24*scale, by+headR+10*scale + arm*10*scale);
+      ctx.moveTo(bx, by+headR+16*scale);
+      ctx.lineTo(bx+26*scale, by+headR+8*scale - arm*10*scale);
+      ctx.stroke();
+
+      // hands
+      ctx.fillStyle = colors.skin;
+      ctx.beginPath();
+      ctx.arc(bx-24*scale, by+headR+10*scale + arm*10*scale, 3.5*scale, 0, Math.PI*2);
+      ctx.arc(bx+26*scale, by+headR+8*scale - arm*10*scale, 3.5*scale, 0, Math.PI*2);
+      ctx.fill();
+
+      // legs
+      ctx.strokeStyle = colors.pants;
+      ctx.lineWidth = 8*scale;
+      ctx.beginPath();
+      ctx.moveTo(bx, by+headR+bodyH);
+      ctx.lineTo(bx-14*scale, by+headR+bodyH+25*scale + leg*7*scale);
+      ctx.moveTo(bx, by+headR+bodyH);
+      ctx.lineTo(bx+14*scale, by+headR+bodyH+25*scale - leg*7*scale);
+      ctx.stroke();
+
+      // shoes
+      ctx.strokeStyle = "#333";
+      ctx.lineWidth = 5*scale;
+      ctx.beginPath();
+      ctx.moveTo(bx-20*scale, by+headR+bodyH+30*scale + leg*7*scale);
+      ctx.lineTo(bx-8*scale, by+headR+bodyH+30*scale + leg*7*scale);
+      ctx.moveTo(bx+8*scale, by+headR+bodyH+30*scale - leg*7*scale);
+      ctx.lineTo(bx+20*scale, by+headR+bodyH+30*scale - leg*7*scale);
+      ctx.stroke();
+
+      // head
+      ctx.fillStyle = colors.skin;
+      ctx.beginPath();
+      ctx.arc(bx, by, headR, 0, Math.PI*2);
+      ctx.fill();
+
+      // hair
+      ctx.fillStyle = colors.hair;
+      ctx.beginPath();
+      ctx.arc(bx, by-4*scale, headR*0.95, Math.PI, Math.PI*2);
+      ctx.lineTo(bx+headR*0.85, by+2*scale);
+      ctx.arc(bx, by+2*scale, headR*0.85, 0, Math.PI, true);
+      ctx.closePath();
+      ctx.fill();
+
+      // face
+      ctx.fillStyle = "#2b1e1e";
+      ctx.beginPath();
+      ctx.arc(bx-4*scale, by-1*scale, 1.5*scale, 0, Math.PI*2);
+      ctx.arc(bx+4*scale, by-1*scale, 1.5*scale, 0, Math.PI*2);
+      ctx.fill();
+      ctx.strokeStyle = "#2b1e1e";
+      ctx.lineWidth = 1.5*scale;
+      ctx.beginPath();
+      ctx.arc(bx, by+4*scale, 4*scale, 0.1*Math.PI, 0.9*Math.PI);
+      ctx.stroke();
+
+      // label
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      roundedRect(bx-30*scale, by-38*scale, 60*scale, 18*scale, 8*scale);
+      ctx.fill();
+      ctx.fillStyle = "#3a2a22";
+      ctx.font = `${9*scale+5}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, bx, by-29*scale);
+    }
+
+    function drawMusicNotes(t){
+      const baseX = w*0.5;
+      const baseY = h*0.45;
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
+      for(let i=0;i<8;i++){
+        const p = (t*0.0008 + i/8) % 1;
+        const x = baseX + Math.sin(i*2.1 + t*0.002)*120 + (i-4)*18;
+        const y = baseY - p*170;
+        ctx.globalAlpha = 1-p;
+        ctx.font = `${18 + p*14}px serif`;
+        ctx.fillText(i%2===0 ? "♪" : "♫", x, y);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    let start = performance.now();
+    function frame(now){
+      const t = now - start;
+      drawBackground(t);
+
+      const camOffset = camOn ? Math.sin(t*0.00035)*35 : 0;
+      const cx = w*0.5 + camOffset;
+      const groundY = h*0.70;
+
+      // Stage mat
+      const stageW = Math.min(360, w*0.55);
+      const stageH = 24;
+      ctx.fillStyle = "rgba(255,225,180,0.45)";
+      ctx.beginPath();
+      ctx.ellipse(cx, groundY+80, stageW*0.5, stageH, 0, 0, Math.PI*2);
+      ctx.fill();
+
+      const speed = danceOn ? 0.006 : 0;
+      const phase = t*speed;
+      drawPerson(cx-55, groundY+15, 1.15, {
+        skin:"#f6c8a8", hair:"#2b1f1f", shirt:"#2f80ed", pants:"#3e3e56", outline:"#1f1f1f"
+      }, phase, "Main");
+      drawPerson(cx+55, groundY+15, 1.10, {
+        skin:"#f4bf9d", hair:"#5b2b2b", shirt:"#ff5f87", pants:"#5a3d7a", outline:"#1f1f1f"
+      }, phase+1.2, "Saathi");
+
+      drawMusicNotes(t);
+
+      // Caption
+      ctx.fillStyle = "rgba(255,255,255,0.88)";
+      roundedRect(w*0.5-190, h-58, 380, 36, 12);
+      ctx.fill();
+      ctx.fillStyle = "#4b2f24";
+      ctx.font = "600 18px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("Pyari si jagah par khubsurat dance moment ✨", w*0.5, h-40);
+
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>

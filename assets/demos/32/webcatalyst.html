@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>💃 Dancing Animation 💃</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            z-index: 10;
+        }
+        #title {
+            color: #fff;
+            font-size: 28px;
+            font-weight: bold;
+            text-shadow: 2px 2px 10px rgba(0,0,0,0.5), 0 0 20px rgba(255,100,200,0.5);
+            margin-bottom: 10px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        #subtitle {
+            color: #ffd700;
+            font-size: 16px;
+            text-shadow: 1px 1px 5px rgba(0,0,0,0.5);
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            z-index: 10;
+        }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .btn:hover {
+            transform: scale(1.1);
+        }
+        #playBtn {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            color: white;
+            box-shadow: 0 4px 15px rgba(238,90,36,0.4);
+        }
+        #pauseBtn {
+            background: linear-gradient(135deg, #4ecdc4, #44bd32);
+            color: white;
+            box-shadow: 0 4px 15px rgba(68,189,50,0.4);
+        }
+        #resetBtn {
+            background: linear-gradient(135deg, #a29bfe, #6c5ce7);
+            color: white;
+            box-shadow: 0 4px 15px rgba(108,92,231,0.4);
+        }
+        #musicNote {
+            position: absolute;
+            color: #fff;
+            font-size: 24px;
+            pointer-events: none;
+            animation: floatUp 3s ease-out forwards;
+            z-index: 5;
+        }
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) rotate(0deg); }
+            100% { opacity: 0; transform: translateY(-200px) rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="ui-overlay">
+        <div id="title">🌸 Dancing in Paradise 🌸</div>
+        <div id="subtitle">✨ A Beautiful Dance Animation ✨</div>
+    </div>
+    <div id="controls">
+        <button class="btn" id="playBtn" onclick="togglePlay()">▶ Play</button>
+        <button class="btn" id="pauseBtn" onclick="changeDance()">💃 Change Dance</button>
+        <button class="btn" id="resetBtn" onclick="resetAnimation()">🔄 Reset</button>
+    </div>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+        
+        let isPlaying = true;
+        let danceStyle = 0;
+        let time = 0;
+        let particles = [];
+        let musicNotes = [];
+        let flowers = [];
+        let butterflies = [];
+        let stars = [];
+        
+        // Initialize flowers
+        for (let i = 0; i < 30; i++) {
+            flowers.push({
+                x: Math.random() * canvas.width,
+                y: canvas.height - 50 - Math.random() * 100,
+                size: 5 + Math.random() * 15,
+                color: ['#ff6b6b', '#ffd700', '#ff69b4', '#00ced1', '#ff4500', '#9370db'][Math.floor(Math.random() * 6)],
+                petalCount: 5 + Math.floor(Math.random() * 3),
+                sway: Math.random() * Math.PI * 2
+            });
+        }
+        
+        // Initialize butterflies
+        for (let i = 0; i < 8; i++) {
+            butterflies.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height * 0.6,
+                size: 8 + Math.random() * 12,
+                color: ['#ff69b4', '#ffd700', '#00ced1', '#ff4500', '#9370db'][Math.floor(Math.random() * 5)],
+                speedX: (Math.random() - 0.5) * 2,
+                speedY: (Math.random() - 0.5) * 1.5,
+                wingAngle: 0,
+                wingSpeed: 0.1 + Math.random() * 0.1
+            });
+        }
+        
+        // Initialize stars
+        for (let i = 0; i < 50; i++) {
+            stars.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height * 0.4,
+                size: Math.random() * 2,
+                twinkle: Math.random() * Math.PI * 2
+            });
+        }
+        
+        // Character properties
+        const character1 = {
+            x: canvas.width * 0.35,
+            y: canvas.height * 0.6,
+            color: '#ff6b6b',
+            skinColor: '#fdbcb4',
+            hairColor: '#2c1810',
+            dressColor: '#ff1493',
+            size: 60,
+            bobOffset: 0
+        };
+        
+        const character2 = {
+            x: canvas.width * 0.65,
+            y: canvas.height * 0.6,
+            color: '#4ecdc4',
+            skinColor: '#fdbcb4',
+            hairColor: '#1a1a2e',
+            dressColor: '#00bfff',
+            size: 60,
+            bobOffset: Math.PI
+        };
+        
+        function drawSky() {
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#1a1a2e');
+            gradient.addColorStop(0.3, '#16213e');
+            gradient.addColorStop(0.6, '#0f3460');
+            gradient.addColorStop(0.8, '#e94560');
+            gradient.addColorStop(1, '#ff6b6b');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        function drawStars() {
+            stars.forEach(star => {
+                star.twinkle += 0.05;
+                const alpha = 0.3 + Math.sin(star.twinkle) * 0.7;
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.fill();
+            });
+        }
+        
+        function drawMoon() {
+            ctx.beginPath();
+            ctx.arc(canvas.width * 0.85, canvas.height * 0.15, 40, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffd700';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(canvas.width * 0.85 + 15, canvas.height * 0.15 - 10, 35, 0, Math.PI * 2);
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fill();
+        }
+        
+        function drawMountains() {
+            // Background mountains
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height * 0.5);
+            ctx.lineTo(canvas.width * 0.1, canvas.height * 0.35);
+            ctx.lineTo(canvas.width * 0.2, canvas.height * 0.45);
+            ctx.lineTo(canvas.width * 0.35, canvas.height * 0.3);
+            ctx.lineTo(canvas.width * 0.5, canvas.height * 0.4);
+            ctx.lineTo(canvas.width * 0.65, canvas.height * 0.25);
+            ctx.lineTo(canvas.width * 0.8, canvas.height * 0.38);
+            ctx.lineTo(canvas.width * 0.9, canvas.height * 0.32);
+            ctx.lineTo(canvas.width, canvas.height * 0.45);
+            ctx.lineTo(canvas.width, canvas.height * 0.5);
+            ctx.closePath();
+            ctx.fillStyle = '#2d3436';
+            ctx.fill();
+            
+            // Foreground mountains
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height * 0.55);
+            ctx.lineTo(canvas.width * 0.15, canvas.height * 0.45);
+            ctx.lineTo(canvas.width * 0.3, canvas.height * 0.5);
+            ctx.lineTo(canvas.width * 0.45, canvas.height * 0.4);
+            ctx.lineTo(canvas.width * 0.6, canvas.height * 0.48);
+            ctx.lineTo(canvas.width * 0.75, canvas.height * 0.42);
+            ctx.lineTo(canvas.width * 0.9, canvas.height * 0.5);
+            ctx.lineTo(canvas.width, canvas.height * 0.45);
+            ctx.lineTo(canvas.width, canvas.height * 0.55);
+            ctx.closePath();
+            ctx.fillStyle = '#636e72';
+            ctx.fill();
+        }
+        
+        function drawGround() {
+            const gradient = ctx.createLinearGradient(0, canvas.height * 0.55, 0, canvas.height);
+            gradient.addColorStop(0, '#27ae60');
+            gradient.addColorStop(0.3, '#2ecc71');
+            gradient.addColorStop(0.7, '#229954');
+            gradient.addColorStop(1, '#1e8449');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, canvas.height * 0.55, canvas.width, canvas.height * 0.45);
+            
+            // Grass details
+            for (let i = 0; i < canvas.width; i += 15) {
+                const height = 10 + Math.sin(i * 0.1 + time * 2) * 5;
+                ctx.beginPath();
+                ctx.moveTo(i, canvas.height * 0.55);
+                ctx.lineTo(i + 3, canvas.height * 0.55 - height);
+                ctx.lineTo(i + 6, canvas.height * 0.55);
+                ctx.fillStyle = '#2ecc71';
+                ctx.fill();
+            }
+        }
+        
+        function drawFlowers() {
+            flowers.forEach(flower => {
+                flower.sway += 0.02;
+                const swayX = Math.sin(flower.sway) * 3;
+                
+                ctx.beginPath();
+                ctx.moveTo(flower.x + swayX, flower.y);
+                ctx.lineTo(flower.x + swayX, flower.y - 20);
+                ctx.strokeStyle = '#27ae60';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Petals
+                for (let i = 0; i < flower.petalCount; i++) {
+                    const angle = (i / flower.petalCount) * Math.PI * 2 + flower.sway * 0.5;
+                    const px = flower.x + swayX + Math.cos(angle) * flower.size;
+                    const py = flower.y - 20 + Math.sin(angle) * flower.size;
+                    ctx.beginPath();
+                    ctx.arc(px, py, flower.size * 0.5, 0, Math.PI * 2);
+                    ctx.fillStyle = flower.color;
+                    ctx.fill();
+                }
+                
+                // Center
+                ctx.beginPath();
+                ctx.arc(flower.x + swayX, flower.y - 20, flower.size * 0.3, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffd700';
+                ctx.fill();
+            });
+        }
+        
+        function drawButterflies() {
+            butterflies.forEach(butterfly => {
+                butterfly.x += butterfly.speedX;
+                butterfly.y += butterfly.speedY;
+                butterfly.wingAngle += butterfly.wingSpeed;
+                
+                if (butterfly.x < 0 || butterfly.x > canvas.width) butterfly.speedX *= -1;
+                if (butterfly.y < 0 || butterfly.y > canvas.height * 0.6) butterfly.speedY *= -1;
+                
+                const wingFlap = Math.sin(butterfly.wingAngle) * 0.5;
+                
+                ctx.save();
+                ctx.translate(butterfly.x, butterfly.y);
+                
+                // Wings
+                ctx.beginPath();
+                ctx.ellipse(-butterfly.size * 0.5, 0, butterfly.size * 0.5, butterfly.size * 0.3 * (0.5 + wingFlap), -0.3, 0, Math.PI * 2);
+                ctx.fillStyle = butterfly.color + '80';
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.ellipse(butterfly.size * 0.5, 0, butterfly.size * 0.5, butterfly.size * 0.3 * (0.5 + wingFlap), 0.3, 0, Math.PI * 2);
+                ctx.fillStyle = butterfly.color + '80';
+                ctx.fill();
+                
+                // Body
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 2, butterfly.size * 0.4, 0, 0, Math.PI * 2);
+                ctx.fillStyle = '#333';
+                ctx.fill();
+                
+                ctx.restore();
+            });
+        }
+        
+        function drawCharacter(char, isLeft) {
+            const bob = Math.sin(time * 3 + char.bobOffset) * 10;
+            const armSwing = Math.sin(time * 3 + char.bobOffset) * 0.5;
+            const legSwing = Math.sin(time * 3 + char.bobOffset) * 0.3;
+            
+            ctx.save();
+            ctx.translate(char.x, char.y + bob);
+            
+            // Shadow
+            ctx.beginPath();
+            ctx.ellipse(0, char.size + 10, 30, 8, 0, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.fill();
+            
+            // Legs
+            ctx.save();
+            ctx.translate(-10, char.size - 20);
+            ctx.rotate(legSwing);
+            ctx.fillStyle = char.skinColor;
+            ctx.fillRect(-5, 0, 10, 30);
+            // Shoe
+            ctx.fillStyle = '#333';
+            ctx.fillRect(-6, 25, 12, 8);
+            ctx.restore();
+            
+            ctx.save();
+            ctx.translate(10, char.size - 20);
+            ctx.rotate(-legSwing);
+            ctx.fillStyle = char.skinColor;
+            ctx.fillRect(-5, 0, 10, 30);
+            ctx.fillStyle = '#333';
+            ctx.fillRect(-6, 25, 12, 8);
+            ctx.restore();
+            
+            // Body/Dress
+            ctx.beginPath();
+            ctx.moveTo(-25, -10);
+            ctx.lineTo(25, -10);
+            ctx.lineTo(30, char.size - 20);
+            ctx.lineTo(-30, char.size - 20);
+            ctx.closePath();
+            ctx.fillStyle = char.dressColor;
+            ctx.fill();
+            
+            // Dress pattern
+            ctx.beginPath();
+            ctx.moveTo(-20, 0);
+            ctx.lineTo(20, 0);
+            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Arms
+            ctx.save();
+            ctx.translate(-25, -5);
+            ctx.rotate(-armSwing - 0.3);
+            ctx.fillStyle = char.skinColor;
+            ctx.fillRect(-3, 0, 6, 35);
+            // Hand
+            ctx.beginPath();
+            ctx.arc(0, 38, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            
+            ctx.save();
+            ctx.translate(25, -5);
+            ctx.rotate(armSwing + 0.3);
+            ctx.fillStyle = char.skinColor;
+            ctx.fillRect(-3, 0, 6, 35);
+            ctx.beginPath();
+            ctx.arc(0, 38, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            
+            // Head
+            ctx.beginPath();
+            ctx.arc(0, -25, 20, 0, Math.PI * 2);
+            ctx.fillStyle = char.skinColor;
+            ctx.fill();
+            
+            // Hair
+            ctx.beginPath();
+            ctx.arc(0, -30, 22, Math.PI, Math.PI * 2);
+            ctx.fillStyle = char.hairColor;
+            ctx.fill();
+            
+            // Hair sides
+            ctx.beginPath();
+            ctx.ellipse(-18, -20, 8, 15, 0.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(18, -20, 8, 15, -0.2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Eyes
+            ctx.beginPath();
+            ctx.arc(-7, -25, 3, 0, Math.PI * 2);
+            ctx.fillStyle = '#333';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(7, -25, 3, 0, Math.PI * 2);
+            ctx.fillStyle = '#333';
+            ctx.fill();
+            
+            // Eye shine
+            ctx.beginPath();
+            ctx.arc(-6, -26, 1, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(8, -26, 1, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+            
+            // Smile
+            ctx.beginPath();
+            ctx.arc(0, -20, 8, 0.1, Math.PI - 0.1);
+            ctx.strokeStyle = '#c0392b';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Blush
+            ctx.beginPath();
+            ctx.arc(-12, -18, 4, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255,100,100,0.3)';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(12, -18, 4, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255,100,100,0.3)';
+            ctx.fill();
+            
+            // Necklace
+            ctx.beginPath();
+            ctx.arc(0, -10, 15, 0.2, Math.PI - 0.2);
+            ctx.strokeStyle = '#ffd700';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+        
+        function drawMusicNotes() {
+            if (Math.random() < 0.05) {
+                musicNotes.push({
+                    x: Math.random() * canvas.width,
+                    y: canvas.height * 0.6,
+                    symbol: ['♪', '♫', '♬', '♩'][Math.floor(Math.random() * 4)],
+                    size: 20 + Math.random() * 20,
+                    speed: 1 + Math.random() * 2,
+                    opacity: 1,
+                    color: ['#ff6b6b', '#ffd700', '#ff69b4', '#00ced1'][Math.floor(Math.random() * 4)]
+                });
+            }
+            
+            musicNotes = musicNotes.filter(note => {
+                note.y -= note.speed;
+                note.opacity -= 0.01;
+                
+                if (note.opacity <= 0) return false;
+                
+                ctx.beginPath();
+                ctx.font = `${note.size}px Arial`;
+                ctx.fillStyle = note.color;
+                ctx.globalAlpha = note.opacity;
+                ctx.fillText(note.symbol, note.x, note.y);
+                ctx.globalAlpha = 1;
+                
+                return true;
+            });
+        }
+        
+        function drawParticles() {
+            if (Math.random() < 0.1) {
+                particles.push({
+                    x: character1.x + (Math.random() - 0.5) * 100,
+                    y: character1.y + (Math.random() - 0.5) * 100,
+                    size: 2 + Math.random() * 4,
+                    speedX: (Math.random() - 0.5) * 3,
+                    speedY: -Math.random() * 3,
+                    opacity: 1,
+                    color: ['#ff6b6b', '#ffd700', '#ff69b4', '#00ced1', '#fff'][Math.floor(Math.random() * 5)]
+                });
+            }
+            
+            particles = particles.filter(p => {
+                p.x += p.speedX;
+                p.y += p.speedY;
+                p.opacity -= 0.02;
+                p.size *= 0.98;
+                
+                if (p.opacity <= 0) return false;
+                
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.opacity;
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                
+                return true;
+            });
+        }
+        
+        function drawSparkles() {
+            const sparkleCount = 20;
+            for (let i = 0; i < sparkleCount; i++) {
+                const x = canvas.width * 0.5 + Math.cos(time * 2 + i * 0.3) * 200;
+                const y = canvas.height * 0.5 + Math.sin(time * 3 + i * 0.5) * 150;
+                const size = 2 + Math.sin(time * 5 + i) * 2;
+                
+                if (size > 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, y - size * 2);
+                    ctx.lineTo(x + size, y);
+                    ctx.lineTo(x, y + size * 2);
+                    ctx.lineTo(x - size, y);
+                    ctx.closePath();
+                    ctx.fillStyle = '#ffd700';
+                    ctx.globalAlpha = 0.5 + Math.sin(time * 4 + i) * 0.5;
+                    ctx.fill();
+                    ctx.globalAlpha = 1;
+                }
+            }
+        }
+        
+        function drawTree(x, y, scale) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            
+            // Trunk
+            ctx.beginPath();
+            ctx.moveTo(-10, 0);
+            ctx.lineTo(10, 0);
+            ctx.lineTo(8, -80);
+            ctx.lineTo(-8, -80);
+            ctx.closePath();
+            ctx.fillStyle = '#8B4513';
+            ctx.fill();
+            
+            // Leaves
+            for (let i = 0; i < 5; i++) {
+                ctx.beginPath();
+                const angle = (i / 5) * Math.PI * 2 + time * 0.5;
+                const cx = Math.cos(angle) * 30;
+                const cy = -80 + Math.sin(angle) * 20;
+                ctx.arc(cx, cy, 25, 0, Math.PI * 2);
+                ctx.fillStyle = '#27ae60';
+                ctx.fill();
+            }
+            
+            ctx.beginPath();
+            ctx.arc(0, -90, 30, 0, Math.PI * 2);
+            ctx.fillStyle = '#2ecc71';
+            ctx.fill();
+            
+            ctx.restore();
+        }
+        
+        function drawLanterns() {
+            for (let i = 0; i < 5; i++) {
+                const x = canvas.width * 0.1 + i * canvas.width * 0.2;
+                const y = 50 + Math.sin(time + i) * 10;
+                
+                // String
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, y);
+                ctx.strokeStyle = '#666';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                
+                // Lantern
+                ctx.beginPath();
+                ctx.ellipse(x, y + 15, 12, 18, 0, 0, Math.PI * 2);
+                const gradient = ctx.createRadialGradient(x, y + 15, 0, x, y + 15, 18);
+                gradient.addColorStop(0, '#ffd700');
+                gradient.addColorStop(1, '#ff6b6b');
+                ctx.fillStyle = gradient;
+                ctx.fill();
+                
+                // Glow
+                ctx.beginPath();
+                ctx.arc(x, y + 15, 25, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 215, 0, 0.1)';
+                ctx.fill();
+            }
+        }
+        
+        function animate() {
+            if (!isPlaying) {
+                requestAnimationFrame(animate);
+                return;
+            }
+            
+            time += 0.016;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw scene
+            drawSky();
+            drawStars();
+            drawMoon();
+            drawMountains();
+            drawGround();
+            drawTree(canvas.width * 0.1, canvas.height * 0.55, 1.2);
+            drawTree(canvas.width * 0.9, canvas.height * 0.55, 1.0);
+            drawTree(canvas.width * 0.5, canvas.height * 0.52, 0.8);
+            drawFlowers();
+            drawButterflies();
+            drawLanterns();
+            drawSparkles();
+            
+            // Draw characters dancing
+            drawCharacter(character1, true);
+            drawCharacter(character2, false);
+            
+            // Draw connection between characters
+            ctx.beginPath();
+            ctx.moveTo(character1.x + 25, character1.y - 5 + Math.sin(time * 3) * 10);
+            ctx.quadraticCurveTo(
+                (character1.x + character2.x) / 2,
+                character1.y - 50 + Math.sin(time * 3) * 20,
+                character2.x - 25,
+                character2.y - 5 + Math.sin(time * 3) * 10
+            );
+            ctx.strokeStyle = 'rgba(255, 105, 180, 0.5)';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            drawMusicNotes();
+            drawParticles();
+            
+            requestAnimationFrame(animate);
+        }
+        
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            document.getElementById('playBtn').textContent = isPlaying ? '⏸ Pause' : '▶ Play';
+        }
+        
+        function changeDance() {
+            danceStyle = (danceStyle + 1) % 3;
+            character1.bobOffset = danceStyle * Math.PI / 2;
+            character2.bobOffset = danceStyle * Math.PI / 2 + Math.PI;
+            
+            // Change colors
+            const colors = [
+                { dress1: '#ff1493', dress2: '#00bfff' },
+                { dress1: '#ffd700', dress2: '#ff4500' },
+                { dress1: '#9370db', dress2: '#2ecc71' }
+            ];
+            
+            character1.dressColor = colors[danceStyle].dress1;
+            character2.dressColor = colors[danceStyle].dress2;
+        }
+        
+        function resetAnimation() {
+            time = 0;
+            danceStyle = 0;
+            character1.bobOffset = 0;
+            character2.bobOffset = Math.PI;
+            character1.dressColor = '#ff1493';
+            character2.dressColor = '#00bfff';
+            particles = [];
+            musicNotes = [];
+        }
+        
+        // Start animation
+        animate();
+    </script>
+</body>
+</html>

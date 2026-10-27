@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stellwerk GUI Demo</title>
+  <style>
+    :root{
+      --bg:#0f172a;
+      --panel:#1e293b;
+      --panel2:#0b1220;
+      --accent:#38bdf8;
+      --text:#e2e8f0;
+      --muted:#94a3b8;
+      --ok:#22c55e;
+      --warn:#f59e0b;
+    }
+
+    *{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
+    body{
+      margin:0;
+      background: radial-gradient(1200px 600px at 10% 10%, #1d4ed8 0%, #0f172a 45%, #020617 100%);
+      color:var(--text);
+      min-height:100vh;
+      overflow:hidden;
+    }
+
+    .world{
+      position:relative;
+      width:100vw;
+      height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex-direction:column;
+      gap:16px;
+    }
+
+    .seat{
+      width:220px;
+      height:220px;
+      border-radius:18px;
+      background:linear-gradient(145deg,#374151,#111827);
+      border:2px solid #64748b;
+      box-shadow:0 20px 40px rgba(0,0,0,.45), inset 0 0 20px rgba(255,255,255,.05);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      user-select:none;
+      transition:transform .15s ease, box-shadow .15s ease;
+      text-align:center;
+      padding:14px;
+      font-size:22px;
+      font-weight:700;
+    }
+    .seat:hover{transform:translateY(-3px); box-shadow:0 25px 50px rgba(0,0,0,.6), inset 0 0 20px rgba(255,255,255,.08)}
+    .seat:active{transform:translateY(1px) scale(.99)}
+
+    .hint{color:var(--muted);font-size:15px}
+
+    .overlay{
+      position:fixed;inset:0;
+      background:rgba(2,6,23,.66);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+      backdrop-filter:blur(4px);
+    }
+
+    .window{
+      width:min(760px, 95vw);
+      background:linear-gradient(180deg,var(--panel),var(--panel2));
+      border:1px solid #334155;
+      border-radius:16px;
+      box-shadow:0 30px 80px rgba(0,0,0,.7);
+      overflow:hidden;
+    }
+
+    .titlebar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:12px 14px;
+      border-bottom:1px solid #334155;
+      background:rgba(15,23,42,.8);
+    }
+    .titlebar h2{
+      margin:0;
+      font-size:18px;
+      letter-spacing:.3px;
+    }
+
+    .close{
+      border:none;background:#ef4444;color:white;
+      width:30px;height:30px;border-radius:8px;
+      font-weight:bold;cursor:pointer;
+    }
+
+    .content{padding:16px}
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:12px;
+    }
+
+    .big-btn{
+      border:1px solid #334155;
+      background:#0f172a;
+      color:var(--text);
+      padding:22px 12px;
+      border-radius:12px;
+      cursor:pointer;
+      font-size:20px;
+      font-weight:700;
+      transition:.15s ease;
+    }
+    .big-btn:hover{border-color:var(--accent);transform:translateY(-2px)}
+    .big-btn small{display:block;font-size:12px;color:var(--muted);font-weight:400;margin-top:6px}
+
+    .list{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      max-height:50vh;
+      overflow:auto;
+      padding-right:4px;
+    }
+
+    .route{
+      width:100%;
+      text-align:left;
+      background:#0b1326;
+      color:var(--text);
+      border:1px solid #334155;
+      border-radius:10px;
+      padding:14px 14px;
+      cursor:pointer;
+      font-size:16px;
+      font-weight:700;
+    }
+    .route:hover{border-color:var(--accent);background:#0f1b35}
+
+    .toolbar{
+      display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;
+    }
+
+    .btn{
+      border:1px solid #334155;
+      background:#0f172a;color:var(--text);
+      border-radius:10px;padding:10px 12px;cursor:pointer;font-weight:700
+    }
+    .btn:hover{border-color:var(--accent)}
+    .btn.ok{border-color:#166534;background:#052e16}
+    .btn.warn{border-color:#92400e;background:#3f1d00}
+
+    .panel{
+      border:1px solid #334155;
+      border-radius:12px;
+      padding:14px;
+      background:#0a1222;
+      margin-top:12px;
+    }
+
+    .status{
+      margin-top:8px;
+      color:var(--muted);
+      font-size:14px;
+    }
+
+    .signal-row{
+      display:grid;
+      grid-template-columns:1fr auto auto;
+      gap:10px;
+      align-items:center;
+      padding:8px 0;
+      border-bottom:1px dashed #243244;
+    }
+    .signal-row:last-child{border-bottom:none}
+
+    .chip{
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:700;
+      border:1px solid #334155;
+      color:var(--muted);
+    }
+
+    .green{background:rgba(34,197,94,.15);color:#86efac;border-color:#14532d}
+    .red{background:rgba(239,68,68,.15);color:#fca5a5;border-color:#7f1d1d}
+
+    .hidden{display:none}
+    @media (max-width:720px){
+      .grid{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="world">
+    <div id="seat" class="seat">🪑 Sitz<br/>Klicke zum Hinsetzen</div>
+    <div class="hint">Wenn du auf den Sitz gehst, öffnet sich die GUI.</div>
+  </div>
+
+  <div id="overlay" class="overlay">
+    <div class="window">
+      <div class="titlebar">
+        <h2 id="windowTitle">Hauptmenü</h2>
+        <button id="closeAll" class="close">✕</button>
+      </div>
+
+      <div class="content">
+        <!-- MAIN GUI -->
+        <div id="mainMenu">
+          <div class="grid">
+            <button id="btnStellwerke" class="big-btn">Stellwerke<small>Öffnet die Streckenliste</small></button>
+            <button id="btnShop" class="big-btn">Shop<small>Coming Soon</small></button>
+            <button id="btnCreator" class="big-btn">Creator<small>by Dein Name</small></button>
+          </div>
+          <p class="status">Wähle einen Bereich aus.</p>
+        </div>
+
+        <!-- STELLWERKE LIST GUI -->
+        <div id="stellwerkeMenu" class="hidden">
+          <div class="list">
+            <button class="route" data-route="Köln–Düsseldorf">Köln–Düsseldorf</button>
+            <button class="route" data-route="Berlin–Hamburg">Berlin–Hamburg</button>
+            <button class="route" data-route="München–Augsburg">München–Augsburg</button>
+            <button class="route" data-route="Frankfurt–Mainz">Frankfurt–Mainz</button>
+          </div>
+          <div class="toolbar">
+            <button id="backToMain" class="btn">← Zurück</button>
+          </div>
+        </div>
+
+        <!-- STELLWERK GUI -->
+        <div id="signalBoxMenu" class="hidden">
+          <h3 id="routeTitle" style="margin:0 0 8px 0;">Stellwerk</h3>
+          <div class="panel">
+            <div class="signal-row">
+              <div>Signal A1</div>
+              <span id="stateA" class="chip red">HALT</span>
+              <button class="btn ok" data-toggle="A">Umschalten</button>
+            </div>
+            <div class="signal-row">
+              <div>Signal B2</div>
+              <span id="stateB" class="chip red">HALT</span>
+              <button class="btn ok" data-toggle="B">Umschalten</button>
+            </div>
+            <div class="signal-row">
+              <div>Weiche W7</div>
+              <span id="stateW" class="chip">GERADE</span>
+              <button id="toggleW" class="btn warn">Wechseln</button>
+            </div>
+          </div>
+          <p id="opStatus" class="status">System bereit.</p>
+          <div class="toolbar">
+            <button id="backToRoutes" class="btn">← Zur Streckenliste</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const seat = document.getElementById("seat");
+    const overlay = document.getElementById("overlay");
+    const closeAll = document.getElementById("closeAll");
+    const title = document.getElementById("windowTitle");
+
+    const mainMenu = document.getElementById("mainMenu");
+    const stellwerkeMenu = document.getElementById("stellwerkeMenu");
+    const signalBoxMenu = document.getElementById("signalBoxMenu");
+
+    const btnStellwerke = document.getElementById("btnStellwerke");
+    const btnShop = document.getElementById("btnShop");
+    const btnCreator = document.getElementById("btnCreator");
+    const backToMain = document.getElementById("backToMain");
+    const backToRoutes = document.getElementById("backToRoutes");
+    const routeTitle = document.getElementById("routeTitle");
+    const opStatus = document.getElementById("opStatus");
+
+    const stateA = document.getElementById("stateA");
+    const stateB = document.getElementById("stateB");
+    const stateW = document.getElementById("stateW");
+
+    function show(view){
+      mainMenu.classList.add("hidden");
+      stellwerkeMenu.classList.add("hidden");
+      signalBoxMenu.classList.add("hidden");
+      view.classList.remove("hidden");
+    }
+
+    function openMainGui(){
+      overlay.style.display = "flex";
+      title.textContent = "Hauptmenü";
+      show(mainMenu);
+    }
+
+    function closeGui(){
+      overlay.style.display = "none";
+    }
+
+    seat.addEventListener("click", openMainGui);
+    closeAll.addEventListener("click", closeGui);
+
+    btnStellwerke.addEventListener("click", () => {
+      title.textContent = "Stellwerke";
+      show(stellwerkeMenu);
+    });
+
+    btnShop.addEventListener("click", () => alert("Shop kommt bald."));
+    btnCreator.addEventListener("click", () => alert("Creator: Du ❤️"));
+
+    backToMain.addEventListener("click", () => {
+      title.textContent = "Hauptmenü";
+      show(mainMenu);
+    });
+
+    document.querySelectorAll(".route").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const route = btn.dataset.route;
+        title.textContent = "Stellwerk";
+        routeTitle.textContent = `Stellwerk: ${route}`;
+        opStatus.textContent = `${route} geladen.`;
+        show(signalBoxMenu);
+      });
+    });
+
+    backToRoutes.addEventListener("click", () => {
+      title.textContent = "Stellwerke";
+      show(stellwerkeMenu);
+    });
+
+    function toggleSignal(el){
+      const isRed = el.classList.contains("red");
+      if(isRed){
+        el.classList.remove("red");
+        el.classList.add("green");
+        el.textContent = "FAHRT";
+      } else {
+        el.classList.remove("green");
+        el.classList.add("red");
+        el.textContent = "HALT";
+      }
+    }
+
+    document.querySelectorAll("[data-toggle='A']").forEach(b => {
+      b.addEventListener("click", () => {
+        toggleSignal(stateA);
+        opStatus.textContent = "Signal A1 umgeschaltet.";
+      });
+    });
+
+    document.querySelectorAll("[data-toggle='B']").forEach(b => {
+      b.addEventListener("click", () => {
+        toggleSignal(stateB);
+        opStatus.textContent = "Signal B2 umgeschaltet.";
+      });
+    });
+
+    document.getElementById("toggleW").addEventListener("click", () => {
+      stateW.textContent = stateW.textContent === "GERADE" ? "ABZWEIG" : "GERADE";
+      opStatus.textContent = "Weiche W7 gewechselt.";
+    });
+  </script>
+</body>
+</html>

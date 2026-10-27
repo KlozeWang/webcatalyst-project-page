@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Duel: Dodge, Counter, Block</title>
+<style>
+  :root{
+    --bg:#0f1220;
+    --panel:#171b2e;
+    --panel2:#1e2440;
+    --text:#e9ecff;
+    --muted:#9aa3c7;
+    --good:#44d17a;
+    --bad:#ff5f6d;
+    --warn:#f7c948;
+    --accent:#7aa7ff;
+    --line:#30395f;
+  }
+  html,body{margin:0;height:100%;background:radial-gradient(circle at 50% 20%, #1d2240 0%, #0f1220 55%, #090b12 100%);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--text);overflow:hidden;}
+  canvas{display:block;width:100vw;height:100vh;image-rendering:auto;}
+  .hud{
+    position:fixed; inset:0; pointer-events:none;
+    display:flex; flex-direction:column; justify-content:space-between;
+  }
+  .topbar{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding:16px;
+    gap:12px;
+  }
+  .card{
+    pointer-events:none;
+    background:linear-gradient(180deg, rgba(30,36,64,.94), rgba(20,24,43,.9));
+    border:1px solid rgba(122,167,255,.2);
+    box-shadow:0 10px 30px rgba(0,0,0,.3);
+    border-radius:14px;
+    padding:12px 14px;
+    backdrop-filter: blur(8px);
+  }
+  .statrow{display:flex; gap:12px; flex-wrap:wrap; align-items:center;}
+  .label{font-size:12px; color:var(--muted); letter-spacing:.04em; text-transform:uppercase;}
+  .barwrap{width:min(32vw,360px); min-width:220px; margin-top:6px;}
+  .bar{
+    width:100%; height:14px; background:#0b0d17; border-radius:999px; overflow:hidden; border:1px solid rgba(255,255,255,.08);
+  }
+  .fill{height:100%; width:100%; border-radius:999px; transition:width .08s linear;}
+  .fill.player{background:linear-gradient(90deg, #3ad56c, #9ff5b8);}
+  .fill.enemy{background:linear-gradient(90deg, #ff5565, #ff9aa4);}
+  .small{font-size:13px; color:var(--text);}
+  .instructions{
+    max-width:560px;
+    margin:0 auto 16px auto;
+    text-align:center;
+    pointer-events:none;
+    line-height:1.45;
+  }
+  .instructions .card{display:inline-block; padding:12px 16px;}
+  .keys{display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:10px;}
+  .key{
+    min-width:44px; padding:4px 8px; border-radius:8px;
+    background:#0d1020; border:1px solid rgba(255,255,255,.1);
+    font-weight:700; color:#fff;
+  }
+  .hint{color:var(--muted); font-size:13px}
+  .center{
+    position:fixed; inset:0; display:grid; place-items:center; pointer-events:none;
+  }
+  .overlay{
+    pointer-events:auto;
+    max-width:min(92vw,560px);
+    text-align:center;
+    padding:24px;
+  }
+  h1{margin:0 0 8px 0; font-size:42px; letter-spacing:.02em;}
+  p{margin:8px 0; color:var(--muted);}
+  button{
+    pointer-events:auto;
+    margin-top:14px;
+    background:linear-gradient(180deg, #7aa7ff, #4e7cff);
+    color:white; border:none; border-radius:12px;
+    padding:12px 18px; font-weight:800; font-size:16px;
+    box-shadow:0 10px 20px rgba(78,124,255,.25);
+    cursor:pointer;
+  }
+  button:active{transform:translateY(1px);}
+  .banner{
+    position:fixed; left:50%; top:18%; transform:translateX(-50%);
+    font-size:42px; font-weight:900; letter-spacing:.04em;
+    text-shadow:0 4px 16px rgba(0,0,0,.5);
+    opacity:0; transition:opacity .2s ease, transform .2s ease;
+    pointer-events:none;
+  }
+  .banner.show{opacity:1; transform:translateX(-50%) scale(1.03);}
+  .banner.good{color:#9ff5b8;}
+  .banner.bad{color:#ff9aa4;}
+  .bottom{
+    padding:16px;
+    display:flex; justify-content:center;
+  }
+  .meter{
+    width:min(680px,92vw);
+    display:flex; justify-content:space-between; gap:12px; align-items:center;
+  }
+  .state{
+    font-size:14px; color:var(--muted);
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="hud">
+  <div class="topbar">
+    <div class="card">
+      <div class="label">Player</div>
+      <div class="barwrap">
+        <div class="bar"><div class="fill player" id="playerHp"></div></div>
+      </div>
+      <div class="statrow" style="margin-top:8px">
+        <div class="small" id="playerState">Ready</div>
+      </div>
+    </div>
+    <div class="card" style="text-align:right">
+      <div class="label">Enemy</div>
+      <div class="barwrap">
+        <div class="bar"><div class="fill enemy" id="enemyHp"></div></div>
+      </div>
+      <div class="statrow" style="justify-content:flex-end; margin-top:8px">
+        <div class="small" id="enemyState">Watching</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="instructions">
+    <div class="card">
+      <div class="small"><strong>Controls:</strong> <span class="hint">A/D to move • J attack • K block • L dodge • I counter</span></div>
+      <div class="keys">
+        <div class="key">A</div><div class="key">D</div>
+        <div class="key">J</div><div class="key">K</div><div class="key">L</div><div class="key">I</div>
+      </div>
+      <div class="hint" style="margin-top:8px">Counter right as the enemy attack starts. Dodge to evade, block to reduce damage, or strike first.</div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="card meter">
+      <div class="state" id="statusText">First to land decisive hits wins.</div>
+      <div class="state">Win 3 rounds to defeat the duelist.</div>
+    </div>
+  </div>
+</div>
+
+<div class="banner" id="banner">Counter!</div>
+
+<div class="center" id="menu">
+  <div class="card overlay">
+    <h1>Duel</h1>
+    <p>Face a single opponent in a timed, reaction-based duel. Use realistic spacing, blocking, dodging, and counter timing to win the match.</p>
+    <p><strong>Goal:</strong> win 3 rounds before your opponent does.</p>
+    <button id="startBtn">Start Duel</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const playerHpEl = document.getElementById('playerHp');
+  const enemyHpEl = document.getElementById('enemyHp');
+  const playerStateEl = document.getElementById('playerState');
+  const enemyStateEl = document.getElementById('enemyState');
+  const statusText = document.getElementById('statusText');
+  const banner = document.getElementById('banner');
+  const menu = document.getElementById('menu');
+  const startBtn = document.getElementById('startBtn');
+
+  let W=0,H=0,dpr=1;
+  function resize(){
+    dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    W = canvas.width = Math.floor(innerWidth * dpr);
+    H = canvas.height = Math.floor(innerHeight * dpr);
+    canvas.style.width = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+  }
+  window.addEventListener('resize', resize); resize();
+
+  const keys = {};
+  window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; });
+  window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+  const roundToWin = 3;
+  let gameRunning = false;
+  let lastTime = 0;
+  let shake = 0;
+  let flash = 0;
+
+  const player = {
+    x: 0, y: 0, vx: 0, facing: 1,
+    hp: 100, rounds: 0,
+    action: 'idle', actionT: 0, recovery: 0,
+    block: false, dodge: false, invuln: 0, stun: 0,
+    attackCooldown: 0, hitLanded: false
+  };
+  const enemy = {
+    x: 0, y: 0, vx: 0, facing: -1,
+    hp: 100, rounds: 0,
+    action: 'idle', actionT: 0, recovery: 0,
+    block: false, dodge: false, invuln: 0, stun: 0,
+    attackCooldown: 0, hitLanded: false,
+    aiWindup: 0, think: 0
+  };
+
+  function resetRound(){
+    player.hp = 100; enemy.hp = 100;
+    player.x = innerWidth * 0.28; enemy.x = innerWidth * 0.72;
+    player.y = enemy.y = innerHeight * 0.72;
+    player.vx = enemy.vx = 0;
+    player.action = enemy.action = 'idle';
+    player.actionT = enemy.actionT = 0;
+    player.recovery = enemy.recovery = 0;
+    player.block = enemy.block = false;
+    player.dodge = enemy.dodge = false;
+    player.invuln = enemy.invuln = 0;
+    player.stun = enemy.stun = 0;
+    player.attackCooldown = enemy.attackCooldown = 0;
+    player.hitLanded = enemy.hitLanded = false;
+    enemy.aiWindup = 0;
+    enemy.think = 0.3;
+    statusText.textContent = 'Round starts now.';
+    playerStateEl.textContent = 'Ready';
+    enemyStateEl.textContent = 'Guarding';
+  }
+
+  function startGame(){
+    menu.style.display = 'none';
+    gameRunning = true;
+    player.rounds = 0; enemy.rounds = 0;
+    resetRound();
+    lastTime = performance.now();
+    requestAnimationFrame(loop);
+  }
+  startBtn.addEventListener('click', startGame);
+
+  function showBanner(text, good=true){
+    banner.textContent = text;
+    banner.className = 'banner show ' + (good ? 'good' : 'bad');
+    setTimeout(() => banner.classList.remove('show'), 650);
+  }
+
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+  function dist(){ return Math.abs(player.x - enemy.x); }
+  function setStatus(){
+    playerHpEl.style.width = clamp(player.hp,0,100)+'%';
+    enemyHpEl.style.width = clamp(enemy.hp,0,100)+'%';
+    playerStateEl.textContent = player.dodge ? 'Dodging' : player.block ? 'Blocking' : player.action === 'attack' ? 'Attacking' : player.stun>0 ? 'Stunned' : 'Ready';
+    enemyStateEl.textContent = enemy.dodge ? 'Dodging' : enemy.block ? 'Blocking' : enemy.action === 'attack' ? 'Attacking' : enemy.stun>0 ? 'Stunned' : 'Reading you';
+  }
+
+  function damage(target, amount, source=''){
+    if (target.invuln > 0) return;
+    if (target.block && source === 'attack') amount *= 0.35;
+    if (target.dodge && source === 'attack') amount = 0;
+    target.hp = Math.max(0, target.hp - amount);
+    shake = Math.max(shake, amount * 0.06);
+    flash = Math.max(flash, amount * 0.01);
+  }
+
+  function attack(attacker, defender){
+    attacker.action = 'attack';
+    attacker.actionT = 0;
+    attacker.hitLanded = false;
+    attacker.attackCooldown = 1.15;
+    attacker.recovery = 0.55;
+  }
+
+  function canAttack(ent){
+    return ent.action !== 'attack' && ent.recovery <= 0 && ent.stun <= 0 && ent.attackCooldown <= 0;
+  }
+
+  function tryCounter(attacker, defender){
+    if (attacker.action === 'attack' && attacker.actionT < 0.22 && defender.action !== 'attack') {
+      defender.action = 'counter';
+      defender.stun = 0.05;
+      defender.invuln = 0.18;
+      attacker.hp = Math.max(0, attacker.hp - 20);
+      attacker.stun = 0.35;
+      attacker.recovery = 0.6;
+      attacker.action = 'stagger';
+      showBanner('COUNTER!', true);
+      statusText.textContent = 'Perfect counter!';
+      return true;
+    }
+    return false;
+  }
+
+  function enemyAI(dt){
+    enemy.think -= dt;
+    if (enemy.stun > 0 || enemy.recovery > 0 || enemy.action === 'attack') return;
+
+    const d = dist();
+    const aggressive = enemy.hp < 40 || player.hp > enemy.hp;
+    const desired = aggressive ? 120 : 160;
+
+    if (d > desired) {
+      enemy.vx = -Math.sign(enemy.x - player.x) * (aggressive ? 180 : 130);
+      enemy.action = 'idle';
+    } else if (d < 90) {
+      enemy.vx = Math.sign(enemy.x - player.x) * 150;
+      enemy.action = 'idle';
+    } else {
+      enemy.vx = 0;
+      if (enemy.think <= 0) {
+        const r = Math.random();
+        if (player.action === 'attack' && d < 155 && r < 0.35) {
+          enemy.block = true; enemy.dodge = false; enemy.action = 'block'; enemy.recovery = 0.25;
+          enemy.think = 0.4;
+        } else if (d < 170 && r < 0.42) {
+          attack(enemy, player);
+          enemy.think = 0.8;
+        } else if (r < 0.72) {
+          enemy.block = true; enemy.dodge = false; enemy.action = 'block'; enemy.recovery = 0.2;
+          enemy.think = 0.35;
+        } else {
+          enemy.dodge = true; enemy.block = false; enemy.action = 'dodge'; enemy.invuln = 0.25; enemy.recovery = 0.3;
+          enemy.vx = -Math.sign(enemy.x - player.x) * 280;
+          enemy.think = 0.45;
+        }
+      }
+    }
+  }
+
+  function updateEntity(ent, dt, isPlayer){
+    ent.x += ent.vx * dt;
+    ent.vx *= Math.pow(0.0008, dt);
+    ent.x = clamp(ent.x, W*0.12, W*0.88);
+
+    if (ent.invuln > 0) ent.invuln -= dt;
+    if (ent.stun > 0) ent.stun -= dt;
+    if (ent.recovery > 0) ent.recovery -= dt;
+    if (ent.attackCooldown > 0) ent.attackCooldown -= dt;
+    if (ent.actionT != null && ent.action === 'attack') ent.actionT += dt;
+
+    if (ent.dodge) {
+      ent.invuln = Math.max(ent.invuln, 0.15);
+      if (ent.action !== 'attack') {
+        ent.recovery = Math.max(ent.recovery, 0.18);
+      }
+    }
+    if (ent.recovery <= 0 && ent.action !== 'attack' && ent.stun <= 0) {
+      ent.block = false;
+      ent.dodge = false;
+      if (ent.action !== 'counter') ent.action = 'idle';
+    }
+
+    if (ent.action === 'attack') {
+      const hitWindow = ent.actionT > 0.22 && ent.actionT < 0.34;
+      if (hitWindow && !ent.hitLanded) {
+        const opp = isPlayer ? enemy : player;
+        if (Math.abs(ent.x - opp.x) < 88) {
+          ent.hitLanded = true;
+          if (opp.dodge && opp.invuln > 0) {
+            showBanner('DODGE!', true);
+            statusText.textContent = isPlayer ? 'You evaded the strike.' : 'Enemy evaded your strike.';
+          } else {
+            let dmg = 14;
+            if (opp.block) dmg = 5;
+            damage(opp, dmg, 'attack');
+            opp.stun = opp.block ? 0.12 : 0.28;
+            if (!opp.block) shake = Math.max(shake, 4);
+            statusText.textContent = isPlayer ? 'You landed a hit.' : 'You were hit.';
+          }
+        }
+      }
+      if (ent.actionT > 0.5) {
+        ent.action = 'idle';
+        ent.recovery = Math.max(ent.recovery, 0.25);
+        ent.block = false;
+        ent.dodge = false;
+      }
+    }
+  }
+
+  function playerInput(dt){
+    if (player.stun > 0 || player.action === 'attack') return;
+    const speed = player.block ? 95 : player.dodge ? 260 : 170;
+    let dir = 0;
+    if (keys['a']) dir -= 1;
+    if (keys['d']) dir += 1;
+    player.vx = dir * speed;
+
+    player.block = !!keys['k'];
+    if (keys['l'] && player.recovery <= 0 && !player.dodge && player.stun <= 0) {
+      player.dodge = true;
+      player.action = 'dodge';
+      player.invuln = 0.22;
+      player.recovery = 0.28;
+      player.vx += (player.x < enemy.x ? -1 : 1) * 300;
+    }
+    if (keys['j'] && canAttack(player) && dist() < 105) attack(player, enemy);
+    if (keys['i'] && enemy.action === 'attack') tryCounter(enemy, player);
+    if (!player.block && player.action !== 'dodge' && player.recovery <= 0) player.action = 'idle';
+  }
+
+  function resolveRound(){
+    if (player.hp <= 0 || enemy.hp <= 0){
+      if (player.hp <= 0 && enemy.hp <= 0) {
+        player.rounds++; enemy.rounds++;
+        showBanner('DOUBLE KO', false);
+      } else if (enemy.hp <= 0) {
+        player.rounds++;
+        showBanner('ROUND WON', true);
+      } else {
+        enemy.rounds++;
+        showBanner('ROUND LOST', false);
+      }
+      if (player.rounds >= roundToWin || enemy.rounds >= roundToWin) {
+        gameRunning = false;
+        menu.style.display = 'grid';
+        menu.querySelector('h1').textContent = player.rounds > enemy.rounds ? 'Victory!' : 'Defeat';
+        menu.querySelector('p').innerHTML = player.rounds > enemy.rounds ? 'You won the duel through timing, spacing, and clean reactions.' : 'The duelist outplayed you. Try mixing blocks, dodges, and counters more often.';
+        startBtn.textContent = 'Play Again';
+      } else {
+        setTimeout(resetRound, 900);
+      }
+    }
+  }
+
+  function draw(){
+    ctx.save();
+    if (shake > 0) {
+      ctx.translate((Math.random()-0.5)*shake*dpr, (Math.random()-0.5)*shake*dpr);
+      shake *= 0.9;
+    }
+    ctx.clearRect(0,0,W,H);
+
+    const grd = ctx.createLinearGradient(0,0,0,H);
+    grd.addColorStop(0,'#171c35');
+    grd.addColorStop(1,'#090b12');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0,0,W,H);
+
+    ctx.fillStyle = 'rgba(255,255,255,.03)';
+    for (let i=0;i<7;i++){
+      ctx.fillRect(0, H*0.82 + i*3*dpr, W, 1*dpr);
+    }
+
+    const groundY = H*0.78;
+    ctx.strokeStyle = 'rgba(255,255,255,.08)';
+    ctx.lineWidth = 2*dpr;
+    ctx.beginPath();
+    ctx.moveTo(W*0.08, groundY);
+    ctx.lineTo(W*0.92, groundY);
+    ctx.stroke();
+
+    function drawFighter(ent, color, accent){
+      const x = ent.x*dpr, y = ent.y*dpr;
+      const scale = Math.min(W,H) * 0.0012;
+      const facing = ent === player ? 1 : -1;
+
+      ctx.save();
+      ctx.translate(x,y);
+      ctx.scale(facing,1);
+
+      const bob = ent.action === 'attack' ? Math.sin(ent.actionT*20)*2*dpr : 0;
+      ctx.translate(0, bob);
+
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      ctx.beginPath();
+      ctx.arc(0, -78*dpr*scale, 18*dpr*scale, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.lineWidth = 7*dpr*scale;
+      ctx.beginPath();
+      ctx.moveTo(0, -60*dpr*scale);
+      ctx.lineTo(0, -20*dpr*scale);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(0, -45*dpr*scale);
+      ctx.lineTo(-26*dpr*scale, -28*dpr*scale);
+      ctx.moveTo(0, -42*dpr*scale);
+      ctx.lineTo(24*dpr*scale, -22*dpr*scale);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(0, -20*dpr*scale);
+      ctx.lineTo(-18*dpr*scale, 18*dpr*scale);
+      ctx.moveTo(0, -20*dpr*scale);
+      ctx.lineTo(16*dpr*scale, 18*dpr*scale);
+      ctx.stroke();
+
+      if (ent.block) {
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = 4*dpr*scale;
+        ctx.beginPath();
+        ctx.arc(14*dpr*scale, -34*dpr*scale, 24*dpr*scale, -0.7, 0.7);
+        ctx.stroke();
+      }
+      if (ent.dodge) {
+        ctx.fillStyle = 'rgba(122,167,255,.22)';
+        ctx.beginPath();
+        ctx.ellipse(0, -28*dpr*scale, 38*dpr*scale, 18*dpr*scale, 0, 0, Math.PI*2);
+        ctx.fill();
+      }
+      if (ent.action === 'attack') {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3*dpr*scale;
+        ctx.beginPath();
+        ctx.moveTo(18*dpr*scale, -26*dpr*scale);
+        ctx.lineTo(56*dpr*scale, -42*dpr*scale);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    drawFighter(enemy, '#ff6674', '#ffb1b8');
+    drawFighter(player, '#78b5ff', '#d8e7ff');
+
+    if (flash > 0){
+      ctx.fillStyle = `rgba(255,255,255,${Math.min(.14, flash)})`;
+      ctx.fillRect(0,0,W,H);
+      flash *= 0.85;
+    }
+
+    ctx.restore();
+  }
+
+  function loop(t){
+    if (!gameRunning) return;
+    const dt = Math.min(0.033, (t - lastTime) / 1000);
+    lastTime = t;
+
+    player.facing = player.x < enemy.x ? 1 : -1;
+    enemy.facing = -player.facing;
+
+    playerInput(dt);
+    enemyAI(dt);
+
+    updateEntity(player, dt, true);
+    updateEntity(enemy, dt, false);
+
+    if (player.x > enemy.x - 85 && player.vx > 0) player.x = enemy.x - 85;
+    if (enemy.x > player.x - 85 && enemy.vx > 0) enemy.x = player.x + 85;
+
+    resolveRound();
+    setStatus();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  playerHpEl.style.width = '100%';
+  enemyHpEl.style.width = '100%';
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Shadow of Time: Echo Runner</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #05070d;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    image-rendering: auto;
+    background: #05070d;
+  }
+  #ui {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    color: #dce7ff;
+  }
+  #topBar {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 14px;
+    text-shadow: 0 0 10px rgba(94,170,255,0.35);
+  }
+  .panel {
+    background: linear-gradient(180deg, rgba(10,16,26,0.68), rgba(5,10,16,0.32));
+    border: 1px solid rgba(123,170,255,0.14);
+    box-shadow: 0 0 24px rgba(0,0,0,0.35), inset 0 0 22px rgba(92,160,255,0.04);
+    backdrop-filter: blur(4px);
+    border-radius: 14px;
+    padding: 10px 12px;
+  }
+  #title {
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-size: 13px;
+    color: #f0f4ff;
+  }
+  #hint {
+    max-width: 48vw;
+    line-height: 1.35;
+    color: #b8c8ef;
+  }
+  #levelInfo {
+    text-align: right;
+    min-width: 170px;
+  }
+  #centerMsg {
+    position: absolute;
+    top: 16%;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    font-size: 18px;
+    color: #f2f6ff;
+    text-shadow: 0 0 18px rgba(126,184,255,0.35);
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    background: rgba(5,8,14,0.18);
+    padding: 12px 18px;
+    border-radius: 16px;
+    border: 1px solid rgba(129,176,255,0.15);
+    max-width: 80vw;
+  }
+  #startOverlay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background:
+      radial-gradient(circle at center, rgba(8,12,18,0.32), rgba(3,5,10,0.92)),
+      linear-gradient(180deg, rgba(5,8,14,0.82), rgba(3,4,8,0.98));
+    pointer-events: auto;
+  }
+  #startCard {
+    width: min(720px, calc(100vw - 28px));
+    border-radius: 22px;
+    border: 1px solid rgba(135,180,255,0.18);
+    background: linear-gradient(180deg, rgba(8,13,22,0.78), rgba(5,8,14,0.55));
+    box-shadow: 0 0 60px rgba(0,0,0,0.55), inset 0 0 40px rgba(76,145,255,0.05);
+    color: #e8efff;
+    padding: 22px;
+  }
+  #startCard h1 {
+    margin: 0 0 10px 0;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-size: 30px;
+  }
+  #startCard p {
+    margin: 8px 0;
+    line-height: 1.6;
+    color: #bed0f6;
+  }
+  #startCard .small {
+    font-size: 13px;
+    color: #91a6cf;
+  }
+  .kbd {
+    display: inline-block;
+    padding: 1px 8px;
+    border: 1px solid rgba(170,200,255,0.28);
+    border-bottom-color: rgba(170,200,255,0.42);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    color: #eff4ff;
+    font-weight: 700;
+  }
+  #mobileControls {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: none;
+  }
+  .btn {
+    position: absolute;
+    width: 74px;
+    height: 74px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(144,188,255,0.18);
+    box-shadow: inset 0 0 20px rgba(90,160,255,0.08), 0 0 18px rgba(0,0,0,0.25);
+    color: #ebf2ff;
+    display: grid;
+    place-items: center;
+    font-size: 20px;
+    pointer-events: auto;
+  }
+  #leftBtn { left: 18px; bottom: 24px; }
+  #rightBtn { left: 104px; bottom: 24px; }
+  #jumpBtn { right: 18px; bottom: 24px; }
+  #dashBtn { right: 104px; bottom: 24px; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="ui">
+  <div id="topBar">
+    <div class="panel">
+      <div id="title">Shadow of Time: Echo Runner</div>
+      <div id="hint">Move: <span class="kbd">A</span>/<span class="kbd">D</span> or <span class="kbd">←</span>/<span class="kbd">→</span> · Jump: <span class="kbd">W</span>/<span class="kbd">Space</span> · Dash: <span class="kbd">Shift</span> · Wait/Observe: <span class="kbd">E</span></div>
+    </div>
+    <div id="levelInfo" class="panel">Level <span id="levelNum">1</span>/200<br><span id="objective">Reach the gate</span></div>
+  </div>
+  <div id="centerMsg"></div>
+  <div id="startOverlay">
+    <div id="startCard">
+      <h1>Shadow of Time: Echo Runner</h1>
+      <p>A silent protagonist moves through a broken timeline. Every loop leaves a shadow echo that repeats your past actions exactly.</p>
+      <p>Use the echoes to stand on switches, hold bridges, distract guardians, and solve time-based puzzles.</p>
+      <p><b>Goal:</b> Reach the glowing gate at the end of each level. Some levels contain enemies or a boss time-shard. Plan carefully.</p>
+      <p class="small">Click or tap to begin. Audio will start after the first interaction.</p>
+    </div>
+  </div>
+  <div id="mobileControls">
+    <div class="btn" id="leftBtn">◀</div>
+    <div class="btn" id="rightBtn">▶</div>
+    <div class="btn" id="dashBtn">⇢</div>
+    <div class="btn" id="jumpBtn">⤒</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const levelNumEl = document.getElementById('levelNum');
+  const objectiveEl = document.getElementById('objective');
+  const centerMsg = document.getElementById('centerMsg');
+  const startOverlay = document.getElementById('startOverlay');
+  const mobileControls = document.getElementById('mobileControls');
+
+  const W = () => canvas.width;
+  const H = () => canvas.height;
+  let dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+
+  function resize() {
+    dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    canvas.width = Math.floor(innerWidth * dpr);
+    canvas.height = Math.floor(innerHeight * dpr);
+    mobileControls.style.display = ('ontouchstart' in window || navigator.maxTouchPoints > 0) ? 'block' : 'none';
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  const keys = {};
+  addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase())) e.preventDefault(); });
+  addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+  const touch = { left:false, right:false, jump:false, dash:false };
+  function bindBtn(id, prop) {
+    const el = document.getElementById(id);
+    const down = e => { e.preventDefault(); touch[prop] = true; };
+    const up = e => { e.preventDefault(); touch[prop] = false; };
+    el.addEventListener('touchstart', down, {passive:false});
+    el.addEventListener('touchend', up, {passive:false});
+    el.addEventListener('touchcancel', up, {passive:false});
+    el.addEventListener('mousedown', down);
+    addEventListener('mouseup', up);
+  }
+  bindBtn('leftBtn','left'); bindBtn('rightBtn','right'); bindBtn('jumpBtn','jump'); bindBtn('dashBtn','dash');
+
+  let audioCtx = null, master = null, musicGain = null, sfxGain = null;
+  function startAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    master = audioCtx.createGain(); master.gain.value = 0.5; master.connect(audioCtx.destination);
+    musicGain = audioCtx.createGain(); musicGain.gain.value = 0.18; musicGain.connect(master);
+    sfxGain = audioCtx.createGain(); sfxGain.gain.value = 0.55; sfxGain.connect(master);
+    let t = audioCtx.currentTime;
+    const notes = [261.63, 329.63, 392.00, 523.25];
+    for (let i=0;i<16;i++) {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.value = notes[i%notes.length] * (i%4===3?0.5:1);
+      o.connect(g); g.connect(musicGain);
+      const dt = i*0.55;
+      g.gain.setValueAtTime(0.0001, t+dt);
+      g.gain.exponentialRampToValueAtTime(0.18, t+dt+0.06);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+dt+0.5);
+      o.start(t+dt); o.stop(t+dt+0.55);
+    }
+  }
+  function beep(freq, dur=0.09, type='sine', vol=0.1) {
+    if (!audioCtx) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type; o.frequency.value = freq;
+    o.connect(g); g.connect(sfxGain);
+    const t = audioCtx.currentTime;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function playJump(){ beep(620,0.08,'triangle',0.12); }
+  function playStep(){ beep(220,0.03,'sine',0.05); }
+  function playDash(){ beep(880,0.06,'sawtooth',0.08); }
+  function playGate(){ beep(523,0.12,'triangle',0.12); beep(784,0.12,'sine',0.06); }
+  function playHit(){ beep(110,0.12,'square',0.12); }
+
+  const TILE = 32;
+  const GRAV = 2200;
+  const MOVE = 360;
+  const JUMP = 760;
+  const DASH = 720;
+  const LOOP = 8.0;
+
+  const game = {
+    level: 1,
+    levels: [],
+    t: 0,
+    camX: 0,
+    camY: 0,
+    pausedIntro: true,
+    msgTimer: 0,
+    nextMessage: '',
+    fade: 0
+  };
+
+  function levelWidthFor(n){ return 34 + Math.min(30, Math.floor(n/5)); }
+  function makeLevel(n) {
+    const w = levelWidthFor(n), h = 18;
+    const solids = [];
+    for (let y=0;y<h;y++) for (let x=0;x<w;x++) if (y===h-1 || x===0 || x===w-1) solids.push([x,y]);
+    const platforms = [];
+    let seed = (n*9973) >>> 0;
+    const rnd = () => (seed = (seed*1664525 + 1013904223) >>> 0) / 4294967296;
+    for (let i=0;i<Math.min(10 + Math.floor(n/10), 16); i++) {
+      let x = 3 + Math.floor(rnd()*(w-8));
+      let y = 5 + Math.floor(rnd()*8);
+      let len = 3 + Math.floor(rnd()*5);
+      if (i % 4 === 0) len = 2 + (n % 3);
+      platforms.push({x,y,len, moving: (n%7===0 && i===2), dx: (n%2?1:-1)*40, range: 1.4});
+    }
+    const switches = [];
+    const gates = [];
+    const enemies = [];
+    const crates = [];
+    const lasers = [];
+    const boss = (n===40 || n===80 || n===120 || n===160 || n===200);
+    const goalX = w - 3, goalY = 12;
+    gates.push({x:goalX, y:goalY});
+    if (n > 1) {
+      switches.push({x:6+Math.floor(rnd()*5), y:13, required: 1 + (n%3===0?1:0), active:false});
+    }
+    if (n % 4 === 0) crates.push({x:8, y:10});
+    if (n % 5 === 0) enemies.push({x:w-10, y:14, dir:-1, min:w-14, max:w-4, speed: 70 + (n%3)*20});
+    if (n % 6 === 0) lasers.push({x: Math.floor(w/2), y: 11, phase: rnd()*Math.PI*2});
+    const spawn = {x:3, y:14};
+    if (boss) {
+      enemies.length = 0;
+      lasers.push({x: Math.floor(w/2), y: 9, phase:0});
+      gates[0].sealed = true;
+    }
+    return {w,h,solids,platforms,switches,gates,enemies,crates,lasers,spawn,boss, n};
+  }
+
+  function setupLevels() {
+    game.levels = [];
+    for (let i=1;i<=200;i++) game.levels.push(makeLevel(i));
+  }
+  setupLevels();
+
+  const player = {x: 96,y: 400,vx:0,vy:0,w:20,h:28, onGround:false, facing:1, dashT:0, dashCD:0, dead:false};
+  let echoes = [];
+  let loopStart = 0;
+  let runBuffer = [];
+  let particles = [];
+
+  function spawnParticles(x,y,c,n=10,sp=120) {
+    for (let i=0;i<n;i++) particles.push({x,y,vx:(Math.random()*2-1)*sp,vy:(Math.random()*2-1)*sp,r:1+Math.random()*2,c,t:0,life:0.6+Math.random()*0.5});
+  }
+  function currentLevel() { return game.levels[game.level-1]; }
+
+  function rectsCollide(a,b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  function solidRects(level, time) {
+    const arr = [];
+    for (const [x,y] of level.solids) arr.push({x:x*TILE,y:y*TILE,w:TILE,h:TILE});
+    for (const p of level.platforms) {
+      let xx = p.x*TILE, yy = p.y*TILE;
+      if (p.moving) xx += Math.sin(time*1.2 + p.x)*90;
+      for (let i=0;i<p.len;i++) arr.push({x:xx+i*TILE,y:yy,w:TILE,h:TILE});
+    }
+    return arr;
+  }
+
+  function moveEntity(ent, level, dt, time) {
+    ent.x += ent.vx * dt;
+    let solids = solidRects(level, time);
+    for (const s of solids) {
+      if (rectsCollide(ent,s)) {
+        if (ent.vx > 0) ent.x = s.x - ent.w;
+        else if (ent.vx < 0) ent.x = s.x + s.w;
+        ent.vx = 0;
+      }
+    }
+    ent.y += ent.vy * dt;
+    ent.onGround = false;
+    for (const s of solids) {
+      if (rectsCollide(ent,s)) {
+        if (ent.vy > 0) { ent.y = s.y - ent.h; ent.vy = 0; ent.onGround = true; }
+        else if (ent.vy < 0) { ent.y = s.y + s.h; ent.vy = 0; }
+      }
+    }
+  }
+
+  function loopReset() {
+    const level = currentLevel();
+    echoes.push(runBuffer.slice());
+    if (echoes.length > 5) echoes.shift();
+    runBuffer = [];
+    player.x = level.spawn.x*TILE; player.y = level.spawn.y*TILE - 28; player.vx = player.vy = 0;
+    loopStart = game.t;
+    centerMsg.textContent = "Timeline folded. Your shadow remembers.";
+    centerMsg.style.opacity = 1;
+    setTimeout(()=>centerMsg.style.opacity=0, 1800);
+  }
+
+  function advanceLevel() {
+    game.level++;
+    if (game.level > 200) {
+      game.level = 200;
+      centerMsg.textContent = "The final echo aligns. The gate opens.";
+    } else {
+      centerMsg.textContent = `Level ${game.level}: time fractures ahead.`;
+    }
+    centerMsg.style.opacity = 1;
+    setTimeout(()=>centerMsg.style.opacity=0, 1800);
+    const level = currentLevel();
+    player.x = level.spawn.x*TILE; player.y = level.spawn.y*TILE - 28; player.vx = player.vy = 0;
+    echoes = []; runBuffer = []; loopStart = game.t;
+    levelNumEl.textContent = game.level;
+    objectiveEl.textContent = level.boss ? "Defeat the time shard and reach the gate" : "Reach the gate";
+    playGate();
+  }
+
+  function update(dt) {
+    if (game.pausedIntro) return;
+    game.t += dt;
+    const level = currentLevel();
+    const left = keys['a'] || keys['arrowleft'] || touch.left;
+    const right = keys['d'] || keys['arrowright'] || touch.right;
+    const jump = keys['w'] || keys[' '] || keys['arrowup'] || touch.jump;
+    const dash = keys['shift'] || touch.dash;
+    if (dash && player.dashCD <= 0) { player.dashT = 0.16; player.dashCD = 0.55; playDash(); spawnParticles(player.x+10, player.y+14, '#6fb1ff', 10, 150); }
+    player.dashCD = Math.max(0, player.dashCD - dt);
+    if (player.dashT > 0) {
+      player.dashT -= dt;
+      player.vy = 0;
+      player.vx = player.facing * DASH;
+    } else {
+      if (left && !right) { player.vx = Math.max(player.vx - MOVE*dt, -MOVE); player.facing = -1; }
+      else if (right && !left) { player.vx = Math.min(player.vx + MOVE*dt, MOVE); player.facing = 1; }
+      else player.vx *= Math.pow(0.0009, dt);
+      player.vy += GRAV * dt;
+      if (jump && player.onGround) { player.vy = -JUMP; player.onGround = false; playJump(); spawnParticles(player.x+10, player.y+28, '#88aaff', 8, 120); }
+    }
+
+    moveEntity(player, level, dt, game.t);
+    if (player.onGround && Math.abs(player.vx) > 20 && Math.random()<0.12) playStep();
+    runBuffer.push({x:player.x,y:player.y,vx:player.vx,vy:player.vy,f:player.facing,ds:player.dashT>0});
+    if (game.t - loopStart >= LOOP) loopReset();
+
+    for (const e of echoes) {
+      const idx = Math.min(e.length-1, Math.floor((game.t - loopStart) / dt));
+      const s = e[Math.min(e.length-1, Math.max(0, Math.floor((game.t - loopStart) / dt)))];
+      if (s) { e._i = (e._i||0); }
+    }
+
+    let ltime = game.t - loopStart;
+    let frame = Math.floor((ltime / LOOP) * (runBuffer.length || 1));
+    frame = Math.max(0, Math.min(runBuffer.length-1, frame));
+    const echoStates = echoes.map(run => run[Math.min(run.length-1, frame)]).filter(Boolean);
+
+    for (const s of echoStates) {
+      const ex = {x:s.x,y:s.y,w:20,h:28};
+      for (const sw of level.switches) {
+        if (ex.x + ex.w > sw.x*TILE && ex.x < (sw.x+1)*TILE && ex.y + ex.h > sw.y*TILE && ex.y < (sw.y+1)*TILE) sw.active = true;
+      }
+      for (const c of level.crates) {
+        const cx = c.x*TILE, cy = c.y*TILE;
+        if (Math.abs((ex.x+10)- (cx+16)) < 18 && Math.abs((ex.y+14)-(cy+16)) < 24) c.pressed = true;
+      }
+    }
+
+    for (const sw of level.switches) sw.active = false;
+    for (const s of echoStates) {
+      const ex = {x:s.x,y:s.y,w:20,h:28};
+      for (const sw of level.switches) if (ex.x+ex.w > sw.x*TILE && ex.x < (sw.x+1)*TILE && ex.y+ex.h > sw.y*TILE && ex.y < (sw.y+1)*TILE) sw.active = true;
+    }
+
+    for (const en of level.enemies) {
+      en.x += en.dir * en.speed * dt;
+      if (en.x < en.min*TILE) en.dir = 1;
+      if (en.x > en.max*TILE) en.dir = -1;
+      const er = {x:en.x,y:en.y*TILE-26,w:20,h:26};
+      if (rectsCollide(player, er)) { playHit(); spawnParticles(player.x+10, player.y+14, '#ff667a', 14, 220); loopReset(); break; }
+      for (const s of echoStates) {
+        const rr = {x:s.x,y:s.y,w:20,h:28};
+        if (rectsCollide(rr, er)) { en.dir *= -1; spawnParticles(en.x+10, en.y*TILE-14, '#7ef0ff', 8, 120); }
+      }
+    }
+
+    for (const lz of level.lasers) {
+      lz.phase += dt * 1.8;
+      const lx = lz.x*TILE + 16;
+      const ly = lz.y*TILE + 16;
+      const active = Math.sin(lz.phase) > 0.25 || level.boss;
+      if (active) {
+        const beam = {x:lx-4,y:ly,w:8,h:(level.h*TILE) - ly - 16};
+        if (rectsCollide(player, beam)) { playHit(); loopReset(); break; }
+      }
+    }
+
+    const gate = level.gates[0];
+    const allSwitches = level.switches.every(sw => sw.active || sw.required===0);
+    if (level.boss) {
+      const bossR = {x:(level.w-8)*TILE,y:6*TILE,w:64,h:64};
+      if (rectsCollide(player, bossR)) { playHit(); loopReset(); }
+      gate.sealed = !allSwitches;
+      if (game.t - loopStart > 5 && allSwitches) gate.sealed = false;
+    }
+
+    if (!gate.sealed && player.x + player.w > gate.x*TILE && player.y + player.h > gate.y*TILE && player.y < (gate.y+2)*TILE) {
+      advanceLevel();
+      return;
+    }
+
+    for (const p of particles) {
+      p.t += dt; p.x += p.vx*dt; p.y += p.vy*dt; p.vy += 500*dt; p.vx *= Math.pow(0.18, dt);
+    }
+    particles = particles.filter(p => p.t < p.life);
+    game.camX += ((player.x - W()/dpr*0.42) - game.camX) * (1 - Math.pow(0.00001, dt));
+    game.camY += ((player.y - H()/dpr*0.56) - game.camY) * (1 - Math.pow(0.00001, dt));
+    game.camX = Math.max(0, game.camX);
+    if (game.msgTimer > 0) game.msgTimer -= dt;
+  }
+
+  function drawRect(x,y,w,h,fill,glow=null,alpha=1,r=0) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    if (glow) { ctx.shadowColor = glow; ctx.shadowBlur = 18; }
+    ctx.fillStyle = fill;
+    if (r) {
+      roundRect(x,y,w,h,r); ctx.fill();
+    } else ctx.fillRect(x,y,w,h);
+    ctx.restore();
+  }
+  function roundRect(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  function render() {
+    const Wp = innerWidth, Hp = innerHeight;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,Wp,Hp);
+    const level = currentLevel();
+    const cx = game.camX, cy = game.camY;
+
+    const grad = ctx.createLinearGradient(0,0,0,Hp);
+    grad.addColorStop(0, '#05070d'); grad.addColorStop(1, '#0a1020');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,Wp,Hp);
+
+    ctx.save();
+    ctx.translate(-cx, -cy);
+    const par = Math.sin(game.t*0.1)*18;
+    for (let i=0;i<24;i++) {
+      ctx.fillStyle = `rgba(120,160,255,${0.02 + i*0.001})`;
+      ctx.fillRect(i*220 + (par*0.2), 70 + (i%4)*40, 80, 2);
+    }
+
+    ctx.fillStyle = 'rgba(7,10,18,0.9)';
+    ctx.fillRect(0,0,level.w*TILE, level.h*TILE);
+
+    for (const [x,y] of level.solids) {
+      const xx=x*TILE, yy=y*TILE;
+      const g = ctx.createLinearGradient(xx,yy,xx,yy+TILE);
+      g.addColorStop(0,'#101724'); g.addColorStop(1,'#070b12');
+      ctx.fillStyle = g;
+      ctx.fillRect(xx,yy,TILE,TILE);
+      ctx.strokeStyle = 'rgba(120,170,255,0.06)';
+      ctx.strokeRect(xx+0.5,yy+0.5,TILE-1,TILE-1);
+    }
+    for (const p of level.platforms) {
+      const xx = p.x*TILE + (p.moving ? Math.sin(game.t*1.2 + p.x)*90 : 0), yy = p.y*TILE;
+      ctx.save(); ctx.shadowColor = 'rgba(120,180,255,0.35)'; ctx.shadowBlur = 14;
+      ctx.fillStyle = '#162036';
+      ctx.fillRect(xx,yy,p.len*TILE,TILE);
+      ctx.restore();
+    }
+    for (const sw of level.switches) {
+      const on = sw.active;
+      drawRect(sw.x*TILE+7, sw.y*TILE+18, 18, 6, on ? '#75d7ff' : '#243247', on ? '#75d7ff' : null, 1, 3);
+      if (on) spawnParticles(sw.x*TILE+16, sw.y*TILE+14, '#7ce0ff', 1, 0);
+    }
+    for (const c of level.crates) {
+      drawRect(c.x*TILE+3, c.y*TILE+3, 26, 26, '#29344c', '#84b6ff', 1, 5);
+    }
+
+    for (const e of echoes) {
+      const idx = Math.min(e.length-1, Math.floor(((game.t-loopStart)/LOOP) * e.length));
+      const s = e[idx];
+      if (!s) continue;
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.shadowColor = 'rgba(123,184,255,0.9)';
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = 'rgba(120,180,255,0.45)';
+      ctx.fillRect(s.x, s.y, 20, 28);
+      ctx.fillStyle = 'rgba(235,245,255,0.18)';
+      ctx.fillRect(s.x+3, s.y+4, 14, 20);
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(114,193,255,0.9)';
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = '#1f2d47';
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+    ctx.fillStyle = '#8fd8ff';
+    ctx.fillRect(player.x + (player.facing>0?12:4), player.y + 8, 4, 4);
+    ctx.restore();
+
+    for (const en of level.enemies) {
+      const ex = en.x, ey = en.y*TILE-26;
+      ctx.save();
+      ctx.shadowColor = 'rgba(255,90,120,0.7)'; ctx.shadowBlur = 20;
+      ctx.fillStyle = '#3c1320';
+      ctx.fillRect(ex, ey, 20, 26);
+      ctx.fillStyle = '#ff7b93';
+      ctx.fillRect(ex+5, ey+7, 3, 3);
+      ctx.fillRect(ex+12, ey+7, 3, 3);
+      ctx.restore();
+    }
+
+    for (const lz of level.lasers) {
+      const active = Math.sin(lz.phase) > 0.25 || level.boss;
+      const lx = lz.x*TILE+16, ly = lz.y*TILE+16;
+      if (active) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(126,234,255,0.9)';
+        ctx.shadowColor = 'rgba(126,234,255,0.9)';
+        ctx.shadowBlur = 18;
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(lx, level.h*TILE - 16); ctx.stroke();
+        ctx.restore();
+      }
+      drawRect(lx-6,ly-6,12,12,'#63dfff','#63dfff',1,6);
+    }
+
+    if (level.boss) {
+      const bx = (level.w-8)*TILE, by = 6*TILE;
+      ctx.save();
+      ctx.shadowColor = 'rgba(255,90,160,0.85)';
+      ctx.shadowBlur = 28;
+      ctx.fillStyle = '#23101f';
+      ctx.fillRect(bx,by,64,64);
+      ctx.strokeStyle = 'rgba(255,120,170,0.5)';
+      ctx.strokeRect(bx+0.5,by+0.5,63,63);
+      ctx.restore();
+    }
+
+    const gx = level.gates[0].x*TILE, gy = level.gates[0].y*TILE;
+    ctx.save();
+    ctx.shadowColor = level.gates[0].sealed ? 'rgba(130,140,180,0.35)' : 'rgba(80,220,255,0.95)';
+    ctx.shadowBlur = 24;
+    ctx.strokeStyle = level.gates[0].sealed ? 'rgba(120,130,160,0.35)' : 'rgba(126,234,255,0.9)';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(gx+5, gy, 22, 48);
+    ctx.fillStyle = level.gates[0].sealed ? 'rgba(70,80,110,0.75)' : 'rgba(100,210,255,0.16)';
+    ctx.fillRect(gx+6, gy+2, 20, 44);
+    ctx.restore();
+
+    for (const p of particles) {
+      ctx.fillStyle = p.c;
+      ctx.globalAlpha = Math.max(0, 1 - p.t/p.life);
+      ctx.fillRect(p.x,p.y,p.r,p.r);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    const fog = ctx.createRadialGradient(Wp*0.5,Hp*0.55,50, Wp*0.5,Hp*0.55, Math.max(Wp,Hp)*0.8);
+    fog.addColorStop(0,'rgba(0,0,0,0)');
+    fog.addColorStop(1,'rgba(1,3,7,0.72)');
+    ctx.fillStyle = fog; ctx.fillRect(0,0,Wp,Hp);
+
+    ctx.fillStyle = 'rgba(180,210,255,0.12)';
+    for (let i=0;i<48;i++) {
+      const x = (i*137 + game.t*18) % Wp;
+      const y = (i*59 + game.t*6) % Hp;
+      ctx.fillRect(x,y,1,1);
+    }
+
+    if (game.pausedIntro) {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(0,0,Wp,Hp);
+    }
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(1/30, (now - last)/1000);
+    last = now;
+    update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  addEventListener('pointerdown', () => {
+    startAudio();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    if (game.pausedIntro) {
+      game.pausedIntro = false;
+      startOverlay.style.display = 'none';
+      loopStart = game.t;
+      player.x = currentLevel().spawn.x*TILE; player.y = currentLevel().spawn.y*TILE - 28;
+      levelNumEl.textContent = game.level;
+      objectiveEl.textContent = currentLevel().boss ? "Defeat the time shard and reach the gate" : "Reach the gate";
+    }
+  }, {once:false});
+
+  addEventListener('visibilitychange', () => {
+    if (document.hidden && audioCtx && audioCtx.state === 'running') audioCtx.suspend();
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Tunisia Arcade Quest</title>
+<style>
+  html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#1a1f2a; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  canvas { display:block; width:100vw; height:100vh; image-rendering:auto; }
+  .overlay {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    pointer-events:none; color:#fff; text-align:center;
+    text-shadow:0 2px 0 rgba(0,0,0,.25), 0 0 12px rgba(0,0,0,.35);
+  }
+  .panel {
+    background: linear-gradient(180deg, rgba(18,25,38,.88), rgba(28,38,58,.78));
+    border: 2px solid rgba(255,255,255,.15);
+    border-radius: 18px;
+    padding: 22px 26px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.35);
+    max-width: 860px;
+    margin: 24px;
+  }
+  .title { font-size: clamp(34px, 5vw, 74px); font-weight: 900; letter-spacing:1px; color:#ffe28a; margin-bottom: 10px; }
+  .subtitle { font-size: clamp(15px, 1.7vw, 22px); opacity:.95; line-height:1.5; }
+  .small { margin-top:14px; font-size: clamp(13px, 1.4vw, 18px); opacity:.9; line-height:1.5; }
+  .badge { display:inline-block; padding:5px 10px; margin:4px 6px 0 0; border-radius:999px; background:rgba(255,255,255,.12); }
+  .hidden { display:none; }
+  .footerHint { margin-top:16px; font-size:14px; opacity:.85; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="menu" class="overlay">
+  <div class="panel">
+    <div class="title">TUNISIA ARCADE QUEST</div>
+    <div class="subtitle">
+      Un platform 2D side-scroller in stile arcade anni ’90, con estetica <b>cartoon vettoriale</b> e ambientazione tunisina.
+      <br>Esplora <b>medine</b>, <b>souk</b>, <b>deserti</b>, <b>oasi</b> e <b>rovine</b>, raccogli <b>dinar-coin</b>, e sconfiggi il <b>Guardiano del Souk</b>.
+    </div>
+    <div class="small">
+      <span class="badge">← → muovi</span>
+      <span class="badge">↑ / Spazio salta</span>
+      <span class="badge">X dash</span>
+      <span class="badge">Z attacco</span>
+      <span class="badge">P pausa</span>
+      <span class="badge">R riavvia</span>
+      <br><br>
+      <b>Power-up:</b> babouche-boost = salto extra, tajine-shield = protezione.
+      <br><b>Obiettivo:</b> completa i livelli, attiva i checkpoint e accumula punti.
+    </div>
+    <div class="footerHint">Premi <b>Invio</b> o fai <b>click/tap</b> per iniziare</div>
+  </div>
+</div>
+
+<div id="end" class="overlay hidden">
+  <div class="panel">
+    <div class="title" id="endTitle">FINE GIOCO</div>
+    <div class="subtitle" id="endText">Hai completato l’avventura!</div>
+    <div class="small" id="endStats"></div>
+    <div class="footerHint">Premi <b>Invio</b> o <b>click/tap</b> per tornare al menu</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const menu = document.getElementById('menu');
+  const end = document.getElementById('end');
+  const endTitle = document.getElementById('endTitle');
+  const endText = document.getElementById('endText');
+  const endStats = document.getElementById('endStats');
+
+  let W=0,H=0, DPR=1;
+  function resize(){ DPR = Math.min(window.devicePixelRatio||1, 2); W = canvas.width = innerWidth*DPR; H = canvas.height = innerHeight*DPR; canvas.style.width = innerWidth+'px'; canvas.style.height = innerHeight+'px'; }
+  addEventListener('resize', resize); resize();
+
+  const keys = {};
+  addEventListener('keydown', e => { keys[e.code]=true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault(); if(state==='menu' && (e.code==='Enter' || e.code==='Space')) startGame(); if(state==='end' && (e.code==='Enter' || e.code==='Space')) showMenu(); if(e.code==='KeyR') startGame(); if(e.code==='KeyP') paused = !paused; });
+  addEventListener('keyup', e => keys[e.code]=false);
+  addEventListener('pointerdown', () => { if(state==='menu') startGame(); else if(state==='end') showMenu(); });
+
+  const GRAV=0.34;
+  const TILE=40;
+  const stateEnum = {menu:'menu', play:'play', end:'end'};
+  let state = stateEnum.menu;
+  let paused = false;
+
+  const audio = {
+    ctx:null, on:false, master:null, musicTimer:0, stepTimer:0, unlocked:false,
+    init(){ if(this.ctx) return; const A=window.AudioContext||window.webkitAudioContext; this.ctx=new A(); this.master=this.ctx.createGain(); this.master.gain.value=.08; this.master.connect(this.ctx.destination); },
+    beep(freq, dur=.08, type='square', vol=.35){ if(!this.ctx) return; const o=this.ctx.createOscillator(), g=this.ctx.createGain(); o.type=type; o.frequency.value=freq; g.gain.value=vol; o.connect(g); g.connect(this.master); o.start(); g.gain.exponentialRampToValueAtTime(.0001, this.ctx.currentTime + dur); o.stop(this.ctx.currentTime + dur); },
+    noise(dur=.12, vol=.2){ if(!this.ctx) return; const sr=this.ctx.sampleRate, len=sr*dur, buf=this.ctx.createBuffer(1,len,sr), data=buf.getChannelData(0); for(let i=0;i<len;i++) data[i]=Math.random()*2-1; const src=this.ctx.createBufferSource(), g=this.ctx.createGain(), f=this.ctx.createBiquadFilter(); f.type='highpass'; f.frequency.value=800; src.buffer=buf; src.connect(f); f.connect(g); g.connect(this.master); g.gain.value=vol; src.start(); },
+    musicTick(){ if(!this.ctx || state!==stateEnum.play || paused) return; this.musicTimer += dt; if(this.musicTimer < 0.32) return; this.musicTimer=0; const scale=[0,2,3,5,7,10,12]; const root = [196,220,174,233][Math.floor(performance.now()/12000)%4]; const n = scale[(Math.random()*scale.length)|0]; const f = root * Math.pow(2,n/12); this.beep(f, .11, 'triangle', .08); if(Math.random()<.3) setTimeout(()=>this.beep(f*2,.06,'square',.03), 50); },
+    hit(){ this.noise(.08,.15); this.beep(160,.06,'sawtooth',.12); },
+    jump(){ this.beep(420,.06,'triangle',.08); this.beep(640,.04,'triangle',.05); },
+    coin(){ this.beep(880,.05,'square',.06); this.beep(1320,.06,'square',.04); },
+    power(){ this.beep(520,.08,'triangle',.09); this.beep(780,.09,'triangle',.08); },
+    dash(){ this.beep(240,.05,'sawtooth',.08); },
+    boss(){ this.beep(110,.10,'square',.08); },
+    win(){ this.beep(523,.11,'triangle',.08); setTimeout(()=>this.beep(659,.12,'triangle',.08),120); setTimeout(()=>this.beep(784,.16,'triangle',.08),240); }
+  };
+
+  let dt=0, last=0;
+  const game = { levelIndex:0, score:0, coins:0, lives:3, checkpoint:null, cameraX:0, cameraY:0, shake:0, message:'', msgTimer:0 };
+
+  function rectsOverlap(a,b){ return a.x<a.w+a.x && a.x < b.x+b.w && a.x+a.w > b.x && a.y+a.h>b.y && a.y<b.y+b.h; }
+  function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+
+  function makeLevel(def){
+    return {
+      name:def.name, width:def.width, height:900, theme:def.theme, bg:def.bg, fg:def.fg, sand:def.sand||false, storm:def.storm||false, boss:def.boss||false,
+      player:{x:80,y:620,w:34,h:52,vx:0,vy:0,dir:1,onGround:false,health:1,attackCd:0,dashCd:0,inv:0,boost:0,shield:0,boostTimer:0,shieldTimer:0,jumpCount:0},
+      platforms:def.platforms.slice(),
+      moving:def.moving.slice(),
+      solids:def.solids.slice(),
+      hazards:def.hazards.slice(),
+      coins:def.coins.slice(),
+      powerups:def.powerups.slice(),
+      enemies:def.enemies.slice(),
+      checkpoints:def.checkpoints.slice(),
+      goal:def.goal,
+      bossObj:def.bossObj||null
+    };
+  }
+
+  function stage1(){
+    const p=[], s=[], h=[], c=[], pu=[], e=[], cp=[];
+    for(let i=0;i<18;i++) p.push({x:i*220,y:700,w:180,h:24,kind:'stone'});
+    p.push({x:1000,y:620,w:160,h:22,kind:'rope'});
+    p.push({x:1210,y:560,w:160,h:22,kind:'rope'});
+    p.push({x:1430,y:500,w:160,h:22,kind:'rope'});
+    p.push({x:1670,y:620,w:200,h:22,kind:'roof'});
+    p.push({x:1980,y:580,w:180,h:22,kind:'roof'});
+    p.push({x:2250,y:530,w:220,h:22,kind:'roof'});
+    p.push({x:2600,y:650,w:220,h:22,kind:'roof'});
+    s.push({x:520,y:660,w:54,h:40,type:'crate'});
+    s.push({x:560,y:620,w:54,h:40,type:'crate'});
+    s.push({x:910,y:660,w:140,h:24,type:'rug'});
+    s.push({x:1820,y:660,w:140,h:24,type:'rug'});
+    for(let i=0;i<7;i++) c.push({x:260+i*60,y:610-Math.sin(i)*20,r:12,val:10});
+    for(let i=0;i<9;i++) c.push({x:1040+i*48,y:560-Math.cos(i)*16,r:12,val:10});
+    pu.push({x:1320,y:510,w:26,h:26,type:'babouche'});
+    pu.push({x:2130,y:500,w:26,h:26,type:'tajine'});
+    e.push({x:420,y:660,w:30,h:26,type:'scarab',dir:1,baseY:660,range:120});
+    e.push({x:760,y:660,w:30,h:26,type:'pigeon',dir:-1,baseY:660,range:160});
+    e.push({x:1460,y:470,w:34,h:30,type:'bandit',dir:1,baseY:470,range:220});
+    e.push({x:1800,y:580,w:30,h:26,type:'scarab',dir:-1,baseY:580,range:90});
+    e.push({x:2360,y:500,w:34,h:30,type:'bandit',dir:-1,baseY:500,range:260});
+    cp.push({x:1120,y:540,w:40,h:80});
+    cp.push({x:2060,y:490,w:40,h:80});
+    return makeLevel({ name:'Medina dei Vicoli', width:3000, theme:'medina', bg:['#f7d48a','#f0b05e','#d56b45'], fg:['#735542','#a9683b','#f2cf8a'], platforms:p, solids:s, hazards:h, coins:c, powerups:pu, enemies:e, checkpoints:cp, goal:{x:2860,y:620,w:70,h:120} });
+  }
+
+  function stage2(){
+    const p=[], s=[], h=[], c=[], pu=[], e=[], cp=[];
+    for(let i=0;i<16;i++) p.push({x:i*240,y:700+((i%2)?-25:0),w:190,h:22,kind:'sand'});
+    p.push({x:1200,y:600,w:180,h:22,kind:'sand'});
+    p.push({x:1450,y:540,w:180,h:22,kind:'sand'});
+    p.push({x:1690,y:490,w:180,h:22,kind:'sand'});
+    p.push({x:2020,y:620,w:200,h:22,kind:'sand'});
+    p.push({x:2310,y:560,w:170,h:22,kind:'sand'});
+    p.push({x:2560,y:500,w:180,h:22,kind:'sand'});
+    s.push({x:760,y:650,w:60,h:50,type:'crate'});
+    s.push({x:1580,y:460,w:120,h:80,type:'ruin'});
+    s.push({x:2460,y:460,w:120,h:80,type:'ruin'});
+    h.push({x:1040,y:740,w:170,h:40,type:'sandstorm',moving:true,vy:0});
+    h.push({x:2140,y:740,w:190,h:40,type:'sandstorm',moving:true,vy:0});
+    for(let i=0;i<10;i++) c.push({x:180+i*56,y:590-Math.sin(i*0.7)*26,r:12,val:10});
+    pu.push({x:1360,y:560,w:26,h:26,type:'babouche'});
+    pu.push({x:2220,y:520,w:26,h:26,type:'tajine'});
+    e.push({x:390,y:660,w:30,h:26,type:'scarab',dir:1,baseY:660,range:150});
+    e.push({x:930,y:660,w:30,h:26,type:'scarab',dir:-1,baseY:660,range:110});
+    e.push({x:1520,y:430,w:34,h:30,type:'pigeon',dir:-1,baseY:430,range:170});
+    e.push({x:1760,y:430,w:34,h:30,type:'bandit',dir:1,baseY:430,range:240});
+    e.push({x:2380,y:520,w:30,h:26,type:'scarab',dir:-1,baseY:520,range:140});
+    cp.push({x:1280,y:560,w:40,h:80});
+    cp.push({x:2200,y:500,w:40,h:80});
+    return makeLevel({ name:'Deserto delle Dune', width:3000, theme:'desert', bg:['#ffe08a','#f7b44c','#d87f2d'], fg:['#a8662a','#c98b3c','#f5d27d'], sand:true, storm:true, platforms:p, solids:s, hazards:h, coins:c, powerups:pu, enemies:e, checkpoints:cp, goal:{x:2860,y:620,w:70,h:120} });
+  }
+
+  function stage3(){
+    const p=[], s=[], h=[], c=[], pu=[], e=[], cp=[];
+    for(let i=0;i<12;i++) p.push({x:i*260,y:710,w:200,h:22,kind:'market'});
+    p.push({x:1320,y:620,w:140,h:22,kind:'market'});
+    p.push({x:1540,y:560,w:160,h:22,kind:'market'});
+    p.push({x:1780,y:500,w:160,h:22,kind:'market'});
+    p.push({x:2060,y:560,w:180,h:22,kind:'market'});
+    s.push({x:610,y:650,w:60,h:50,type:'crate'});
+    s.push({x:880,y:650,w:120,h:24,type:'rug'});
+    s.push({x:1880,y:460,w:140,h:80,type:'arch'});
+    for(let i=0;i<12;i++) c.push({x:150+i*70,y:590-Math.sin(i*0.6)*30,r:12,val:10});
+    pu.push({x:1420,y:580,w:26,h:26,type:'babouche'});
+    pu.push({x:2160,y:520,w:26,h:26,type:'tajine'});
+    e.push({x:420,y:670,w:30,h:26,type:'scarab',dir:1,baseY:670,range:120});
+    e.push({x:980,y:670,w:34,h:30,type:'bandit',dir:-1,baseY:670,range:160});
+    e.push({x:1600,y:530,w:30,h:26,type:'pigeon',dir:1,baseY:530,range:180});
+    e.push({x:2200,y:530,w:34,h:30,type:'bandit',dir:1,baseY:530,range:210});
+    cp.push({x:1240,y:580,w:40,h:80});
+    cp.push({x:2080,y:520,w:40,h:80});
+    const bossObj = {x:2740,y:610,w:92,h:110,hp:10,phase:0,cd:0,dir:-1,vy:0,vx:0,awake:false};
+    return makeLevel({ name:'Rovine del Guardiano', width:3100, theme:'ruins', bg:['#c9d8ea','#a8bed3','#6d8ea7'], fg:['#53677a','#8a9fb0','#d9e4ec'], platforms:p, solids:s, hazards:h, coins:c, powerups:pu, enemies:e, checkpoints:cp, goal:{x:3000,y:610,w:80,h:120}, boss:true, bossObj });
+  }
+
+  let levels = [stage1(), stage2(), stage3()];
+  let current = null;
+
+  function resetLevel(idx){
+    current = levels[idx];
+    current.player = JSON.parse(JSON.stringify(current.player));
+    game.checkpoint = null;
+    game.cameraX = 0; game.cameraY = 0; game.shake = 0; game.message = ''; game.msgTimer = 0;
+  }
+
+  function startGame(){ audio.init(); audio.ctx.resume?.(); state = stateEnum.play; menu.classList.add('hidden'); end.classList.add('hidden'); game.levelIndex=0; game.score=0; game.coins=0; game.lives=3; resetLevel(0); }
+  function showMenu(){ state=stateEnum.menu; menu.classList.remove('hidden'); end.classList.add('hidden'); }
+
+  function nextLevel(){ game.score += 500; game.levelIndex++; if(game.levelIndex >= levels.length){ audio.win(); state=stateEnum.end; endTitle.textContent='VITTORIA!'; endText.textContent='Hai liberato la Tunisia Arcade Quest.'; endStats.innerHTML = `Punteggio finale: <b>${game.score}</b><br>Monete raccolte: <b>${game.coins}</b><br>Vite rimanenti: <b>${game.lives}</b>`; end.classList.remove('hidden'); return; } resetLevel(game.levelIndex); audio.power(); }
+
+  function damagePlayer(){
+    const p=current.player; if(p.inv>0 || p.shield>0) return;
+    game.lives--; game.shake = 14; audio.hit();
+    if(game.lives<=0){ state=stateEnum.end; endTitle.textContent='GAME OVER'; endText.textContent='Riprova a sfidare Medina, Deserto e il Guardiano del Souk.'; endStats.innerHTML = `Punteggio: <b>${game.score}</b><br>Monete: <b>${game.coins}</b>`; end.classList.remove('hidden'); return; }
+    if(game.checkpoint){ p.x=game.checkpoint.x; p.y=game.checkpoint.y-60; } else { p.x=80; p.y=620; }
+    p.vx=0; p.vy=0; p.inv=120;
+  }
+
+  function update(){
+    if(state!==stateEnum.play || paused){ return; }
+    const L=current, p=L.player;
+    audio.musicTick();
+    p.attackCd = Math.max(0,p.attackCd-1); p.dashCd = Math.max(0,p.dashCd-1); p.inv = Math.max(0,p.inv-1);
+    p.boostTimer = Math.max(0,p.boostTimer-1); p.shieldTimer = Math.max(0,p.shieldTimer-1);
+    if(p.boostTimer===0) p.boost=0; if(p.shieldTimer===0) p.shield=0;
+    const left = keys['ArrowLeft']||keys['KeyA'], right=keys['ArrowRight']||keys['KeyD'], jump=keys['ArrowUp']||keys['Space']||keys['KeyW'], dash=keys['KeyX'], atk=keys['KeyZ'];
+    if(left) { p.vx -= 0.45; p.dir=-1; }
+    if(right){ p.vx += 0.45; p.dir=1; }
+    p.vx *= p.onGround ? 0.86 : 0.96; p.vx = clamp(p.vx, -5.2, 5.2);
+    if(jump && p.jumpLock!==true){
+      if(p.onGround || p.jumpCount < (p.boost?2:1)){ p.vy = p.boost ? -10.8 : -9.5; p.onGround=false; p.jumpCount++; p.jumpLock=true; audio.jump(); }
+    } else if(!jump) p.jumpLock=false;
+    if(dash && p.dashCd===0){ p.vx = p.dir*9.5; p.inv = Math.max(p.inv, 18); p.dashCd = 45; audio.dash(); }
+    if(atk && p.attackCd===0){ p.attackCd = 18; audio.beep(220,.05,'square',.05); }
+    p.vy += GRAV; if(p.vy>12) p.vy=12;
+
+    moveEntity(p, L);
+    if(p.y > H/DPR + 200){ damagePlayer(); }
+
+    for(const m of L.moving){ if(m.vx==null) { m.vx=1.5; } m.x += m.vx; if(m.x<700||m.x>2400) m.vx*=-1; }
+    L.hazards.forEach((hz,i)=>{ if(hz.moving) hz.x += Math.sin((performance.now()/900)+i)*1.2; });
+
+    for(const e of L.enemies){ updateEnemy(e,L); }
+    if(L.boss && L.bossObj){ updateBoss(L.bossObj,L); }
+
+    collectAndCollide(L);
+    if(p.x > L.goal.x && p.y + p.h > L.goal.y) nextLevel();
+    game.cameraX = clamp(p.x - (W/DPR)*0.38, 0, L.width - W/DPR);
+    game.cameraY = 0;
+    game.shake = Math.max(0, game.shake-1);
+    if(game.msgTimer>0) game.msgTimer--;
+  }
+
+  function moveEntity(ent, L){
+    ent.x += ent.vx || 0;
+    collideSolids(ent,L,'x');
+    ent.y += ent.vy || 0;
+    ent.onGround=false;
+    collideSolids(ent,L,'y');
+  }
+
+  function collideSolids(ent, L, axis){
+    const list = [...L.platforms, ...L.solids, ...L.moving.map(m=>({x:m.x,y:m.y,w:m.w,h:m.h,kind:'moving'}))];
+    for(const b of list){
+      if(ent.x < b.x+b.w && ent.x+ent.w > b.x && ent.y < b.y+b.h && ent.y+ent.h > b.y){
+        if(axis==='x'){
+          if(ent.vx>0) ent.x = b.x - ent.w;
+          else if(ent.vx<0) ent.x = b.x + b.w;
+          ent.vx = 0;
+        } else {
+          if(ent.vy>0){ ent.y = b.y - ent.h; ent.vy = 0; ent.onGround=true; ent.jumpCount=0; }
+          else if(ent.vy<0){ ent.y = b.y + b.h; ent.vy = 0; }
+        }
+      }
+    }
+  }
+
+  function updateEnemy(e,L){
+    const p=L.player;
+    if(e.dead) return;
+    if(e.type==='scarab'){ e.vx = (e.dir||1)*1.1; e.x += e.vx; if(e.x<e.baseX-120||e.x>e.baseX+120){ e.dir*=-1; } e.y = e.baseY + Math.sin(performance.now()/250 + e.x*0.01)*2; }
+    if(e.type==='pigeon'){ e.vx = (e.dir||1)*1.5; e.x += e.vx; if(e.x<e.baseX-160||e.x>e.baseX+160){ e.dir*=-1; } e.y = e.baseY - Math.abs(Math.sin(performance.now()/180 + e.x*0.02))*18; }
+    if(e.type==='bandit'){ e.vx = (Math.sign(p.x-e.x))*1.0; e.x += e.vx; if(Math.abs(p.x-e.x)<220 && Math.random()<.01) { e.throwCd=35; } e.y = e.baseY; }
+    e.baseX ??= e.x;
+    if(p.attackCd>8 && p.x + (p.dir>0?28:-18) < e.x+e.w && p.x + p.w + (p.dir>0?18:-28) > e.x && p.y < e.y+e.h && p.y+p.h > e.y){ e.dead=true; game.score+=100; audio.hit(); return; }
+    if(p.x < e.x+e.w && p.x+p.w > e.x && p.y < e.y+e.h && p.y+p.h > e.y){ damagePlayer(); }
+  }
+
+  function updateBoss(b,L){
+    const p=L.player;
+    b.awake = true;
+    b.cd = Math.max(0,b.cd-1);
+    if(b.hp<=0){ b.dead=true; game.score += 1000; audio.win(); nextLevel(); return; }
+    const phase = b.hp>7 ? 0 : b.hp>4 ? 1 : 2;
+    if(phase===0){
+      b.vx = Math.sign(p.x-b.x)*0.7;
+      if(b.cd===0 && Math.abs(p.x-b.x)<440){ shootSandball(b,L); b.cd=95; }
+    } else if(phase===1){
+      b.vx = Math.sign(p.x-b.x)*1.2;
+      if(b.cd===0){ shootSandball(b,L); shootSandball(b,L,14); b.cd=72; }
+      if(Math.random()<.02) b.vy = -9;
+    } else {
+      b.vx = Math.sign(p.x-b.x)*1.6;
+      if(b.cd===0){ for(let i=-1;i<=1;i++) shootSandball(b,L,i*12); b.cd=54; }
+      if(Math.random()<.03) b.vy = -10;
+    }
+    b.x += b.vx; b.vy = (b.vy||0) + GRAV*0.7; b.y += b.vy;
+    if(b.y>620){ b.y=620; b.vy=0; }
+    if(b.x<2500) b.x=2500; if(b.x>2940) b.x=2940;
+    if(p.attackCd>8 && Math.abs((p.x + p.w/2) - (b.x + b.w/2)) < 90 && Math.abs((p.y+p.h/2) - (b.y+b.h/2)) < 70){ b.hp--; game.score += 120; audio.boss(); game.shake=8; }
+    if(p.x < b.x+b.w && p.x+p.w > b.x && p.y < b.y+b.h && p.y+p.h > b.y){ damagePlayer(); }
+  }
+  function shootSandball(b,L,off=0){ L.hazards.push({x:b.x-8,y:b.y+28,w:18,h:18,vx:-4.5-off*0.02,vy:-1.5,ttl:360,type:'sandball'}); audio.beep(180,.05,'square',.05); }
+
+  function collectAndCollide(L){
+    const p=L.player;
+    for(const c of L.coins){ if(!c.taken && circleRect(c.x,c.y,c.r,p)){ c.taken=true; game.coins++; game.score += c.val; audio.coin(); } }
+    for(const u of L.powerups){ if(!u.taken && p.x < u.x+u.w && p.x+p.w > u.x && p.y < u.y+u.h && p.y+p.h > u.y){ u.taken=true; if(u.type==='babouche'){ p.boost=1; p.boostTimer=900; game.score+=200; } else { p.shield=1; p.shieldTimer=900; game.score+=200; } audio.power(); } }
+    for(const cp of L.checkpoints){ if(!cp.active && p.x < cp.x+cp.w && p.x+p.w > cp.x && p.y < cp.y+cp.h && p.y+p.h > cp.y){ cp.active=true; game.checkpoint={x:cp.x+12,y:cp.y}; game.message='Checkpoint attivato!'; game.msgTimer=140; audio.beep(330,.05,'triangle',.05); } }
+    for(const h of L.hazards){ if(h.type==='sandstorm'){ if(p.x < h.x+260 && p.x+p.w > h.x && p.y < h.y+60 && p.y+p.h > h.y){ if(p.shield<=0) damagePlayer(); p.vx *= 0.92; } }
+      if(h.type==='sandball'){ h.x += h.vx; h.y += h.vy; h.vy += 0.18; h.ttl--; if(p.x<p.x+999 && p.x < h.x+h.w && p.x+p.w > h.x && p.y < h.y+h.h && p.y+p.h > h.y){ damagePlayer(); h.ttl=0; } }
+    }
+    L.hazards = L.hazards.filter(h=>!h.ttl || h.ttl>0);
+  }
+  function circleRect(cx,cy,r,rect){ const rx=clamp(cx,rect.x,rect.x+rect.w), ry=clamp(cy,rect.y,rect.y+rect.h); const dx=cx-rx, dy=cy-ry; return dx*dx+dy*dy<r*r; }
+
+  function draw(){
+    const scale = DPR; ctx.setTransform(scale,0,0,scale,0,0);
+    ctx.clearRect(0,0,innerWidth,innerHeight);
+    drawBackground();
+    if(state===stateEnum.play || state===stateEnum.end){
+      const L=current, camX=game.cameraX, camY=game.cameraY;
+      ctx.save();
+      if(game.shake>0){ ctx.translate((Math.random()-.5)*game.shake, (Math.random()-.5)*game.shake); }
+      ctx.translate(-camX, -camY);
+      drawLevel(L);
+      ctx.restore();
+      drawHUD(L);
+      if(game.msgTimer>0){ ctx.fillStyle='rgba(255,255,255,.95)'; ctx.font='700 18px system-ui'; ctx.textAlign='center'; ctx.fillText(game.message, innerWidth/2, 42); }
+    }
+    if(paused && state===stateEnum.play){ dimPause(); }
+  }
+
+  function drawBackground(){
+    const t = current ? current.theme : 'menu';
+    const sky = current ? current.bg : ['#24334a','#1c2636','#101722'];
+    const g = ctx.createLinearGradient(0,0,0,innerHeight);
+    g.addColorStop(0, sky[0]); g.addColorStop(.6, sky[1]); g.addColorStop(1, sky[2]);
+    ctx.fillStyle = g; ctx.fillRect(0,0,innerWidth,innerHeight);
+    ctx.fillStyle = t==='desert' ? 'rgba(255,236,162,.14)' : 'rgba(255,255,255,.08)';
+    for(let i=0;i<5;i++){ const x=(i*220 + (performance.now()*0.01))% (innerWidth+260)-130; ctx.beginPath(); ctx.arc(x, 110+i*26, 34+i*8, 0, Math.PI*2); ctx.fill(); }
+    if(current && current.storm){ ctx.fillStyle='rgba(255,214,130,.09)'; for(let i=0;i<80;i++){ const x=(Math.random()*innerWidth), y=(Math.random()*innerHeight); ctx.fillRect(x,y,2,2);} }
+  }
+
+  function drawLevel(L){
+    const camX=game.cameraX;
+    const drawGround = (x,y,w,h,col,edge) => { ctx.fillStyle=col; roundRect(x,y,w,h,12,true); ctx.fillStyle=edge; roundRect(x,y,w,8,10,true); };
+    for(let i=0;i<Math.ceil(L.width/120);i++){
+      const x=i*120, y=760;
+      ctx.fillStyle = L.theme==='desert' ? '#d8a04c' : '#815f45'; ctx.beginPath(); ctx.moveTo(x-40,y); ctx.quadraticCurveTo(x+60,y-120,x+160,y); ctx.fill();
+    }
+    for(const p of L.platforms){ drawPlatform(p, L.theme); }
+    for(const m of L.moving){ drawPlatform(m, 'moving'); }
+    for(const s of L.solids){ drawProp(s, L.theme); }
+    for(const c of L.coins){ if(!c.taken) drawCoin(c); }
+    for(const u of L.powerups){ if(!u.taken) drawPowerup(u); }
+    for(const cp of L.checkpoints){ drawCheckpoint(cp); }
+    for(const h of L.hazards){ drawHazard(h); }
+    for(const e of L.enemies){ if(!e.dead) drawEnemy(e); }
+    if(L.boss && L.bossObj && !L.bossObj.dead) drawBoss(L.bossObj);
+    drawGoal(L.goal);
+    drawPlayer(L.player);
+    drawParallax(L);
+  }
+
+  function roundRect(x,y,w,h,r,fill){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); if(fill) ctx.fill(); else ctx.stroke(); }
+  function drawPlatform(p, theme){ const c = theme==='desert' ? '#d9b06a' : theme==='medina' ? '#b47a4d' : theme==='market' ? '#a87c4f' : theme==='moving' ? '#7db7c7' : '#9f8a5d'; ctx.fillStyle = c; roundRect(p.x,p.y,p.w,p.h,10,true); ctx.fillStyle='rgba(255,255,255,.18)'; roundRect(p.x,p.y,p.w,6,10,true); }
+  function drawProp(s, theme){ if(s.type==='crate'){ ctx.fillStyle='#d9a15d'; roundRect(s.x,s.y,s.w,s.h,8,true); ctx.strokeStyle='#9b6735'; ctx.lineWidth=4; ctx.strokeRect(s.x+5,s.y+5,s.w-10,s.h-10); } else if(s.type==='rug'){ ctx.fillStyle='#d65757'; roundRect(s.x,s.y,s.w,s.h,14,true); ctx.fillStyle='rgba(255,255,255,.25)'; ctx.fillRect(s.x+10,s.y+6,s.w-20,4); } else if(s.type==='ruin' || s.type==='arch'){ ctx.fillStyle='#b3a08a'; roundRect(s.x,s.y,s.w,s.h,14,true); ctx.fillStyle='rgba(70,52,36,.25)'; ctx.fillRect(s.x+18,s.y+18,s.w-36,s.h-22); } }
+  function drawCoin(c){ ctx.fillStyle='#ffd34d'; ctx.beginPath(); ctx.arc(c.x,c.y,c.r,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#fff2a0'; ctx.beginPath(); ctx.arc(c.x-4,c.y-4,c.r*0.35,0,Math.PI*2); ctx.fill(); ctx.fillStyle='rgba(0,0,0,.2)'; ctx.font='900 12px system-ui'; ctx.textAlign='center'; ctx.fillText('د', c.x, c.y+4); }
+  function drawPowerup(u){ ctx.save(); ctx.translate(u.x+u.w/2,u.y+u.h/2); ctx.rotate(Math.sin(performance.now()/200)*0.08); if(u.type==='babouche'){ ctx.fillStyle='#ff8a5b'; ctx.beginPath(); ctx.ellipse(0,0,15,10,0,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#ffd66b'; ctx.fillRect(-8,-3,16,6); } else { ctx.fillStyle='#f0c86b'; ctx.beginPath(); ctx.moveTo(0,-16); ctx.lineTo(14,0); ctx.lineTo(0,16); ctx.lineTo(-14,0); ctx.closePath(); ctx.fill(); ctx.fillStyle='#c96b4d'; ctx.fillRect(-4,-6,8,12); } ctx.restore(); }
+  function drawCheckpoint(cp){ ctx.fillStyle=cp.active?'#5de08f':'#89a4b5'; ctx.fillRect(cp.x+16,cp.y,8,cp.h); ctx.fillStyle=cp.active?'#ffd34d':'#d7e2ea'; ctx.beginPath(); ctx.moveTo(cp.x+24,cp.y+10); ctx.lineTo(cp.x+56,cp.y+20); ctx.lineTo(cp.x+24,cp.y+30); ctx.closePath(); ctx.fill(); }
+  function drawHazard(h){ if(h.type==='sandstorm'){ ctx.fillStyle='rgba(255,220,130,.28)'; roundRect(h.x,h.y,260,40,20,true); ctx.fillStyle='rgba(255,255,255,.08)'; for(let i=0;i<12;i++) ctx.fillRect(h.x+i*20,h.y+10+Math.sin((performance.now()/100)+i)*6,16,3); } else { ctx.fillStyle='#d9a24a'; ctx.beginPath(); ctx.arc(h.x+h.w/2,h.y+h.h/2,h.w/2,0,Math.PI*2); ctx.fill(); } }
+  function drawEnemy(e){ ctx.save(); ctx.translate(e.x,e.y); if(e.type==='bandit') drawBandit(e); else if(e.type==='pigeon') drawPigeon(e); else drawScarab(e); ctx.restore(); }
+  function drawScarab(e){ ctx.fillStyle='#2d7a5d'; ctx.beginPath(); ctx.ellipse(15,15,14,10,0,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#1f4f3d'; ctx.fillRect(2,11,26,8); ctx.strokeStyle='#1f4f3d'; ctx.lineWidth=2; for(let i=0;i<3;i++){ ctx.beginPath(); ctx.moveTo(6+i*7,24); ctx.lineTo(2+i*7,32); ctx.stroke(); } }
+  function drawPigeon(e){ ctx.fillStyle='#d8dde8'; ctx.beginPath(); ctx.ellipse(16,15,15,11,0,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#8792a6'; ctx.beginPath(); ctx.ellipse(12,12,8,6,0,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#f4c24f'; ctx.fillRect(24,15,7,3); }
+  function drawBandit(e){ ctx.fillStyle='#6d4634'; ctx.beginPath(); ctx.arc(16,10,9,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#ffdfb0'; ctx.fillRect(8,10,16,14); ctx.fillStyle='#28323d'; ctx.fillRect(10,12,12,4); ctx.fillStyle='#c45d4d'; ctx.fillRect(6,24,24,8); ctx.fillStyle='#3c2b24'; ctx.fillRect(0,30,10,4); ctx.fillRect(22,30,10,4); ctx.fillRect(4,32,6,14); ctx.fillRect(22,32,6,14); }
+  function drawBoss(b){ ctx.fillStyle='#7b4a2f'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(b.x,b.y,b.w,b.h,14) : roundRect(b.x,b.y,b.w,b.h,14,true); ctx.fill(); ctx.fillStyle='#d8b35c'; ctx.beginPath(); ctx.arc(b.x+b.w/2,b.y+34,28,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#fff3c5'; ctx.fillRect(b.x+18,b.y+55,56,12); ctx.fillStyle='#3a2a23'; ctx.fillRect(b.x+10,b.y+20,20,8); ctx.fillRect(b.x+58,b.y+20,20,8); ctx.fillStyle='#ffcc55'; ctx.fillRect(b.x+34,b.y+82,24,10); }
+  function drawGoal(g){ ctx.fillStyle='#6fe0a2'; ctx.fillRect(g.x+28,g.y,10,g.h); ctx.fillStyle='#ffe26b'; ctx.beginPath(); ctx.moveTo(g.x+38,g.y+10); ctx.lineTo(g.x+70,g.y+24); ctx.lineTo(g.x+38,g.y+38); ctx.closePath(); ctx.fill(); }
+  function drawPlayer(p){
+    ctx.save(); ctx.translate(p.x,p.y);
+    if(p.inv>0 && Math.floor(p.inv/6)%2===0) ctx.globalAlpha=.5;
+    ctx.scale(p.dir<0?-1:1,1);
+    ctx.translate(-p.w,0);
+    ctx.fillStyle='#2d5b8f'; ctx.beginPath(); ctx.ellipse(20,14,14,12,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#ffe6c8'; ctx.beginPath(); ctx.arc(20,12,11,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#3a2e2b'; ctx.beginPath(); ctx.arc(16,12,1.8,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(24,12,1.8,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#3a2e2b'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(20,17,4,0,Math.PI); ctx.stroke();
+    ctx.fillStyle='#3a2e2b'; ctx.beginPath(); ctx.moveTo(8,17); ctx.lineTo(0,28); ctx.lineTo(12,30); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#e7a54f'; ctx.fillRect(8,26,24,12);
+    ctx.fillStyle='#4d8b65'; ctx.fillRect(6,32,12,18); ctx.fillRect(20,32,12,18);
+    ctx.fillStyle='#ffcc55'; ctx.fillRect(3,43,18,7); ctx.fillRect(19,43,18,7);
+    if(p.shield){ ctx.strokeStyle='rgba(120,230,255,.75)'; ctx.lineWidth=4; ctx.beginPath(); ctx.arc(18,26,28,0,Math.PI*2); ctx.stroke(); }
+    if(p.attackCd>8){ ctx.strokeStyle='rgba(255,255,255,.8)'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(34,24); ctx.lineTo(48,20); ctx.stroke(); }
+    ctx.restore();
+  }
+  function drawParallax(L){
+    const camX=game.cameraX;
+    for(let i=0;i<6;i++){
+      const speed = 0.15 + i*0.05;
+      ctx.fillStyle = L.theme==='desert' ? 'rgba(255,220,150,.15)' : 'rgba(255,255,255,.10)';
+      const x = -((camX*speed)%260);
+      for(let j=-1;j<8;j++){
+        const xx=x+j*260;
+        ctx.beginPath();
+        ctx.moveTo(xx, 720);
+        ctx.quadraticCurveTo(xx+80, 620-20*(i%3), xx+180, 720);
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawHUD(L){
+    ctx.fillStyle='rgba(14,20,30,.55)'; roundRect(16,16,420,92,18,true);
+    ctx.fillStyle='#fff'; ctx.font='700 18px system-ui'; ctx.textAlign='left';
+    ctx.fillText(`Livello ${game.levelIndex+1}/${levels.length}: ${L.name}`, 30, 42);
+    ctx.fillText(`Punteggio: ${game.score}`, 30, 66);
+    ctx.fillText(`Monete: ${game.coins}`, 30, 90);
+
+    for(let i=0;i<game.lives;i++){ heart(470+i*28, 35, 10); }
+    ctx.fillStyle='rgba(14,20,30,.55)'; roundRect(430,16,240,92,18,true);
+    ctx.fillStyle='#fff'; ctx.fillText('Power-up', 444, 42);
+    const p=L.player;
+    bar(444, 54, 190, 12, p.boostTimer/900, '#ff8a5b', 'Babouche');
+    bar(444, 74, 190, 12, p.shieldTimer/900, '#65d7ff', 'Tajine');
+    if(L.boss && L.bossObj && !L.bossObj.dead){
+      ctx.fillStyle='rgba(14,20,30,.55)'; roundRect(innerWidth-330,16,300,72,18,true);
+      ctx.fillStyle='#fff'; ctx.fillText('Guardiano del Souk', innerWidth-314, 44);
+      bar(innerWidth-314, 54, 260, 12, L.bossObj.hp/10, '#ff6a5e', '');
+    }
+  }
+  function bar(x,y,w,h,v,col,label){ ctx.fillStyle='rgba(255,255,255,.14)'; roundRect(x,y,w,h,999,true); ctx.fillStyle=col; roundRect(x,y,w*clamp(v,0,1),h,999,true); }
+  function heart(x,y,s){ ctx.fillStyle='#ff627a'; ctx.beginPath(); ctx.moveTo(x,y+s*0.35); ctx.bezierCurveTo(x,y,x-s*0.65,y,x-s*0.65,y+s*0.35); ctx.bezierCurveTo(x-s*0.65,y+s*0.8,x,y+s*1.1,x,y+s*1.5); ctx.bezierCurveTo(x,y+s*1.1,x+s*0.65,y+s*0.8,x+s*0.65,y+s*0.35); ctx.bezierCurveTo(x+s*0.65,y,x,y,x,y+s*0.35); ctx.fill(); }
+
+  function dimPause(){ ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillRect(0,0,innerWidth,innerHeight); ctx.fillStyle='#fff'; ctx.font='800 34px system-ui'; ctx.textAlign='center'; ctx.fillText('PAUSA', innerWidth/2, innerHeight/2); }
+
+  function loop(t){ dt = Math.min(2.2, (t-last)/16.666); last=t; update(); draw(); requestAnimationFrame(loop); }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

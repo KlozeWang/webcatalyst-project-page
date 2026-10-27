@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Eldoria: Quest for the Sacred Crystals</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #111827; /* Tailwind gray-900 */
+            touch-action: none; /* Prevent scroll on mobile */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 10;
+        }
+        .ui-content {
+            pointer-events: auto;
+            max-width: 600px;
+            text-align: center;
+            padding: 2rem;
+            background: rgba(31, 41, 55, 0.9);
+            border: 2px solid #3b82f6;
+            border-radius: 1rem;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+        }
+        .hidden {
+            display: none !important;
+        }
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            pointer-events: none;
+            z-index: 5;
+            color: white;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px black;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="hud" class="hidden text-xl sm:text-2xl">
+        <div id="healthDisplay" class="text-red-400 mb-2">Health: ❤️❤️❤️</div>
+        <div id="crystalDisplay" class="text-blue-300">Crystals: 0 / 5</div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="startScreen" class="ui-layer">
+        <div class="ui-content">
+            <h1 class="text-4xl md:text-5xl font-bold text-blue-400 mb-4 tracking-wider">ELDORIA</h1>
+            <h2 class="text-xl text-gray-300 mb-4">The Fallen Kingdom</h2>
+            <p class="text-gray-400 mb-6 text-sm md:text-base leading-relaxed">
+                Long ago, Eldoria was peaceful until Dark Lord Vexar attacked with forbidden magic. The king fell, and darkness spread. Before the end, the ancient guardians hid <strong>Five Sacred Crystals</strong>. You are the last hope. Collect them to restore the light!
+            </p>
+            <p class="text-yellow-400 mb-6 text-sm">Controls: WASD / Arrow Keys or Touch/Drag to move.</p>
+            <button id="startBtn" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-full transition duration-300 ease-in-out transform hover:scale-105 shadow-lg">
+                Begin Quest
+            </button>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameOverScreen" class="ui-layer hidden">
+        <div class="ui-content border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.5)]">
+            <h1 class="text-5xl font-bold text-red-500 mb-4">YOU DIED</h1>
+            <p class="text-gray-300 mb-6">Dark Lord Vexar's minions overwhelmed you. Eldoria remains in darkness.</p>
+            <button id="restartBtn" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-8 rounded-full transition duration-300 shadow-lg">
+                Try Again
+            </button>
+        </div>
+    </div>
+
+    <!-- Victory Screen -->
+    <div id="victoryScreen" class="ui-layer hidden">
+        <div class="ui-content border-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.6)]">
+            <h1 class="text-5xl font-bold text-yellow-400 mb-4">VICTORY!</h1>
+            <p class="text-gray-200 mb-6">You collected all 5 Sacred Crystals! The power of light surges through the land, banishing Dark Lord Vexar. Eldoria is saved!</p>
+            <button id="playAgainBtn" class="bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold py-3 px-8 rounded-full transition duration-300 shadow-lg">
+                Play Again
+            </button>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // UI Elements
+    const startScreen = document.getElementById('startScreen');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const victoryScreen = document.getElementById('victoryScreen');
+    const hud = document.getElementById('hud');
+    const healthDisplay = document.getElementById('healthDisplay');
+    const crystalDisplay = document.getElementById('crystalDisplay');
+    
+    // Buttons
+    document.getElementById('startBtn').addEventListener('click', startGame);
+    document.getElementById('restartBtn').addEventListener('click', startGame);
+    document.getElementById('playAgainBtn').addEventListener('click', startGame);
+
+    // Audio Context
+    let audioCtx;
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+    }
+
+    function playSound(type) {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        const now = audioCtx.currentTime;
+        
+        if (type === 'collect') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, now);
+            osc.frequency.exponentialRampToValueAtTime(1760, now + 0.1);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        } else if (type === 'hurt') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, now);
+            osc.frequency.exponentialRampToValueAtTime(50, now + 0.2);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+            osc.start(now);
+            osc.stop(now + 0.2);
+        } else if (type === 'win') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(440, now);
+            osc.frequency.setValueAtTime(554, now + 0.2);
+            osc.frequency.setValueAtTime(659, now + 0.4);
+            osc.frequency.setValueAtTime(880, now + 0.6);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.linearRampToValueAtTime(0, now + 1);
+            osc.start(now);
+            osc.stop(now + 1);
+        } else if (type === 'lose') {
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(200, now);
+            osc.frequency.exponentialRampToValueAtTime(50, now + 0.8);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.linearRampToValueAtTime(0, now + 0.8);
+            osc.start(now);
+            osc.stop(now + 0.8);
+        }
+    }
+
+    // Game State
+    let state = 'START'; // START, PLAY, OVER, WIN
+    let animationId;
+    let lastTime = 0;
+
+    // Input Handling
+    const keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false };
+    let touchTarget = null;
+
+    window.addEventListener('keydown', e => { if (keys.hasOwnProperty(e.key)) keys[e.key] = true; });
+    window.addEventListener('keyup', e => { if (keys.hasOwnProperty(e.key)) keys[e.key] = false; });
+
+    // Touch / Mouse controls for mobile
+    function handlePointer(e) {
+        if (state !== 'PLAY') return;
+        const x = e.touches ? e.touches[0].clientX : e.clientX;
+        const y = e.touches ? e.touches[0].clientY : e.clientY;
+        touchTarget = { x, y };
+    }
+    function clearPointer() { touchTarget = null; }
+
+    canvas.addEventListener('mousedown', handlePointer);
+    canvas.addEventListener('mousemove', (e) => { if(e.buttons > 0) handlePointer(e); });
+    canvas.addEventListener('mouseup', clearPointer);
+    canvas.addEventListener('touchstart', handlePointer, {passive: false});
+    canvas.addEventListener('touchmove', (e) => { e.preventDefault(); handlePointer(e); }, {passive: false});
+    canvas.addEventListener('touchend', clearPointer);
+
+    // Resize handling
+    let width, height;
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Game Objects
+    const player = {
+        x: 0, y: 0, size: 15, speed: 250, color: '#34d399', hp: 3, maxHp: 3, invulnerableTimer: 0
+    };
+
+    let crystals = [];
+    let enemies = [];
+    let particles = [];
+    const TOTAL_CRYSTALS = 5;
+    let collectedCrystals = 0;
+
+    function spawnCrystals() {
+        crystals = [];
+        for (let i = 0; i < TOTAL_CRYSTALS; i++) {
+            crystals.push({
+                x: Math.random() * (width - 100) + 50,
+                y: Math.random() * (height - 100) + 50,
+                size: 10,
+                collected: false,
+                floatOffset: Math.random() * Math.PI * 2
+            });
+        }
+    }
+
+    function spawnEnemies() {
+        enemies = [];
+        const numEnemies = Math.min(5 + Math.floor(width / 300), 12);
+        for (let i = 0; i < numEnemies; i++) {
+            // Spawn away from center
+            let ex, ey;
+            do {
+                ex = Math.random() * width;
+                ey = Math.random() * height;
+            } while (Math.hypot(ex - width/2, ey - height/2) < 200);
+
+            enemies.push({
+                x: ex, y: ey, size: 12, 
+                speed: 80 + Math.random() * 50,
+                color: '#ef4444',
+                type: Math.random() > 0.5 ? 'chaser' : 'wanderer',
+                angle: Math.random() * Math.PI * 2
+            });
+        }
+    }
+
+    function createParticles(x, y, color) {
+        for(let i=0; i<15; i++) {
+            particles.push({
+                x: x, y: y,
+                vx: (Math.random() - 0.5) * 200,
+                vy: (Math.random() - 0.5) * 200,
+                life: 1.0,
+                color: color
+            });
+        }
+    }
+
+    function startGame() {
+        initAudio();
+        state = 'PLAY';
+        
+        // Hide all screens
+        startScreen.classList.add('hidden');
+        gameOverScreen.classList.add('hidden');
+        victoryScreen.classList.add('hidden');
+        hud.classList.remove('hidden');
+
+        // Reset player
+        player.x = width / 2;
+        player.y = height / 2;
+        player.hp = player.maxHp;
+        player.invulnerableTimer = 0;
+        
+        collectedCrystals = 0;
+        particles = [];
+        touchTarget = null;
+        
+        for (let key in keys) keys[key] = false;
+
+        spawnCrystals();
+        spawnEnemies();
+        updateHUD();
+
+        lastTime = performance.now();
+        if (animationId) cancelAnimationFrame(animationId);
+        animationId = requestAnimationFrame(gameLoop);
+    }
+
+    function updateHUD() {
+        let hearts = '';
+        for(let i=0; i<player.maxHp; i++) {
+            hearts += i < player.hp ? '❤️' : '🖤';
+        }
+        healthDisplay.innerText = `Health: ${hearts}`;
+        crystalDisplay.innerText = `Crystals: ${collectedCrystals} / ${TOTAL_CRYSTALS}`;
+    }
+
+    function setGameOver() {
+        state = 'OVER';
+        playSound('lose');
+        hud.classList.add('hidden');
+        gameOverScreen.classList.remove('hidden');
+    }
+
+    function setVictory() {
+        state = 'WIN';
+        playSound('win');
+        hud.classList.add('hidden');
+        victoryScreen.classList.remove('hidden');
+    }
+
+    function update(dt) {
+        if (state !== 'PLAY') return;
+
+        // Player Movement
+        let dx = 0, dy = 0;
+        if (keys.w || keys.ArrowUp) dy -= 1;
+        if (keys.s || keys.ArrowDown) dy += 1;
+        if (keys.a || keys.ArrowLeft) dx -= 1;
+        if (keys.d || keys.ArrowRight) dx += 1;
+
+        if (touchTarget) {
+            const tdx = touchTarget.x - player.x;
+            const tdy = touchTarget.y - player.y;
+            const dist = Math.hypot(tdx, tdy);
+            if (dist > 5) {
+                dx = tdx / dist;
+                dy = tdy / dist;
+            }
+        }
+
+        // Normalize diagonal movement
+        if (dx !== 0 && dy !== 0 && !touchTarget) {
+            const length = Math.hypot(dx, dy);
+            dx /= length;
+            dy /= length;
+        }
+
+        player.x += dx * player.speed * dt;
+        player.y += dy * player.speed * dt;
+
+        // Boundary check
+        player.x = Math.max(player.size, Math.min(width - player.size, player.x));
+        player.y = Math.max(player.size, Math.min(height - player.size, player.y));
+
+        if (player.invulnerableTimer > 0) {
+            player.invulnerableTimer -= dt;
+        }
+
+        // Crystals
+        crystals.forEach(c => {
+            if (!c.collected) {
+                c.floatOffset += dt * 2;
+                const dist = Math.hypot(player.x - c.x, player.y - (c.y + Math.sin(c.floatOffset)*5));
+                if (dist < player.size + c.size * 1.5) {
+                    c.collected = true;
+                    collectedCrystals++;
+                    playSound('collect');
+                    createParticles(c.x, c.y, '#60a5fa');
+                    updateHUD();
+                    
+                    // Increase difficulty
+                    enemies.forEach(e => e.speed *= 1.1);
+
+                    if (collectedCrystals >= TOTAL_CRYSTALS) {
+                        setVictory();
+                    }
+                }
+            }
+        });
+
+        // Enemies
+        enemies.forEach(e => {
+            if (e.type === 'chaser') {
+                const edx = player.x - e.x;
+                const edy = player.y - e.y;
+                const dist = Math.hypot(edx, edy);
+                if (dist > 0) {
+                    e.x += (edx / dist) * e.speed * dt;
+                    e.y += (edy / dist) * e.speed * dt;
+                }
+            } else {
+                // Wanderer
+                e.x += Math.cos(e.angle) * e.speed * dt;
+                e.y += Math.sin(e.angle) * e.speed * dt;
+                
+                // Bounce off walls
+                if (e.x < e.size || e.x > width - e.size) { e.angle = Math.PI - e.angle; e.x = Math.max(e.size, Math.min(width-e.size, e.x));}
+                if (e.y < e.size || e.y > height - e.size) { e.angle = -e.angle; e.y = Math.max(e.size, Math.min(height-e.size, e.y)); }
+            }
+
+            // Player Collision
+            if (player.invulnerableTimer <= 0) {
+                const dist = Math.hypot(player.x - e.x, player.y - e.y);
+                if (dist < player.size + e.size) {
+                    player.hp--;
+                    player.invulnerableTimer = 1.5;
+                    playSound('hurt');
+                    createParticles(player.x, player.y, '#ef4444');
+                    updateHUD();
+                    if (player.hp <= 0) {
+                        setGameOver();
+                    }
+                }
+            }
+        });
+
+        // Particles
+        for(let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt * 2;
+            if(p.life <= 0) particles.splice(i, 1);
+        }
+    }
+
+    function draw() {
+        // Clear background
+        ctx.fillStyle = '#111827';
+        ctx.fillRect(0, 0, width, height);
+
+        // Draw grid/ground pattern
+        ctx.strokeStyle = '#1f2937';
+        ctx.lineWidth = 1;
+        const gridSize = 50;
+        for(let x = (player.x * -0.1)%gridSize; x < width; x+=gridSize) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+        }
+        for(let y = (player.y * -0.1)%gridSize; y < height; y+=gridSize) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+        }
+
+        // Draw Crystals
+        crystals.forEach(c => {
+            if (!c.collected) {
+                const yOffset = Math.sin(c.floatOffset) * 5;
+                ctx.save();
+                ctx.translate(c.x, c.y + yOffset);
+                ctx.rotate(c.floatOffset * 0.5);
+                
+                // Glow
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#60a5fa';
+                
+                ctx.fillStyle = '#93c5fd';
+                ctx.beginPath();
+                ctx.moveTo(0, -c.size);
+                ctx.lineTo(c.size, 0);
+                ctx.lineTo(0, c.size);
+                ctx.lineTo(-c.size, 0);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Inner core
+                ctx.fillStyle = '#ffffff';
+                ctx.scale(0.5, 0.5);
+                ctx.beginPath();
+                ctx.moveTo(0, -c.size);
+                ctx.lineTo(c.size, 0);
+                ctx.lineTo(0, c.size);
+                ctx.lineTo(-c.size, 0);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.restore();
+            }
+        });
+
+        // Draw Particles
+        particles.forEach(p => {
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 3, 0, Math.PI*2);
+            ctx.fill();
+        });
+        ctx.globalAlpha = 1.0;
+
+        // Draw Enemies (Vexar's Minions)
+        enemies.forEach(e => {
+            ctx.fillStyle = e.color;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#7f1d1d';
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, e.size, 0, Math.PI * 2);
+            ctx.fill();
+            // Evil eye
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, e.size * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(e.x + 2, e.y - 2, e.size * 0.15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        });
+
+        // Draw Player
+        if (state === 'PLAY' || state === 'WIN') {
+            if (player.invulnerableTimer <= 0 || Math.floor(performance.now() / 100) % 2 === 0) {
+                ctx.fillStyle = player.color;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = player.color;
+                
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Hero marking
+                ctx.strokeStyle = '#064e3b';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(player.x, player.y - player.size * 0.6);
+                ctx.lineTo(player.x, player.y + player.size * 0.6);
+                ctx.moveTo(player.x - player.size * 0.6, player.y);
+                ctx.lineTo(player.x + player.size * 0.6, player.y);
+                ctx.stroke();
+
+                ctx.shadowBlur = 0;
+            }
+        }
+    }
+
+    function gameLoop(timestamp) {
+        if (!lastTime) lastTime = timestamp;
+        const dt = Math.min((timestamp - lastTime) / 1000, 0.1); // cap dt
+        lastTime = timestamp;
+
+        update(dt);
+        draw();
+
+        if (state === 'PLAY' || particles.length > 0) {
+            animationId = requestAnimationFrame(gameLoop);
+        }
+    }
+
+    // Initial draw to show background
+    draw();
+
+</script>
+</body>
+</html>

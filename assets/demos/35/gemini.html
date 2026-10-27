@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wild West Quick Draw</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Courier New', Courier, monospace;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            /* Desert Sky to Sand gradient */
+            background: linear-gradient(to bottom, #fca5a5 0%, #fdba74 40%, #d97706 40%, #b45309 100%);
+            cursor: crosshair;
+            overflow: hidden;
+        }
+
+        /* Sun */
+        .sun {
+            position: absolute;
+            top: 10%;
+            left: 20%;
+            width: 80px;
+            height: 80px;
+            background: #fef08a;
+            border-radius: 50%;
+            box-shadow: 0 0 40px #fef08a;
+        }
+
+        /* Mountains */
+        .mountain {
+            position: absolute;
+            bottom: 60%;
+            width: 0; 
+            height: 0; 
+            border-left: 150px solid transparent;
+            border-right: 150px solid transparent;
+            border-bottom: 200px solid #92400e;
+        }
+        .m1 { left: -50px; border-bottom-color: #78350f; }
+        .m2 { left: 150px; border-bottom-color: #92400e; transform: scale(1.2); }
+        .m3 { right: -50px; border-bottom-color: #78350f; }
+
+        /* Cover items (Barrels/Boxes) */
+        .cover {
+            position: absolute;
+            bottom: 15%;
+            width: 80px;
+            height: 60px;
+            background-color: #451a03;
+            border: 2px solid #290f02;
+            border-radius: 5px;
+            z-index: 10;
+        }
+
+        /* Targets */
+        .target-slot {
+            position: absolute;
+            bottom: calc(15% + 10px);
+            width: 60px;
+            height: 80px;
+            overflow: hidden;
+            z-index: 5;
+        }
+
+        .target {
+            position: absolute;
+            bottom: -80px; /* Hidden initially */
+            width: 100%;
+            height: 100%;
+            transition: bottom 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3rem;
+            pointer-events: auto;
+        }
+
+        .target.up {
+            bottom: 0;
+        }
+
+        .bandit::after { content: '👺'; }
+        .civilian::after { content: '🤠'; }
+
+        /* Floating Score Text */
+        .floating-text {
+            position: absolute;
+            font-weight: bold;
+            font-size: 1.5rem;
+            pointer-events: none;
+            animation: floatUp 1s ease-out forwards;
+            z-index: 20;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-50px) scale(1.5); opacity: 0; }
+        }
+
+        /* Gunshot Flash */
+        #flash {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        /* UI Overlays */
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            color: white;
+        }
+
+        .hidden { display: none !important; }
+
+        .btn {
+            background-color: #b45309;
+            color: #fef3c7;
+            border: 2px solid #78350f;
+            padding: 10px 20px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 4px 4px 0 #451a03;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .btn:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0 #451a03;
+        }
+
+        /* Reticle */
+        #reticle {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            z-index: 60;
+            display: none;
+        }
+        #reticle::before, #reticle::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.8);
+        }
+        #reticle::before { top: 50%; left: 0; right: 0; height: 2px; transform: translateY(-50%); }
+        #reticle::after { left: 50%; top: 0; bottom: 0; width: 2px; transform: translateX(-50%); }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- Background Elements -->
+        <div class="sun"></div>
+        <div class="mountain m1"></div>
+        <div class="mountain m2"></div>
+        <div class="mountain m3"></div>
+
+        <!-- HUD -->
+        <div class="absolute top-4 left-4 z-40 text-yellow-100 font-bold text-2xl drop-shadow-md">
+            SCORE: <span id="score-display">0</span>
+        </div>
+        <div class="absolute top-4 right-4 z-40 text-yellow-100 font-bold text-2xl drop-shadow-md">
+            TIME: <span id="time-display">30</span>
+        </div>
+
+        <!-- Gunshot Flash -->
+        <div id="flash"></div>
+        
+        <!-- Reticle -->
+        <div id="reticle"></div>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="overlay">
+            <h1 class="text-5xl md:text-7xl font-bold mb-4 text-center text-yellow-500 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)]">DEAD RED<br>REVOLVER</h1>
+            <p class="text-xl mb-8 text-center max-w-md px-4">Shoot the Bandits 👺 (+10)<br>Don't shoot Civilians 🤠 (-20)</p>
+            <button id="start-btn" class="btn">DRAW!</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="overlay hidden">
+            <h2 class="text-5xl font-bold mb-2 text-red-500">TIME'S UP</h2>
+            <p class="text-2xl mb-2">Final Score: <span id="final-score" class="text-yellow-400">0</span></p>
+            <p class="text-lg mb-8" id="eval-text"></p>
+            <button id="restart-btn" class="btn">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Web Audio API Setup ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new AudioContext();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playGunshot() {
+            if (!audioCtx) return;
+            
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            
+            gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+            
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.2);
+        }
+
+        function playHitSound(isBandit) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            osc.type = isBandit ? 'triangle' : 'sawtooth';
+            osc.frequency.setValueAtTime(isBandit ? 800 : 200, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(isBandit ? 1200 : 100, audioCtx.currentTime + 0.1);
+            
+            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
+            
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        // --- Game Logic ---
+        const container = document.getElementById('game-container');
+        const scoreDisplay = document.getElementById('score-display');
+        const timeDisplay = document.getElementById('time-display');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const evalText = document.getElementById('eval-text');
+        const flash = document.getElementById('flash');
+        const reticle = document.getElementById('reticle');
+
+        let score = 0;
+        let timeLeft = 30;
+        let isPlaying = false;
+        let gameTimer;
+        let spawnTimer;
+        const numSlots = window.innerWidth < 600 ? 3 : 5;
+        const slots = [];
+
+        // Setup environment
+        function setupLevel() {
+            const containerWidth = window.innerWidth;
+            const spacing = containerWidth / (numSlots + 1);
+
+            for (let i = 0; i < numSlots; i++) {
+                const xPos = spacing * (i + 1);
+
+                // Create Cover
+                const cover = document.createElement('div');
+                cover.className = 'cover';
+                cover.style.left = `${xPos - 40}px`;
+                container.appendChild(cover);
+
+                // Create Target Slot
+                const slot = document.createElement('div');
+                slot.className = 'target-slot';
+                slot.style.left = `${xPos - 30}px`;
+                
+                const target = document.createElement('div');
+                target.className = 'target';
+                target.dataset.index = i;
+                
+                // Interaction
+                target.addEventListener('mousedown', handleShootTarget);
+                target.addEventListener('touchstart', handleShootTarget, {passive: false});
+
+                slot.appendChild(target);
+                container.appendChild(slot);
+                slots.push(target);
+            }
+        }
+
+        function startGame() {
+            initAudio();
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            reticle.style.display = 'block';
+            
+            score = 0;
+            timeLeft = 30;
+            isPlaying = true;
+            updateHUD();
+
+            // Clear any active targets
+            slots.forEach(t => t.className = 'target');
+
+            gameTimer = setInterval(() => {
+                timeLeft--;
+                updateHUD();
+                if (timeLeft <= 0) endGame();
+            }, 1000);
+
+            scheduleNextSpawn();
+        }
+
+        function scheduleNextSpawn() {
+            if (!isPlaying) return;
+            const delay = Math.random() * 800 + 400; // 400ms to 1200ms
+            spawnTimer = setTimeout(() => {
+                spawnTarget();
+                scheduleNextSpawn();
+            }, delay);
+        }
+
+        function spawnTarget() {
+            // Find available slots
+            const availableSlots = slots.filter(t => !t.classList.contains('up'));
+            if (availableSlots.length === 0) return;
+
+            const target = availableSlots[Math.floor(Math.random() * availableSlots.length)];
+            const isBandit = Math.random() > 0.3; // 70% bandit
+
+            target.className = `target up ${isBandit ? 'bandit' : 'civilian'}`;
+
+            // Hide after a random time
+            const hideDelay = Math.random() * 1000 + 800;
+            setTimeout(() => {
+                if (target.classList.contains('up')) {
+                    target.classList.remove('up');
+                }
+            }, hideDelay);
+        }
+
+        function handleShootTarget(e) {
+            e.preventDefault(); // Prevent double firing on touch
+            if (!isPlaying) return;
+
+            const target = e.target;
+            if (!target.classList.contains('up')) return;
+
+            const rect = target.getBoundingClientRect();
+            const clickX = e.clientX || (e.touches && e.touches[0].clientX);
+            const clickY = e.clientY || (e.touches && e.touches[0].clientY);
+
+            if (target.classList.contains('bandit')) {
+                updateScore(10);
+                showFloatingText('+10', clickX, clickY, '#4ade80');
+                playHitSound(true);
+            } else if (target.classList.contains('civilian')) {
+                updateScore(-20);
+                showFloatingText('-20', clickX, clickY, '#f87171');
+                playHitSound(false);
+            }
+
+            target.classList.remove('up');
+        }
+
+        function updateScore(points) {
+            score += points;
+            updateHUD();
+        }
+
+        function updateHUD() {
+            scoreDisplay.innerText = score;
+            timeDisplay.innerText = timeLeft;
+        }
+
+        function showFloatingText(text, x, y, color) {
+            const el = document.createElement('div');
+            el.className = 'floating-text';
+            el.innerText = text;
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            el.style.color = color;
+            container.appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+        }
+
+        function triggerFlash() {
+            playGunshot();
+            flash.style.opacity = '0.7';
+            setTimeout(() => {
+                flash.style.opacity = '0';
+            }, 50);
+        }
+
+        function endGame() {
+            isPlaying = false;
+            clearInterval(gameTimer);
+            clearTimeout(spawnTimer);
+            reticle.style.display = 'none';
+            
+            slots.forEach(t => t.classList.remove('up'));
+
+            finalScoreDisplay.innerText = score;
+            
+            if (score > 200) evalText.innerText = "Fastest hand in the West!";
+            else if (score > 100) evalText.innerText = "Not bad, partner.";
+            else evalText.innerText = "You shoot like a blind mule.";
+
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        // Global shoot handler for missed shots
+        container.addEventListener('mousedown', (e) => {
+            if(isPlaying && e.target.id === 'game-container' || e.target.classList.contains('cover') || e.target.classList.contains('mountain')) {
+                triggerFlash();
+            }
+            if(isPlaying && e.target.classList.contains('target')) {
+                triggerFlash(); // Also flash when hitting target
+            }
+        });
+        container.addEventListener('touchstart', (e) => {
+             if(isPlaying && !e.target.closest('.overlay')) {
+                triggerFlash();
+             }
+        }, {passive: false});
+
+        // Mouse tracking for reticle
+        document.addEventListener('mousemove', (e) => {
+            if(isPlaying) {
+                reticle.style.left = `${e.clientX}px`;
+                reticle.style.top = `${e.clientY}px`;
+            }
+        });
+
+        // Initialize
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('restart-btn').addEventListener('click', startGame);
+        
+        setupLevel();
+
+        // Handle resize slightly gracefully (just reload to recalculate positions for simplicity in this constraints)
+        window.addEventListener('resize', () => {
+            if(!isPlaying) {
+                container.querySelectorAll('.cover, .target-slot').forEach(e => e.remove());
+                slots.length = 0;
+                setupLevel();
+            }
+        });
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BMW M4 Racing - High Graphics</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+background: #000;
+overflow: hidden;
+font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+cursor: none;
+}
+canvas { display: block; }
+#ui {
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+pointer-events: none;
+}
+#speedometer {
+position: absolute;
+bottom: 30px;
+right: 30px;
+width: 200px;
+height: 200px;
+}
+#score {
+position: absolute;
+top: 20px;
+left: 50%;
+transform: translateX(-50%);
+color: #fff;
+font-size: 28px;
+font-weight: bold;
+text-shadow: 0 0 20px rgba(0,150,255,0.8);
+letter-spacing: 3px;
+}
+#speed-text {
+position: absolute;
+bottom: 240px;
+right: 50px;
+color: #00d4ff;
+font-size: 48px;
+font-weight: bold;
+text-shadow: 0 0 30px rgba(0,212,255,0.8);
+}
+#speed-unit {
+position: absolute;
+bottom: 210px;
+right: 80px;
+color: #888;
+font-size: 16px;
+}
+#nitro-bar {
+position: absolute;
+bottom: 30px;
+left: 30px;
+width: 200px;
+height: 20px;
+background: rgba(255,255,255,0.1);
+border: 1px solid rgba(255,255,255,0.3);
+border-radius: 10px;
+overflow: hidden;
+}
+#nitro-fill {
+height: 100%;
+width: 100%;
+background: linear-gradient(90deg, #ff6600, #ffcc00);
+border-radius: 10px;
+transition: width 0.1s;
+}
+#nitro-label {
+position: absolute;
+bottom: 55px;
+left: 30px;
+color: #ff6600;
+font-size: 14px;
+font-weight: bold;
+letter-spacing: 2px;
+}
+#game-over {
+position: absolute;
+top: 50%;
+left: 50%;
+transform: translate(-50%, -50%);
+text-align: center;
+color: #fff;
+display: none;
+pointer-events: auto;
+}
+#game-over h1 {
+font-size: 64px;
+color: #ff3333;
+text-shadow: 0 0 40px rgba(255,0,0,0.8);
+margin-bottom: 20px;
+}
+#game-over p {
+font-size: 24px;
+color: #aaa;
+margin-bottom: 30px;
+}
+#game-over button {
+padding: 15px 40px;
+font-size: 20px;
+background: linear-gradient(135deg, #0066ff, #00ccff);
+color: #fff;
+border: none;
+border-radius: 30px;
+cursor: pointer;
+pointer-events: auto;
+transition: all 0.3s;
+}
+#game-over button:hover {
+transform: scale(1.1);
+box-shadow: 0 0 30px rgba(0,102,255,0.8);
+}
+#start-screen {
+position: absolute;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background: rgba(0,0,0,0.85);
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+pointer-events: auto;
+z-index: 100;
+}
+#start-screen h1 {
+font-size: 72px;
+color: #fff;
+text-shadow: 0 0 40px rgba(0,150,255,0.8);
+margin-bottom: 10px;
+}
+#start-screen h2 {
+font-size: 28px;
+color: #00d4ff;
+margin-bottom: 40px;
+letter-spacing: 5px;
+}
+#start-screen .controls {
+color: #888;
+font-size: 16px;
+margin-bottom: 30px;
+text-align: center;
+line-height: 2;
+}
+#start-screen .controls span {
+color: #fff;
+background: rgba(255,255,255,0.1);
+padding: 5px 15px;
+border-radius: 5px;
+margin: 0 5px;
+}
+#start-screen button {
+padding: 20px 60px;
+font-size: 24px;
+background: linear-gradient(135deg, #0066ff, #00ccff);
+color: #fff;
+border: none;
+border-radius: 30px;
+cursor: pointer;
+transition: all 0.3s;
+letter-spacing: 3px;
+font-weight: bold;
+}
+#start-screen button:hover {
+transform: scale(1.1);
+box-shadow: 0 0 40px rgba(0,102,255,0.8);
+}
+#minimap {
+position: absolute;
+top: 20px;
+right: 20px;
+width: 150px;
+height: 200px;
+background: rgba(0,0,0,0.5);
+border: 1px solid rgba(255,255,255,0.2);
+border-radius: 10px;
+}
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="ui">
+<div id="score">SCORE: 0</div>
+<div id="speed-text">0</div>
+<div id="speed-unit">KM/H</div>
+<div id="nitro-label">NITRO</div>
+<div id="nitro-bar"><div id="nitro-fill"></div></div>
+<canvas id="minimap"></canvas>
+<div id="game-over">
+<h1>CRASHED!</h1>
+<p>Final Score: <span id="final-score">0</span></p>
+<button onclick="restartGame()">RACE AGAIN</button>
+</div>
+<div id="start-screen">
+<h1>BMW M4</h1>
+<h2>RACING</h2>
+<div class="controls">
+<span>↑</span> Accelerate &nbsp; <span>↓</span> Brake<br>
+<span>←</span> <span>→</span> Steer &nbsp; <span>SPACE</span> Nitro
+</div>
+<button onclick="startGame()">START ENGINE</button>
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const minimapCanvas = document.getElementById('minimap');
+const minimapCtx = minimapCanvas.getContext('2d');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+minimapCanvas.width = 150;
+minimapCanvas.height = 200;
+
+window.addEventListener('resize', () => {
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+});
+
+// Game state
+let gameRunning = false;
+let score = 0;
+let speed = 0;
+let maxSpeed = 320;
+let nitro = 100;
+let nitroActive = false;
+let playerX = 0;
+let playerY = 0;
+let roadOffset = 0;
+let difficulty = 1;
+let particles = [];
+let enemies = [];
+let roadMarkers = [];
+let rainDrops = [];
+let stars = [];
+let buildings = [];
+let treePositions = [];
+
+// Player car
+const player = {
+x: 0,
+y: 0,
+width: 50,
+height: 90,
+speed: 0,
+angle: 0,
+tilt: 0
+};
+
+// Input
+const keys = {};
+window.addEventListener('keydown', (e) => {
+keys[e.key] = true;
+if (e.key === ' ') e.preventDefault();
+});
+window.addEventListener('keyup', (e) => {
+keys[e.key] = false;
+});
+
+// Initialize stars
+for (let i = 0; i < 200; i++) {
+stars.push({
+x: Math.random() * canvas.width,
+y: Math.random() * canvas.height * 0.4,
+size: Math.random() * 2,
+brightness: Math.random()
+});
+}
+
+// Initialize buildings
+for (let i = 0; i < 30; i++) {
+buildings.push({
+x: Math.random() * 2000 - 500,
+width: 40 + Math.random() * 80,
+height: 100 + Math.random() * 200,
+side: Math.random() > 0.5 ? 'left' : 'right',
+color: `hsl(${200 + Math.random() * 60}, 30%, ${10 + Math.random() * 15}%)`,
+windows: Math.floor(Math.random() * 8) + 2
+});
+}
+
+// Initialize rain
+for (let i = 0; i < 100; i++) {
+rainDrops.push({
+x: Math.random() * canvas.width,
+y: Math.random() * canvas.height,
+speed: 10 + Math.random() * 10,
+length: 10 + Math.random() * 20
+});
+}
+
+function startGame() {
+document.getElementById('start-screen').style.display = 'none';
+gameRunning = true;
+score = 0;
+speed = 0;
+nitro = 100;
+player.x = canvas.width / 2;
+player.y = canvas.height - 200;
+enemies = [];
+particles = [];
+gameLoop();
+}
+
+function restartGame() {
+document.getElementById('game-over').style.display = 'none';
+gameRunning = true;
+score = 0;
+speed = 0;
+nitro = 100;
+player.x = canvas.width / 2;
+player.y = canvas.height - 200;
+enemies = [];
+particles = [];
+gameLoop();
+}
+
+function spawnEnemy() {
+const lanes = [-1, -0.5, 0, 0.5, 1];
+const lane = lanes[Math.floor(Math.random() * lanes.length)];
+const roadWidth = 300;
+const enemyX = canvas.width / 2 + lane * roadWidth;
+
+const colors = ['#ff3333', '#33ff33', '#3333ff', '#ffff33', '#ff33ff', '#33ffff', '#ffffff', '#ff6600'];
+const enemyColors = ['#cc0000', '#0066cc', '#cc6600', '#009900', '#990099', '#009999'];
+
+enemies.push({
+x: enemyX,
+y: -100,
+width: 45,
+height: 85,
+speed: 2 + Math.random() * 3,
+color: enemyColors[Math.floor(Math.random() * enemyColors.length)],
+lane: lane,
+type: Math.random() > 0.7 ? 'truck' : 'car'
+});
+}
+
+function createParticle(x, y, type) {
+for (let i = 0; i < (type === 'explosion' ? 30 : 5); i++) {
+particles.push({
+x: x,
+y: y,
+vx: (Math.random() - 0.5) * (type === 'explosion' ? 15 : 5),
+vy: (Math.random() - 0.5) * (type === 'explosion' ? 15 : 5),
+life: 1,
+decay: 0.02 + Math.random() * 0.03,
+size: type === 'explosion' ? 3 + Math.random() * 5 : 1 + Math.random() * 2,
+color: type === 'explosion' ?
+`hsl(${Math.random() * 60}, 100%, ${50 + Math.random() * 50}%)` :
+`hsl(${200 + Math.random() * 60}, 100%, 70%)`,
+type: type
+});
+}
+}
+
+function drawSky() {
+const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.5);
+gradient.addColorStop(0, '#0a0a2e');
+gradient.addColorStop(0.5, '#1a1a4e');
+gradient.addColorStop(1, '#2a2a5e');
+ctx.fillStyle = gradient;
+ctx.fillRect(0, 0, canvas.width, canvas.height * 0.5);
+
+// Stars
+stars.forEach(star => {
+star.brightness += 0.01;
+const alpha = 0.3 + Math.sin(star.brightness) * 0.3;
+ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+ctx.beginPath();
+ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+ctx.fill();
+});
+
+// Moon
+ctx.fillStyle = '#ffffcc';
+ctx.shadowColor = '#ffffcc';
+ctx.shadowBlur = 50;
+ctx.beginPath();
+ctx.arc(canvas.width - 150, 100, 40, 0, Math.PI * 2);
+ctx.fill();
+ctx.shadowBlur = 0;
+}
+
+function drawBuildings() {
+buildings.forEach(b => {
+const screenX = b.side === 'left' ?
+b.x - roadOffset * 0.3 :
+canvas.width - b.x + roadOffset * 0.3;
+
+if (screenX > -100 && screenX < canvas.width + 100) {
+ctx.fillStyle = b.color;
+ctx.fillRect(screenX, canvas.height * 0.3 - b.height, b.width, b.height);
+
+// Windows
+for (let w = 0; w < b.windows; w++) {
+for (let h = 0; h < 5; h++) {
+if (Math.random() > 0.3) {
+ctx.fillStyle = `rgba(255, 255, 100, ${0.3 + Math.random() * 0.7})`;
+ctx.fillRect(
+screenX + 5 + w * (b.width / b.windows),
+canvas.height * 0.3 - b.height + 10 + h * 30,
+b.width / b.windows - 10,
+20
+);
+}
+}
+}
+}
+});
+}
+
+function drawRoad() {
+const roadWidth = 300;
+const roadLeft = canvas.width / 2 - roadWidth / 2;
+const roadRight = canvas.width / 2 + roadWidth / 2;
+
+// Road surface
+const roadGradient = ctx.createLinearGradient(roadLeft, 0, roadRight, 0);
+roadGradient.addColorStop(0, '#1a1a1a');
+roadGradient.addColorStop(0.1, '#2a2a2a');
+roadGradient.addColorStop(0.5, '#333333');
+roadGradient.addColorStop(0.9, '#2a2a2a');
+roadGradient.addColorStop(1, '#1a1a1a');
+ctx.fillStyle = roadGradient;
+ctx.fillRect(roadLeft, 0, roadWidth, canvas.height);
+
+// Road edges (glowing)
+ctx.shadowColor = '#0066ff';
+ctx.shadowBlur = 20;
+ctx.strokeStyle = '#0066ff';
+ctx.lineWidth = 3;
+ctx.beginPath();
+ctx.moveTo(roadLeft, 0);
+ctx.lineTo(roadLeft, canvas.height);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(roadRight, 0);
+ctx.lineTo(roadRight, canvas.height);
+ctx.stroke();
+ctx.shadowBlur = 0;
+
+// Lane markings
+roadOffset = (roadOffset + speed * 0.5) % 80;
+ctx.setLineDash([40, 40]);
+ctx.lineDashOffset = -roadOffset;
+ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+ctx.lineWidth = 2;
+
+for (let i = -1; i <= 1; i++) {
+const laneX = canvas.width / 2 + i * (roadWidth / 3);
+ctx.beginPath();
+ctx.moveTo(laneX, 0);
+ctx.lineTo(laneX, canvas.height);
+ctx.stroke();
+}
+ctx.setLineDash([]);
+
+// Center line (double yellow)
+ctx.strokeStyle = 'rgba(255, 200, 0, 0.8)';
+ctx.lineWidth = 3;
+ctx.beginPath();
+ctx.moveTo(canvas.width / 2 - 3, 0);
+ctx.lineTo(canvas.width / 2 - 3, canvas.height);
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(canvas.width / 2 + 3, 0);
+ctx.lineTo(canvas.width / 2 + 3, canvas.height);
+ctx.stroke();
+
+// Road reflection
+const reflGradient = ctx.createLinearGradient(0, canvas.height * 0.8, 0, canvas.height);
+reflGradient.addColorStop(0, 'rgba(0, 100, 255, 0)');
+reflGradient.addColorStop(1, 'rgba(0, 100, 255, 0.1)');
+ctx.fillStyle = reflGradient;
+ctx.fillRect(roadLeft, canvas.height * 0.8, roadWidth, canvas.height * 0.2);
+}
+
+function drawBMW_M4(x, y, width, height, angle, tilt, isPlayer) {
+ctx.save();
+ctx.translate(x, y);
+ctx.rotate(angle);
+
+const w = width;
+const h = height;
+
+// Shadow
+ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+ctx.beginPath();
+ctx.ellipse(0, h / 2 + 5, w / 2 + 5, 15, 0, 0, Math.PI * 2);
+ctx.fill();
+
+// Car body
+const bodyGradient = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+if (isPlayer) {
+bodyGradient.addColorStop(0, '#1a1a2e');
+bodyGradient.addColorStop(0.3, '#2d2d4e');
+bodyGradient.addColorStop(0.5, '#3d3d6e');
+bodyGradient.addColorStop(0.7, '#2d2d4e');
+bodyGradient.addColorStop(1, '#1a1a2e');
+} else {
+bodyGradient.addColorStop(0, '#333');
+bodyGradient.addColorStop(0.5, '#555');
+bodyGradient.addColorStop(1, '#333');
+}
+
+// Main body
+ctx.fillStyle = bodyGradient;
+ctx.beginPath();
+ctx.moveTo(-w / 2 + 5, -h / 2);
+ctx.lineTo(w / 2 - 5, -h / 2);
+ctx.lineTo(w / 2, -h / 4);
+ctx.lineTo(w / 2, h / 4);
+ctx.lineTo(w / 2 - 5, h / 2);
+ctx.lineTo(-w / 2 + 5, h / 2);
+ctx.lineTo(-w / 2, h / 4);
+ctx.lineTo(-w / 2, -h / 4);
+ctx.closePath();
+ctx.fill();
+
+// Roof
+const roofGradient = ctx.createLinearGradient(0, -h / 4, 0, h / 4);
+roofGradient.addColorStop(0, isPlayer ? '#0a0a1e' : '#222');
+roofGradient.addColorStop(1, isPlayer ? '#1a1a3e' : '#333');
+ctx.fillStyle = roofGradient;
+ctx.beginPath();
+ctx.moveTo(-w / 3, -h / 4);
+ctx.lineTo(w / 3, -h / 4);
+ctx.lineTo(w / 3 - 5, h / 6);
+ctx.lineTo(-w / 3 + 5, h / 6);
+ctx.closePath();
+ctx.fill();
+
+// Windshield
+ctx.fillStyle = 'rgba(100, 150, 255, 0.3)';
+ctx.beginPath();
+ctx.moveTo(-w / 3 + 3, -h / 4 + 5);
+ctx.lineTo(w / 3 - 3, -h / 4 + 5);
+ctx.lineTo(w / 3 - 8, -h / 6);
+ctx.lineTo(-w / 3 + 8, -h / 6);
+ctx.closePath();
+ctx.fill();
+
+// Rear window
+ctx.fillStyle = 'rgba(100, 150, 255, 0.2)';
+ctx.beginPath();
+ctx.moveTo(-w / 3 + 5, h / 6);
+ctx.lineTo(w / 3 - 5, h / 6);
+ctx.lineTo(w / 3 - 3, h / 4 - 5);
+ctx.lineTo(-w / 3 + 3, h / 4 - 5);
+ctx.closePath();
+ctx.fill();
+
+// Headlights (front)
+if (isPlayer) {
+ctx.shadowColor = '#ffffff';
+ctx.shadowBlur = 20;
+ctx.fillStyle = '#ffffff';
+ctx.beginPath();
+ctx.ellipse(-w / 3, -h / 2 + 5, 8, 4, 0, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.ellipse(w / 3, -h / 2 + 5, 8, 4, 0, 0, Math.PI * 2);
+ctx.fill();
+ctx.shadowBlur = 0;
+
+// Headlight beams
+ctx.fillStyle = 'rgba(255, 255, 200, 0.1)';
+ctx.beginPath();
+ctx.moveTo(-w / 3 - 10, -h / 2);
+ctx.lineTo(-w / 3 + 10, -h / 2);
+ctx.lineTo(-w / 3 + 30, -h / 2 - 100);
+ctx.lineTo(-w / 3 - 30, -h / 2 - 100);
+ctx.closePath();
+ctx.fill();
+ctx.beginPath();
+ctx.moveTo(w / 3 - 10, -h / 2);
+ctx.lineTo(w / 3 + 10, -h / 2);
+ctx.lineTo(w / 3 + 30, -h / 2 - 100);
+ctx.lineTo(w / 3 - 30, -h / 2 - 100);
+ctx.closePath();
+ctx.fill();
+}
+
+// Taillights (rear)
+ctx.shadowColor = '#ff0000';
+ctx.shadowBlur = 15;
+ctx.fillStyle = '#ff0000';
+ctx.beginPath();
+ctx.ellipse(-w / 3, h / 2 - 5, 8, 3, 0, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.ellipse(w / 3, h / 2 - 5, 8, 3, 0, 0, Math.PI * 2);
+ctx.fill();
+ctx.shadowBlur = 0;
+
+// BMW kidney grille
+if (isPlayer) {
+ctx.fillStyle = '#000';
+ctx.fillRect(-8, -h / 2 + 10, 6, 12);
+ctx.fillRect(2, -h / 2 + 10, 6, 12);
+ctx.strokeStyle = '#ccc';
+ctx.lineWidth = 1;
+ctx.strokeRect(-8, -h / 2 + 10, 6, 12);
+ctx.strokeRect(2, -h / 2 + 10, 6, 12);
+}
+
+// Side skirts
+ctx.fillStyle = '#111';
+ctx.fillRect(-w / 2 - 2, -h / 4, 4, h / 2);
+ctx.fillRect(w / 2 - 2, -h / 4, 4, h / 2);
+
+// Wheels
+const wheelPositions = [
+[-w / 2 - 3, -h / 3],
+[w / 2 - 1, -h / 3],
+[-w / 2 - 3, h / 3],
+[w / 2 - 1, h / 3]
+];
+
+wheelPositions.forEach(([wx, wy]) => {
+ctx.fillStyle = '#111';
+ctx.beginPath();
+ctx.arc(wx, wy, 8, 0, Math.PI * 2);
+ctx.fill();
+ctx.fillStyle = '#333';
+ctx.beginPath();
+ctx.arc(wx, wy, 5, 0, Math.PI * 2);
+ctx.fill();
+ctx.fillStyle = '#666';
+ctx.beginPath();
+ctx.arc(wx, wy, 2, 0, Math.PI * 2);
+ctx.fill();
+});
+
+// M stripe
+if (isPlayer) {
+ctx.fillStyle = '#0066ff';
+ctx.fillRect(-w / 2 + 5, h / 2 - 15, 15, 3);
+ctx.fillStyle = '#ff0000';
+ctx.fillRect(-w / 2 + 5, h / 2 - 10, 15, 3);
+ctx.fillStyle = '#ff6600';
+ctx.fillRect(-w / 2 + 5, h / 2 - 5, 15, 3);
+}
+
+// Nitro flame
+if (nitroActive && isPlayer) {
+ctx.shadowColor = '#ff6600';
+ctx.shadowBlur = 30;
+const flameHeight = 20 + Math.random() * 30;
+const flameGradient = ctx.createLinearGradient(0, h / 2, 0, h / 2 + flameHeight);
+flameGradient.addColorStop(0, '#ffcc00');
+flameGradient.addColorStop(0.5, '#ff6600');
+flameGradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+ctx.fillStyle = flameGradient;
+ctx.beginPath();
+ctx.moveTo(-10, h / 2);
+ctx.lineTo(10, h / 2);
+ctx.lineTo(5 + Math.random() * 5, h / 2 + flameHeight);
+ctx.lineTo(-5 - Math.random() * 5, h / 2 + flameHeight);
+ctx.closePath();
+ctx.fill();
+ctx.shadowBlur = 0;
+}
+
+ctx.restore();
+}
+
+function drawRain() {
+ctx.strokeStyle = 'rgba(150, 180, 255, 0.3)';
+ctx.lineWidth = 1;
+rainDrops.forEach(drop => {
+ctx.beginPath();
+ctx.moveTo(drop.x, drop.y);
+ctx.lineTo(drop.x - 2, drop.y + drop.length);
+ctx.stroke();
+drop.y += drop.speed;
+drop.x -= 1;
+if (drop.y > canvas.height) {
+drop.y = -drop.length;
+drop.x = Math.random() * canvas.width;
+}
+});
+}
+
+function drawParticles() {
+particles.forEach(p => {
+ctx.globalAlpha = p.life;
+ctx.fillStyle = p.color;
+ctx.beginPath();
+ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+ctx.fill();
+});
+ctx.globalAlpha = 1;
+}
+
+function drawMinimap() {
+minimapCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+minimapCtx.fillRect(0, 0, 150, 200);
+
+// Road
+minimapCtx.fillStyle = '#333';
+minimapCtx.fillRect(50, 0, 50, 200);
+
+// Player
+minimapCtx.fillStyle = '#00ff00';
+minimapCtx.fillRect(70, 150, 10, 15);
+
+// Enemies
+enemies.forEach(e => {
+minimapCtx.fillStyle = '#ff0000';
+minimapCtx.fillRect(65 + e.lane * 15, 100 + (e.y / canvas.height) * 100, 8, 12);
+});
+
+// Border
+minimapCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+minimapCtx.lineWidth = 1;
+minimapCtx.strokeRect(0, 0, 150, 200);
+}
+
+function update() {
+if (!gameRunning) return;
+
+// Acceleration
+if (keys['ArrowUp'] || keys['w']) {
+speed += 0.5;
+} else if (keys['ArrowDown'] || keys['s']) {
+speed -= 0.8;
+} else {
+speed -= 0.1;
+}
+
+// Nitro
+if (keys[' '] && nitro > 0) {
+nitroActive = true;
+nitro -= 0.5;
+speed += 1;
+if (nitro <= 0) {
+nitro = 0;
+nitroActive = false;
+}
+} else {
+nitroActive = false;
+if (nitro < 100) nitro += 0.1;
+}
+
+// Speed limits
+speed = Math.max(0, Math.min(speed, maxSpeed + (nitroActive ? 100 : 0)));
+
+// Steering
+if (keys['ArrowLeft'] || keys['a']) {
+player.x -= 5;
+player.tilt = -0.1;
+} else if (keys['ArrowRight'] || keys['d']) {
+player.x += 5;
+player.tilt = 0.1;
+} else {
+player.tilt *= 0.9;
+}
+
+// Road boundaries
+const roadLeft = canvas.width / 2 - 170;
+const roadRight = canvas.width / 2 + 170;
+player.x = Math.max(roadLeft + 30, Math.min(roadRight - 30, player.x));
+
+// Score
+score += Math.floor(speed * 0.1);
+
+// Spawn enemies
+if (Math.random() < 0.02 * difficulty) {
+spawnEnemy();
+}
+
+// Update enemies
+enemies.forEach((enemy, index) => {
+enemy.y += enemy.speed + speed * 0.3;
+
+// Collision detection
+const dx = player.x - enemy.x;
+const dy = player.y - enemy.y;
+const dist = Math.sqrt(dx * dx + dy * dy);
+
+if (dist < 40) {
+gameRunning = false;
+createParticle(player.x, player.y, 'explosion');
+document.getElementById('final-score').textContent = score;
+document.getElementById('game-over').style.display = 'block';
+}
+
+// Remove off-screen enemies
+if (enemy.y > canvas.height + 100) {
+enemies.splice(index, 1);
+score += 50;
+}
+});
+
+// Update particles
+particles.forEach((p, index) => {
+p.x += p.vx;
+p.y += p.vy;
+p.life -= p.decay;
+if (p.life <= 0) {
+particles.splice(index, 1);
+}
+});
+
+// Exhaust particles
+if (speed > 50 && Math.random() > 0.5) {
+createParticle(
+player.x + (Math.random() - 0.5) * 10,
+player.y + 45,
+'exhaust'
+);
+}
+
+// Increase difficulty
+difficulty = 1 + score / 5000;
+
+// Update UI
+document.getElementById('score').textContent = `SCORE: ${score}`;
+document.getElementById('speed-text').textContent = Math.floor(speed);
+document.getElementById('nitro-fill').style.width = `${nitro}%`;
+}
+
+function draw() {
+ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+drawSky();
+drawBuildings();
+drawRoad();
+drawRain();
+
+// Draw enemies
+enemies.forEach(enemy => {
+drawBMW_M4(enemy.x, enemy.y, enemy.width, enemy.height, 0, 0, false);
+});
+
+// Draw player
+drawBMW_M4(player.x, player.y, player.width, player.height, player.tilt, 0, true);
+
+// Draw particles
+drawParticles();
+
+// Speed lines effect
+if (speed > 200) {
+const alpha = (speed - 200) / 200;
+ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.3})`;
+ctx.lineWidth = 1;
+for (let i = 0; i < 10; i++) {
+const x = Math.random() * canvas.width;
+const y = Math.random() * canvas.height;
+ctx.beginPath();
+ctx.moveTo(x, y);
+ctx.lineTo(x, y + 50 + speed * 0.5);
+ctx.stroke();
+}
+}
+
+// Vignette
+const vignetteGradient = ctx.createRadialGradient(
+canvas.width / 2, canvas.height / 2, canvas.height * 0.3,
+canvas.width / 2, canvas.height / 2, canvas.height * 0.8
+);
+vignetteGradient.addColorStop(0, 'rgba(0,0,0,0)');
+vignetteGradient.addColorStop(1, 'rgba(0,0,0,0.5)');
+ctx.fillStyle = vignetteGradient;
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+drawMinimap();
+}
+
+function gameLoop() {
+if (!gameRunning) return;
+update();
+draw();
+requestAnimationFrame(gameLoop);
+}
+
+// Initial draw
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gallery Photo Puzzle</title>
+  <style>
+    :root {
+      --bg: #0f1220;
+      --panel: #171b2e;
+      --text: #eef1ff;
+      --muted: #aab3d6;
+      --accent: #6ea8ff;
+      --accent2: #8bffcb;
+      --danger: #ff7b7b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(circle at 20% 20%, #1b2240 0%, var(--bg) 55%);
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 16px;
+    }
+
+    .app {
+      width: min(940px, 100%);
+      background: color-mix(in srgb, var(--panel) 88%, black 12%);
+      border: 1px solid #28305a;
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 16px 50px rgba(0,0,0,.35);
+    }
+
+    .top {
+      display: grid;
+      grid-template-columns: 1fr auto auto auto;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .file-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      background: #111733;
+      border: 1px solid #2b3566;
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .file-wrap label {
+      background: #2a3675;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      white-space: nowrap;
+      font-weight: 600;
+      font-size: 14px;
+      transition: .2s ease;
+    }
+
+    .file-wrap label:hover { filter: brightness(1.12); }
+
+    .filename {
+      color: var(--muted);
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    input[type=file] { display: none; }
+
+    select, button {
+      height: 42px;
+      border-radius: 10px;
+      border: 1px solid #2f3d78;
+      background: #12193a;
+      color: var(--text);
+      padding: 0 12px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    button {
+      cursor: pointer;
+      background: linear-gradient(180deg, #3a5ddf, #2c49bb);
+      border-color: #4d67d9;
+      min-width: 110px;
+      transition: .2s ease;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .45;
+      filter: grayscale(.3);
+    }
+
+    button:hover:enabled { transform: translateY(-1px); }
+
+    .stats {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      background: #101633;
+      border: 1px solid #2a356a;
+      border-radius: 999px;
+      padding: 7px 12px;
+      color: #dfe6ff;
+      font-size: 13px;
+    }
+
+    .chip b { color: var(--accent2); }
+
+    .board-wrap {
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid #2c386f;
+      background: #0b1024;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      touch-action: manipulation;
+      user-select: none;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: #0a0f20;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 20px;
+      background: linear-gradient(to bottom, rgba(6,8,20,.52), rgba(6,8,20,.75));
+      color: white;
+      font-weight: 700;
+      font-size: clamp(18px, 2.8vw, 30px);
+    }
+
+    .overlay.hidden { display: none; }
+
+    .sub {
+      margin-top: 8px;
+      font-size: clamp(12px, 1.6vw, 16px);
+      color: #cdd7ff;
+      font-weight: 500;
+    }
+
+    .hint {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 760px) {
+      .top {
+        grid-template-columns: 1fr 1fr;
+      }
+      .file-wrap { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="top">
+      <div class="file-wrap">
+        <label for="photoInput">Choose Photo</label>
+        <input id="photoInput" type="file" accept="image/*" />
+        <div id="filename" class="filename">No photo selected</div>
+      </div>
+
+      <select id="difficulty" title="Difficulty">
+        <option value="3">Easy (3x3)</option>
+        <option value="4" selected>Medium (4x4)</option>
+        <option value="5">Hard (5x5)</option>
+        <option value="6">Expert (6x6)</option>
+      </select>
+
+      <button id="startBtn" disabled>Start Puzzle</button>
+      <button id="resetBtn" disabled style="background: linear-gradient(180deg,#565f84,#3d4463); border-color:#616c9a;">Reset</button>
+    </div>
+
+    <div class="stats">
+      <div class="chip">Moves: <b id="moves">0</b></div>
+      <div class="chip">Time: <b id="time">00:00</b></div>
+      <div class="chip">Best: <b id="best">—</b></div>
+    </div>
+
+    <div class="board-wrap" id="boardWrap">
+      <canvas id="board"></canvas>
+      <div id="overlay" class="overlay">
+        <div>
+          <div id="overlayTitle">Select a photo from gallery</div>
+          <div id="overlaySub" class="sub">Then press <b>Start Puzzle</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hint">Tap/click a tile next to the empty space to slide it.</div>
+  </div>
+
+  <script>
+    (() => {
+      const input = document.getElementById('photoInput');
+      const filename = document.getElementById('filename');
+      const startBtn = document.getElementById('startBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      const difficulty = document.getElementById('difficulty');
+      const canvas = document.getElementById('board');
+      const ctx = canvas.getContext('2d');
+      const boardWrap = document.getElementById('boardWrap');
+      const overlay = document.getElementById('overlay');
+      const overlayTitle = document.getElementById('overlayTitle');
+      const overlaySub = document.getElementById('overlaySub');
+      const movesEl = document.getElementById('moves');
+      const timeEl = document.getElementById('time');
+      const bestEl = document.getElementById('best');
+
+      let img = null;
+      let imgURL = null;
+      let size = 4;
+      let positions = [];
+      let emptyIndex = 0;
+      let started = false;
+      let moves = 0;
+      let seconds = 0;
+      let timer = null;
+      let boardPx = 0;
+      let crop = { sx: 0, sy: 0, sSize: 0 };
+
+      const BEST_KEY = 'gallery-photo-puzzle-best';
+
+      function formatTime(totalSec) {
+        const m = String(Math.floor(totalSec / 60)).padStart(2, '0');
+        const s = String(totalSec % 60).padStart(2, '0');
+        return `${m}:${s}`;
+      }
+
+      function showBest() {
+        const best = JSON.parse(localStorage.getItem(BEST_KEY) || '{}');
+        const key = `x${size}`;
+        if (best[key]) {
+          bestEl.textContent = `${best[key].time} • ${best[key].moves} moves`;
+        } else {
+          bestEl.textContent = '—';
+        }
+      }
+
+      function saveBestIfNeeded() {
+        const best = JSON.parse(localStorage.getItem(BEST_KEY) || '{}');
+        const key = `x${size}`;
+        const current = { moves, sec: seconds, time: formatTime(seconds) };
+        const prev = best[key];
+        if (!prev || current.sec < prev.sec || (current.sec === prev.sec && current.moves < prev.moves)) {
+          best[key] = current;
+          localStorage.setItem(BEST_KEY, JSON.stringify(best));
+        }
+        showBest();
+      }
+
+      function setOverlay(title, sub = '', visible = true) {
+        overlayTitle.textContent = title;
+        overlaySub.innerHTML = sub;
+        overlay.classList.toggle('hidden', !visible);
+      }
+
+      function computeCrop() {
+        if (!img) return;
+        const iw = img.naturalWidth;
+        const ih = img.naturalHeight;
+        const sSize = Math.min(iw, ih);
+        crop.sx = (iw - sSize) / 2;
+        crop.sy = (ih - sSize) / 2;
+        crop.sSize = sSize;
+      }
+
+      function resizeCanvas() {
+        boardPx = boardWrap.clientWidth;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(boardPx * dpr);
+        canvas.height = Math.floor(boardPx * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        draw();
+      }
+
+      function initPositions() {
+        const total = size * size;
+        positions = Array.from({ length: total }, (_, i) => i);
+        emptyIndex = total - 1;
+      }
+
+      function neighbors(index) {
+        const r = Math.floor(index / size);
+        const c = index % size;
+        const arr = [];
+        if (r > 0) arr.push(index - size);
+        if (r < size - 1) arr.push(index + size);
+        if (c > 0) arr.push(index - 1);
+        if (c < size - 1) arr.push(index + 1);
+        return arr;
+      }
+
+      function shuffleBoard() {
+        const total = size * size;
+        let prev = -1;
+        const steps = total * 80;
+        for (let i = 0; i < steps; i++) {
+          let n = neighbors(emptyIndex);
+          if (prev !== -1 && n.length > 1) n = n.filter(x => x !== prev);
+          const pick = n[Math.floor(Math.random() * n.length)];
+          positions[emptyIndex] = positions[pick];
+          positions[pick] = total - 1;
+          prev = emptyIndex;
+          emptyIndex = pick;
+        }
+        if (isSolved()) shuffleBoard();
+      }
+
+      function isSolved() {
+        for (let i = 0; i < positions.length; i++) {
+          if (positions[i] !== i) return false;
+        }
+        return true;
+      }
+
+      function startTimer() {
+        clearInterval(timer);
+        timer = setInterval(() => {
+          seconds++;
+          timeEl.textContent = formatTime(seconds);
+        }, 1000);
+      }
+
+      function stopTimer() {
+        clearInterval(timer);
+        timer = null;
+      }
+
+      function startGame() {
+        if (!img) return;
+        size = parseInt(difficulty.value, 10);
+        showBest();
+        started = true;
+        moves = 0;
+        seconds = 0;
+        movesEl.textContent = '0';
+        timeEl.textContent = '00:00';
+        initPositions();
+        shuffleBoard();
+        draw();
+        startTimer();
+        setOverlay('Solve the puzzle!', 'Good luck 🍀', false);
+        resetBtn.disabled = false;
+      }
+
+      function resetGame() {
+        if (!img) return;
+        stopTimer();
+        started = false;
+        moves = 0;
+        seconds = 0;
+        movesEl.textContent = '0';
+        timeEl.textContent = '00:00';
+        initPositions();
+        draw();
+        setOverlay('Puzzle reset', 'Press <b>Start Puzzle</b> to shuffle again.', true);
+      }
+
+      function handleWin() {
+        stopTimer();
+        started = false;
+        saveBestIfNeeded();
+        setOverlay('🎉 You solved it!', `Time: <b>${formatTime(seconds)}</b> • Moves: <b>${moves}</b>`, true);
+      }
+
+      function drawGridLines(tileSize) {
+        ctx.strokeStyle = 'rgba(255,255,255,.2)';
+        ctx.lineWidth = 1;
+        for (let i = 1; i < size; i++) {
+          const p = i * tileSize;
+          ctx.beginPath();
+          ctx.moveTo(p, 0); ctx.lineTo(p, boardPx); ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(0, p); ctx.lineTo(boardPx, p); ctx.stroke();
+        }
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, boardPx, boardPx);
+        if (!img) {
+          ctx.fillStyle = '#0b1024';
+          ctx.fillRect(0, 0, boardPx, boardPx);
+          return;
+        }
+
+        const total = size * size;
+        const tileSize = boardPx / size;
+        const srcTile = crop.sSize / size;
+
+        for (let i = 0; i < total; i++) {
+          const tileId = positions[i];
+          const dr = Math.floor(i / size);
+          const dc = i % size;
+          const dx = dc * tileSize;
+          const dy = dr * tileSize;
+
+          if (tileId === total - 1) {
+            ctx.fillStyle = 'rgba(8, 12, 28, 0.95)';
+            ctx.fillRect(dx, dy, tileSize, tileSize);
+            continue;
+          }
+
+          const sr = Math.floor(tileId / size);
+          const sc = tileId % size;
+          const sx = crop.sx + sc * srcTile;
+          const sy = crop.sy + sr * srcTile;
+
+          ctx.drawImage(img, sx, sy, srcTile, srcTile, dx, dy, tileSize, tileSize);
+        }
+
+        drawGridLines(tileSize);
+      }
+
+      function canvasIndexFromEvent(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX ?? e.touches?.[0]?.clientX) - rect.left;
+        const y = (e.clientY ?? e.touches?.[0]?.clientY) - rect.top;
+        const c = Math.floor((x / rect.width) * size);
+        const r = Math.floor((y / rect.height) * size);
+        if (c < 0 || c >= size || r < 0 || r >= size) return -1;
+        return r * size + c;
+      }
+
+      function tryMove(index) {
+        if (!started) return;
+        if (index < 0) return;
+        if (!neighbors(emptyIndex).includes(index)) return;
+
+        const total = size * size;
+        positions[emptyIndex] = positions[index];
+        positions[index] = total - 1;
+        emptyIndex = index;
+
+        moves++;
+        movesEl.textContent = String(moves);
+        draw();
+
+        if (isSolved()) handleWin();
+      }
+
+      input.addEventListener('change', () => {
+        const file = input.files && input.files[0];
+        if (!file) return;
+
+        filename.textContent = file.name.length > 45 ? file.name.slice(0, 42) + '...' : file.name;
+        if (imgURL) URL.revokeObjectURL(imgURL);
+        imgURL = URL.createObjectURL(file);
+
+        const newImg = new Image();
+        newImg.onload = () => {
+          img = newImg;
+          computeCrop();
+          startBtn.disabled = false;
+          resetBtn.disabled = false;
+          initPositions();
+          resizeCanvas();
+          showBest();
+          started = false;
+          stopTimer();
+          moves = 0;
+          seconds = 0;
+          movesEl.textContent = '0';
+          timeEl.textContent = '00:00';
+          setOverlay('Photo loaded ✅', 'Press <b>Start Puzzle</b> to play.', true);
+        };
+        newImg.onerror = () => {
+          setOverlay('Could not load image', 'Please choose another photo.', true);
+        };
+        newImg.src = imgURL;
+      });
+
+      startBtn.addEventListener('click', startGame);
+      resetBtn.addEventListener('click', resetGame);
+      difficulty.addEventListener('change', () => {
+        size = parseInt(difficulty.value, 10);
+        showBest();
+        if (img && !started) {
+          initPositions();
+          draw();
+        }
+      });
+
+      canvas.addEventListener('click', (e) => tryMove(canvasIndexFromEvent(e)));
+      canvas.addEventListener('touchstart', (e) => {
+        tryMove(canvasIndexFromEvent(e));
+      }, { passive: true });
+
+      window.addEventListener('resize', resizeCanvas);
+
+      size = parseInt(difficulty.value, 10);
+      showBest();
+      resizeCanvas();
+    })();
+  </script>
+</body>
+</html>

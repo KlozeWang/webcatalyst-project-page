@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Persib Bandung - Football Manager</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a1a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; color: white; }
+canvas { display: block; }
+#gameContainer { position: relative; width: 100vw; height: 100vh; }
+#menuScreen, #leagueScreen, #teamScreen, #matchScreen, #gameOverScreen {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 10;
+}
+#menuScreen { background: linear-gradient(135deg, #000428, #004e92); }
+#leagueScreen { background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); display: none; }
+#teamScreen { background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460); display: none; }
+#matchScreen { background: transparent; display: none; }
+#gameOverScreen { background: rgba(0,0,0,0.9); display: none; }
+
+h1 { font-size: 3em; text-shadow: 0 0 20px rgba(255,255,0,0.5); margin-bottom: 20px; }
+h2 { font-size: 2em; margin-bottom: 15px; color: #ffd700; }
+h3 { font-size: 1.5em; margin-bottom: 10px; }
+
+.btn {
+    padding: 15px 40px; margin: 10px; font-size: 1.2em; border: 2px solid #ffd700;
+    background: rgba(255,215,0,0.1); color: #ffd700; cursor: pointer;
+    border-radius: 10px; transition: all 0.3s; font-weight: bold;
+    text-transform: uppercase; letter-spacing: 2px;
+}
+.btn:hover { background: #ffd700; color: #000; transform: scale(1.05); }
+.btn-small { padding: 8px 20px; font-size: 0.9em; }
+
+.league-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; max-width: 800px; }
+.league-card {
+    background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.2);
+    padding: 20px; border-radius: 15px; cursor: pointer; transition: all 0.3s;
+    text-align: center;
+}
+.league-card:hover { border-color: #ffd700; background: rgba(255,215,0,0.2); transform: translateY(-5px); }
+.league-card .flag { font-size: 2em; margin-bottom: 10px; }
+.league-card .name { font-size: 1em; font-weight: bold; }
+
+.team-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-width: 900px; max-height: 60vh; overflow-y: auto; }
+.team-card {
+    background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1);
+    padding: 15px; border-radius: 10px; cursor: pointer; transition: all 0.3s;
+    text-align: center;
+}
+.team-card:hover { border-color: #00ff88; background: rgba(0,255,136,0.1); }
+.team-card.selected { border-color: #ffd700; background: rgba(255,215,0,0.2); }
+.team-card .crest { font-size: 2em; margin-bottom: 5px; }
+.team-card .tname { font-size: 0.85em; font-weight: bold; }
+.team-card .rating { font-size: 0.75em; color: #aaa; }
+
+#hud {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 20px; background: rgba(0,0,0,0.8);
+    padding: 10px 30px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.2);
+    z-index: 5;
+}
+.hud-team { display: flex; align-items: center; gap: 10px; font-size: 1.2em; font-weight: bold; }
+.hud-score { font-size: 2em; color: #ffd700; font-weight: bold; }
+.hud-time { font-size: 1.2em; color: #00ff88; }
+.hud-possession { font-size: 0.8em; color: #aaa; }
+
+#minimap {
+    position: absolute; bottom: 10px; right: 10px; width: 200px; height: 120px;
+    background: rgba(0,100,0,0.8); border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 10px; z-index: 5;
+}
+
+#commentary {
+    position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.8); padding: 10px 25px; border-radius: 20px;
+    font-size: 1em; z-index: 5; white-space: nowrap;
+}
+
+#controls {
+    position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7);
+    padding: 10px; border-radius: 10px; font-size: 0.75em; z-index: 5;
+    line-height: 1.6;
+}
+
+.goal-animation {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 4em; font-weight: bold; color: #ffd700; text-shadow: 0 0 30px rgba(255,215,0,0.8);
+    animation: goalPop 2s ease-out forwards; z-index: 20;
+}
+@keyframes goalPop {
+    0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+    50% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+}
+
+.scoreboard {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.9); padding: 30px 50px; border-radius: 20px;
+    border: 2px solid #ffd700; text-align: center; z-index: 20;
+}
+.scoreboard h2 { font-size: 2.5em; margin-bottom: 10px; }
+.scoreboard .final-score { font-size: 4em; color: #ffd700; margin: 20px 0; }
+
+.particles { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 15; }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Main Menu -->
+    <div id="menuScreen">
+        <h1>⚽ PERSIB BANDUNG ⚽</h1>
+        <h2 style="color: #0066ff; text-shadow: 0 0 15px rgba(0,102,255,0.5);">The Best The Best</h2>
+        <p style="margin-bottom: 30px; color: #aaa;">Football Manager Game</p>
+        <button class="btn" onclick="showLeagueScreen()">🏆 MAIN GAME</button>
+        <button class="btn" onclick="showTeamScreen()">👥 PILIH TIM</button>
+        <button class="btn" onclick="showInstructions()">📋 CARA MAIN</button>
+        <p style="margin-top: 20px; color: #666; font-size: 0.8em;">v2.0 | Persib Bandung Edition</p>
+    </div>
+
+    <!-- League Selection -->
+    <div id="leagueScreen">
+        <h2>🏆 PILIH LEAGUE</h2>
+        <div class="league-grid">
+            <div class="league-card" onclick="selectLeague('liga1')">
+                <div class="flag">🇮🇩</div>
+                <div class="name">LIGA 1 INDONESIA</div>
+            </div>
+            <div class="league-card" onclick="selectLeague('premier')">
+                <div class="flag">🏴󠁧󠁢󠁥󠁮󠁧󠁿</div>
+                <div class="name">PREMIER LEAGUE</div>
+            </div>
+            <div class="league-card" onclick="selectLeague('laliga')">
+                <div class="flag">🇪🇸</div>
+                <div class="name">LA LIGA</div>
+            </div>
+            <div class="league-card" onclick="selectLeague('seriaa')">
+                <div class="flag">🇮🇹</div>
+                <div class="name">SERIE A</div>
+            </div>
+            <div class="league-card" onclick="selectLeague('bundesliga')">
+                <div class="flag">🇩🇪</div>
+                <div class="name">BUNDESLIGA</div>
+            </div>
+            <div class="league-card" onclick="selectLeague('ligue1')">
+                <div class="flag">🇫🇷</div>
+                <div class="name">LIGUE 1</div>
+            </div>
+            <div class="league-card" onclick="selectLeague('champions')">
+                <div class="flag">🌍</div>
+                <div class="name">CHAMPIONS LEAGUE</div>
+            </div>
+            <div class="league-card" onclick="selectLeague('asia')">
+                <div class="flag">🌏</div>
+                <div class="name">ASIA LEAGUE</div>
+            </div>
+            <div class="league-card" onclick="selectLeague('worldcup')">
+                <div class="flag">🏆</div>
+                <div class="name">WORLD CUP</div>
+            </div>
+        </div>
+        <button class="btn btn-small" style="margin-top: 20px;" onclick="showMenu()">← KEMBALI</button>
+    </div>
+
+    <!-- Team Selection -->
+    <div id="teamScreen">
+        <h2>👥 PILIH TIM</h2>
+        <p id="leagueLabel" style="color: #ffd700; margin-bottom: 15px;"></p>
+        <div class="team-grid" id="teamGrid"></div>
+        <button class="btn btn-small" style="margin-top: 20px;" onclick="startMatch()">⚽ MULAI MATCH!</button>
+        <button class="btn btn-small" onclick="showLeagueScreen()">← KEMBALI</button>
+    </div>
+
+    <!-- Match Screen -->
+    <div id="matchScreen">
+        <div id="hud">
+            <div class="hud-team">
+                <span id="hudHomeName">PERSIB</span>
+                <span id="homeCrest">🔵</span>
+            </div>
+            <div class="hud-score">
+                <span id="homeScore">0</span> - <span id="awayScore">0</span>
+            </div>
+            <div class="hud-team">
+                <span id="awayCrest">🔴</span>
+                <span id="awayName">OPPONENT</span>
+            </div>
+            <div class="hud-time" id="matchTime">00:00</div>
+        </div>
+        <div id="commentary">Match dimulai! 🏟️</div>
+        <div id="controls">
+            <strong>CONTROLS:</strong><br>
+            ↑↓←→ : Gerak<br>
+            SPACE : Tendang/Shoot<br>
+            S : Pass<br>
+            D : Tackle<br>
+            W : Sprint<br>
+            ESC : Pause
+        </div>
+        <canvas id="minimap"></canvas>
+    </div>
+
+    <!-- Game Over -->
+    <div id="gameOverScreen">
+        <div class="scoreboard">
+            <h2>🏁 FULL TIME 🏁</h2>
+            <div class="final-score">
+                <span id="finalHome">0</span> - <span id="finalAway">0</span>
+            </div>
+            <p id="matchResult" style="font-size: 1.2em; margin-bottom: 20px;"></p>
+            <button class="btn" onclick="showMenu()">🏠 MENU UTAMA</button>
+            <button class="btn" onclick="restartMatch()">🔄 MAIN LAGI</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const minimapCanvas = document.getElementById('minimap');
+const minimapCtx = minimapCanvas.getContext('2d');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+minimapCanvas.width = 200;
+minimapCanvas.height = 120;
+
+window.addEventListener('resize', () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+});
+
+// Game State
+let gameState = 'menu';
+let currentLeague = '';
+let selectedTeam = null;
+let opponentTeam = null;
+let matchTime = 0;
+let homeScore = 0;
+let awayScore = 0;
+let matchPaused = false;
+let goalAnimation = false;
+let goalTimer = 0;
+
+// League Data
+const leagues = {
+    liga1: {
+        name: 'Liga 1 Indonesia',
+        teams: [
+            { name: 'Persib Bandung', crest: '🔵', color: '#0066ff', rating: 85 },
+            { name: 'Persija Jakarta', crest: '🔴', color: '#ff0000', rating: 82 },
+            { name: 'Bali United', crest: '🟡', color: '#ffcc00', rating: 80 },
+            { name: 'Persik Kediri', crest: '🟢', color: '#00cc00', rating: 78 },
+            { name: 'Arema FC', crest: '🟣', color: '#9900cc', rating: 77 },
+            { name: 'Borneo FC', crest: '⚫', color: '#333333', rating: 76 },
+            { name: 'PSM Makassar', crest: '🟠', color: '#ff6600', rating: 75 },
+            { name: 'Madura United', crest: '🔵', color: '#0033cc', rating: 74 },
+            { name: 'Persis Solo', crest: '🟤', color: '#8B4513', rating: 73 },
+            { name: 'PSS Sleman', crest: '🟡', color: '#ffff00', rating: 72 },
+            { name: 'Persebaya', crest: '🟢', color: '#00ff00', rating: 79 },
+            { name: 'PSIS Semarang', crest: '🔵', color: '#0000ff', rating: 74 }
+        ]
+    },
+    premier: {
+        name: 'Premier League',
+        teams: [
+            { name: 'Man City', crest: '🔵', color: '#6CABDD', rating: 92 },
+            { name: 'Arsenal', crest: '🔴', color: '#EF0107', rating: 90 },
+            { name: 'Liverpool', crest: '🔴', color: '#C8102E', rating: 91 },
+            { name: 'Man United', crest: '🔴', color: '#DA291C', rating: 87 },
+            { name: 'Chelsea', crest: '🔵', color: '#034694', rating: 86 },
+            { name: 'Tottenham', crest: '⚪', color: '#132257', rating: 84 },
+            { name: 'Newcastle', crest: '⚫', color: '#241F20', rating: 83 },
+            { name: 'Aston Villa', crest: '🟤', color: '#670E36', rating: 82 }
+        ]
+    },
+    laliga: {
+        name: 'La Liga',
+        teams: [
+            { name: 'Real Madrid', crest: '⚪', color: '#FEBE10', rating: 93 },
+            { name: 'Barcelona', crest: '🔵', color: '#A50044', rating: 91 },
+            { name: 'Atletico Madrid', crest: '🔴', color: '#CE3524', rating: 87 },
+            { name: 'Real Sociedad', crest: '🔵', color: '#0067B1', rating: 83 },
+            { name: 'Athletic Bilbao', crest: '🔴', color: '#EE2523', rating: 82 },
+            { name: 'Villarreal', crest: '🟡', color: '#FFE114', rating: 81 },
+            { name: 'Real Betis', crest: '🟢', color: '#00954C', rating: 80 },
+            { name: 'Sevilla', crest: '⚪', color: '#F43333', rating: 81 }
+        ]
+    },
+    seriaa: {
+        name: 'Serie A',
+        teams: [
+            { name: 'Inter Milan', crest: '🔵', color: '#0068A8', rating: 89 },
+            { name: 'AC Milan', crest: '🔴', color: '#FB090B', rating: 87 },
+            { name: 'Juventus', crest: '⚪', color: '#000000', rating: 86 },
+            { name: 'Napoli', crest: '🔵', color: '#12A0D7', rating: 85 },
+            { name: 'Roma', crest: '🟤', color: '#8E1F2F', rating: 83 },
+            { name: 'Lazio', crest: '🔵', color: '#87D8F7', rating: 82 },
+            { name: 'Atalanta', crest: '🔵', color: '#1E71B8', rating: 84 },
+            { name: 'Fiorentina', crest: '🟣', color: '#482E92', rating: 80 }
+        ]
+    },
+    bundesliga: {
+        name: 'Bundesliga',
+        teams: [
+            { name: 'Bayern Munich', crest: '🔴', color: '#DC052D', rating: 91 },
+            { name: 'Dortmund', crest: '🟡', color: '#FDE100', rating: 87 },
+            { name: 'Leipzig', crest: '⚪', color: '#DD0741', rating: 85 },
+            { name: 'Leverkusen', crest: '🔴', color: '#E32221', rating: 88 },
+            { name: 'Frankfurt', crest: '⚫', color: '#E1000F', rating: 82 },
+            { name: 'Freiburg', crest: '⚫', color: '#000000', rating: 79 },
+            { name: 'Wolfsburg', crest: '🟢', color: '#65B32E', rating: 78 },
+            { name: 'Stuttgart', crest: '⚪', color: '#E32219', rating: 80 }
+        ]
+    },
+    ligue1: {
+        name: 'Ligue 1',
+        teams: [
+            { name: 'PSG', crest: '🔵', color: '#004170', rating: 90 },
+            { name: 'Marseille', crest: '⚪', color: '#2FAEE0', rating: 83 },
+            { name: 'Monaco', crest: '🔴', color: '#E7302B', rating: 82 },
+            { name: 'Lille', crest: '🔴', color: '#E2001A', rating: 80 },
+            { name: 'Lyon', crest: '⚪', color: '#1F3A8E', rating: 81 },
+            { name: 'Nice', crest: '⚫', color: '#000000', rating: 78 },
+            { name: 'Lens', crest: '🔴', color: '#FFDJ00', rating: 79 },
+            { name: 'Rennes', crest: '🔴', color: '#D3192C', rating: 78 }
+        ]
+    },
+    champions: {
+        name: 'Champions League',
+        teams: [
+            { name: 'Real Madrid', crest: '⚪', color: '#FEBE10', rating: 93 },
+            { name: 'Man City', crest: '🔵', color: '#6CABDD', rating: 92 },
+            { name: 'Bayern Munich', crest: '🔴', color: '#DC052D', rating: 91 },
+            { name: 'Barcelona', crest: '🔵', color: '#A50044', rating: 91 },
+            { name: 'Inter Milan', crest: '🔵', color: '#0068A8', rating: 89 },
+            { name: 'Arsenal', crest: '🔴', color: '#EF0107', rating: 90 },
+            { name: 'PSG', crest: '🔵', color: '#004170', rating: 90 },
+            { name: 'Liverpool', crest: '🔴', color: '#C8102E', rating: 91 }
+        ]
+    },
+    asia: {
+        name: 'Asia League',
+        teams: [
+            { name: 'Persib Bandung', crest: '🔵', color: '#0066ff', rating: 85 },
+            { name: 'Urawa Reds', crest: '🔴', color: '#E60012', rating: 82 },
+            { name: 'Jeonbuk', crest: '🟡', color: '#FFD700', rating: 80 },
+            { name: 'Al Hilal', crest: '🔵', color: '#0055A4', rating: 86 },
+            { name: 'Ulsan HD', crest: '🟡', color: '#FFC72C', rating: 81 },
+            { name: 'Yokohama FM', crest: '🔵', color: '#0066B2', rating: 79 },
+            { name: 'Shanghai SIPG', crest: '🔴', color: '#FF0000', rating: 78 },
+            { name: 'Guangzhou', crest: '🟡', color: '#FFD700', rating: 75 }
+        ]
+    },
+    worldcup: {
+        name: 'World Cup',
+        teams: [
+            { name: 'Argentina', crest: '🇦🇷', color: '#75AADB', rating: 92 },
+            { name: 'France', crest: '🇫🇷', color: '#002395', rating: 91 },
+            { name: 'Brazil', crest: '🇧🇷', color: '#009739', rating: 90 },
+            { name: 'England', crest: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', color: '#FFFFFF', rating: 89 },
+            { name: 'Germany', crest: '🇩🇪', color: '#000000', rating: 88 },
+            { name: 'Spain', crest: '🇪🇸', color: '#C60B1E', rating: 89 },
+            { name: 'Indonesia', crest: '🇮🇩', color: '#FF0000', rating: 75 },
+            { name: 'Japan', crest: '🇯🇵', color: '#BC002D', rating: 83 }
+        ]
+    }
+};
+
+// Ball
+let ball = { x: 0, y: 0, vx: 0, vy: 0, radius: 8, owner: null };
+
+// Players
+let homeTeam = [];
+let awayTeam = [];
+let playerIndex = 0;
+
+// Field dimensions
+const FIELD = {
+    width: 1200,
+    height: 800,
+    goalWidth: 140,
+    goalDepth: 40
+};
+
+// Input
+const keys = {};
+window.addEventListener('keydown', (e) => {
+    keys[e.key] = true;
+    if (e.key === 'Escape' && gameState === 'playing') {
+        matchPaused = !matchPaused;
+    }
+});
+window.addEventListener('keyup', (e) => { keys[e.key] = false; });
+
+// Navigation
+function showMenu() {
+    gameState = 'menu';
+    document.getElementById('menuScreen').style.display = 'flex';
+    document.getElementById('leagueScreen').style.display = 'none';
+    document.getElementById('teamScreen').style.display = 'none';
+    document.getElementById('matchScreen').style.display = 'none';
+    document.getElementById('gameOverScreen').style.display = 'none';
+}
+
+function showLeagueScreen() {
+    gameState = 'league';
+    document.getElementById('menuScreen').style.display = 'none';
+    document.getElementById('leagueScreen').style.display = 'flex';
+    document.getElementById('teamScreen').style.display = 'none';
+    document.getElementById('matchScreen').style.display = 'none';
+}
+
+function showTeamScreen() {
+    gameState = 'team';
+    document.getElementById('menuScreen').style.display = 'none';
+    document.getElementById('leagueScreen').style.display = 'none';
+    document.getElementById('teamScreen').style.display = 'flex';
+    document.getElementById('matchScreen').style.display = 'none';
+    if (currentLeague) {
+        document.getElementById('leagueLabel').textContent = leagues[currentLeague].name;
+        renderTeamGrid();
+    }
+}
+
+function showInstructions() {
+    alert('CONTROLS:\n\n↑↓←→ : Gerakkan pemain\nSPACE : Tendang/Shoot\nS : Pass ke teman tim\nD : Tackle\nW : Sprint\nESC : Pause/Resume\n\nTujuan: Skor lebih banyak dari lawan!\n\nPersib Bandung - The Best The Best! 🔵');
+}
+
+function selectLeague(league) {
+    currentLeague = league;
+    showTeamScreen();
+}
+
+function renderTeamGrid() {
+    const grid = document.getElementById('teamGrid');
+    grid.innerHTML = '';
+    leagues[currentLeague].teams.forEach((team, index) => {
+        const card = document.createElement('div');
+        card.className = 'team-card' + (selectedTeam === index ? ' selected' : '');
+        card.innerHTML = `
+            <div class="crest">${team.crest}</div>
+            <div class="tname">${team.name}</div>
+            <div class="rating">⭐ ${team.rating}</div>
+        `;
+        card.onclick = () => {
+            selectedTeam = index;
+            renderTeamGrid();
+        };
+        grid.appendChild(card);
+    });
+}
+
+function startMatch() {
+    if (selectedTeam === null) {
+        alert('Pilih tim terlebih dahulu!');
+        return;
+    }
+
+    gameState = 'playing';
+    homeScore = 0;
+    awayScore = 0;
+    matchTime = 0;
+    matchPaused = false;
+
+    const league = leagues[currentLeague];
+    homeTeam = league.teams[selectedTeam];
+
+    // Random opponent
+    let oppIndex;
+    do {
+        oppIndex = Math.floor(Math.random() * league.teams.length);
+    } while (oppIndex === selectedTeam);
+    opponentTeam = league.teams[oppIndex];
+
+    // Setup HUD
+    document.getElementById('hudHomeName').textContent = homeTeam.name;
+    document.getElementById('homeCrest').textContent = homeTeam.crest;
+    document.getElementById('awayName').textContent = opponentTeam.name;
+    document.getElementById('awayCrest').textContent = opponentTeam.crest;
+    document.getElementById('homeScore').textContent = '0';
+    document.getElementById('awayScore').textContent = '0';
+
+    // Initialize players
+    initPlayers();
+
+    // Show match screen
+    document.getElementById('menuScreen').style.display = 'none';
+    document.getElementById('leagueScreen').style.display = 'none';
+    document.getElementById('teamScreen').style.display = 'none';
+    document.getElementById('matchScreen').style.display = 'flex';
+    document.getElementById('gameOverScreen').style.display = 'none';
+
+    setCommentary(`Match dimulai! ${homeTeam.name} vs ${opponentTeam.name} ⚽`);
+}
+
+function initPlayers() {
+    homeTeam = [];
+    awayTeam = [];
+
+    // Home team formation (4-4-2)
+    const homePositions = [
+        { x: 0.05, y: 0.5 }, // GK
+        { x: 0.2, y: 0.15 }, { x: 0.2, y: 0.4 }, { x: 0.2, y: 0.6 }, { x: 0.2, y: 0.85 }, // DEF
+        { x: 0.4, y: 0.15 }, { x: 0.4, y: 0.4 }, { x: 0.4, y: 0.6 }, { x: 0.4, y: 0.85 }, // MID
+        { x: 0.55, y: 0.35 }, { x: 0.55, y: 0.65 } // FWD
+    ];
+
+    const awayPositions = [
+        { x: 0.95, y: 0.5 }, // GK
+        { x: 0.8, y: 0.15 }, { x: 0.8, y: 0.4 }, { x: 0.8, y: 0.6 }, { x: 0.8, y: 0.85 }, // DEF
+        { x: 0.6, y: 0.15 }, { x: 0.6, y: 0.4 }, { x: 0.6, y: 0.6 }, { x: 0.6, y: 0.85 }, // MID
+        { x: 0.45, y: 0.35 }, { x: 0.45, y: 0.65 } // FWD
+    ];
+
+    homePositions.forEach((pos, i) => {
+        homeTeam.push({
+            x: pos.x * FIELD.width,
+            y: pos.y * FIELD.height,
+            vx: 0, vy: 0,
+            targetX: pos.x * FIELD.width,
+            targetY: pos.y * FIELD.height,
+            radius: 15,
+            team: 'home',
+            index: i,
+            speed: 3 + Math.random() * 1.5,
+            hasBall: false,
+            cooldown: 0
+        });
+    });
+
+    awayPositions.forEach((pos, i) => {
+        awayTeam.push({
+            x: pos.x * FIELD.width,
+            y: pos.y * FIELD.height,
+            vx: 0, vy: 0,
+            targetX: pos.x * FIELD.width,
+            targetY: pos.y * FIELD.height,
+            radius: 15,
+            team: 'away',
+            index: i,
+            speed: 2.5 + Math.random() * 1.5,
+            hasBall: false,
+            cooldown: 0
+        });
+    });
+
+    playerIndex = 10; // Start with forward
+    resetBall();
+}
+
+function resetBall() {
+    ball.x = FIELD.width / 2;
+    ball.y = FIELD.height / 2;
+    ball.vx = 0;
+    ball.vy = 0;
+    ball.owner = null;
+}
+
+function resetPositions() {
+    homeTeam.forEach((p, i) => {
+        const homePositions = [
+            { x: 0.05, y: 0.5 }, { x: 0.2, y: 0.15 }, { x: 0.2, y: 0.4 },
+            { x: 0.2, y: 0.6 }, { x: 0.2, y: 0.85 }, { x: 0.4, y: 0.15 },
+            { x: 0.4, y: 0.4 }, { x: 0.4, y: 0.6 }, { x: 0.4, y: 0.85 },
+            { x: 0.55, y: 0.35 }, { x: 0.55, y: 0.65 }
+        ];
+        p.x = homePositions[i].x * FIELD.width;
+        p.y = homePositions[i].y * FIELD.height;
+        p.targetX = p.x;
+        p.targetY = p.y;
+    });
+
+    awayTeam.forEach((p, i) => {
+        const awayPositions = [
+            { x: 0.95, y: 0.5 }, { x: 0.8, y: 0.15 }, { x: 0.8, y: 0.4 },
+            { x: 0.8, y: 0.6 }, { x: 0.8, y: 0.85 }, { x: 0.6, y: 0.15 },
+            { x: 0.6, y: 0.4 }, { x: 0.6, y: 0.6 }, { x: 0.6, y: 0.85 },
+            { x: 0.45, y: 0.35 }, { x: 0.45, y: 0.65 }
+        ];
+        p.x = awayPositions[i].x * FIELD.width;
+        p.y = awayPositions[i].y * FIELD.height;
+        p.targetX = p.x;
+        p.targetY = p.y;
+    });
+
+    resetBall();
+}
+
+function getClosestPlayer(team, tx, ty) {
+    let closest = null;
+    let minDist = Infinity;
+    team.forEach(p => {
+        const dist = Math.hypot(p.x - tx, p.y - ty);
+        if (dist < minDist) {
+            minDist = dist;
+            closest = p;
+        }
+    });
+    return closest;
+}
+
+function updateBall() {
+    // Ball friction
+    ball.vx *= 0.98;
+    ball.vy *= 0.98;
+
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+
+    // Ball bounds
+    if (ball.y < ball.radius) { ball.y = ball.radius; ball.vy *= -0.5; }
+    if (ball.y > FIELD.height - ball.radius) { ball.y = FIELD.height - ball.radius; ball.vy *= -0.5; }
+
+    // Goal detection
+    if (ball.x < FIELD.goalDepth && ball.y > (FIELD.height - FIELD.goalWidth) / 2 && ball.y < (FIELD.height + FIELD.goalWidth) / 2) {
+        // Goal for away team
+        awayScore++;
+        document.getElementById('awayScore').textContent = awayScore;
+        showGoalAnimation(opponentTeam.name);
+        setCommentary(`GOOOOL! ${opponentTeam.name} mencetak gol! ⚽🔴`);
+        resetPositions();
+        return;
+    }
+    if (ball.x > FIELD.width - FIELD.goalDepth && ball.y > (FIELD.height - FIELD.goalWidth) / 2 && ball.y < (FIELD.height + FIELD.goalWidth) / 2) {
+        // Goal for home team
+        homeScore++;
+        document.getElementById('homeScore').textContent = homeScore;
+        showGoalAnimation(homeTeam.name);
+        setCommentary(`GOOOOL! ${homeTeam.name} mencetak gol! ⚽🔵`);
+        resetPositions();
+        return;
+    }
+
+    // Side bounds
+    if (ball.x < ball.radius) { ball.x = ball.radius; ball.vx *= -0.5; }
+    if (ball.x > FIELD.width - ball.radius) { ball.x = FIELD.width - ball.radius; ball.vx *= -0.5; }
+
+    // Player-ball collision
+    [...homeTeam, ...awayTeam].forEach(p => {
+        const dist = Math.hypot(p.x - ball.x, p.y - ball.y);
+        if (dist < p.radius + ball.radius) {
+            if (!ball.owner) {
+                ball.owner = p;
+            }
+            if (ball.owner === p) {
+                // Dribbling
+                const angle = Math.atan2(p.vy, p.vx);
+                ball.x = p.x + Math.cos(angle) * (p.radius + ball.radius + 5);
+                ball.y = p.y + Math.sin(angle) * (p.radius + ball.radius + 5);
+                ball.vx = p.vx * 0.8;
+                ball.vy = p.vy * 0.8;
+            }
+        }
+    });
+}
+
+function updateHomePlayer() {
+    const p = homeTeam[playerIndex];
+    let speed = p.speed;
+    if (keys['w'] || keys['W']) speed *= 1.5;
+
+    if (keys['ArrowUp']) p.vy = -speed;
+    else if (keys['ArrowDown']) p.vy = speed;
+    else p.vy *= 0.8;
+
+    if (keys['ArrowLeft']) p.vx = -speed;
+    else if (keys['ArrowRight']) p.vx = speed;
+    else p.vx *= 0.8;
+
+    p.x += p.vx;
+    p.y += p.vy;
+
+    // Bounds
+    p.x = Math.max(p.radius, Math.min(FIELD.width - p.radius, p.x));
+    p.y = Math.max(p.radius, Math.min(FIELD.height - p.radius, p.y));
+
+    // Shoot
+    if (keys[' '] && ball.owner === p) {
+        const goalX = FIELD.width;
+        const goalY = FIELD.height / 2 + (Math.random() - 0.5) * FIELD.goalWidth * 0.6;
+        const angle = Math.atan2(goalY - p.y, goalX - p.x);
+        ball.vx = Math.cos(angle) * 12;
+        ball.vy = Math.sin(angle) * 12;
+        ball.owner = null;
+        keys[' '] = false;
+        setCommentary(`${homeTeam.name} menendang! 💥`);
+    }
+
+    // Pass
+    if ((keys['s'] || keys['S']) && ball.owner === p) {
+        // Find closest teammate in front
+        let bestTeammate = null;
+        let bestDist = Infinity;
+        homeTeam.forEach(t => {
+            if (t !== p && t.x > p.x) {
+                const dist = Math.hypot(t.x - p.x, t.y - p.y);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestTeammate = t;
+                }
+            }
+        });
+        if (bestTeammate) {
+            const angle = Math.atan2(bestTeammate.y - p.y, bestTeammate.x - p.x);
+            ball.vx = Math.cos(angle) * 8;
+            ball.vy = Math.sin(angle) * 8;
+            ball.owner = null;
+            keys['s'] = false;
+            keys['S'] = false;
+            setCommentary(`${homeTeam.name} melakukan pass! 🎯`);
+        }
+    }
+
+    // Tackle
+    if ((keys['d'] || keys['D']) && ball.owner && ball.owner.team === 'away') {
+        const dist = Math.hypot(p.x - ball.owner.x, p.y - ball.owner.y);
+        if (dist < p.radius + ball.owner.radius + 10) {
+            ball.owner = null;
+            ball.vx = (Math.random() - 0.5) * 5;
+            ball.vy = (Math.random() - 0.5) * 5;
+            keys['d'] = false;
+            keys['D'] = false;
+            setCommentary('Tackle berhasil! 💪');
+        }
+    }
+
+    // Switch player
+    if (keys['q'] || keys['Q']) {
+        const closest = getClosestPlayer(homeTeam, ball.x, ball.y);
+        if (closest) {
+            playerIndex = closest.index;
+            keys['q'] = false;
+            keys['Q'] = false;
+        }
+    }
+}
+
+function updateAI(team, isHome) {
+    team.forEach(p => {
+        if (p === (isHome ? homeTeam[playerIndex] : null)) return;
+
+        let targetX, targetY;
+        const ballDist = Math.hypot(p.x - ball.x, p.y - ball.y);
+
+        if (ball.owner === p) {
+            // Has ball - move towards opponent goal
+            if (isHome) {
+                targetX = FIELD.width - 100;
+                targetY = FIELD.height / 2 + (Math.random() - 0.5) * 200;
+            } else {
+                targetX = 100;
+                targetY = FIELD.height / 2 + (Math.random() - 0.5) * 200;
+            }
+
+            // Shoot if close to goal
+            if (isHome && p.x > FIELD.width - 200) {
+                const angle = Math.atan2(FIELD.height / 2 - p.y, FIELD.width - p.x);
+                ball.vx = Math.cos(angle) * 10;
+                ball.vy = Math.sin(angle) * 10;
+                ball.owner = null;
+            } else if (!isHome && p.x < 200) {
+                const angle = Math.atan2(FIELD.height / 2 - p.y, -p.x);
+                ball.vx = Math.cos(angle) * 10;
+                ball.vy = Math.sin(angle) * 10;
+                ball.owner = null;
+            }
+        } else if (ball.owner && ball.owner.team === (isHome ? 'away' : 'home')) {
+            // Defend - chase ball owner
+            targetX = ball.owner.x;
+            targetY = ball.owner.y;
+        } else {
+            // Return to formation
+            const formationX = isHome ? (0.2 + p.index * 0.07) : (0.8 - p.index * 0.07);
+            targetX = formationX * FIELD.width;
+            targetY = (0.15 + p.index * 0.1) * FIELD.height;
+        }
+
+        // Move towards target
+        const dx = targetX - p.x;
+        const dy = targetY - p.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 5) {
+            p.vx = (dx / dist) * p.speed * 0.7;
+            p.vy = (dy / dist) * p.speed * 0.7;
+        } else {
+            p.vx *= 0.8;
+            p.vy *= 0.8;
+        }
+
+        p.x += p.vx;
+        p.y += p.vy;
+
+        // Bounds
+        p.x = Math.max(p.radius, Math.min(FIELD.width - p.radius, p.x));
+        p.y = Math.max(p.radius, Math.min(FIELD.height - p.radius, p.y));
+
+        // AI tackle
+        if (ball.owner && ball.owner.team !== p.team) {
+            const distToOwner = Math.hypot(p.x - ball.owner.x, p.y - ball.owner.y);
+            if (distToOwner < p.radius + ball.owner.radius + 5 && Math.random() < 0.02) {
+                ball.owner = null;
+                ball.vx = (Math.random() - 0.5) * 6;
+                ball.vy = (Math.random() - 0.5) * 6;
+            }
+        }
+    });
+}
+
+function drawField() {
+    // Field background
+    ctx.fillStyle = '#2d8a4e';
+    ctx.fillRect(0, 0, FIELD.width, FIELD.height);
+
+    // Field pattern
+    for (let i = 0; i < FIELD.width; i += 100) {
+        ctx.fillStyle = i % 200 === 0 ? '#2d8a4e' : '#339955';
+        ctx.fillRect(i, 0, 100, FIELD.height);
+    }
+
+    // Field border
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(50, 50, FIELD.width - 100, FIELD.height - 100);
+
+    // Center line
+    ctx.beginPath();
+    ctx.moveTo(FIELD.width / 2, 50);
+    ctx.lineTo(FIELD.width / 2, FIELD.height - 50);
+    ctx.stroke();
+
+    // Center circle
+    ctx.beginPath();
+    ctx.arc(FIELD.width / 2, FIELD.height / 2, 70, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Center dot
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(FIELD.width / 2, FIELD.height / 2, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Goals
+    // Left goal
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillRect(0, (FIELD.height - FIELD.goalWidth) / 2, FIELD.goalDepth, FIELD.goalWidth);
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(0, (FIELD.height - FIELD.goalWidth) / 2, FIELD.goalDepth, FIELD.goalWidth);
+
+    // Right goal
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillRect(FIELD.width - FIELD.goalDepth, (FIELD.height - FIELD.goalWidth) / 2, FIELD.goalDepth, FIELD.goalWidth);
+    ctx.strokeRect(FIELD.width - FIELD.goalDepth, (FIELD.height - FIELD.goalWidth) / 2, FIELD.goalDepth, FIELD.goalWidth);
+
+    // Penalty areas
+    ctx.strokeRect(50, (FIELD.height - 300) / 2, 120, 300);
+    ctx.strokeRect(FIELD.width - 170, (FIELD.height - 300) / 2, 120, 300);
+}
+
+function drawPlayer(p, isHome) {
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y + p.radius, p.radius * 0.8, p.radius * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Player body
+    ctx.fillStyle = isHome ? homeTeam.color : opponentTeam.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Player border
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Player number
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(p.index + 1, p.x, p.y);
+
+    // Selected player indicator
+    if (isHome && p === homeTeam[playerIndex]) {
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius + 5, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Arrow
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y - p.radius - 15);
+        ctx.lineTo(p.x - 8, p.y - p.radius - 25);
+        ctx.lineTo(p.x + 8, p.y - p.radius - 25);
+        ctx.closePath();
+        ctx.fill();
+    }
+}
+
+function drawBall() {
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(ball.x, ball.y + ball.radius, ball.radius * 0.8, ball.radius * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ball
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ball pattern
+    ctx.fillStyle = '#333';
+    ctx.beginPath();
+    ctx.arc(ball.x - 3, ball.y - 3, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(ball.x + 3, ball.y + 3, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ball outline
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+    ctx.stroke();
+}
+
+function drawMinimap() {
+    minimapCtx.fillStyle = '#2d8a4e';
+    minimapCtx.fillRect(0, 0, 200, 120);
+
+    const scaleX = 200 / FIELD.width;
+    const scaleY = 120 / FIELD.height;
+
+    // Draw players on minimap
+    homeTeam.forEach(p => {
+        minimapCtx.fillStyle = homeTeam.color;
+        minimapCtx.beginPath();
+        minimapCtx.arc(p.x * scaleX, p.y * scaleY, 3, 0, Math.PI * 2);
+        minimapCtx.fill();
+    });
+
+    awayTeam.forEach(p => {
+        minimapCtx.fillStyle = opponentTeam.color;
+        minimapCtx.beginPath();
+        minimapCtx.arc(p.x * scaleX, p.y * scaleY, 3, 0, Math.PI * 2);
+        minimapCtx.fill();
+    });
+
+    // Ball on minimap
+    minimapCtx.fillStyle = 'white';
+    minimapCtx.beginPath();
+    minimapCtx.arc(ball.x * scaleX, ball.y * scaleY, 2, 0, Math.PI * 2);
+    minimapCtx.fill();
+}
+
+function showGoalAnimation(teamName) {
+    goalAnimation = true;
+    goalTimer = 120;
+
+    const div = document.createElement('div');
+    div.className = 'goal-animation';
+    div.textContent = '⚽ GOOL! ⚽';
+    document.getElementById('matchScreen').appendChild(div);
+
+    setTimeout(() => div.remove(), 2000);
+}
+
+function setCommentary(text) {
+    document.getElementById('commentary').textContent = text;
+}
+
+function updateMatchTime() {
+    matchTime += 1/60; // 1 second per real second
+    const minutes = Math.floor(matchTime / 60);
+    const seconds = Math.floor(matchTime % 60);
+    document.getElementById('matchTime').textContent =
+        `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+    // End match at 90 seconds (simulated 90 minutes)
+    if (matchTime >= 90) {
+        endMatch();
+    }
+}
+
+function endMatch() {
+    gameState = 'gameover';
+    document.getElementById('matchScreen').style.display = 'none';
+    document.getElementById('gameOverScreen').style.display = 'flex';
+    document.getElementById('finalHome').textContent = homeScore;
+    document.getElementById('finalAway').textContent = awayScore;
+
+    let result = '';
+    if (homeScore > awayScore) {
+        result = `🏆 ${homeTeam.name} MENANG! 🎉`;
+    } else if (awayScore > homeScore) {
+        result = `😞 ${opponentTeam.name} Menang. Semangat!`;
+    } else {
+        result = '🤝 Seri! Pertandingan yang seru!';
+    }
+    document.getElementById('matchResult').textContent = result;
+}
+
+function restartMatch() {
+    startMatch();
+}
+
+function gameLoop() {
+    if (gameState === 'playing' && !matchPaused) {
+        updateHomePlayer();
+        updateAI(homeTeam, true);
+        updateAI(awayTeam, false);
+        updateBall();
+        updateMatchTime();
+    }
+
+    // Draw
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (gameState === 'playing' || gameState === 'gameover') {
+        // Scale field to fit canvas
+        const scale = Math.min(canvas.width / FIELD.width, canvas.height / FIELD.height) * 0.9;
+        const offsetX = (canvas.width - FIELD.width * scale) / 2;
+        const offsetY = (canvas.height - FIELD.height * scale) / 2;
+
+        ctx.save();
+        ctx.translate(offsetX, offsetY);
+        ctx.scale(scale, scale);
+
+        drawField();
+
+        // Draw players
+        homeTeam.forEach(p => drawPlayer(p, true));
+        awayTeam.forEach(p => drawPlayer(p, false));
+
+        drawBall();
+
+        ctx.restore();
+
+        drawMinimap();
+    }
+
+    // Pause overlay
+    if (matchPaused && gameState === 'playing') {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('⏸️ PAUSED', canvas.width / 2, canvas.height / 2);
+        ctx.font = '24px Arial';
+        ctx.fillText('Tekan ESC untuk lanjut', canvas.width / 2, canvas.height / 2 + 50);
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+// Start game loop
+gameLoop();
+</script>
+</body>
+</html>

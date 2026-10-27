@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>3D Maze Runner - Owner: Noor Alam</title>
+<style>
+  :root {
+    --hud-bg: rgba(0,0,0,0.45);
+    --hud-border: rgba(255,255,255,0.25);
+    --text: #f4f7ff;
+    --accent: #66f2ff;
+  }
+
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    font-family: Arial, Helvetica, sans-serif;
+    color: var(--text);
+  }
+
+  #game {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+  }
+
+  .hud {
+    position: fixed;
+    left: 12px;
+    top: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--hud-border);
+    background: var(--hud-bg);
+    border-radius: 8px;
+    backdrop-filter: blur(3px);
+    font-size: 14px;
+    line-height: 1.4;
+    user-select: none;
+  }
+
+  .hud .title {
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .owner {
+    position: fixed;
+    right: 12px;
+    top: 12px;
+    padding: 8px 12px;
+    border: 1px solid var(--hud-border);
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 8px;
+    font-weight: 700;
+    color: #ffe08a;
+    user-select: none;
+  }
+
+  .centerMessage {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    text-align: center;
+    padding: 20px;
+  }
+
+  .centerMessage .box {
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(0,0,0,0.55);
+    padding: 18px 24px;
+    border-radius: 12px;
+    font-size: 20px;
+    font-weight: 700;
+    color: #eafff0;
+    text-shadow: 0 0 12px rgba(0,255,150,0.4);
+    opacity: 0;
+    transform: scale(0.96);
+    transition: 220ms ease;
+  }
+
+  .centerMessage.show .box {
+    opacity: 1;
+    transform: scale(1);
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="hud">
+  <div class="title">3D Maze Runner</div>
+  <div>Move: <b>W A S D</b> or Arrow Keys</div>
+  <div>Turn: <b>Q / E</b></div>
+  <div>Goal: Reach the glowing portal</div>
+  <div id="distInfo">Distance: --</div>
+</div>
+
+<div class="owner">Game Owner: Noor Alam</div>
+
+<div id="winMessage" class="centerMessage">
+  <div class="box">🎉 You escaped the maze!<br/>Press <b>R</b> to play again.</div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const distInfo = document.getElementById("distInfo");
+  const winMessage = document.getElementById("winMessage");
+
+  let W = 0, H = 0;
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  // Map legend:
+  // . = empty, 1/2/3 = walls, E = exit portal
+  const MAP_RAW = [
+    "11111111111111111111",
+    "1....2.............1",
+    "1.1112.1111111111..1",
+    "1....2.....3....1..1",
+    "1.11111111.3.11.1..1",
+    "1........1.3.1..1..1",
+    "1.11111..1.3.1.11..1",
+    "1.....1..1.3.1.....1",
+    "1.111.1..1.3.11111.1",
+    "1...1.1....3.......1",
+    "111.1.11111111111..1",
+    "1...1.........E....1",
+    "1.1111111111111111.1",
+    "1..................1",
+    "11111111111111111111"
+  ];
+
+  const map = MAP_RAW.map(row => row.split(""));
+  const mapH = map.length;
+  const mapW = map[0].length;
+
+  let goal = { x: 0, y: 0 };
+  for (let y = 0; y < mapH; y++) {
+    for (let x = 0; x < mapW; x++) {
+      if (map[y][x] === "E") {
+        goal.x = x + 0.5;
+        goal.y = y + 0.5;
+        map[y][x] = ".";
+      }
+    }
+  }
+
+  const player = {
+    x: 1.5,
+    y: 1.5,
+    a: 0
+  };
+
+  const FOV = Math.PI / 3; // 60 degrees
+  const MAX_DIST = 40;
+  const keys = {};
+  let won = false;
+
+  function resetGame() {
+    player.x = 1.5;
+    player.y = 1.5;
+    player.a = 0;
+    won = false;
+    winMessage.classList.remove("show");
+  }
+
+  window.addEventListener("keydown", (e) => {
+    keys[e.key.toLowerCase()] = true;
+    if (e.key.toLowerCase() === "r") resetGame();
+  });
+  window.addEventListener("keyup", (e) => {
+    keys[e.key.toLowerCase()] = false;
+  });
+
+  function isWall(x, y) {
+    const mx = Math.floor(x);
+    const my = Math.floor(y);
+    if (mx < 0 || my < 0 || mx >= mapW || my >= mapH) return true;
+    const c = map[my][mx];
+    return c !== ".";
+  }
+
+  function wallTypeAt(mx, my) {
+    if (mx < 0 || my < 0 || mx >= mapW || my >= mapH) return "1";
+    const c = map[my][mx];
+    return c === "." ? "1" : c;
+  }
+
+  function normalizeAngle(a) {
+    while (a < -Math.PI) a += Math.PI * 2;
+    while (a > Math.PI) a -= Math.PI * 2;
+    return a;
+  }
+
+  function castRay(rayA) {
+    const rayDirX = Math.cos(rayA);
+    const rayDirY = Math.sin(rayA);
+
+    let mapX = Math.floor(player.x);
+    let mapY = Math.floor(player.y);
+
+    const deltaDistX = Math.abs(1 / (rayDirX || 1e-9));
+    const deltaDistY = Math.abs(1 / (rayDirY || 1e-9));
+
+    let stepX, stepY;
+    let sideDistX, sideDistY;
+
+    if (rayDirX < 0) {
+      stepX = -1;
+      sideDistX = (player.x - mapX) * deltaDistX;
+    } else {
+      stepX = 1;
+      sideDistX = (mapX + 1 - player.x) * deltaDistX;
+    }
+
+    if (rayDirY < 0) {
+      stepY = -1;
+      sideDistY = (player.y - mapY) * deltaDistY;
+    } else {
+      stepY = 1;
+      sideDistY = (mapY + 1 - player.y) * deltaDistY;
+    }
+
+    let side = 0;
+    let hit = false;
+    let safe = 0;
+
+    while (!hit && safe < 128) {
+      safe++;
+      if (sideDistX < sideDistY) {
+        sideDistX += deltaDistX;
+        mapX += stepX;
+        side = 0;
+      } else {
+        sideDistY += deltaDistY;
+        mapY += stepY;
+        side = 1;
+      }
+
+      if (mapX < 0 || mapY < 0 || mapX >= mapW || mapY >= mapH) {
+        hit = true;
+        break;
+      }
+
+      if (map[mapY][mapX] !== ".") hit = true;
+    }
+
+    let perpWallDist;
+    if (side === 0) {
+      perpWallDist = (mapX - player.x + (1 - stepX) / 2) / (rayDirX || 1e-9);
+    } else {
+      perpWallDist = (mapY - player.y + (1 - stepY) / 2) / (rayDirY || 1e-9);
+    }
+
+    if (perpWallDist < 0.0001) perpWallDist = 0.0001;
+    if (perpWallDist > MAX_DIST) perpWallDist = MAX_DIST;
+
+    return {
+      dist: perpWallDist,
+      side,
+      wall: wallTypeAt(mapX, mapY)
+    };
+  }
+
+  function wallColor(type, shade) {
+    let r = 200, g = 200, b = 220;
+    if (type === "1") { r = 120; g = 175; b = 255; }
+    if (type === "2") { r = 255; g = 170; b = 120; }
+    if (type === "3") { r = 180; g = 255; b = 180; }
+    r = Math.max(0, Math.min(255, Math.floor(r * shade)));
+    g = Math.max(0, Math.min(255, Math.floor(g * shade)));
+    b = Math.max(0, Math.min(255, Math.floor(b * shade)));
+    return `rgb(${r},${g},${b})`;
+  }
+
+  function drawBackground() {
+    const sky = ctx.createLinearGradient(0, 0, 0, H * 0.55);
+    sky.addColorStop(0, "#0a132b");
+    sky.addColorStop(1, "#1a3e66");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H * 0.55);
+
+    const floor = ctx.createLinearGradient(0, H * 0.55, 0, H);
+    floor.addColorStop(0, "#2f2a24");
+    floor.addColorStop(1, "#0f0d0b");
+    ctx.fillStyle = floor;
+    ctx.fillRect(0, H * 0.55, W, H * 0.45);
+  }
+
+  function drawMinimap() {
+    const scale = 10;
+    const pad = 12;
+    const mw = mapW * scale;
+    const mh = mapH * scale;
+
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fillRect(pad - 4, H - mh - pad - 4, mw + 8, mh + 8);
+
+    for (let y = 0; y < mapH; y++) {
+      for (let x = 0; x < mapW; x++) {
+        const c = map[y][x];
+        if (c === ".") ctx.fillStyle = "#1c1f26";
+        else if (c === "1") ctx.fillStyle = "#5f8ecc";
+        else if (c === "2") ctx.fillStyle = "#c9895f";
+        else ctx.fillStyle = "#74bf74";
+        ctx.fillRect(pad + x * scale, H - mh - pad + y * scale, scale - 1, scale - 1);
+      }
+    }
+
+    // Goal
+    ctx.fillStyle = "#6affca";
+    ctx.beginPath();
+    ctx.arc(pad + goal.x * scale, H - mh - pad + goal.y * scale, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Player
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(pad + player.x * scale, H - mh - pad + player.y * scale, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "#fff";
+    ctx.beginPath();
+    ctx.moveTo(pad + player.x * scale, H - mh - pad + player.y * scale);
+    ctx.lineTo(
+      pad + (player.x + Math.cos(player.a) * 1.2) * scale,
+      H - mh - pad + (player.y + Math.sin(player.a) * 1.2) * scale
+    );
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawGoalSprite(depthBuffer, rays) {
+    const dx = goal.x - player.x;
+    const dy = goal.y - player.y;
+    const dist = Math.hypot(dx, dy);
+    const rel = normalizeAngle(Math.atan2(dy, dx) - player.a);
+
+    if (Math.abs(rel) > FOV * 0.7 || dist < 0.2 || dist > MAX_DIST) return;
+
+    const sx = (rel / (FOV / 2)) * (W / 2) + W / 2;
+    const size = Math.min(H * 1.2, H / dist);
+    const half = size / 2;
+    const top = H / 2 - half * 0.8;
+
+    const rayIndex = Math.floor((sx / W) * rays);
+    if (rayIndex < 0 || rayIndex >= depthBuffer.length) return;
+    if (dist > depthBuffer[rayIndex] + 0.1) return;
+
+    const glow = ctx.createRadialGradient(sx, top + half, 2, sx, top + half, half);
+    glow.addColorStop(0, "rgba(180,255,230,0.95)");
+    glow.addColorStop(0.5, "rgba(80,255,200,0.55)");
+    glow.addColorStop(1, "rgba(80,255,200,0.05)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(sx, top + half, half * 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function update(dt) {
+    if (won) return;
+
+    const moveSpeed = 2.7;
+    const rotSpeed = 1.9;
+
+    let forward = 0;
+    let strafe = 0;
+    let turn = 0;
+
+    if (keys["w"] || keys["arrowup"]) forward += 1;
+    if (keys["s"] || keys["arrowdown"]) forward -= 1;
+    if (keys["a"]) strafe -= 1;
+    if (keys["d"]) strafe += 1;
+    if (keys["arrowleft"] || keys["q"]) turn -= 1;
+    if (keys["arrowright"] || keys["e"]) turn += 1;
+
+    player.a = normalizeAngle(player.a + turn * rotSpeed * dt);
+
+    const dirX = Math.cos(player.a);
+    const dirY = Math.sin(player.a);
+    const sideX = Math.cos(player.a + Math.PI / 2);
+    const sideY = Math.sin(player.a + Math.PI / 2);
+
+    let vx = (dirX * forward + sideX * strafe) * moveSpeed * dt;
+    let vy = (dirY * forward + sideY * strafe) * moveSpeed * dt;
+
+    const nextX = player.x + vx;
+    const nextY = player.y + vy;
+
+    const r = 0.18;
+    if (!isWall(nextX + Math.sign(vx) * r, player.y) && !isWall(nextX, player.y + r) && !isWall(nextX, player.y - r)) {
+      player.x = nextX;
+    }
+    if (!isWall(player.x, nextY + Math.sign(vy) * r) && !isWall(player.x + r, nextY) && !isWall(player.x - r, nextY)) {
+      player.y = nextY;
+    }
+
+    const gd = Math.hypot(goal.x - player.x, goal.y - player.y);
+    distInfo.textContent = `Distance: ${gd.toFixed(2)}`;
+
+    if (gd < 0.45) {
+      won = true;
+      winMessage.classList.add("show");
+    }
+  }
+
+  function render() {
+    drawBackground();
+
+    const rays = Math.max(120, Math.floor(W / 2));
+    const colW = W / rays;
+    const depthBuffer = new Array(rays);
+
+    for (let i = 0; i < rays; i++) {
+      const camX = (i / rays) * 2 - 1;
+      const rayA = player.a + camX * (FOV / 2);
+      const hit = castRay(rayA);
+      depthBuffer[i] = hit.dist;
+
+      const lineH = Math.min(H * 1.6, H / hit.dist);
+      const y = (H - lineH) / 2;
+
+      const d = hit.dist;
+      let shade = 1 / (1 + d * d * 0.06);
+      shade = Math.max(0.18, Math.min(1, shade));
+      if (hit.side === 1) shade *= 0.78;
+
+      ctx.fillStyle = wallColor(hit.wall, shade);
+      ctx.fillRect(i * colW, y, colW + 1, lineH);
+    }
+
+    drawGoalSprite(depthBuffer, rays);
+    drawMinimap();
+
+    // Crosshair
+    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - 8, H / 2);
+    ctx.lineTo(W / 2 + 8, H / 2);
+    ctx.moveTo(W / 2, H / 2 - 8);
+    ctx.lineTo(W / 2, H / 2 + 8);
+    ctx.stroke();
+
+    if (won) {
+      ctx.fillStyle = "rgba(110,255,190,0.2)";
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  let last = performance.now();
+  function loop(now) {
+    const dt = Math.min(0.033, (now - last) / 1000);
+    last = now;
+    update(dt);
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  resetGame();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

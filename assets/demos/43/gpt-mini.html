@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Noor Alam - 3D Runner Game</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+      background: #050814;
+      font-family: Arial, Helvetica, sans-serif;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    canvas { display: block; }
+    #ui {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      color: white;
+    }
+    #topBar {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      font-weight: bold;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.65);
+      font-size: 14px;
+    }
+    .panel {
+      background: rgba(10, 18, 40, 0.42);
+      border: 1px solid rgba(255,255,255,0.14);
+      backdrop-filter: blur(8px);
+      border-radius: 14px;
+      padding: 10px 12px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+    }
+    #centerMsg {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      max-width: 90vw;
+      display: none;
+    }
+    #centerMsg h1 {
+      margin: 0 0 10px;
+      font-size: 42px;
+      line-height: 1;
+      letter-spacing: 1px;
+    }
+    #centerMsg p {
+      margin: 6px 0;
+      font-size: 16px;
+      opacity: 0.95;
+    }
+    #bottomHint {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      font-size: 13px;
+      opacity: 0.9;
+    }
+    .kbd {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.18);
+      margin: 0 2px;
+    }
+    #mobileControls {
+      position: absolute;
+      bottom: 18px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-between;
+      padding: 0 16px;
+      box-sizing: border-box;
+      gap: 12px;
+      pointer-events: auto;
+    }
+    .btn {
+      flex: 1;
+      height: 62px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(255,255,255,0.10);
+      color: white;
+      font-size: 18px;
+      font-weight: bold;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.22);
+    }
+    .btn:active {
+      transform: scale(0.98);
+      background: rgba(255,255,255,0.18);
+    }
+    #startOverlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at center, rgba(23,38,90,0.35), rgba(0,0,0,0.72));
+      pointer-events: auto;
+    }
+    #startCard {
+      width: min(560px, calc(100vw - 28px));
+      text-align: center;
+      padding: 22px;
+    }
+    #startCard h1 {
+      margin: 0 0 8px;
+      font-size: 40px;
+    }
+    #startCard .owner {
+      margin-top: 10px;
+      font-size: 14px;
+      opacity: 0.95;
+    }
+    #startCard button {
+      margin-top: 16px;
+      width: 100%;
+      height: 54px;
+      font-size: 18px;
+      font-weight: bold;
+      border: none;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #47d7ff, #7d5cff);
+      color: white;
+      box-shadow: 0 10px 25px rgba(71,215,255,0.25);
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div id="topBar">
+      <div class="panel">Score: <span id="score">0</span><br>Best: <span id="best">0</span></div>
+      <div class="panel">Speed: <span id="speed">0</span><br>Lives: <span id="lives">3</span></div>
+    </div>
+
+    <div id="centerMsg" class="panel">
+      <h1 id="msgTitle">Game Over</h1>
+      <p id="msgText">Tap Restart to play again.</p>
+    </div>
+
+    <div id="bottomHint" class="panel">
+      Move with <span class="kbd">A</span><span class="kbd">D</span> or <span class="kbd">←</span><span class="kbd">→</span>, Jump with <span class="kbd">Space</span>, Duck with <span class="kbd">S</span> or <span class="kbd">↓</span>
+    </div>
+
+    <div id="mobileControls">
+      <button class="btn" id="leftBtn">⬅ Left</button>
+      <button class="btn" id="jumpBtn">⤒ Jump</button>
+      <button class="btn" id="rightBtn">Right ➡</button>
+    </div>
+
+    <div id="startOverlay">
+      <div id="startCard" class="panel">
+        <h1>Neon Runner 3D</h1>
+        <div>Dash through the futuristic track, dodge obstacles, collect crystals, and survive as long as you can.</div>
+        <div class="owner">Game Owner: <strong>Noor Alam</strong></div>
+        <button id="startBtn">Start Game</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    let scene, camera, renderer, clock;
+    let player, playerHitbox, ground, sky;
+    let lanes = [-4, 0, 4];
+    let targetLane = 1;
+    let laneX = 0;
+    let speed = 0.35;
+    let score = 0;
+    let best = Number(localStorage.getItem('noor_alam_runner_best') || 0);
+    let lives = 3;
+    let gameRunning = false;
+    let gameOver = false;
+    let jumpVel = 0;
+    let onGround = true;
+    let ducking = false;
+    let obstacles = [];
+    let collectibles = [];
+    let particles = [];
+    let spawnTimer = 0;
+    let collectTimer = 0;
+    let shake = 0;
+    const gravity = 0.018;
+    const jumpStrength = 0.34;
+
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const speedEl = document.getElementById('speed');
+    const livesEl = document.getElementById('lives');
+    const startOverlay = document.getElementById('startOverlay');
+    const centerMsg = document.getElementById('centerMsg');
+    const msgTitle = document.getElementById('msgTitle');
+    const msgText = document.getElementById('msgText');
+    const startBtn = document.getElementById('startBtn');
+
+    bestEl.textContent = best;
+
+    function init() {
+      scene = new THREE.Scene();
+      scene.fog = new THREE.Fog(0x08111f, 18, 120);
+
+      camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 6.5, 14);
+      camera.lookAt(0, 2, -18);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      document.body.appendChild(renderer.domElement);
+
+      clock = new THREE.Clock();
+
+      const ambient = new THREE.AmbientLight(0x7aa5ff, 0.85);
+      scene.add(ambient);
+
+      const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+      dir.position.set(6, 14, 10);
+      dir.castShadow = true;
+      dir.shadow.mapSize.width = 2048;
+      dir.shadow.mapSize.height = 2048;
+      scene.add(dir);
+
+      const hemi = new THREE.HemisphereLight(0x8ac6ff, 0x12203e, 0.85);
+      scene.add(hemi);
+
+      const starGeo = new THREE.BufferGeometry();
+      const starCount = 1200;
+      const starPos = new Float32Array(starCount * 3);
+      for (let i = 0; i < starCount; i++) {
+        starPos[i * 3] = (Math.random() - 0.5) * 300;
+        starPos[i * 3 + 1] = Math.random() * 160 + 10;
+        starPos[i * 3 + 2] = (Math.random() - 0.5) * 300;
+      }
+      starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+      const starMat = new THREE.PointsMaterial({ color: 0xa8d8ff, size: 0.55, transparent: true, opacity: 0.9 });
+      const stars = new THREE.Points(starGeo, starMat);
+      scene.add(stars);
+
+      const groundGeo = new THREE.CylinderGeometry(14, 14, 220, 24, 1, false);
+      const groundMat = new THREE.MeshStandardMaterial({ color: 0x0b1633, roughness: 1, metalness: 0.15 });
+      ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.z = Math.PI / 2;
+      ground.position.z = -90;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      const trackGeo = new THREE.BoxGeometry(12, 0.3, 220);
+      const trackMat = new THREE.MeshStandardMaterial({ color: 0x111d44, roughness: 0.8, metalness: 0.3, emissive: 0x07102a, emissiveIntensity: 0.55 });
+      const track = new THREE.Mesh(trackGeo, trackMat);
+      track.position.set(0, 0.15, -90);
+      track.receiveShadow = true;
+      scene.add(track);
+
+      const stripGeo = new THREE.BoxGeometry(0.2, 0.05, 8);
+      const stripMat = new THREE.MeshStandardMaterial({ color: 0x48d8ff, emissive: 0x48d8ff, emissiveIntensity: 1.2 });
+      for (let i = 0; i < 24; i++) {
+        const strip = new THREE.Mesh(stripGeo, stripMat);
+        strip.position.set(-5.8, 0.21, -i * 9);
+        scene.add(strip);
+        const strip2 = strip.clone();
+        strip2.position.x = 0;
+        scene.add(strip2);
+        const strip3 = strip.clone();
+        strip3.position.x = 5.8;
+        scene.add(strip3);
+      }
+
+      const playerGeo = new THREE.CapsuleGeometry(0.75, 1.2, 6, 10);
+      const playerMat = new THREE.MeshStandardMaterial({ color: 0xffd166, emissive: 0x3b2200, emissiveIntensity: 0.35, roughness: 0.5, metalness: 0.1 });
+      player = new THREE.Mesh(playerGeo, playerMat);
+      player.position.set(0, 1.55, 4);
+      player.castShadow = true;
+      scene.add(player);
+
+      const visor = new THREE.Mesh(
+        new THREE.SphereGeometry(0.28, 18, 18),
+        new THREE.MeshStandardMaterial({ color: 0x9be7ff, emissive: 0x61d7ff, emissiveIntensity: 1.3 })
+      );
+      visor.position.set(0.18, 2.1, 4.42);
+      scene.add(visor);
+
+      window.addEventListener('resize', onResize);
+      window.addEventListener('keydown', onKeyDown);
+      document.getElementById('leftBtn').addEventListener('touchstart', () => moveLeft());
+      document.getElementById('rightBtn').addEventListener('touchstart', () => moveRight());
+      document.getElementById('jumpBtn').addEventListener('touchstart', () => jump());
+      document.getElementById('leftBtn').addEventListener('mousedown', () => moveLeft());
+      document.getElementById('rightBtn').addEventListener('mousedown', () => moveRight());
+      document.getElementById('jumpBtn').addEventListener('mousedown', () => jump());
+
+      startBtn.addEventListener('click', startGame);
+      animate();
+    }
+
+    function startGame() {
+      resetGame();
+      startOverlay.style.display = 'none';
+      gameRunning = true;
+      gameOver = false;
+      centerMsg.style.display = 'none';
+    }
+
+    function resetGame() {
+      for (const o of obstacles) scene.remove(o.mesh);
+      for (const c of collectibles) scene.remove(c.mesh);
+      obstacles = [];
+      collectibles = [];
+      particles = [];
+      score = 0;
+      speed = 0.35;
+      lives = 3;
+      targetLane = 1;
+      laneX = 0;
+      jumpVel = 0;
+      onGround = true;
+      ducking = false;
+      spawnTimer = 0;
+      collectTimer = 0;
+      shake = 0;
+      player.position.set(0, 1.55, 4);
+      player.scale.set(1, 1, 1);
+      updateHUD();
+    }
+
+    function updateHUD() {
+      scoreEl.textContent = Math.floor(score);
+      bestEl.textContent = best;
+      speedEl.textContent = speed.toFixed(2);
+      livesEl.textContent = lives;
+    }
+
+    function onKeyDown(e) {
+      if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') moveLeft();
+      if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') moveRight();
+      if (e.key === ' ' || e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') jump();
+      if (e.key === 'ArrowDown' || e.key.toLowerCase() === 's') duck(true);
+      if (!gameRunning && (e.key === 'Enter' || e.key === ' ')) startGame();
+    }
+
+    function moveLeft() { if (!gameRunning) return; targetLane = Math.max(0, targetLane - 1); }
+    function moveRight() { if (!gameRunning) return; targetLane = Math.min(2, targetLane + 1); }
+    function jump() {
+      if (!gameRunning || gameOver) return;
+      if (onGround) {
+        jumpVel = jumpStrength;
+        onGround = false;
+        player.rotation.z = 0;
+      }
+    }
+    function duck(state) {
+      if (!gameRunning) return;
+      ducking = state;
+      player.scale.y = state ? 0.6 : 1;
+      player.position.y = state ? 1.05 : (onGround ? 1.55 : player.position.y);
+    }
+
+    function spawnObstacle() {
+      const types = ['block', 'barrier', 'spike'];
+      const type = types[Math.floor(Math.random() * types.length)];
+      const lane = Math.floor(Math.random() * 3);
+      let mesh;
+      if (type === 'block') {
+        mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(1.8, 1.8, 1.8),
+          new THREE.MeshStandardMaterial({ color: 0xff5c8a, emissive: 0x3f0015, emissiveIntensity: 0.4 })
+        );
+        mesh.position.y = 0.9;
+      } else if (type === 'barrier') {
+        mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(2.6, 2.8, 0.9),
+          new THREE.MeshStandardMaterial({ color: 0x8a7dff, emissive: 0x1d134f, emissiveIntensity: 0.55 })
+        );
+        mesh.position.y = 1.4;
+      } else {
+        mesh = new THREE.Mesh(
+          new THREE.ConeGeometry(1.0, 2.0, 6),
+          new THREE.MeshStandardMaterial({ color: 0xff9f43, emissive: 0x3a1700, emissiveIntensity: 0.35 })
+        );
+        mesh.rotation.y = Math.PI / 6;
+        mesh.position.y = 1;
+      }
+      mesh.castShadow = true;
+      mesh.position.x = lanes[lane];
+      mesh.position.z = -120;
+      scene.add(mesh);
+      obstacles.push({ mesh, type, lane, hit: false });
+    }
+
+    function spawnCollectible() {
+      const lane = Math.floor(Math.random() * 3);
+      const mesh = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.55, 0),
+        new THREE.MeshStandardMaterial({ color: 0x49f2c2, emissive: 0x0a4e40, emissiveIntensity: 0.9, roughness: 0.2, metalness: 0.3 })
+      );
+      mesh.position.set(lanes[lane], 2.2 + Math.random() * 1.5, -120);
+      mesh.castShadow = true;
+      scene.add(mesh);
+      collectibles.push({ mesh, lane, collected: false });
+    }
+
+    function createBurst(x, y, z, color) {
+      for (let i = 0; i < 10; i++) {
+        const p = new THREE.Mesh(
+          new THREE.SphereGeometry(0.12, 8, 8),
+          new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.6 })
+        );
+        p.position.set(x, y, z);
+        p.userData = {
+          vx: (Math.random() - 0.5) * 0.45,
+          vy: Math.random() * 0.45,
+          vz: (Math.random() - 0.5) * 0.45,
+          life: 1
+        };
+        scene.add(p);
+        particles.push(p);
+      }
+    }
+
+    function hitPlayer() {
+      lives--;
+      shake = 0.5;
+      createBurst(player.position.x, player.position.y + 0.8, player.position.z, 0xff4d6d);
+      updateHUD();
+      if (lives <= 0) endGame();
+    }
+
+    function endGame() {
+      gameRunning = false;
+      gameOver = true;
+      centerMsg.style.display = 'block';
+      msgTitle.textContent = 'Game Over';
+      msgText.textContent = 'Your score: ' + Math.floor(score) + ' — Tap Restart to try again.';
+      startOverlay.style.display = 'grid';
+      startBtn.textContent = 'Restart Game';
+      if (score > best) {
+        best = Math.floor(score);
+        localStorage.setItem('noor_alam_runner_best', best);
+      }
+      updateHUD();
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta() * 60, 2);
+
+      if (gameRunning) {
+        speed += 0.0007 * dt;
+        score += speed * 0.9;
+        spawnTimer += dt;
+        collectTimer += dt;
+
+        if (spawnTimer > Math.max(18, 42 - speed * 16)) {
+          spawnTimer = 0;
+          spawnObstacle();
+          if (Math.random() < 0.7) spawnCollectible();
+        }
+
+        laneX += (lanes[targetLane] - laneX) * 0.18 * dt;
+        player.position.x = laneX;
+        player.rotation.y = (targetLane - 1) * -0.12;
+
+        if (!onGround) {
+          player.position.y += jumpVel * dt;
+          jumpVel -= gravity * dt;
+          if (player.position.y <= (ducking ? 1.05 : 1.55)) {
+            player.position.y = ducking ? 1.05 : 1.55;
+            onGround = true;
+            jumpVel = 0;
+          }
+        } else {
+          player.position.y += (ducking ? 1.05 : 1.55) - player.position.y;
+        }
+
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+          const o = obstacles[i];
+          o.mesh.position.z += speed * dt * 1.8;
+          o.mesh.rotation.y += 0.01 * dt;
+          if (o.mesh.position.z > 12) {
+            scene.remove(o.mesh);
+            obstacles.splice(i, 1);
+            continue;
+          }
+          const dx = Math.abs(o.mesh.position.x - player.position.x);
+          const dz = Math.abs(o.mesh.position.z - player.position.z);
+          const dy = Math.abs(o.mesh.position.y - player.position.y);
+          if (dx < 1.2 && dz < 1.8 && dy < 1.7) {
+            hitPlayer();
+            scene.remove(o.mesh);
+            obstacles.splice(i, 1);
+          }
+        }
+
+        for (let i = collectibles.length - 1; i >= 0; i--) {
+          const c = collectibles[i];
+          c.mesh.position.z += speed * dt * 1.8;
+          c.mesh.rotation.x += 0.03 * dt;
+          c.mesh.rotation.y += 0.05 * dt;
+          if (c.mesh.position.z > 12) {
+            scene.remove(c.mesh);
+            collectibles.splice(i, 1);
+            continue;
+          }
+          const dx = Math.abs(c.mesh.position.x - player.position.x);
+          const dz = Math.abs(c.mesh.position.z - player.position.z);
+          const dy = Math.abs(c.mesh.position.y - player.position.y);
+          if (dx < 1.2 && dz < 1.6 && dy < 1.8) {
+            score += 20;
+            createBurst(c.mesh.position.x, c.mesh.position.y, c.mesh.position.z, 0x49f2c2);
+            scene.remove(c.mesh);
+            collectibles.splice(i, 1);
+            updateHUD();
+          }
+        }
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.userData.life -= 0.03 * dt;
+          p.position.x += p.userData.vx * dt;
+          p.position.y += p.userData.vy * dt;
+          p.position.z += p.userData.vz * dt;
+          p.userData.vy -= 0.015 * dt;
+          p.material.opacity = Math.max(0, p.userData.life);
+          p.material.transparent = true;
+          if (p.userData.life <= 0) {
+            scene.remove(p);
+            particles.splice(i, 1);
+          }
+        }
+
+        if (score > best) {
+          best = Math.floor(score);
+          localStorage.setItem('noor_alam_runner_best', best);
+        }
+        updateHUD();
+      }
+
+      if (shake > 0) {
+        camera.position.x = (Math.random() - 0.5) * shake;
+        camera.position.y = 6.5 + (Math.random() - 0.5) * shake;
+        shake *= 0.88;
+      } else {
+        camera.position.x += (0 - camera.position.x) * 0.08;
+        camera.position.y += (6.5 - camera.position.y) * 0.08;
+      }
+
+      camera.lookAt(player.position.x * 0.4, 2.2, -18);
+
+      renderer.render(scene, camera);
+    }
+
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    init();
+  </script>
+</body>
+</html>

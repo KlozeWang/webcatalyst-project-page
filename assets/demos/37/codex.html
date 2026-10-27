@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Latency Link: Mirror Master</title>
+  <style>
+    :root{
+      --bg:#0a0f1f;
+      --panel:#101a33;
+      --accent:#39d0ff;
+      --good:#45ff8a;
+      --warn:#ffb347;
+      --bad:#ff5d73;
+      --text:#e9f1ff;
+      --muted:#9fb1d1;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+      background: radial-gradient(circle at top, #10244d 0%, var(--bg) 60%);
+      color:var(--text);
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      min-height:100vh;
+      padding:14px;
+    }
+    .wrap{
+      width:min(1000px,96vw);
+      background:linear-gradient(180deg,#0f1a35,#0b1328);
+      border:1px solid #243b72;
+      border-radius:14px;
+      box-shadow:0 20px 60px rgba(0,0,0,.45);
+      overflow:hidden;
+    }
+    .top{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      align-items:center;
+      justify-content:space-between;
+      padding:10px 12px;
+      background:#0e1730;
+      border-bottom:1px solid #243b72;
+    }
+    .left, .right{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+    button{
+      border:1px solid #2f5db8;
+      background:linear-gradient(180deg,#1b3d83,#16346e);
+      color:#eaf2ff;
+      padding:8px 12px;
+      border-radius:9px;
+      cursor:pointer;
+      font-weight:700;
+      letter-spacing:.2px;
+    }
+    button:hover{filter:brightness(1.08)}
+    button:disabled{opacity:.5; cursor:not-allowed}
+    .chip{
+      background:#111f3f;
+      border:1px solid #2a4789;
+      border-radius:10px;
+      padding:7px 10px;
+      font-size:13px;
+      color:var(--muted);
+      min-width:130px;
+    }
+    .chip b{color:var(--text)}
+    .bar{
+      margin-top:5px;
+      width:100%;
+      height:7px;
+      border-radius:999px;
+      background:#1a2b53;
+      overflow:hidden;
+    }
+    .fill{
+      height:100%;
+      width:0%;
+      transition:width .15s linear;
+    }
+    .mobileFill{background:linear-gradient(90deg,var(--warn),var(--bad))}
+    .tvFill{background:linear-gradient(90deg,#2dd4bf,#60a5fa)}
+    canvas{
+      display:block;
+      width:100%;
+      aspect-ratio:16/9;
+      background:
+        linear-gradient(180deg,rgba(90,130,255,.08),rgba(255,255,255,0)),
+        radial-gradient(circle at 20% 50%,rgba(57,208,255,.09),transparent 40%),
+        radial-gradient(circle at 80% 50%,rgba(69,255,138,.08),transparent 40%),
+        #070c19;
+    }
+    .footer{
+      padding:8px 12px 12px;
+      color:#adc0e6;
+      font-size:12px;
+      border-top:1px solid #243b72;
+      background:#0d152c;
+    }
+    .legend span{margin-right:14px; white-space:nowrap;}
+    .dot{
+      display:inline-block; width:9px; height:9px; border-radius:50%;
+      margin-right:4px; transform:translateY(1px);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="left">
+        <button id="connectBtn">Connect</button>
+        <button id="pauseBtn" disabled>Pause</button>
+        <button id="resetBtn">Reset</button>
+        <div class="chip">Status: <b id="statusText">Disconnected</b></div>
+      </div>
+      <div class="right">
+        <div class="chip">
+          Mobile CPU: <b id="mobileCpuTxt">0%</b>
+          <div class="bar"><div id="mobileFill" class="fill mobileFill"></div></div>
+        </div>
+        <div class="chip">
+          TV CPU: <b id="tvCpuTxt">0%</b>
+          <div class="bar"><div id="tvFill" class="fill tvFill"></div></div>
+        </div>
+      </div>
+    </div>
+    <canvas id="game" width="960" height="540"></canvas>
+    <div class="footer">
+      <div class="legend">
+        <span><i class="dot" style="background:#39d0ff"></i>Video stream packets (Mobile → TV)</span>
+        <span><i class="dot" style="background:#8bffb8"></i>Input packets (TV → Mobile)</span>
+        <span><i class="dot" style="background:#ff5d73"></i>Congestion/Jitter nodes</span>
+      </div>
+      Click red nodes to optimize latency. Keep latency under 100ms equivalent to win throughput.
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const connectBtn = document.getElementById('connectBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const statusText = document.getElementById('statusText');
+
+    const mobileCpuTxt = document.getElementById('mobileCpuTxt');
+    const tvCpuTxt = document.getElementById('tvCpuTxt');
+    const mobileFill = document.getElementById('mobileFill');
+    const tvFill = document.getElementById('tvFill');
+
+    const state = {
+      running: false,
+      paused: false,
+      t: 0,
+      packets: [],
+      obstacles: [],
+      sparks: [],
+      deliveredVideo: 0,
+      deliveredInput: 0,
+      dropped: 0,
+      score: 0,
+      latency: 18,
+      waveTimer: 0,
+      spawnVideoTimer: 0,
+      spawnInputTimer: 0,
+      level: 1,
+      mobileCpu: 0,
+      tvCpu: 0
+    };
+
+    const MOBILE = { x: 85, y: canvas.height/2, w: 95, h: 125 };
+    const TV = { x: canvas.width-85, y: canvas.height/2, w: 95, h: 125 };
+
+    function resetGame() {
+      state.running = false;
+      state.paused = false;
+      state.t = 0;
+      state.packets.length = 0;
+      state.obstacles.length = 0;
+      state.sparks.length = 0;
+      state.deliveredVideo = 0;
+      state.deliveredInput = 0;
+      state.dropped = 0;
+      state.score = 0;
+      state.latency = 18;
+      state.waveTimer = 0;
+      state.spawnVideoTimer = 0;
+      state.spawnInputTimer = 0;
+      state.level = 1;
+      state.mobileCpu = 0;
+      state.tvCpu = 0;
+      connectBtn.textContent = "Connect";
+      pauseBtn.disabled = true;
+      pauseBtn.textContent = "Pause";
+      statusText.textContent = "Disconnected";
+      updateCpuUI();
+      draw();
+    }
+
+    function startGame() {
+      if (state.running) return;
+      state.running = true;
+      state.paused = false;
+      connectBtn.textContent = "Connected";
+      pauseBtn.disabled = false;
+      statusText.textContent = "Low-Latency Link Active";
+    }
+
+    connectBtn.addEventListener('click', startGame);
+
+    pauseBtn.addEventListener('click', () => {
+      if (!state.running) return;
+      state.paused = !state.paused;
+      pauseBtn.textContent = state.paused ? "Resume" : "Pause";
+      statusText.textContent = state.paused ? "Paused" : "Low-Latency Link Active";
+    });
+
+    resetBtn.addEventListener('click', resetGame);
+
+    canvas.addEventListener('click', (e) => {
+      if (!state.running || state.paused) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+      for (let i = state.obstacles.length - 1; i >= 0; i--) {
+        const o = state.obstacles[i];
+        const dx = x - o.x;
+        const dy = y - o.y;
+        if (dx*dx + dy*dy < (o.r + 10) * (o.r + 10)) {
+          for (let k = 0; k < 8; k++) {
+            state.sparks.push({
+              x:o.x, y:o.y,
+              vx:(Math.random()-0.5)*4,
+              vy:(Math.random()-0.5)*4,
+              life:28 + Math.random()*18
+            });
+          }
+          state.obstacles.splice(i, 1);
+          state.score += 7;
+          state.latency = Math.max(8, state.latency - 2.8);
+          break;
+        }
+      }
+    });
+
+    function spawnPacket(type) {
+      if (type === 'video') {
+        state.packets.push({
+          type,
+          x: MOBILE.x + 52,
+          y: MOBILE.y + (Math.random()-0.5) * 98,
+          vx: 2.8 + Math.random()*1.7 + state.level*0.08,
+          vy: (Math.random()-0.5) * 0.55,
+          r: 4.1
+        });
+      } else {
+        state.packets.push({
+          type,
+          x: TV.x - 52,
+          y: TV.y + (Math.random()-0.5) * 98,
+          vx: -(3.2 + Math.random()*1.5 + state.level*0.06),
+          vy: (Math.random()-0.5) * 0.7,
+          r: 3.3
+        });
+      }
+    }
+
+    function spawnObstacle() {
+      const midMargin = 170;
+      state.obstacles.push({
+        x: midMargin + Math.random() * (canvas.width - midMargin*2),
+        y: 78 + Math.random() * (canvas.height - 156),
+        r: 12 + Math.random() * 16,
+        drift: (Math.random()-0.5) * 0.35,
+        pulse: Math.random() * Math.PI * 2
+      });
+    }
+
+    function update(dt) {
+      state.t += dt;
+      state.waveTimer += dt;
+      state.spawnVideoTimer += dt;
+      state.spawnInputTimer += dt;
+
+      const videoInterval = Math.max(0.05, 0.11 - state.level*0.003);
+      const inputInterval = Math.max(0.09, 0.19 - state.level*0.002);
+
+      while (state.spawnVideoTimer > videoInterval) {
+        state.spawnVideoTimer -= videoInterval;
+        spawnPacket('video');
+      }
+      while (state.spawnInputTimer > inputInterval) {
+        state.spawnInputTimer -= inputInterval;
+        spawnPacket('input');
+      }
+
+      if (state.waveTimer > 1.35) {
+        state.waveTimer = 0;
+        if (Math.random() < 0.8) spawnObstacle();
+      }
+
+      if (state.t > state.level * 12) state.level++;
+
+      for (let i = state.obstacles.length - 1; i >= 0; i--) {
+        const o = state.obstacles[i];
+        o.pulse += dt * 3;
+        o.y += o.drift;
+        if (o.y < 68 || o.y > canvas.height - 68) o.drift *= -1;
+        if (Math.random() < 0.0018 + state.level * 0.00015 && state.obstacles.length < 24) {
+          spawnObstacle();
+        }
+        if (state.t > 12 && Math.random() < 0.0009 && o.r > 10) o.r -= 0.5;
+      }
+
+      for (let i = state.packets.length - 1; i >= 0; i--) {
+        const p = state.packets[i];
+        p.x += p.vx * 60 * dt;
+        p.y += p.vy * 60 * dt;
+
+        if (p.y < 28 || p.y > canvas.height - 28) p.vy *= -1;
+
+        let hit = false;
+        for (const o of state.obstacles) {
+          const dx = p.x - o.x;
+          const dy = p.y - o.y;
+          if (dx*dx + dy*dy < (o.r + p.r) * (o.r + p.r)) {
+            hit = true;
+            break;
+          }
+        }
+
+        if (hit) {
+          state.dropped++;
+          state.latency += p.type === 'video' ? 1.4 : 1.1;
+          state.packets.splice(i, 1);
+          continue;
+        }
+
+        if (p.type === 'video' && p.x > TV.x - 48) {
+          state.deliveredVideo++;
+          state.score += 2;
+          state.latency = Math.max(6, state.latency - 0.12);
+          state.packets.splice(i, 1);
+          continue;
+        }
+
+        if (p.type === 'input' && p.x < MOBILE.x + 48) {
+          state.deliveredInput++;
+          state.score += 3;
+          state.latency = Math.max(6, state.latency - 0.22);
+          state.packets.splice(i, 1);
+          continue;
+        }
+
+        if (p.x < -40 || p.x > canvas.width + 40) {
+          state.packets.splice(i, 1);
+        }
+      }
+
+      for (let i = state.sparks.length - 1; i >= 0; i--) {
+        const s = state.sparks[i];
+        s.x += s.vx;
+        s.y += s.vy;
+        s.life -= 1;
+        if (s.life <= 0) state.sparks.splice(i, 1);
+      }
+
+      state.latency += Math.max(0, state.obstacles.length - 5) * 0.006;
+      state.latency += Math.max(0, state.packets.length - 40) * 0.003;
+      state.latency = Math.min(140, state.latency);
+
+      const congestion = state.obstacles.length * 0.65 + state.packets.length * 0.1 + state.latency * 0.25;
+      state.mobileCpu = Math.max(86, Math.min(99, 90 + congestion * 0.12));
+      state.tvCpu = Math.max(3, Math.min(16, 4 + state.packets.length * 0.06 + state.obstacles.length * 0.04));
+
+      if (state.latency >= 100) {
+        state.running = false;
+        statusText.textContent = "Connection Unstable";
+        pauseBtn.disabled = true;
+      }
+
+      updateCpuUI();
+    }
+
+    function updateCpuUI() {
+      mobileCpuTxt.textContent = `${state.mobileCpu.toFixed(1)}%`;
+      tvCpuTxt.textContent = `${state.tvCpu.toFixed(1)}%`;
+      mobileFill.style.width = `${state.mobileCpu}%`;
+      tvFill.style.width = `${Math.min(100, state.tvCpu*6)}%`;
+    }
+
+    function drawNodeBox(node, title, sub, color) {
+      ctx.save();
+      ctx.translate(node.x, node.y);
+      ctx.fillStyle = '#0e1f3f';
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      roundRect(-node.w/2, -node.h/2, node.w, node.h, 12);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = color;
+      ctx.font = 'bold 16px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(title, 0, -8);
+
+      ctx.fillStyle = '#b8caef';
+      ctx.font = '12px system-ui';
+      ctx.fillText(sub, 0, 14);
+      ctx.restore();
+    }
+
+    function roundRect(x, y, w, h, r){
+      ctx.beginPath();
+      ctx.moveTo(x+r,y);
+      ctx.arcTo(x+w,y,x+w,y+h,r);
+      ctx.arcTo(x+w,y+h,x,y+h,r);
+      ctx.arcTo(x,y+h,x,y,r);
+      ctx.arcTo(x,y,x+w,y,r);
+      ctx.closePath();
+    }
+
+    function drawLink() {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(57,208,255,.35)';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([10, 8]);
+      ctx.beginPath();
+      ctx.moveTo(MOBILE.x + 48, MOBILE.y - 18);
+      ctx.bezierCurveTo(canvas.width*0.35, canvas.height*0.2, canvas.width*0.65, canvas.height*0.2, TV.x - 48, TV.y - 18);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(139,255,184,.35)';
+      ctx.beginPath();
+      ctx.moveTo(TV.x - 48, TV.y + 18);
+      ctx.bezierCurveTo(canvas.width*0.65, canvas.height*0.8, canvas.width*0.35, canvas.height*0.8, MOBILE.x + 48, MOBILE.y + 18);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    function draw() {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+
+      drawLink();
+      drawNodeBox(MOBILE, "Mobile Host", "Encode + Process (90-95%)", '#39d0ff');
+      drawNodeBox(TV, "Android TV Thin Client", "Decode + Relay Input (4-5%)", '#7aa7ff');
+
+      for (const o of state.obstacles) {
+        const pulse = Math.sin(o.pulse) * 2;
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, o.r + pulse, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(255,93,115,.20)';
+        ctx.fill();
+        ctx.strokeStyle = '#ff5d73';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      for (const p of state.packets) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+        if (p.type === 'video') {
+          ctx.fillStyle = '#39d0ff';
+          ctx.shadowColor = '#39d0ff';
+        } else {
+          ctx.fillStyle = '#8bffb8';
+          ctx.shadowColor = '#8bffb8';
+        }
+        ctx.shadowBlur = 8;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+
+      for (const s of state.sparks) {
+        ctx.fillStyle = `rgba(255,180,110,${Math.max(0,s.life/40)})`;
+        ctx.fillRect(s.x, s.y, 2, 2);
+      }
+
+      ctx.fillStyle = '#d9e7ff';
+      ctx.font = 'bold 16px system-ui';
+      ctx.fillText(`Score: ${state.score}`, 20, 28);
+      ctx.fillText(`Latency: ${state.latency.toFixed(1)} ms`, 20, 52);
+      ctx.fillText(`Video Frames: ${state.deliveredVideo}`, 20, 76);
+      ctx.fillText(`Input Commands: ${state.deliveredInput}`, 20, 100);
+      ctx.fillStyle = '#ff9bab';
+      ctx.fillText(`Dropped: ${state.dropped}`, 20, 124);
+
+      if (!state.running) {
+        ctx.fillStyle = 'rgba(3,8,20,.62)';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#eef4ff';
+        ctx.font = 'bold 34px system-ui';
+        ctx.fillText(state.t === 0 ? "Latency Link: Mirror Master" : "Link Disconnected", canvas.width/2, canvas.height/2 - 34);
+        ctx.font = '16px system-ui';
+        ctx.fillStyle = '#b8caef';
+        if (state.t === 0) {
+          ctx.fillText("Press Connect to start the stream.", canvas.width/2, canvas.height/2 + 2);
+          ctx.fillText("Click red congestion nodes to keep latency low.", canvas.width/2, canvas.height/2 + 28);
+        } else {
+          ctx.fillText("Latency exceeded safe threshold.", canvas.width/2, canvas.height/2 + 2);
+          ctx.fillText("Press Reset and try again.", canvas.width/2, canvas.height/2 + 28);
+        }
+        ctx.textAlign = 'start';
+      }
+
+      if (state.paused && state.running) {
+        ctx.fillStyle = 'rgba(3,8,20,.48)';
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#eef4ff';
+        ctx.font = 'bold 36px system-ui';
+        ctx.fillText("Paused", canvas.width/2, canvas.height/2);
+        ctx.textAlign = 'start';
+      }
+    }
+
+    let last = performance.now();
+    function loop(now) {
+      const dt = Math.min(0.033, (now - last) / 1000);
+      last = now;
+
+      if (state.running && !state.paused) update(dt);
+      draw();
+
+      requestAnimationFrame(loop);
+    }
+
+    resetGame();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

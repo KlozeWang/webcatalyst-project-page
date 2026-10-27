@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dart Game</title>
+  <style>
+    :root{
+      --bg:#121212;
+      --panel:#1e1e1e;
+      --accent:#ffcc33;
+      --text:#f4f4f4;
+      --muted:#a0a0a0;
+      --good:#41d17d;
+      --warn:#ff6b6b;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;background:radial-gradient(circle at 50% 20%, #2a2a2a, #0f0f0f 60%);font-family:Arial,Helvetica,sans-serif;color:var(--text)}
+    .wrap{
+      height:100%;
+      display:grid;
+      grid-template-rows:auto 1fr auto;
+      gap:10px;
+      padding:10px;
+      max-width:1200px;
+      margin:0 auto;
+    }
+    .hud{
+      background:linear-gradient(180deg,#2a2a2a,#1c1c1c);
+      border:1px solid #3a3a3a;
+      border-radius:12px;
+      padding:10px 14px;
+      display:flex;
+      flex-wrap:wrap;
+      align-items:center;
+      gap:14px;
+      justify-content:space-between;
+    }
+    .stats{
+      display:flex;gap:14px;flex-wrap:wrap;align-items:center;
+    }
+    .chip{
+      background:#101010;
+      border:1px solid #3a3a3a;
+      border-radius:999px;
+      padding:8px 12px;
+      font-weight:bold;
+      font-size:14px;
+      white-space:nowrap;
+    }
+    .chip .v{color:var(--accent);margin-left:6px}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    button{
+      border:none;
+      background:#333;
+      color:var(--text);
+      border:1px solid #4b4b4b;
+      border-radius:10px;
+      padding:8px 12px;
+      cursor:pointer;
+      font-weight:bold;
+    }
+    button:hover{background:#3e3e3e}
+    #game{
+      width:100%;
+      height:100%;
+      min-height:420px;
+      display:block;
+      border-radius:14px;
+      border:1px solid #3a3a3a;
+      background:radial-gradient(circle at 50% 40%, #1f1f1f, #111);
+      touch-action:none;
+    }
+    .footer{
+      text-align:center;
+      color:var(--muted);
+      font-size:13px;
+      padding-bottom:4px;
+    }
+    .msg{
+      font-weight:bold;
+      letter-spacing:.3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hud">
+      <div class="stats">
+        <div class="chip">Punkte: <span class="v" id="score">301</span></div>
+        <div class="chip">Darts übrig: <span class="v" id="left">3</span></div>
+        <div class="chip">Legs gewonnen: <span class="v" id="legs">0</span></div>
+        <div class="chip">Letzter Wurf: <span class="v" id="last">-</span></div>
+      </div>
+      <div class="controls">
+        <button id="newLeg">Neues Leg</button>
+        <button id="newGame">Neues Spiel</button>
+      </div>
+    </div>
+
+    <canvas id="game"></canvas>
+
+    <div class="footer">
+      <span class="msg" id="msg">Klicke auf die Scheibe oder drücke Leertaste zum Werfen.</span>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const ui = {
+      score: document.getElementById('score'),
+      left: document.getElementById('left'),
+      legs: document.getElementById('legs'),
+      last: document.getElementById('last'),
+      msg: document.getElementById('msg')
+    };
+
+    const numbers = [20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
+    const step = Math.PI * 2 / 20;
+
+    let W=0,H=0,dpr=1;
+    let board = {cx:0, cy:0, R:180};
+
+    let score = 301;
+    let legsWon = 0;
+    let dartsLeft = 3;
+    let turnStartScore = 301;
+    let lastHit = '-';
+    let gameOver = false;
+
+    let aim = {x:0, y:0, active:false};
+    let currentDart = null;
+    let landed = [];
+    let messageTimer = null;
+
+    function resize(){
+      const rect = canvas.getBoundingClientRect();
+      dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      W = rect.width;
+      H = rect.height;
+      board.R = Math.min(W, H) * 0.32;
+      board.cx = W * 0.5;
+      board.cy = H * 0.5 - 10;
+      if(!aim.active){
+        aim.x = board.cx;
+        aim.y = board.cy;
+      }
+    }
+
+    function setMsg(t, color='#f4f4f4'){
+      ui.msg.textContent = t;
+      ui.msg.style.color = color;
+      if(messageTimer) clearTimeout(messageTimer);
+      messageTimer = setTimeout(()=>{
+        if(!gameOver) {
+          ui.msg.textContent = 'Klicke auf die Scheibe oder drücke Leertaste zum Werfen.';
+          ui.msg.style.color = '#a0a0a0';
+        }
+      }, 1800);
+    }
+
+    function updateHUD(){
+      ui.score.textContent = score;
+      ui.left.textContent = dartsLeft;
+      ui.legs.textContent = legsWon;
+      ui.last.textContent = lastHit;
+    }
+
+    function resetLeg(){
+      score = 301;
+      dartsLeft = 3;
+      turnStartScore = 301;
+      lastHit = '-';
+      landed = [];
+      currentDart = null;
+      gameOver = false;
+      updateHUD();
+      setMsg('Neues Leg gestartet.', '#ffcc33');
+    }
+
+    function resetGame(){
+      legsWon = 0;
+      resetLeg();
+    }
+
+    function randn(){
+      let u=0,v=0;
+      while(u===0)u=Math.random();
+      while(v===0)v=Math.random();
+      return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+    }
+
+    function clampAimToBoard(x,y){
+      const dx=x-board.cx, dy=y-board.cy;
+      const d=Math.hypot(dx,dy);
+      const max = board.R*0.98;
+      if(d>max){
+        const k=max/d;
+        return {x:board.cx+dx*k,y:board.cy+dy*k};
+      }
+      return {x,y};
+    }
+
+    function startThrow(){
+      if(gameOver || currentDart) return;
+      if(dartsLeft<=0) return;
+
+      const spread = 7;
+      const tx = aim.x + randn()*spread;
+      const ty = aim.y + randn()*spread;
+      const startX = W*0.5;
+      const startY = H - 30;
+
+      currentDart = {
+        sx:startX, sy:startY,
+        tx, ty,
+        x:startX, y:startY,
+        t0:performance.now(),
+        dur:300
+      };
+    }
+
+    function toLocalPos(evt){
+      const r = canvas.getBoundingClientRect();
+      let x,y;
+      if(evt.touches && evt.touches[0]){
+        x = evt.touches[0].clientX - r.left;
+        y = evt.touches[0].clientY - r.top;
+      } else {
+        x = evt.clientX - r.left;
+        y = evt.clientY - r.top;
+      }
+      return {x,y};
+    }
+
+    function onAim(evt){
+      const p = toLocalPos(evt);
+      const c = clampAimToBoard(p.x,p.y);
+      aim.x = c.x; aim.y = c.y; aim.active = true;
+    }
+
+    function calcHit(x,y){
+      const dx = x - board.cx;
+      const dy = y - board.cy;
+      const r = Math.hypot(dx,dy);
+      const R = board.R;
+
+      const rIB = R*0.05;
+      const rOB = R*0.10;
+      const rT1 = R*0.45, rT2 = R*0.52;
+      const rD1 = R*0.78, rD2 = R*0.86;
+
+      if(r > rD2) return {points:0, text:'MISS', isDouble:false};
+
+      if(r <= rIB) return {points:50, text:'BULL (50)', isDouble:true};
+      if(r <= rOB) return {points:25, text:'OUTER BULL (25)', isDouble:false};
+
+      let theta = Math.atan2(dx, -dy);
+      if(theta < 0) theta += Math.PI*2;
+      theta = (theta + step/2) % (Math.PI*2);
+      const seg = Math.floor(theta / step);
+      const base = numbers[seg];
+
+      if(r >= rD1 && r <= rD2) return {points:base*2, text:`D${base}`, isDouble:true};
+      if(r >= rT1 && r <= rT2) return {points:base*3, text:`T${base}`, isDouble:false};
+      return {points:base, text:`S${base}`, isDouble:false};
+    }
+
+    function endTurn(){
+      dartsLeft = 3;
+      turnStartScore = score;
+      landed = [];
+      updateHUD();
+    }
+
+    function processHit(hit, x, y){
+      landed.push({x,y,hit});
+      lastHit = `${hit.text} = ${hit.points}`;
+      ui.last.textContent = lastHit;
+
+      let remain = score - hit.points;
+
+      // Bust rules (301, double out)
+      if(remain < 0 || remain === 1){
+        setMsg('BUST! Punktestand bleibt gleich.', '#ff6b6b');
+        score = turnStartScore;
+        dartsLeft = 0;
+        updateHUD();
+        setTimeout(endTurn, 700);
+        return;
+      }
+
+      if(remain === 0){
+        if(hit.isDouble){
+          score = 0;
+          legsWon++;
+          gameOver = true;
+          updateHUD();
+          setMsg('GEWONNEN! Doppel-Aus getroffen! 🎯', '#41d17d');
+        } else {
+          setMsg('BUST! Zum Beenden musst du ein Doppel treffen.', '#ff6b6b');
+          score = turnStartScore;
+          dartsLeft = 0;
+          updateHUD();
+          setTimeout(endTurn, 700);
+        }
+        return;
+      }
+
+      score = remain;
+      dartsLeft--;
+      updateHUD();
+
+      if(dartsLeft <= 0){
+        setTimeout(endTurn, 550);
+      }
+    }
+
+    function drawSector(r1,r2,t1,t2,color){
+      const a1 = t1 - Math.PI/2;
+      const a2 = t2 - Math.PI/2;
+      ctx.beginPath();
+      ctx.arc(board.cx, board.cy, r2, a1, a2);
+      ctx.arc(board.cx, board.cy, r1, a2, a1, true);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+
+    function drawBoard(){
+      const {cx,cy,R} = board;
+      const rIB = R*0.05, rOB = R*0.10;
+      const rT1 = R*0.45, rT2 = R*0.52;
+      const rD1 = R*0.78, rD2 = R*0.86;
+
+      // background glow
+      const g = ctx.createRadialGradient(cx,cy,R*0.1,cx,cy,R*1.25);
+      g.addColorStop(0,'#2b2b2b');
+      g.addColorStop(1,'#0c0c0c');
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,W,H);
+
+      // wooden surround
+      ctx.beginPath();
+      ctx.arc(cx,cy,R*0.98,0,Math.PI*2);
+      ctx.fillStyle = '#5a3a20';
+      ctx.fill();
+
+      // segments
+      for(let i=0;i<20;i++){
+        const t1 = i*step - step/2;
+        const t2 = t1 + step;
+        const dark = (i%2===0);
+        const singleCol = dark ? '#1f1f1f' : '#ece8d8';
+        const tripleCol = dark ? '#cc2f2f' : '#2f9b53';
+        const doubleCol = dark ? '#cc2f2f' : '#2f9b53';
+
+        drawSector(rOB, rT1, t1, t2, singleCol);
+        drawSector(rT1, rT2, t1, t2, tripleCol);
+        drawSector(rT2, rD1, t1, t2, singleCol);
+        drawSector(rD1, rD2, t1, t2, doubleCol);
+      }
+
+      // bulls
+      ctx.beginPath();
+      ctx.arc(cx,cy,rOB,0,Math.PI*2);
+      ctx.fillStyle = '#2f9b53';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(cx,cy,rIB,0,Math.PI*2);
+      ctx.fillStyle = '#cc2f2f';
+      ctx.fill();
+
+      // wires / ring lines
+      ctx.strokeStyle = '#c8c8c8';
+      ctx.lineWidth = 1;
+      [rOB,rT1,rT2,rD1,rD2].forEach(rr=>{
+        ctx.beginPath();
+        ctx.arc(cx,cy,rr,0,Math.PI*2);
+        ctx.stroke();
+      });
+
+      for(let i=0;i<20;i++){
+        const t = i*step - step/2;
+        const x1 = cx + Math.sin(t)*rOB;
+        const y1 = cy - Math.cos(t)*rOB;
+        const x2 = cx + Math.sin(t)*rD2;
+        const y2 = cy - Math.cos(t)*rD2;
+        ctx.beginPath();
+        ctx.moveTo(x1,y1);
+        ctx.lineTo(x2,y2);
+        ctx.stroke();
+      }
+
+      // numbers
+      ctx.fillStyle = '#f2f2f2';
+      ctx.font = `bold ${Math.max(12, R*0.09)}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for(let i=0;i<20;i++){
+        const t = i*step;
+        const rr = R*0.95;
+        const x = cx + Math.sin(t)*rr;
+        const y = cy - Math.cos(t)*rr;
+        ctx.fillText(numbers[i], x, y);
+      }
+    }
+
+    function drawCrosshair(){
+      if(!aim.active) return;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,204,51,0.95)';
+      ctx.lineWidth = 1.5;
+      const s = 10;
+      ctx.beginPath();
+      ctx.moveTo(aim.x-s,aim.y); ctx.lineTo(aim.x+s,aim.y);
+      ctx.moveTo(aim.x,aim.y-s); ctx.lineTo(aim.x,aim.y+s);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(aim.x,aim.y,6,0,Math.PI*2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawDart(x,y,rot=0){
+      ctx.save();
+      ctx.translate(x,y);
+      ctx.rotate(rot);
+      ctx.strokeStyle = '#d9d9d9';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-18,0);
+      ctx.lineTo(10,0);
+      ctx.stroke();
+
+      // tip
+      ctx.beginPath();
+      ctx.moveTo(10,0);
+      ctx.lineTo(14,0);
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+
+      // flight
+      ctx.fillStyle = '#39a7ff';
+      ctx.beginPath();
+      ctx.moveTo(-18,0);
+      ctx.lineTo(-25,-5);
+      ctx.lineTo(-25,5);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function loop(now){
+      drawBoard();
+
+      // landed darts
+      for(const d of landed){
+        drawDart(d.x, d.y, -Math.PI*0.15);
+      }
+
+      // flying dart
+      if(currentDart){
+        const t = Math.min(1, (now-currentDart.t0)/currentDart.dur);
+        const e = 1 - Math.pow(1-t, 3);
+        currentDart.x = currentDart.sx + (currentDart.tx-currentDart.sx)*e;
+        currentDart.y = currentDart.sy + (currentDart.ty-currentDart.sy)*e;
+
+        const ang = Math.atan2(currentDart.ty-currentDart.sy, currentDart.tx-currentDart.sx);
+        drawDart(currentDart.x, currentDart.y, ang);
+
+        if(t >= 1){
+          const hit = calcHit(currentDart.tx, currentDart.ty);
+          processHit(hit, currentDart.tx, currentDart.ty);
+          currentDart = null;
+        }
+      }
+
+      drawCrosshair();
+      requestAnimationFrame(loop);
+    }
+
+    canvas.addEventListener('mousemove', onAim);
+    canvas.addEventListener('mousedown', (e)=>{ onAim(e); startThrow(); });
+    canvas.addEventListener('touchstart', (e)=>{
+      e.preventDefault();
+      onAim(e);
+      startThrow();
+    }, {passive:false});
+    canvas.addEventListener('touchmove', (e)=>{
+      e.preventDefault();
+      onAim(e);
+    }, {passive:false});
+
+    window.addEventListener('keydown', (e)=>{
+      if(e.code === 'Space'){
+        e.preventDefault();
+        startThrow();
+      }
+    });
+
+    document.getElementById('newLeg').addEventListener('click', resetLeg);
+    document.getElementById('newGame').addEventListener('click', resetGame);
+    window.addEventListener('resize', resize);
+
+    resize();
+    updateHUD();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

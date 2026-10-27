@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Shadow Fight - Arena</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+background: #000;
+overflow: hidden;
+font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+user-select: none;
+-webkit-user-select: none;
+}
+canvas {
+display: block;
+margin: 0 auto;
+}
+#ui-overlay {
+position: absolute;
+top: 0; left: 0;
+width: 100%; height: 100%;
+pointer-events: none;
+z-index: 10;
+}
+#health-container {
+position: absolute;
+top: 20px;
+left: 50%;
+transform: translateX(-50%);
+width: 90%;
+max-width: 800px;
+display: flex;
+align-items: center;
+gap: 10px;
+}
+.health-bar-wrapper {
+flex: 1;
+height: 28px;
+background: rgba(0,0,0,0.7);
+border: 2px solid #444;
+border-radius: 14px;
+overflow: hidden;
+position: relative;
+}
+.health-bar {
+height: 100%;
+transition: width 0.3s ease;
+border-radius: 12px;
+}
+#p1-health { background: linear-gradient(90deg, #ff4444, #ff6666); width: 100%; }
+#p2-health { background: linear-gradient(90deg, #4488ff, #66aaff); width: 100%; float: right; }
+.player-name {
+color: #fff;
+font-size: 14px;
+font-weight: bold;
+text-shadow: 0 0 10px rgba(0,0,0,0.8);
+min-width: 80px;
+}
+#p1-name { text-align: left; }
+#p2-name { text-align: right; }
+#timer {
+color: #ffcc00;
+font-size: 28px;
+font-weight: bold;
+min-width: 60px;
+text-align: center;
+text-shadow: 0 0 15px rgba(255,204,0,0.5);
+}
+#combo-display {
+position: absolute;
+top: 60px;
+left: 50%;
+transform: translateX(-50%);
+color: #ffcc00;
+font-size: 24px;
+font-weight: bold;
+text-shadow: 0 0 20px rgba(255,204,0,0.8);
+opacity: 0;
+transition: opacity 0.3s;
+}
+#game-message {
+position: absolute;
+top: 50%;
+left: 50%;
+transform: translate(-50%, -50%);
+color: #fff;
+font-size: 48px;
+font-weight: bold;
+text-shadow: 0 0 30px rgba(255,255,255,0.5);
+opacity: 0;
+transition: opacity 0.5s;
+text-align: center;
+}
+#controls {
+position: absolute;
+bottom: 20px;
+left: 50%;
+transform: translateX(-50%);
+display: flex;
+gap: 10px;
+pointer-events: auto;
+}
+.ctrl-btn {
+width: 60px;
+height: 60px;
+border-radius: 50%;
+border: 2px solid rgba(255,255,255,0.3);
+background: rgba(255,255,255,0.1);
+color: #fff;
+font-size: 12px;
+font-weight: bold;
+cursor: pointer;
+display: flex;
+align-items: center;
+justify-content: center;
+backdrop-filter: blur(5px);
+transition: all 0.2s;
+}
+.ctrl-btn:active {
+background: rgba(255,255,255,0.3);
+transform: scale(0.95);
+}
+.ctrl-btn.attack { border-color: rgba(255,100,100,0.5); }
+.ctrl-btn.kick { border-color: rgba(100,100,255,0.5); }
+.ctrl-btn.block { border-color: rgba(100,255,100,0.5); }
+.ctrl-btn.special { border-color: rgba(255,255,100,0.5); }
+#start-screen {
+position: absolute;
+top: 0; left: 0;
+width: 100%; height: 100%;
+background: radial-gradient(ellipse at center, #1a1a2e 0%, #0a0a15 100%);
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+z-index: 100;
+}
+#start-screen h1 {
+color: #fff;
+font-size: 64px;
+text-shadow: 0 0 40px rgba(255,100,0,0.5), 0 0 80px rgba(255,50,0,0.3);
+margin-bottom: 10px;
+letter-spacing: 8px;
+}
+#start-screen h2 {
+color: #aaa;
+font-size: 20px;
+margin-bottom: 40px;
+font-weight: normal;
+letter-spacing: 4px;
+}
+#start-btn {
+padding: 15px 50px;
+font-size: 24px;
+font-weight: bold;
+color: #fff;
+background: linear-gradient(135deg, #ff4400, #ff6600);
+border: none;
+border-radius: 30px;
+cursor: pointer;
+letter-spacing: 3px;
+transition: all 0.3s;
+box-shadow: 0 0 30px rgba(255,68,0,0.4);
+}
+#start-btn:hover {
+transform: scale(1.05);
+box-shadow: 0 0 50px rgba(255,68,0,0.6);
+}
+#controls-info {
+margin-top: 30px;
+color: #666;
+font-size: 14px;
+text-align: center;
+line-height: 2;
+}
+#mobile-controls {
+display: none;
+}
+@media (max-width: 768px) {
+#mobile-controls { display: flex; }
+#start-screen h1 { font-size: 36px; }
+#start-screen h2 { font-size: 14px; }
+#controls-info { display: none; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui-overlay">
+<div id="health-container">
+<span class="player-name" id="p1-name">SHADOW</span>
+<div class="health-bar-wrapper">
+<div class="health-bar" id="p1-health"></div>
+</div>
+<div id="timer">99</div>
+<div class="health-bar-wrapper">
+<div class="health-bar" id="p2-health"></div>
+</div>
+<span class="player-name" id="p2-name">OPONENT</span>
+</div>
+<div id="combo-display"></div>
+<div id="game-message"></div>
+
+<div id="controls">
+<button class="ctrl-btn attack" id="btn-punch">PUNCH</button>
+<button class="ctrl-btn kick" id="btn-kick">KICK</button>
+<button class="ctrl-btn block" id="btn-block">BLOCK</button>
+<button class="ctrl-btn special" id="btn-special">SPEC</button>
+</div>
+</div>
+
+<div id="start-screen">
+<h1>SHADOW FIGHT</h1>
+<h2>ARENA</h2>
+<button id="start-btn">FIGHT</button>
+<div id="controls-info">
+<strong>CONTROLS</strong><br>
+A / D - Move Left / Right<br>
+W - Jump &nbsp;|&nbsp; S - Crouch<br>
+J - Punch &nbsp;|&nbsp; K - Kick<br>
+L - Special Attack &nbsp;|&nbsp; I - Block
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// Audio context for sound effects
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx;
+function initAudio() {
+if (!audioCtx) audioCtx = new AudioCtx();
+}
+
+function playSound(type) {
+if (!audioCtx) return;
+const osc = audioCtx.createOscillator();
+const gain = audioCtx.createGain();
+osc.connect(gain);
+gain.connect(audioCtx.destination);
+
+switch(type) {
+case 'punch':
+osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.1);
+gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+break;
+case 'kick':
+osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.15);
+gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+break;
+case 'special':
+osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.2);
+osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.4);
+gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+break;
+case 'block':
+osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.05);
+gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+osc.start(); osc.stop(audioCtx.currentTime + 0.05);
+break;
+case 'hit':
+osc.type = 'sawtooth';
+osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.08);
+gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+osc.start(); osc.stop(audioCtx.currentTime + 0.08);
+break;
+case 'ko':
+osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 1);
+gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1);
+osc.start(); osc.stop(audioCtx.currentTime + 1);
+break;
+}
+}
+
+// Game state
+let gameState = 'menu'; // menu, fighting, roundEnd, gameOver
+let timer = 99;
+let timerInterval;
+let screenShake = 0;
+let particles = [];
+let projectiles = [];
+
+// Ground level
+const GROUND_Y = () => canvas.height - 100;
+
+// Fighter class
+class Fighter {
+constructor(x, name, isPlayer) {
+this.x = x;
+this.y = GROUND_Y();
+this.vx = 0;
+this.vy = 0;
+this.width = 50;
+this.height = 100;
+this.name = name;
+this.isPlayer = isPlayer;
+this.health = 100;
+this.maxHealth = 100;
+this.speed = 5;
+this.jumpPower = -15;
+this.gravity = 0.6;
+this.grounded = true;
+this.facing = isPlayer ? 1 : -1;
+
+// Animation state
+this.animState = 'idle'; // idle, walk, jump, punch, kick, special, block, hit, ko
+this.animFrame = 0;
+this.animTimer = 0;
+
+// Combat
+this.attacking = false;
+this.attackTimer = 0;
+this.attackCooldown = 0;
+this.blocking = false;
+this.hitStun = 0;
+this.combo = 0;
+this.comboTimer = 0;
+
+// Visual
+this.shadowAlpha = 0.8;
+this.hitFlash = 0;
+this.specialCharge = 0;
+
+// Body parts for animation
+this.bodyAngle = 0;
+this.leftArmAngle = 0;
+this.rightArmAngle = 0;
+this.leftLegAngle = 0;
+this.rightLegAngle = 0;
+this.headY = 0;
+}
+
+update() {
+this.animTimer++;
+
+// Gravity
+if (!this.grounded) {
+this.vy += this.gravity;
+this.y += this.vy;
+if (this.y >= GROUND_Y()) {
+this.y = GROUND_Y();
+this.vy = 0;
+this.grounded = true;
+}
+}
+
+// Horizontal movement
+this.x += this.vx;
+
+// Boundary
+if (this.x < 50) this.x = 50;
+if (this.x > canvas.width - 50) this.x = canvas.width - 50;
+
+// Cooldowns
+if (this.attackCooldown > 0) this.attackCooldown--;
+if (this.hitStun > 0) {
+this.hitStun--;
+if (this.hitStun <= 0) {
+this.animState = 'idle';
+}
+}
+if (this.comboTimer > 0) {
+this.comboTimer--;
+if (this.comboTimer <= 0) this.combo = 0;
+}
+if (this.hitFlash > 0) this.hitFlash--;
+
+// Animation
+this.updateAnimation();
+
+// Face opponent
+if (gameState === 'fighting') {
+const opponent = this.isPlayer ? player2 : player1;
+this.facing = opponent.x > this.x ? 1 : -1;
+}
+}
+
+updateAnimation() {
+switch(this.animState) {
+case 'idle':
+this.bodyAngle = Math.sin(this.animTimer * 0.05) * 0.05;
+this.leftArmAngle = Math.sin(this.animTimer * 0.08) * 0.1 - 0.3;
+this.rightArmAngle = Math.sin(this.animTimer * 0.08 + 1) * 0.1 + 0.3;
+this.leftLegAngle = Math.sin(this.animTimer * 0.06) * 0.05;
+this.rightLegAngle = Math.sin(this.animTimer * 0.06 + Math.PI) * 0.05;
+this.headY = Math.sin(this.animTimer * 0.08) * 2;
+break;
+case 'walk':
+const walkSpeed = 0.15;
+this.leftArmAngle = Math.sin(this.animTimer * walkSpeed) * 0.5;
+this.rightArmAngle = -Math.sin(this.animTimer * walkSpeed) * 0.5;
+this.leftLegAngle = -Math.sin(this.animTimer * walkSpeed) * 0.4;
+this.rightLegAngle = Math.sin(this.animTimer * walkSpeed) * 0.4;
+this.headY = Math.abs(Math.sin(this.animTimer * walkSpeed)) * 3;
+break;
+case 'jump':
+this.leftArmAngle = -0.8;
+this.rightArmAngle = -0.8;
+this.leftLegAngle = 0.3;
+this.rightLegAngle = -0.3;
+break;
+case 'punch':
+if (this.attackTimer > 0 && this.attackTimer < 8) {
+this.rightArmAngle = -1.5 * this.facing;
+this.bodyAngle = 0.2 * this.facing;
+} else if (this.attackTimer >= 8) {
+this.rightArmAngle = 0.3;
+this.bodyAngle = 0;
+}
+break;
+case 'kick':
+if (this.attackTimer > 0 && this.attackTimer < 10) {
+this.rightLegAngle = -1.2 * this.facing;
+this.bodyAngle = -0.15 * this.facing;
+} else if (this.attackTimer >= 10) {
+this.rightLegAngle = 0;
+this.bodyAngle = 0;
+}
+break;
+case 'special':
+if (this.attackTimer > 0 && this.attackTimer < 15) {
+this.leftArmAngle = -1.5;
+this.rightArmAngle = -1.5;
+this.bodyAngle = 0.3;
+this.headY = -5;
+} else if (this.attackTimer >= 15) {
+this.leftArmAngle = 0;
+this.rightArmAngle = 0;
+this.bodyAngle = 0;
+this.headY = 0;
+}
+break;
+case 'block':
+this.leftArmAngle = -1.2;
+this.rightArmAngle = -1.0;
+this.bodyAngle = -0.1;
+break;
+case 'hit':
+this.bodyAngle = -0.3 * this.facing;
+this.leftArmAngle = 0.5;
+this.rightArmAngle = 0.5;
+this.headY = 3;
+break;
+case 'ko':
+this.bodyAngle = -1.5 * this.facing;
+this.headY = 10;
+break;
+}
+}
+
+attack(type) {
+if (this.attacking || this.hitStun > 0 || this.attackCooldown > 0) return;
+
+this.attacking = true;
+this.attackTimer = 0;
+
+switch(type) {
+case 'punch':
+this.animState = 'punch';
+this.attackTimer = 15;
+this.attackCooldown = 20;
+playSound('punch');
+break;
+case 'kick':
+this.animState = 'kick';
+this.attackTimer = 18;
+this.attackCooldown = 25;
+playSound('kick');
+break;
+case 'special':
+this.animState = 'special';
+this.attackTimer = 25;
+this.attackCooldown = 40;
+this.specialCharge = 0;
+playSound('special');
+// Create projectile
+projectiles.push({
+x: this.x + this.facing * 30,
+y: this.y - 60,
+vx: this.facing * 8,
+vy: 0,
+damage: 20,
+owner: this,
+life: 60,
+size: 15
+});
+break;
+}
+}
+
+takeDamage(damage, attacker) {
+if (this.blocking) {
+damage *= 0.2;
+playSound('block');
+screenShake = 3;
+// Block particles
+for (let i = 0; i < 5; i++) {
+particles.push({
+x: this.x + this.facing * 20,
+y: this.y - 50,
+vx: (Math.random() - 0.5) * 4,
+vy: (Math.random() - 0.5) * 4,
+life: 20,
+maxLife: 20,
+color: '#88ccff',
+size: 3
+});
+}
+} else {
+this.hitFlash = 10;
+this.hitStun = 15;
+this.animState = 'hit';
+screenShake = 8;
+playSound('hit');
+
+// Hit particles
+for (let i = 0; i < 10; i++) {
+particles.push({
+x: this.x,
+y: this.y - 50,
+vx: (Math.random() - 0.5) * 8,
+vy: (Math.random() - 0.5) * 8 - 2,
+life: 30,
+maxLife: 30,
+color: '#ff4444',
+size: Math.random() * 4 + 2
+});
+}
+
+attacker.combo++;
+attacker.comboTimer = 60;
+}
+
+this.health -= damage;
+if (this.health <= 0) {
+this.health = 0;
+this.animState = 'ko';
+}
+}
+
+draw() {
+ctx.save();
+ctx.translate(this.x, this.y);
+
+const f = this.facing;
+const flash = this.hitFlash > 0;
+
+// Shadow on ground
+ctx.fillStyle = 'rgba(0,0,0,0.3)';
+ctx.beginPath();
+ctx.ellipse(0, 5, 30, 8, 0, 0, Math.PI * 2);
+ctx.fill();
+
+// Main body - shadow silhouette
+ctx.fillStyle = flash ? '#ff6666' : '#1a1a2e';
+ctx.strokeStyle = flash ? '#ff8888' : '#333355';
+ctx.lineWidth = 2;
+
+// Legs
+ctx.save();
+ctx.translate(-8 * f, -10);
+ctx.rotate(this.leftLegAngle);
+ctx.fillStyle = flash ? '#ff6666' : '#1a1a2e';
+ctx.fillRect(-5, 0, 10, 40);
+ctx.restore();
+
+ctx.save();
+ctx.translate(8 * f, -10);
+ctx.rotate(this.rightLegAngle);
+ctx.fillStyle = flash ? '#ff6666' : '#1a1a2e';
+ctx.fillRect(-5, 0, 10, 40);
+ctx.restore();
+
+// Body
+ctx.save();
+ctx.rotate(this.bodyAngle);
+ctx.fillStyle = flash ? '#ff6666' : '#1a1a2e';
+ctx.beginPath();
+ctx.roundRect(-15, -70 + this.headY, 30, 55, 5);
+ctx.fill();
+ctx.stroke();
+
+// Arms
+ctx.save();
+ctx.translate(-15 * f, -60 + this.headY);
+ctx.rotate(this.leftArmAngle);
+ctx.fillStyle = flash ? '#ff6666' : '#1a1a2e';
+ctx.fillRect(-4, 0, 8, 35);
+ctx.restore();
+
+ctx.save();
+ctx.translate(15 * f, -60 + this.headY);
+ctx.rotate(this.rightArmAngle);
+ctx.fillStyle = flash ? '#ff6666' : '#1a1a2e';
+ctx.fillRect(-4, 0, 8, 35);
+ctx.restore();
+
+// Head
+ctx.fillStyle = flash ? '#ff6666' : '#1a1a2e';
+ctx.beginPath();
+ctx.arc(0, -80 + this.headY, 15, 0, Math.PI * 2);
+ctx.fill();
+ctx.stroke();
+
+// Eyes (glowing)
+ctx.fillStyle = this.isPlayer ? '#ff4400' : '#4488ff';
+ctx.shadowColor = this.isPlayer ? '#ff4400' : '#4488ff';
+ctx.shadowBlur = 10;
+ctx.beginPath();
+ctx.arc(-5 * f, -82 + this.headY, 3, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.arc(5 * f, -82 + this.headY, 3, 0, Math.PI * 2);
+ctx.fill();
+ctx.shadowBlur = 0;
+
+// Block shield
+if (this.blocking) {
+ctx.strokeStyle = 'rgba(100,200,255,0.5)';
+ctx.lineWidth = 3;
+ctx.beginPath();
+ctx.arc(0, -50, 35, 0, Math.PI * 2);
+ctx.stroke();
+ctx.fillStyle = 'rgba(100,200,255,0.1)';
+ctx.fill();
+}
+
+ctx.restore();
+ctx.restore();
+}
+
+getHitbox() {
+return {
+x: this.x - 20,
+y: this.y - 90,
+width: 40,
+height: 90
+};
+}
+
+getAttackHitbox() {
+if (!this.attacking || this.attackTimer <= 0) return null;
+
+let box = null;
+switch(this.animState) {
+case 'punch':
+if (this.attackTimer > 3 && this.attackTimer < 10) {
+box = {
+x: this.x + this.facing * 20,
+y: this.y - 65,
+width: 40,
+height: 20
+};
+}
+break;
+case 'kick':
+if (this.attackTimer > 5 && this.attackTimer < 14) {
+box = {
+x: this.x + this.facing * 15,
+y: this.y - 30,
+width: 50,
+height: 25
+};
+}
+break;
+case 'special':
+if (this.attackTimer > 5 && this.attackTimer < 20) {
+box = {
+x: this.x + this.facing * 30,
+y: this.y - 70,
+width: 60,
+height: 40
+};
+}
+break;
+}
+return box;
+}
+}
+
+// Create fighters
+let player1, player2;
+
+function initFighters() {
+player1 = new Fighter(canvas.width * 0.3, 'SHADOW', true);
+player2 = new Fighter(canvas.width * 0.7, 'OPONENT', false);
+}
+
+initFighters();
+
+// Input handling
+const keys = {};
+window.addEventListener('keydown', (e) => {
+keys[e.key.toLowerCase()] = true;
+if (gameState === 'fighting') {
+switch(e.key.toLowerCase()) {
+case 'j': player1.attack('punch'); break;
+case 'k': player1.attack('kick'); break;
+case 'l': player1.attack('special'); break;
+case 'i': player1.blocking = true; break;
+}
+}
+});
+window.addEventListener('keyup', (e) => {
+keys[e.key.toLowerCase()] = false;
+if (e.key.toLowerCase() === 'i') {
+player1.blocking = false;
+}
+});
+
+// Mobile controls
+document.getElementById('btn-punch').addEventListener('touchstart', (e) => {
+e.preventDefault();
+if (gameState === 'fighting') player1.attack('punch');
+});
+document.getElementById('btn-kick').addEventListener('touchstart', (e) => {
+e.preventDefault();
+if (gameState === 'fighting') player1.attack('kick');
+});
+document.getElementById('btn-block').addEventListener('touchstart', (e) => {
+e.preventDefault();
+player1.blocking = true;
+});
+document.getElementById('btn-block').addEventListener('touchend', (e) => {
+e.preventDefault();
+player1.blocking = false;
+});
+document.getElementById('btn-special').addEventListener('touchstart', (e) => {
+e.preventDefault();
+if (gameState === 'fighting') player1.attack('special');
+});
+
+// AI Controller
+function updateAI() {
+if (gameState !== 'fighting') return;
+
+const ai = player2;
+const player = player1;
+const dist = Math.abs(ai.x - player.x);
+
+// Decision making
+if (ai.hitStun > 0) return;
+
+// Random behavior variations
+const reactionChance = 0.02 + Math.random() * 0.03;
+
+if (dist > 200) {
+// Approach player
+ai.vx = ai.facing * ai.speed * 0.7;
+ai.animState = 'walk';
+} else if (dist > 80) {
+// Attack range
+if (Math.random() < reactionChance) {
+const rand = Math.random();
+if (rand < 0.4) {
+ai.attack('punch');
+} else if (rand < 0.7) {
+ai.attack('kick');
+} else if (rand < 0.85) {
+ai.attack('special');
+}
+}
+// Sometimes approach
+if (Math.random() < 0.3) {
+ai.vx = ai.facing * ai.speed * 0.5;
+}
+} else {
+// Close range
+if (Math.random() < reactionChance * 2) {
+const rand = Math.random();
+if (rand < 0.5) {
+ai.attack('punch');
+} else if (rand < 0.8) {
+ai.attack('kick');
+} else {
+ai.blocking = true;
+setTimeout(() => { ai.blocking = false; }, 500);
+}
+}
+// Retreat sometimes
+if (Math.random() < 0.2) {
+ai.vx = -ai.facing * ai.speed * 0.5;
+}
+}
+
+// Jump occasionally
+if (Math.random() < 0.01 && ai.grounded) {
+ai.vy = ai.jumpPower;
+ai.grounded = false;
+ai.animState = 'jump';
+}
+
+// Block if player is attacking
+if (player.attacking && dist < 100 && Math.random() < 0.4) {
+ai.blocking = true;
+setTimeout(() => { ai.blocking = false; }, 300);
+}
+
+// Stop walking if not needed
+if (dist <= 200 && Math.random() < 0.1) {
+ai.vx = 0;
+if (!ai.attacking) ai.animState = 'idle';
+}
+}
+
+// Collision detection
+function checkCollision(box1, box2) {
+if (!box1 || !box2) return false;
+return box1.x < box2.x + box2.width &&
+box1.x + box1.width > box2.x &&
+box1.y < box2.y + box2.height &&
+box1.y + box1.height > box2.y;
+}
+
+// Update particles
+function updateParticles() {
+for (let i = particles.length - 1; i >= 0; i--) {
+const p = particles[i];
+p.x += p.vx;
+p.y += p.vy;
+p.vy += 0.1;
+p.life--;
+if (p.life <= 0) {
+particles.splice(i, 1);
+}
+}
+}
+
+// Update projectiles
+function updateProjectiles() {
+for (let i = projectiles.length - 1; i >= 0; i--) {
+const p = projectiles[i];
+p.x += p.vx;
+p.y += p.vy;
+p.life--;
+
+// Draw projectile
+ctx.fillStyle = p.owner.isPlayer ? 'rgba(255,100,0,0.8)' : 'rgba(100,100,255,0.8)';
+ctx.shadowColor = p.owner.isPlayer ? '#ff4400' : '#4488ff';
+ctx.shadowBlur = 20;
+ctx.beginPath();
+ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+ctx.fill();
+ctx.shadowBlur = 0;
+
+// Trail particles
+if (Math.random() < 0.5) {
+particles.push({
+x: p.x,
+y: p.y,
+vx: (Math.random() - 0.5) * 2,
+vy: (Math.random() - 0.5) * 2,
+life: 15,
+maxLife: 15,
+color: p.owner.isPlayer ? '#ff6600' : '#6666ff',
+size: Math.random() * 3 + 1
+});
+}
+
+// Check collision with opponent
+const opponent = p.owner === player1 ? player2 : player1;
+const oppHitbox = opponent.getHitbox();
+const projBox = { x: p.x - p.size, y: p.y - p.size, width: p.size * 2, height: p.size * 2 };
+
+if (checkCollision(projBox, oppHitbox)) {
+opponent.takeDamage(p.damage, p.owner);
+screenShake = 10;
+playSound('hit');
+
+// Explosion particles
+for (let j = 0; j < 20; j++) {
+particles.push({
+x: p.x,
+y: p.y,
+vx: (Math.random() - 0.5) * 12,
+vy: (Math.random() - 0.5) * 12,
+life: 40,
+maxLife: 40,
+color: p.owner.isPlayer ? '#ff4400' : '#4488ff',
+size: Math.random() * 5 + 2
+});
+}
+
+projectiles.splice(i, 1);
+continue;
+}
+
+if (p.life <= 0 || p.x < 0 || p.x > canvas.width) {
+projectiles.splice(i, 1);
+}
+}
+}
+
+// Draw background
+function drawBackground() {
+// Sky gradient
+const skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+skyGrad.addColorStop(0, '#0a0a1a');
+skyGrad.addColorStop(0.5, '#1a1a3e');
+skyGrad.addColorStop(1, '#2a1a1a');
+ctx.fillStyle = skyGrad;
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+// Stars
+ctx.fillStyle = '#ffffff';
+for (let i = 0; i < 50; i++) {
+const sx = (i * 137.5 + Date.now() * 0.001) % canvas.width;
+const sy = (i * 97.3) % (canvas.height * 0.5);
+const size = (Math.sin(Date.now() * 0.001 + i) + 1) * 1.5;
+ctx.globalAlpha = 0.3 + Math.sin(Date.now() * 0.002 + i) * 0.3;
+ctx.beginPath();
+ctx.arc(sx, sy, size, 0, Math.PI * 2);
+ctx.fill();
+}
+ctx.globalAlpha = 1;
+
+// Moon
+ctx.fillStyle = '#ffffcc';
+ctx.shadowColor = '#ffffcc';
+ctx.shadowBlur = 40;
+ctx.beginPath();
+ctx.arc(canvas.width * 0.8, 100, 40, 0, Math.PI * 2);
+ctx.fill();
+ctx.shadowBlur = 0;
+
+// Mountains
+ctx.fillStyle = '#0d0d1a';
+ctx.beginPath();
+ctx.moveTo(0, GROUND_Y());
+for (let x = 0; x <= canvas.width; x += 50) {
+const h = Math.sin(x * 0.01) * 80 + Math.sin(x * 0.025) * 40 + 150;
+ctx.lineTo(x, GROUND_Y() - h);
+}
+ctx.lineTo(canvas.width, GROUND_Y());
+ctx.fill();
+
+// Ground
+const groundGrad = ctx.createLinearGradient(0, GROUND_Y(), 0, canvas.height);
+groundGrad.addColorStop(0, '#2a2a3e');
+groundGrad.addColorStop(1, '#1a1a2e');
+ctx.fillStyle = groundGrad;
+ctx.fillRect(0, GROUND_Y(), canvas.width, canvas.height - GROUND_Y());
+
+// Ground line
+ctx.strokeStyle = '#444466';
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.moveTo(0, GROUND_Y());
+ctx.lineTo(canvas.width, GROUND_Y());
+ctx.stroke();
+
+// Ground details
+ctx.strokeStyle = '#333355';
+ctx.lineWidth = 1;
+for (let x = 0; x < canvas.width; x += 100) {
+ctx.beginPath();
+ctx.moveTo(x, GROUND_Y());
+ctx.lineTo(x + 50, GROUND_Y() + 20);
+ctx.stroke();
+}
+}
+
+// Draw particles
+function drawParticles() {
+for (const p of particles) {
+const alpha = p.life / p.maxLife;
+ctx.fillStyle = p.color;
+ctx.globalAlpha = alpha;
+ctx.beginPath();
+ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+ctx.fill();
+}
+ctx.globalAlpha = 1;
+}
+
+// Update UI
+function updateUI() {
+document.getElementById('p1-health').style.width = player1.health + '%';
+document.getElementById('p2-health').style.width = player2.health + '%';
+document.getElementById('timer').textContent = Math.ceil(timer);
+
+if (player1.combo > 1) {
+const comboEl = document.getElementById('combo-display');
+comboEl.textContent = player1.combo + ' HIT COMBO!';
+comboEl.style.opacity = '1';
+} else {
+document.getElementById('combo-display').style.opacity = '0';
+}
+}
+
+// Check win condition
+function checkWin() {
+if (player1.health <= 0 || player2.health <= 0 || timer <= 0) {
+gameState = 'roundEnd';
+clearInterval(timerInterval);
+
+let message = '';
+if (player1.health <= 0) {
+message = 'OPONENT WINS!';
+playSound('ko');
+} else if (player2.health <= 0) {
+message = 'YOU WIN!';
+playSound('ko');
+} else {
+message = timer > 0 ? 'TIME! DRAW!' : 'TIME!';
+}
+
+const msgEl = document.getElementById('game-message');
+msgEl.textContent = message;
+msgEl.style.opacity = '1';
+
+setTimeout(() => {
+if (player1.health <= 0 || player2.health <= 0) {
+msgEl.textContent += '\n\nClick to Restart';
+}
+}, 1000);
+}
+}
+
+// Game loop
+function gameLoop() {
+// Screen shake
+ctx.save();
+if (screenShake > 0) {
+ctx.translate(
+(Math.random() - 0.5) * screenShake,
+(Math.random() - 0.5) * screenShake
+);
+screenShake *= 0.9;
+if (screenShake < 0.5) screenShake = 0;
+}
+
+// Clear
+ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+// Draw background
+drawBackground();
+
+if (gameState === 'fighting' || gameState === 'roundEnd') {
+// Update fighters
+player1.update();
+player2.update();
+
+// Player input
+if (gameState === 'fighting' && !player1.hitStun > 0) {
+if (keys['a'] || keys['arrowleft']) {
+player1.vx = -player1.speed;
+if (player1.grounded) player1.animState = 'walk';
+} else if (keys['d'] || keys['arrowright']) {
+player1.vx = player1.speed;
+if (player1.grounded) player1.animState = 'walk';
+} else {
+player1.vx = 0;
+if (player1.grounded && !player1.attacking) player1.animState = 'idle';
+}
+
+if ((keys['w'] || keys['arrowup']) && player1.grounded) {
+player1.vy = player1.jumpPower;
+player1.grounded = false;
+player1.animState = 'jump';
+}
+
+if (keys['s'] || keys['arrowdown']) {
+// Crouch - reduce hitbox
+}
+}
+
+// AI
+updateAI();
+
+// Check attack collisions
+checkAttackCollision(player1, player2);
+checkAttackCollision(player2, player1);
+
+// Update particles
+updateParticles();
+updateProjectiles();
+
+// Draw fighters
+player1.draw();
+player2.draw();
+
+// Draw particles on top
+drawParticles();
+
+// Update UI
+updateUI();
+
+// Check win
+if (gameState === 'fighting') {
+checkWin();
+}
+}
+
+ctx.restore();
+requestAnimationFrame(gameLoop);
+}
+
+function checkAttackCollision(attacker, defender) {
+if (!attacker.attacking) return;
+
+const attackBox = attacker.getAttackHitbox();
+if (!attackBox) return;
+
+const defHitbox = defender.getHitbox();
+if (checkCollision(attackBox, defHitbox)) {
+let damage = 5;
+switch(attacker.animState) {
+case 'punch': damage = 8; break;
+case 'kick': damage = 12; break;
+case 'special': damage = 20; break;
+}
+
+defender.takeDamage(damage, attacker);
+attacker.attacking = false;
+}
+}
+
+// Start game
+document.getElementById('start-btn').addEventListener('click', () => {
+initAudio();
+document.getElementById('start-screen').style.display = 'none';
+gameState = 'fighting';
+timer = 99;
+
+timerInterval = setInterval(() => {
+if (gameState === 'fighting') {
+timer--;
+if (timer <= 0) {
+timer = 0;
+checkWin();
+}
+}
+}, 1000);
+
+// Reset fighters
+player1.health = 100;
+player2.health = 100;
+player1.x = canvas.width * 0.3;
+player2.x = canvas.width * 0.7;
+player1.animState = 'idle';
+player2.animState = 'idle';
+player1.blocking = false;
+player2.blocking = false;
+player1.combo = 0;
+player2.combo = 0;
+projectiles = [];
+particles = [];
+
+const msgEl = document.getElementById('game-message');
+msgEl.style.opacity = '0';
+});
+
+// Restart on click after round end
+canvas.addEventListener('click', () => {
+if (gameState === 'roundEnd') {
+gameState = 'fighting';
+timer = 99;
+
+player1.health = 100;
+player2.health = 100;
+player1.x = canvas.width * 0.3;
+player2.x = canvas.width * 0.7;
+player1.animState = 'idle';
+player2.animState = 'idle';
+player1.blocking = false;
+player2.blocking = false;
+player1.combo = 0;
+player2.combo = 0;
+projectiles = [];
+particles = [];
+
+const msgEl = document.getElementById('game-message');
+msgEl.style.opacity = '0';
+
+clearInterval(timerInterval);
+timerInterval = setInterval(() => {
+if (gameState === 'fighting') {
+timer--;
+if (timer <= 0) {
+timer = 0;
+checkWin();
+}
+}
+}, 1000);
+}
+});
+
+// Start game loop
+gameLoop();
+</script>
+</body>
+</html>

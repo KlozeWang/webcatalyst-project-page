@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Sky Blaster - Platformer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+width: 100%; height: 100%;
+overflow: hidden;
+background: #0a0a2e;
+touch-action: none;
+user-select: none;
+-webkit-user-select: none;
+font-family: 'Segoe UI', Arial, sans-serif;
+}
+canvas {
+display: block;
+width: 100%;
+height: 100%;
+}
+#ui-overlay {
+position: absolute;
+top: 0; left: 0;
+width: 100%; height: 100%;
+pointer-events: none;
+z-index: 10;
+}
+#hud {
+position: absolute;
+top: 10px; left: 10px; right: 10px;
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 8px 16px;
+background: rgba(0,0,0,0.5);
+border-radius: 12px;
+backdrop-filter: blur(4px);
+}
+.hud-item {
+color: #fff;
+font-size: 16px;
+font-weight: bold;
+text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+#health-bar-container {
+width: 120px; height: 14px;
+background: rgba(255,255,255,0.2);
+border-radius: 7px;
+overflow: hidden;
+border: 1px solid rgba(255,255,255,0.3);
+}
+#health-bar {
+width: 100%; height: 100%;
+background: linear-gradient(90deg, #ff4444, #ff6b6b);
+border-radius: 7px;
+transition: width 0.3s;
+}
+#controls {
+position: absolute;
+bottom: 0; left: 0; right: 0;
+height: 160px;
+pointer-events: auto;
+z-index: 20;
+}
+#dpad {
+position: absolute;
+bottom: 20px; left: 20px;
+width: 140px; height: 140px;
+}
+.dpad-btn {
+position: absolute;
+width: 50px; height: 50px;
+background: rgba(255,255,255,0.15);
+border: 2px solid rgba(255,255,255,0.3);
+border-radius: 12px;
+display: flex;
+align-items: center;
+justify-content: center;
+color: rgba(255,255,255,0.8);
+font-size: 22px;
+cursor: pointer;
+-webkit-tap-highlight-color: transparent;
+}
+.dpad-btn:active, .dpad-btn.active {
+background: rgba(255,255,255,0.35);
+}
+#btn-left { top: 45px; left: 0; }
+#btn-right { top: 45px; right: 0; }
+#btn-up { top: 0; left: 45px; }
+#btn-down { bottom: 0; left: 45px; }
+#action-buttons {
+position: absolute;
+bottom: 20px; right: 20px;
+display: flex;
+gap: 15px;
+align-items: flex-end;
+}
+.action-btn {
+border-radius: 50%;
+display: flex;
+align-items: center;
+justify-content: center;
+color: #fff;
+font-weight: bold;
+font-size: 14px;
+cursor: pointer;
+-webkit-tap-highlight-color: transparent;
+border: 2px solid rgba(255,255,255,0.3);
+text-transform: uppercase;
+letter-spacing: 1px;
+}
+#btn-jump {
+width: 75px; height: 75px;
+background: rgba(80, 180, 255, 0.3);
+}
+#btn-jump:active, #btn-jump.active {
+background: rgba(80, 180, 255, 0.6);
+}
+#btn-shoot {
+width: 65px; height: 65px;
+background: rgba(255, 80, 80, 0.3);
+margin-top: 10px;
+}
+#btn-shoot:active, #btn-shoot.active {
+background: rgba(255, 80, 80, 0.6);
+}
+#start-screen, #game-over-screen {
+position: absolute;
+top: 0; left: 0;
+width: 100%; height: 100%;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+background: rgba(10, 10, 46, 0.92);
+z-index: 100;
+pointer-events: auto;
+}
+#start-screen h1 {
+font-size: 42px;
+color: #4dc3f6;
+text-shadow: 0 0 30px rgba(77, 195, 246, 0.5);
+margin-bottom: 10px;
+}
+#start-screen p, #game-over-screen p {
+color: rgba(255,255,255,0.7);
+font-size: 16px;
+margin-bottom: 30px;
+text-align: center;
+line-height: 1.6;
+}
+.menu-btn {
+padding: 14px 48px;
+font-size: 20px;
+font-weight: bold;
+color: #fff;
+background: linear-gradient(135deg, #4dc3f6, #6c5ce7);
+border: none;
+border-radius: 30px;
+cursor: pointer;
+pointer-events: auto;
+text-transform: uppercase;
+letter-spacing: 2px;
+box-shadow: 0 4px 20px rgba(77, 195, 246, 0.4);
+-webkit-tap-highlight-color: transparent;
+}
+.menu-btn:active {
+transform: scale(0.95);
+}
+#game-over-screen h1 {
+font-size: 36px;
+color: #ff6b6b;
+margin-bottom: 10px;
+}
+#final-score {
+font-size: 24px;
+color: #ffd700;
+margin-bottom: 20px;
+}
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div id="ui-overlay">
+<div id="hud" class="hidden">
+<div class="hud-item">
+<span>❤️</span>
+<div id="health-bar-container"><div id="health-bar"></div></div>
+</div>
+<div class="hud-item" id="score-display">⭐ 0</div>
+<div class="hud-item" id="wave-display">Wave 1</div>
+</div>
+</div>
+
+<div id="controls" class="hidden">
+<div id="dpad">
+<div class="dpad-btn" id="btn-left">◀</div>
+<div class="dpad-btn" id="btn-right">▶</div>
+<div class="dpad-btn" id="btn-up">▲</div>
+<div class="dpad-btn" id="btn-down">▼</div>
+</div>
+<div id="action-buttons">
+<div class="action-btn" id="btn-jump">JUMP</div>
+<div class="action-btn" id="btn-shoot">FIRE</div>
+</div>
+</div>
+
+<div id="start-screen">
+<h1>🚀 Sky Blaster</h1>
+<p>Jump on platforms, shoot enemies,<br>survive as long as you can!</p>
+<button class="menu-btn" id="start-btn">START</button>
+</div>
+
+<div id="game-over-screen" class="hidden">
+<h1>💀 Game Over</h1>
+<div id="final-score">Score: 0</div>
+<p>Click to try again</p>
+<button class="menu-btn" id="restart-btn">RETRY</button>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+function resize() {
+W = canvas.width = window.innerWidth;
+H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Game state
+let gameRunning = false;
+let score = 0;
+let wave = 1;
+let waveTimer = 0;
+let shakeX = 0, shakeY = 0;
+let shakeDuration = 0;
+
+// Input
+const keys = { left: false, right: false, up: false, down: false, jump: false, shoot: false };
+const touchState = { left: false, right: false, jump: false, shoot: false };
+
+// Setup touch controls
+function setupButton(id, key) {
+const el = document.getElementById(id);
+const start = (e) => { e.preventDefault(); touchState[key] = true; el.classList.add('active'); };
+const end = (e) => { e.preventDefault(); touchState[key] = false; el.classList.remove('active'); };
+el.addEventListener('touchstart', start, { passive: false });
+el.addEventListener('touchend', end, { passive: false });
+el.addEventListener('touchcancel', end, { passive: false });
+el.addEventListener('mousedown', start);
+el.addEventListener('mouseup', end);
+el.addEventListener('mouseleave', end);
+}
+
+setupButton('btn-left', 'left');
+setupButton('btn-right', 'right');
+setupButton('btn-jump', 'jump');
+setupButton('btn-shoot', 'shoot');
+
+// Keyboard
+document.addEventListener('keydown', e => {
+if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
+if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
+if (e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') keys.up = true;
+if (e.key === 'ArrowDown' || e.key === 's') keys.down = true;
+if (e.key === 'z' || e.key === 'Z') keys.shoot = true;
+});
+document.addEventListener('keyup', e => {
+if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
+if (e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
+if (e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') keys.up = false;
+if (e.key === 'ArrowDown' || e.key === 's') keys.down = false;
+if (e.key === 'z' || e.key === 'Z') keys.shoot = false;
+});
+
+function isLeft() { return keys.left || touchState.left; }
+function isRight() { return keys.right || touchState.right; }
+function isJump() { return keys.up || keys.jump || touchState.jump; }
+function isShoot() { return keys.shoot || touchState.shoot; }
+
+// Player
+const player = {
+x: 100, y: 300, w: 32, h: 40,
+vx: 0, vy: 0,
+speed: 4.5, jumpForce: -12, gravity: 0.55,
+onGround: false, facing: 1,
+health: 100, maxHealth: 100,
+invincible: 0,
+shootCooldown: 0,
+animFrame: 0, animTimer: 0,
+doubleJump: false, canDoubleJump: true,
+wallSliding: false,
+dashCooldown: 0
+};
+
+// Arrays
+let platforms = [];
+let enemies = [];
+let bullets = [];
+let particles = [];
+let pickups = [];
+let stars = [];
+
+// Generate stars for background
+function generateStars() {
+stars = [];
+for (let i = 0; i < 120; i++) {
+stars.push({
+x: Math.random() * 2000,
+y: Math.random() * 2000,
+size: Math.random() * 2 + 0.5,
+twinkle: Math.random() * Math.PI * 2,
+speed: Math.random() * 0.5 + 0.1
+});
+}
+}
+
+function generateLevel() {
+platforms = [];
+enemies = [];
+bullets = [];
+particles = [];
+pickups = [];
+
+// Ground
+platforms.push({ x: -200, y: H - 40, w: 600, h: 40, type: 'ground' });
+
+// Platforms - generated procedurally
+const platCount = 8 + wave * 2;
+for (let i = 0; i < platCount; i++) {
+const px = 100 + Math.random() * (W - 200);
+const py = H - 120 - Math.random() * (H - 250);
+const pw = 80 + Math.random() * 100;
+platforms.push({
+x: px, y: py, w: pw, h: 16,
+type: 'platform',
+color: `hsl(${200 + Math.random() * 40}, 60%, ${30 + Math.random() * 20}%)`
+});
+}
+
+// Some moving platforms
+for (let i = 0; i < 2 + wave; i++) {
+const px = 200 + Math.random() * (W - 400);
+const py = H - 200 - Math.random() * (H - 350);
+platforms.push({
+x: px, y: py, w: 90, h: 16,
+type: 'moving',
+color: `hsl(${280 + Math.random() * 40}, 60%, 40%)`,
+origX: px,
+moveRange: 80 + Math.random() * 60,
+moveSpeed: 0.5 + Math.random() * 1,
+movePhase: Math.random() * Math.PI * 2
+});
+}
+
+// Enemies
+spawnWave();
+}
+
+function spawnWave() {
+const count = 3 + wave * 2;
+for (let i = 0; i < count; i++) {
+const type = Math.random() < 0.3 + wave * 0.05 ? 'flyer' : 'walker';
+let ex, ey;
+if (type === 'walker') {
+ex = 200 + Math.random() * (W - 300);
+ey = H - 80;
+} else {
+ex = 200 + Math.random() * (W - 300);
+ey = 100 + Math.random() * (H * 0.5);
+}
+enemies.push({
+x: ex, y: ey,
+w: type === 'walker' ? 30 : 28,
+h: type === 'walker' ? 30 : 28,
+vx: (Math.random() < 0.5 ? 1 : -1) * (1 + Math.random() * 1.5 + wave * 0.2),
+vy: 0,
+health: type === 'walker' ? 2 + Math.floor(wave / 3) : 1 + Math.floor(wave / 4),
+maxHealth: type === 'walker' ? 2 + Math.floor(wave / 3) : 1 + Math.floor(wave / 4),
+type: type,
+animTimer: 0,
+shootTimer: Math.random() * 120,
+origY: ey,
+origX: ex,
+moveRange: 60 + Math.random() * 80,
+facing: 1,
+flashTimer: 0
+});
+}
+}
+
+function addParticles(x, y, color, count, speed, life) {
+for (let i = 0; i < count; i++) {
+const angle = Math.random() * Math.PI * 2;
+const spd = Math.random() * speed;
+particles.push({
+x, y,
+vx: Math.cos(angle) * spd,
+vy: Math.sin(angle) * spd - 1,
+life: life || 30 + Math.random() * 20,
+maxLife: life || 30 + Math.random() * 20,
+color: color,
+size: 2 + Math.random() * 3
+});
+}
+}
+
+function addScreenShake(duration) {
+shakeDuration = duration;
+}
+
+function resetGame() {
+player.x = W * 0.2;
+player.y = H * 0.4;
+player.vx = 0;
+player.vy = 0;
+player.health = 100;
+player.invincible = 0;
+player.shootCooldown = 0;
+player.facing = 1;
+player.onGround = false;
+player.canDoubleJump = true;
+player.doubleJump = false;
+score = 0;
+wave = 1;
+waveTimer = 0;
+generateLevel();
+updateHUD();
+}
+
+function updateHUD() {
+document.getElementById('health-bar').style.width = (player.health / player.maxHealth * 100) + '%';
+document.getElementById('score-display').textContent = '⭐ ' + score;
+document.getElementById('wave-display').textContent = 'Wave ' + wave;
+}
+
+// Collision
+function rectCollide(a, b) {
+return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function update() {
+if (!gameRunning) return;
+
+// Screen shake
+if (shakeDuration > 0) {
+shakeX = (Math.random() - 0.5) * shakeDuration * 1.5;
+shakeY = (Math.random() - 0.5) * shakeDuration * 1.5;
+shakeDuration--;
+} else {
+shakeX = 0; shakeY = 0;
+}
+
+// Player movement
+let moveX = 0;
+if (isLeft()) moveX = -1;
+if (isRight()) moveX = 1;
+
+player.vx = moveX * player.speed;
+if (moveX !== 0) player.facing = moveX;
+
+// Jump
+if (isJump() && !player._jumpHeld) {
+if (player.onGround) {
+player.vy = player.jumpForce;
+player.onGround = false;
+player.canDoubleJump = true;
+addParticles(player.x + player.w / 2, player.y + player.h, '#4dc3f6', 6, 2, 15);
+} else if (player.canDoubleJump) {
+player.vy = player.jumpForce * 0.85;
+player.canDoubleJump = false;
+addParticles(player.x + player.w / 2, player.y + player.h, '#a78bfa', 8, 3, 20);
+}
+}
+player._jumpHeld = isJump();
+
+// Gravity
+player.vy += player.gravity;
+if (player.vy > 15) player.vy = 15;
+
+// Move X
+player.x += player.vx;
+if (player.x < 0) player.x = 0;
+if (player.x + player.w > W) player.x = W - player.w;
+
+// Move Y
+player.y += player.vy;
+
+// Platform collision
+player.onGround = false;
+for (let p of platforms) {
+if (p.type === 'moving') {
+p.x = p.origX + Math.sin(Date.now() * 0.001 * p.moveSpeed + p.movePhase) * p.moveRange;
+}
+
+if (player.vy >= 0 &&
+player.x + player.w > p.x && player.x < p.x + p.w &&
+player.y + player.h >= p.y && player.y + player.h <= p.y + p.h + player.vy + 2) {
+player.y = p.y - player.h;
+player.vy = 0;
+player.onGround = true;
+player.canDoubleJump = true;
+}
+}
+
+// Fall off screen
+if (player.y > H + 50) {
+player.health -= 30;
+player.x = W * 0.2;
+player.y = H * 0.3;
+player.vy = 0;
+player.invincible = 60;
+addScreenShake(8);
+if (player.health <= 0) { gameOver(); return; }
+updateHUD();
+}
+
+// Shooting
+if (player.shootCooldown > 0) player.shootCooldown--;
+if (isShoot() && player.shootCooldown <= 0) {
+const bx = player.facing > 0 ? player.x + player.w : player.x - 8;
+bullets.push({
+x: bx, y: player.y + player.h / 2 - 4,
+w: 12, h: 8,
+vx: player.facing * 10,
+vy: 0,
+life: 80,
+damage: 1,
+fromPlayer: true,
+color: '#4dc3f6'
+});
+player.shootCooldown = 10;
+addParticles(bx + 6, player.y + player.h / 2, '#4dc3f6', 3, 2, 10);
+}
+
+// Update bullets
+for (let i = bullets.length - 1; i >= 0; i--) {
+const b = bullets[i];
+b.x += b.vx;
+b.y += b.vy;
+b.life--;
+
+if (b.life <= 0 || b.x < -20 || b.x > W + 20 || b.y < -20 || b.y > H + 20) {
+bullets.splice(i, 1);
+continue;
+}
+
+if (b.fromPlayer) {
+for (let j = enemies.length - 1; j >= 0; j--) {
+const e = enemies[j];
+if (rectCollide(b, e)) {
+e.health -= b.damage;
+e.flashTimer = 6;
+addParticles(b.x, b.y, '#ffd700', 5, 3, 15);
+addScreenShake(3);
+bullets.splice(i, 1);
+if (e.health <= 0) {
+score += e.type === 'walker' ? 100 : 150;
+addParticles(e.x + e.w / 2, e.y + e.h / 2, '#ff6b6b', 15, 5, 25);
+addParticles(e.x + e.w / 2, e.y + e.h / 2, '#ffd700', 10, 4, 20);
+if (Math.random() < 0.25) {
+pickups.push({
+x: e.x, y: e.y, w: 16, h: 16,
+type: Math.random() < 0.5 ? 'health' : 'score',
+vy: -3, life: 300
+});
+}
+enemies.splice(j, 1);
+updateHUD();
+}
+break;
+}
+}
+} else {
+// Enemy bullet hits player
+if (player.invincible <= 0 && rectCollide(b, player)) {
+player.health -= 10;
+player.invincible = 30;
+addScreenShake(5);
+addParticles(player.x + player.w / 2, player.y + player.h / 2, '#ff4444', 8, 3, 15);
+bullets.splice(i, 1);
+if (player.health <= 0) { gameOver(); return; }
+updateHUD();
+}
+}
+}
+
+// Update enemies
+for (let e of enemies) {
+e.animTimer++;
+if (e.flashTimer > 0) e.flashTimer--;
+
+if (e.type === 'walker') {
+e.x += e.vx;
+// Bounce off walls
+if (e.x < 10 || e.x + e.w > W - 10) e.vx *= -1;
+
+// Check if on platform
+let onPlat = false;
+for (let p of platforms) {
+if (e.vx > 0 && e.x + e.w >= p.x && e.x + e.w <= p.x + 10 && e.y + e.h >= p.y - 5 && e.y + e.h <= p.y + 5) {
+onPlat = true;
+}
+if (e.vx < 0 && e.x <= p.x + p.w && e.x >= p.x - 10 && e.y + e.h >= p.y - 5 && e.y + e.h <= p.y + 5) {
+onPlat = true;
+}
+}
+if (!onPlat && Math.random() < 0.02) e.vx *= -1;
+
+// Shoot at player
+e.shootTimer--;
+if (e.shootTimer <= 0) {
+const dx = player.x - e.x;
+const dy = player.y - e.y;
+const dist = Math.sqrt(dx * dx + dy * dy);
+if (dist < 400) {
+e.facing = dx > 0 ? 1 : -1;
+bullets.push({
+x: e.x + e.w / 2, y: e.y + e.h / 2,
+w: 8, h: 8,
+vx: (dx / dist) * 4,
+vy: (dy / dist) * 4,
+life: 100,
+damage: 0,
+fromPlayer: false,
+color: '#ff4444'
+});
+e.shootTimer = 80 + Math.random() * 60;
+}
+}
+} else if (e.type === 'flyer') {
+e.x = e.origX + Math.sin(e.animTimer * 0.03) * e.moveRange;
+e.y = e.origY + Math.cos(e.animTimer * 0.02) * 30;
+
+e.shootTimer--;
+if (e.shootTimer <= 0) {
+const dx = player.x - e.x;
+const dy = player.y - e.y;
+const dist = Math.sqrt(dx * dx + dy * dy);
+if (dist < 450) {
+bullets.push({
+x: e.x + e.w / 2, y: e.y + e.h / 2,
+w: 8, h: 8,
+vx: (dx / dist) * 3.5,
+vy: (dy / dist) * 3.5,
+life: 120,
+damage: 0,
+fromPlayer: false,
+color: '#ff6b6b'
+});
+e.shootTimer = 60 + Math.random() * 80;
+}
+}
+}
+
+// Enemy touches player
+if (player.invincible <= 0 && rectCollide(player, e)) {
+player.health -= 15;
+player.invincible = 45;
+player.vy = -6;
+player.vx = (player.x < e.x ? -5 : 5);
+addScreenShake(6);
+addParticles(player.x + player.w / 2, player.y + player.h / 2, '#ff4444', 10, 4, 20);
+if (player.health <= 0) { gameOver(); return; }
+updateHUD();
+}
+}
+
+// Update pickups
+for (let i = pickups.length - 1; i >= 0; i--) {
+const p = pickups[i];
+p.vy += 0.3;
+p.y += p.vy;
+p.life--;
+
+// Land on platforms
+for (let plat of platforms) {
+if (p.vy >= 0 && p.x + p.w > plat.x && p.x < plat.x + plat.w &&
+p.y + p.h >= plat.y && p.y + p.h <= plat.y + plat.h + 5) {
+p.y = plat.y - p.h;
+p.vy = 0;
+}
+}
+
+if (p.life <= 0) { pickups.splice(i, 1); continue; }
+
+if (rectCollide(player, p)) {
+if (p.type === 'health') {
+player.health = Math.min(player.maxHealth, player.health + 25);
+addParticles(p.x + p.w / 2, p.y + p.h / 2, '#44ff44', 8, 3, 20);
+} else {
+score += 50;
+addParticles(p.x + p.w / 2, p.y + p.h / 2, '#ffd700', 8, 3, 20);
+}
+pickups.splice(i, 1);
+updateHUD();
+}
+}
+
+// Update particles
+for (let i = particles.length - 1; i >= 0; i--) {
+const p = particles[i];
+p.x += p.vx;
+p.y += p.vy;
+p.vy += 0.1;
+p.vx *= 0.98;
+p.life--;
+if (p.life <= 0) particles.splice(i, 1);
+}
+
+// Invincibility
+if (player.invincible > 0) player.invincible--;
+
+// Wave management
+if (enemies.length === 0) {
+waveTimer++;
+if (waveTimer > 120) {
+wave++;
+waveTimer = 0;
+spawnWave();
+updateHUD();
+addParticles(W / 2, H / 2, '#ffd700', 30, 6, 40);
+}
+}
+
+// Animation
+player.animTimer++;
+if (Math.abs(player.vx) > 0.5) {
+if (player.animTimer % 8 === 0) player.animFrame = (player.animFrame + 1) % 4;
+} else {
+player.animFrame = 0;
+}
+}
+
+function draw() {
+ctx.save();
+ctx.translate(shakeX, shakeY);
+
+// Background gradient
+const grad = ctx.createLinearGradient(0, 0, 0, H);
+grad.addColorStop(0, '#0a0a2e');
+grad.addColorStop(0.5, '#1a1a4e');
+grad.addColorStop(1, '#2a1a3e');
+ctx.fillStyle = grad;
+ctx.fillRect(-10, -10, W + 20, H + 20);
+
+// Stars
+for (let s of stars) {
+s.twinkle += 0.02;
+const alpha = 0.4 + Math.sin(s.twinkle) * 0.3;
+ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+ctx.beginPath();
+ctx.arc(s.x % W, s.y % H, s.size, 0, Math.PI * 2);
+ctx.fill();
+}
+
+// Platforms
+for (let p of platforms) {
+if (p.type === 'ground') {
+const grd = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
+grd.addColorStop(0, '#4a7a4a');
+grd.addColorStop(1, '#2a4a2a');
+ctx.fillStyle = grd;
+ctx.fillRect(p.x, p.y, p.w, p.h);
+// Grass top
+ctx.fillStyle = '#6abf6a';
+ctx.fillRect(p.x, p.y, p.w, 4);
+} else {
+// Platform shadow
+ctx.fillStyle = 'rgba(0,0,0,0.3)';
+ctx.fillRect(p.x + 3, p.y + 3, p.w, p.h);
+
+// Platform body
+const pgrd = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
+if (p.type === 'moving') {
+pgrd.addColorStop(0, '#7c5cbf');
+pgrd.addColorStop(1, '#5a3d8f');
+} else {
+pgrd.addColorStop(0, p.color || '#5566aa');
+pgrd.addColorStop(1, '#334477');
+}
+ctx.fillStyle = pgrd;
+ctx.beginPath();
+ctx.roundRect(p.x, p.y, p.w, p.h, 4);
+ctx.fill();
+
+// Top highlight
+ctx.fillStyle = 'rgba(255,255,255,0.15)';
+ctx.fillRect(p.x + 4, p.y, p.w - 8, 3);
+}
+}
+
+// Pickups
+for (let p of pickups) {
+const bob = Math.sin(Date.now() * 0.005) * 3;
+ctx.save();
+ctx.translate(p.x + p.w / 2, p.y + p.h / 2 + bob);
+
+if (p.type === 'health') {
+ctx.fillStyle = '#44ff44';
+ctx.shadowColor = '#44ff44';
+ctx.shadowBlur = 10;
+ctx.fillRect(-3, -8, 6, 16);
+ctx.fillRect(-8, -3, 16, 6);
+ctx.shadowBlur = 0;
+} else {
+ctx.fillStyle = '#ffd700';
+ctx.shadowColor = '#ffd700';
+ctx.shadowBlur = 10;
+ctx.beginPath();
+ctx.arc(0, 0, 7, 0, Math.PI * 2);
+ctx.fill();
+ctx.fillStyle = '#ffaa00';
+ctx.beginPath();
+ctx.arc(0, 0, 4, 0, Math.PI * 2);
+ctx.fill();
+ctx.shadowBlur = 0;
+}
+ctx.restore();
+}
+
+// Enemies
+for (let e of enemies) {
+ctx.save();
+ctx.translate(e.x + e.w / 2, e.y + e.h / 2);
+
+const flash = e.flashTimer > 0;
+
+if (e.type === 'walker') {
+// Body
+ctx.fillStyle = flash ? '#ffffff' : '#e74c3c';
+ctx.shadowColor = '#e74c3c';
+ctx.shadowBlur = 8;
+ctx.beginPath();
+ctx.roundRect(-e.w / 2, -e.h / 2, e.w, e.h, 6);
+ctx.fill();
+ctx.shadowBlur = 0;
+
+// Eyes
+ctx.fillStyle = '#fff';
+const eyeOff = e.facing * 3;
+ctx.beginPath();
+ctx.arc(-5 + eyeOff, -4, 4, 0, Math.PI * 2);
+ctx.arc(5 + eyeOff, -4, 4, 0, Math.PI * 2);
+ctx.fill();
+ctx.fillStyle = '#000';
+ctx.beginPath();
+ctx.arc(-4 + eyeOff + e.facing * 2, -4, 2, 0, Math.PI * 2);
+ctx.arc(6 + eyeOff + e.facing * 2, -4, 2, 0, Math.PI * 2);
+ctx.fill();
+
+// Legs animation
+const legAnim = Math.sin(e.animTimer * 0.15) * 4;
+ctx.fillStyle = flash ? '#cccccc' : '#c0392b';
+ctx.fillRect(-8, e.h / 2 - 2, 6, 6 + legAnim);
+ctx.fillRect(2, e.h / 2 - 2, 6, 6 - legAnim);
+
+// Health bar
+if (e.health < e.maxHealth) {
+ctx.fillStyle = 'rgba(0,0,0,0.5)';
+ctx.fillRect(-15, -e.h / 2 - 10, 30, 4);
+ctx.fillStyle = '#ff4444';
+ctx.fillRect(-15, -e.h / 2 - 10, 30 * (e.health / e.maxHealth), 4);
+}
+} else {
+// Flyer - diamond shape
+ctx.fillStyle = flash ? '#ffffff' : '#9b59b6';
+ctx.shadowColor = '#9b59b6';
+ctx.shadowBlur = 12;
+ctx.beginPath();
+ctx.moveTo(0, -e.h / 2);
+ctx.lineTo(e.w / 2, 0);
+ctx.lineTo(0, e.h / 2);
+ctx.lineTo(-e.w / 2, 0);
+ctx.closePath();
+ctx.fill();
+ctx.shadowBlur = 0;
+
+// Inner glow
+ctx.fillStyle = 'rgba(255,255,255,0.3)';
+ctx.beginPath();
+ctx.moveTo(0, -e.h / 4);
+ctx.lineTo(e.w / 4, 0);
+ctx.lineTo(0, e.h / 4);
+ctx.lineTo(-e.w / 4, 0);
+ctx.closePath();
+ctx.fill();
+
+// Eye
+ctx.fillStyle = '#ff0';
+ctx.beginPath();
+ctx.arc(0, 0, 3, 0, Math.PI * 2);
+ctx.fill();
+
+// Wing flaps
+const wingAngle = Math.sin(e.animTimer * 0.2) * 0.4;
+ctx.fillStyle = flash ? '#dddddd' : 'rgba(155, 89, 182, 0.6)';
+ctx.save();
+ctx.rotate(wingAngle);
+ctx.fillRect(-e.w / 2 - 8, -3, 10, 6);
+ctx.restore();
+ctx.save();
+ctx.rotate(-wingAngle);
+ctx.fillRect(e.w / 2 - 2, -3, 10, 6);
+ctx.restore();
+}
+
+ctx.restore();
+}
+
+// Bullets
+for (let b of bullets) {
+ctx.save();
+ctx.translate(b.x + b.w / 2, b.y + b.h / 2);
+ctx.rotate(Math.atan2(b.vy, b.vx));
+
+if (b.fromPlayer) {
+ctx.fillStyle = '#4dc3f6';
+ctx.shadowColor = '#4dc3f6';
+ctx.shadowBlur = 8;
+ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h);
+ctx.fillStyle = '#fff';
+ctx.fillRect(-b.w / 2 + 2, -b.h / 2 + 2, b.w - 4, b.h - 4);
+} else {
+ctx.fillStyle = '#ff4444';
+ctx.shadowColor = '#ff4444';
+ctx.shadowBlur = 8;
+ctx.beginPath();
+ctx.arc(0, 0, 5, 0, Math.PI * 2);
+ctx.fill();
+ctx.fillStyle = '#ff8888';
+ctx.beginPath();
+ctx.arc(0, 0, 2, 0, Math.PI * 2);
+ctx.fill();
+}
+ctx.shadowBlur = 0;
+ctx.restore();
+}
+
+// Player
+ctx.save();
+ctx.translate(player.x + player.w / 2, player.y + player.h / 2);
+
+if (player.invincible > 0 && Math.floor(player.invincible / 3) % 2 === 0) {
+ctx.globalAlpha = 0.4;
+}
+
+const f = player.facing;
+
+// Shadow
+ctx.fillStyle = 'rgba(0,0,0,0.2)';
+ctx.beginPath();
+ctx.ellipse(0, player.h / 2 + 2, player.w / 2 + 2, 4, 0, 0, Math.PI * 2);
+ctx.fill();
+
+// Body
+const bodyGrad = ctx.createLinearGradient(-player.w / 2, -player.h / 2, player.w / 2, player.h / 2);
+bodyGrad.addColorStop(0, '#4dc3f6');
+bodyGrad.addColorStop(1, '#2a7ab5');
+ctx.fillStyle = bodyGrad;
+ctx.beginPath();
+ctx.roundRect(-player.w / 2, -player.h / 2, player.w, player.h, 8);
+ctx.fill();
+
+// Helmet/visor
+ctx.fillStyle = '#1a3a5c';
+ctx.beginPath();
+ctx.roundRect(-player.w / 2 + 4, -player.h / 2 + 4, player.w - 8, 14, 4);
+ctx.fill();
+
+// Eye
+ctx.fillStyle = '#fff';
+ctx.beginPath();
+ctx.arc(f * 4, -player.h / 2 + 11, 4, 0, Math.PI * 2);
+ctx.fill();
+ctx.fillStyle = '#000';
+ctx.beginPath();
+ctx.arc(f * 5, -player.h / 2 + 11, 2, 0, Math.PI * 2);
+ctx.fill();
+
+// Legs animation
+const legAnim = player.onGround && Math.abs(player.vx) > 0.5 ? Math.sin(player.animTimer * 0.2) * 5 : 0;
+ctx.fillStyle = '#2a5a8a';
+ctx.fillRect(-8, player.h / 2 - 4, 7, 8 + legAnim);
+ctx.fillRect(1, player.h / 2 - 4, 7, 8 - legAnim);
+
+// Boots
+ctx.fillStyle = '#1a3a5c';
+ctx.fillRect(-9, player.h / 2 + 2 + legAnim, 9, 4);
+ctx.fillRect(0, player.h / 2 + 2 - legAnim, 9, 4);
+
+// Gun arm
+ctx.save();
+ctx.translate(f * 8, 2);
+ctx.rotate(f * 0.1);
+ctx.fillStyle = '#3a8ac0';
+ctx.fillRect(0, -3, f * 14, 6);
+ctx.fillStyle = '#5ab0e0';
+ctx.fillRect(f * 10, -4, f * 6, 8);
+ctx.restore();
+
+ctx.globalAlpha = 1;
+ctx.restore();
+
+// Particles
+for (let p of particles) {
+const alpha = p.life / p.maxLife;
+ctx.globalAlpha = alpha;
+ctx.fillStyle = p.color;
+ctx.beginPath();
+ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+ctx.fill();
+}
+ctx.globalAlpha = 1;
+
+ctx.restore();
+}
+
+function gameOver() {
+gameRunning = false;
+document.getElementById('final-score').textContent = 'Score: ' + score + ' | Wave: ' + wave;
+document.getElementById('game-over-screen').classList.remove('hidden');
+document.getElementById('controls').classList.add('hidden');
+document.getElementById('hud').classList.add('hidden');
+}
+
+function startGame() {
+document.getElementById('start-screen').classList.add('hidden');
+document.getElementById('game-over-screen').classList.add('hidden');
+document.getElementById('controls').classList.remove('hidden');
+document.getElementById('hud').classList.remove('hidden');
+resetGame();
+gameRunning = true;
+}
+
+document.getElementById('start-btn').addEventListener('click', startGame);
+document.getElementById('restart-btn').addEventListener('click', startGame);
+document.getElementById('game-over-screen').addEventListener('click', (e) => {
+if (e.target === document.getElementById('game-over-screen')) startGame();
+});
+
+// Game loop
+function gameLoop() {
+update();
+draw();
+requestAnimationFrame(gameLoop);
+}
+
+generateStars();
+gameLoop();
+</script>
+</body>
+</html>

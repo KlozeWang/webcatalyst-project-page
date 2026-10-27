@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Deep Digger</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 20;
+            transition: opacity 0.3s;
+        }
+        .hidden {
+            display: none !important;
+        }
+        /* Mobile D-Pad */
+        .dpad-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 10px;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+            cursor: pointer;
+        }
+        .dpad-btn:active {
+            background: rgba(255, 255, 255, 0.4);
+        }
+        #dpad {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: grid;
+            grid-template-areas: 
+                ". up ."
+                "left down right";
+            gap: 10px;
+            z-index: 10;
+        }
+        @media (min-width: 768px) {
+            #dpad { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- UI Overlay -->
+    <div id="hud" class="absolute top-0 left-0 w-full p-4 flex flex-col sm:flex-row justify-between items-center z-10 pointer-events-none gap-2">
+        <div class="text-2xl font-black text-yellow-400 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">SCORE: <span id="scoreUI">0</span></div>
+        
+        <div class="w-full sm:w-1/3 bg-gray-900 h-6 rounded-full border-2 border-gray-600 relative overflow-hidden">
+            <div id="energyBar" class="h-full bg-gradient-to-r from-blue-600 to-cyan-400 transition-all duration-200" style="width: 100%"></div>
+            <div class="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow-md">ENERGY</div>
+        </div>
+        
+        <div class="text-xl font-bold text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">DEPTH: <span id="depthUI">0</span>m</div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Mobile Controls -->
+    <div id="dpad">
+        <div class="dpad-btn" style="grid-area: up;" id="btnUp">▲</div>
+        <div class="dpad-btn" style="grid-area: left;" id="btnLeft">◀</div>
+        <div class="dpad-btn" style="grid-area: down;" id="btnDown">▼</div>
+        <div class="dpad-btn" style="grid-area: right;" id="btnRight">▶</div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="startScreen" class="overlay">
+        <h1 class="text-6xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-yellow-600 drop-shadow-lg text-center">DEEP DIGGER</h1>
+        <p class="text-white text-lg mb-8 text-center px-4">Dig down, collect minerals, watch your energy!</p>
+        
+        <div class="grid grid-cols-2 gap-4 mb-8 text-white text-sm">
+            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-[#8B4513]"></div> Dirt (1 Energy)</div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-[#555]"></div> Rock (Block)</div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-[#FFD700]"></div> Gold (+Score)</div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-[#00FFFF]"></div> Crystal (+Energy)</div>
+        </div>
+
+        <button id="startBtn" class="px-8 py-4 bg-gradient-to-b from-green-500 to-green-700 hover:from-green-400 hover:to-green-600 text-white font-bold rounded-xl text-2xl shadow-[0_4px_0_rgb(21,128,61)] active:shadow-none active:translate-y-1 transition-all pointer-events-auto">START DIGGING</button>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameOverScreen" class="overlay hidden">
+        <h1 class="text-6xl font-black mb-4 text-red-500 drop-shadow-lg text-center">OUT OF ENERGY!</h1>
+        <div class="bg-gray-800 p-6 rounded-xl border-4 border-gray-700 mb-8 text-center">
+            <p class="text-gray-300 text-xl mb-2">Final Score</p>
+            <p class="text-5xl font-bold text-yellow-400 mb-4" id="finalScore">0</p>
+            <p class="text-gray-300 text-lg">Max Depth: <span id="finalDepth" class="text-white font-bold">0</span>m</p>
+        </div>
+        <button id="restartBtn" class="px-8 py-4 bg-gradient-to-b from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white font-bold rounded-xl text-2xl shadow-[0_4px_0_rgb(29,78,216)] active:shadow-none active:translate-y-1 transition-all pointer-events-auto">PLAY AGAIN</button>
+    </div>
+
+    <script>
+        // --- Web Audio API Setup ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+            
+            if (type === 'dig') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } else if (type === 'coin') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'energy') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.setValueAtTime(600, now + 0.1);
+                osc.frequency.setValueAtTime(800, now + 0.2);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.linearRampToValueAtTime(0, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'thud') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(80, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            }
+        }
+
+        // --- Game Setup ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        
+        // UI Elements
+        const uiScore = document.getElementById('scoreUI');
+        const uiDepth = document.getElementById('depthUI');
+        const uiEnergy = document.getElementById('energyBar');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        
+        // Game Constants
+        const COLS = 11;
+        const TILE_SIZE = 40; // Base size, scaled below
+        let scale = 1;
+        let scaledTileSize = TILE_SIZE;
+        
+        // Block Types
+        const TYPES = {
+            EMPTY: 0,
+            DIRT: 1,
+            ROCK: 2,
+            GOLD: 3,
+            ENERGY: 4,
+            BEDROCK: 5
+        };
+
+        const COLORS = {
+            [TYPES.EMPTY]: '#3e2723', // Background cave color
+            [TYPES.DIRT]: '#8B4513',
+            [TYPES.ROCK]: '#555555',
+            [TYPES.GOLD]: '#FFD700',
+            [TYPES.ENERGY]: '#00FFFF',
+            [TYPES.BEDROCK]: '#111111'
+        };
+
+        // Game State
+        let state = 'START'; // START, PLAY, OVER
+        let map = [];
+        let cameraY = 0;
+        let animationId;
+        
+        const MAX_ENERGY = 100;
+        
+        let player = {
+            x: Math.floor(COLS / 2),
+            y: 0,
+            energy: MAX_ENERGY,
+            score: 0,
+            maxDepth: 0,
+            digTimer: 0
+        };
+
+        // --- Core Functions ---
+        
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            // Calculate scale to fit columns on screen, with a max size
+            const maxTileW = canvas.width / COLS;
+            scaledTileSize = Math.min(maxTileW, 60); 
+            
+            // Center grid horizontally
+            ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset
+            const offsetX = (canvas.width - (COLS * scaledTileSize)) / 2;
+            ctx.translate(offsetX, 0);
+        }
+
+        window.addEventListener('resize', resize);
+
+        function generateRow(y) {
+            let row = new Array(COLS).fill(TYPES.DIRT);
+            
+            // Surface is clean
+            if (y < 3) return row;
+            
+            // Difficulty scaling based on depth
+            const depthFactor = Math.min(y / 100, 1); 
+            
+            for (let x = 0; x < COLS; x++) {
+                const rand = Math.random();
+                
+                // Increase rock chance with depth
+                let rockChance = 0.05 + (depthFactor * 0.25);
+                // Decrease energy chance with depth slightly
+                let energyChance = 0.04 - (depthFactor * 0.02);
+                let goldChance = 0.05 + (depthFactor * 0.05);
+
+                if (rand < rockChance) {
+                    row[x] = TYPES.ROCK;
+                } else if (rand < rockChance + energyChance) {
+                    row[x] = TYPES.ENERGY;
+                } else if (rand < rockChance + energyChance + goldChance) {
+                    row[x] = TYPES.GOLD;
+                }
+            }
+            return row;
+        }
+
+        function ensureMapExtends(targetY) {
+            // Generate map up to targetY + screen height
+            const rowsNeeded = targetY + Math.ceil(canvas.height / scaledTileSize) + 5;
+            while (map.length < rowsNeeded) {
+                map.push(generateRow(map.length));
+            }
+        }
+
+        function initGame() {
+            map = [];
+            ensureMapExtends(0);
+            
+            // Clear starting area
+            for(let y=0; y<3; y++) {
+                for(let x=0; x<COLS; x++) {
+                    map[y][x] = TYPES.EMPTY;
+                }
+            }
+            
+            player = {
+                x: Math.floor(COLS / 2),
+                y: 1,
+                energy: MAX_ENERGY,
+                score: 0,
+                maxDepth: 0,
+                color: '#FF4500' // Orange player
+            };
+            
+            cameraY = 0;
+            updateUI();
+            
+            state = 'PLAY';
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            
+            if (animationId) cancelAnimationFrame(animationId);
+            gameLoop();
+        }
+
+        function updateUI() {
+            uiScore.innerText = player.score;
+            uiDepth.innerText = player.maxDepth;
+            const energyPct = Math.max(0, (player.energy / MAX_ENERGY) * 100);
+            uiEnergy.style.width = `${energyPct}%`;
+            
+            // Change color based on energy level
+            if (energyPct < 20) {
+                uiEnergy.className = "h-full bg-red-600 transition-all duration-200";
+            } else if (energyPct < 50) {
+                uiEnergy.className = "h-full bg-yellow-500 transition-all duration-200";
+            } else {
+                uiEnergy.className = "h-full bg-gradient-to-r from-blue-600 to-cyan-400 transition-all duration-200";
+            }
+        }
+
+        function gameOver() {
+            state = 'OVER';
+            document.getElementById('finalScore').innerText = player.score;
+            document.getElementById('finalDepth').innerText = player.maxDepth;
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        function movePlayer(dx, dy) {
+            if (state !== 'PLAY') return;
+            
+            const nx = player.x + dx;
+            const ny = player.y + dy;
+            
+            // Bounds check
+            if (nx < 0 || nx >= COLS || ny < 0) return;
+            
+            ensureMapExtends(ny);
+            
+            const targetBlock = map[ny][nx];
+            
+            if (targetBlock === TYPES.ROCK || targetBlock === TYPES.BEDROCK) {
+                playSound('thud');
+                return;
+            }
+
+            let energyCost = 0;
+            
+            if (targetBlock !== TYPES.EMPTY) {
+                energyCost = 1; // Digging costs energy
+                
+                if (targetBlock === TYPES.GOLD) {
+                    player.score += 50;
+                    playSound('coin');
+                } else if (targetBlock === TYPES.ENERGY) {
+                    player.energy = Math.min(MAX_ENERGY, player.energy + 20);
+                    playSound('energy');
+                } else {
+                    playSound('dig');
+                }
+                
+                // Clear block
+                map[ny][nx] = TYPES.EMPTY;
+            } else {
+                // Moving through empty space has slight energy cost to prevent infinite roaming
+                energyCost = 0.1; 
+            }
+
+            player.energy -= energyCost;
+            player.x = nx;
+            player.y = ny;
+            
+            if (ny > player.maxDepth) {
+                player.maxDepth = ny;
+                player.score += 5; // Points for depth
+            }
+
+            updateUI();
+
+            if (player.energy <= 0) {
+                gameOver();
+            }
+        }
+
+        // --- Input Handling ---
+        window.addEventListener('keydown', (e) => {
+            if (state !== 'PLAY') return;
+            switch(e.key) {
+                case 'ArrowUp': case 'w': case 'W': movePlayer(0, -1); break;
+                case 'ArrowDown': case 's': case 'S': movePlayer(0, 1); break;
+                case 'ArrowLeft': case 'a': case 'A': movePlayer(-1, 0); break;
+                case 'ArrowRight': case 'd': case 'D': movePlayer(1, 0); break;
+            }
+        });
+
+        // Mobile Controls
+        document.getElementById('btnUp').addEventListener('touchstart', (e)=>{e.preventDefault(); movePlayer(0, -1);});
+        document.getElementById('btnDown').addEventListener('touchstart', (e)=>{e.preventDefault(); movePlayer(0, 1);});
+        document.getElementById('btnLeft').addEventListener('touchstart', (e)=>{e.preventDefault(); movePlayer(-1, 0);});
+        document.getElementById('btnRight').addEventListener('touchstart', (e)=>{e.preventDefault(); movePlayer(1, 0);});
+        // Click fallback for testing mobile view on desktop
+        document.getElementById('btnUp').addEventListener('click', ()=>movePlayer(0, -1));
+        document.getElementById('btnDown').addEventListener('click', ()=>movePlayer(0, 1));
+        document.getElementById('btnLeft').addEventListener('click', ()=>movePlayer(-1, 0));
+        document.getElementById('btnRight').addEventListener('click', ()=>movePlayer(1, 0));
+
+        document.getElementById('startBtn').addEventListener('click', () => {
+            audioCtx.resume();
+            initGame();
+        });
+        document.getElementById('restartBtn').addEventListener('click', initGame);
+
+        // --- Rendering ---
+        function draw() {
+            // Background
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(-canvas.width, 0, canvas.width*3, canvas.height); // Cover translated areas
+            
+            // Calculate Camera Y (smooth follow)
+            const targetCameraY = (player.y * scaledTileSize) - (canvas.height / 2) + (scaledTileSize / 2);
+            // Lock camera so it doesn't show above ground
+            const lockedCameraY = Math.max(-scaledTileSize*2, targetCameraY);
+            
+            cameraY += (lockedCameraY - cameraY) * 0.1; // Lerp
+            
+            ctx.save();
+            ctx.translate(0, -cameraY);
+
+            // Determine visible rows
+            const startRow = Math.max(0, Math.floor(cameraY / scaledTileSize));
+            const endRow = Math.min(map.length, startRow + Math.ceil(canvas.height / scaledTileSize) + 2);
+
+            // Draw Map
+            for (let y = startRow; y < endRow; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    const type = map[y][x];
+                    
+                    // Draw base background for empty spots to simulate cave back wall
+                    ctx.fillStyle = COLORS[TYPES.EMPTY];
+                    ctx.fillRect(x * scaledTileSize, y * scaledTileSize, scaledTileSize, scaledTileSize);
+
+                    if (type !== TYPES.EMPTY) {
+                        ctx.fillStyle = COLORS[type];
+                        
+                        // Add some texture/borders
+                        ctx.fillRect(x * scaledTileSize + 1, y * scaledTileSize + 1, scaledTileSize - 2, scaledTileSize - 2);
+                        
+                        // Shading
+                        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                        ctx.fillRect(x * scaledTileSize + 1, y * scaledTileSize + scaledTileSize - 5, scaledTileSize - 2, 4);
+                        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                        ctx.fillRect(x * scaledTileSize + 1, y * scaledTileSize + 1, scaledTileSize - 2, 4);
+                    }
+                }
+            }
+
+            // Draw Player (simple drill machine look)
+            const px = player.x * scaledTileSize;
+            const py = player.y * scaledTileSize;
+            
+            ctx.fillStyle = player.color;
+            // Body
+            ctx.fillRect(px + 4, py + 4, scaledTileSize - 8, scaledTileSize - 8);
+            // Cockpit
+            ctx.fillStyle = '#add8e6';
+            ctx.fillRect(px + 8, py + 8, scaledTileSize - 16, scaledTileSize / 2 - 4);
+            // Drill point (pointing down)
+            ctx.fillStyle = '#ccc';
+            ctx.beginPath();
+            ctx.moveTo(px + 8, py + scaledTileSize - 4);
+            ctx.lineTo(px + scaledTileSize - 8, py + scaledTileSize - 4);
+            ctx.lineTo(px + scaledTileSize / 2, py + scaledTileSize + 4);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function gameLoop() {
+            if (state === 'PLAY') {
+                draw();
+                animationId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Initialize display
+        resize();
+        
+    </script>
+</body>
+</html>

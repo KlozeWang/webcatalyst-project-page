@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Brainrot Heist Racing</title>
+<style>
+  :root{
+    --bg:#0b1020;
+    --panel:#121a32cc;
+    --panel2:#182341f0;
+    --accent:#7cf7c1;
+    --accent2:#76a9ff;
+    --danger:#ff6f91;
+    --gold:#ffd66b;
+    --text:#e8f0ff;
+    --muted:#9bb0d1;
+    --good:#69f0ae;
+    --bad:#ff7070;
+    --shadow:0 12px 30px rgba(0,0,0,.35);
+    --radius:16px;
+    --line:1px solid rgba(255,255,255,.12);
+  }
+  *{box-sizing:border-box;user-select:none;-webkit-user-select:none}
+  html,body{margin:0;height:100%;overflow:hidden;background:
+    radial-gradient(circle at 50% 10%, #172648 0%, #0c1225 45%, #060914 100%);
+    color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  #game{position:relative;width:100vw;height:100vh;overflow:hidden}
+  canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:auto}
+  .ui{
+    position:absolute;inset:0;pointer-events:none;
+  }
+  .topbar{
+    position:absolute;left:12px;top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;
+    max-width:min(1000px,calc(100vw - 24px));
+  }
+  .panel{
+    pointer-events:auto;background:var(--panel);backdrop-filter: blur(10px);
+    border:var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+  }
+  .stats{padding:10px 12px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .stat{display:flex;flex-direction:column;min-width:98px}
+  .stat b{font-size:13px;color:var(--muted);font-weight:700}
+  .stat span{font-size:16px;font-weight:800}
+  .buttons{display:flex;gap:8px;flex-wrap:wrap;padding:10px}
+  button{
+    pointer-events:auto;border:0;border-radius:12px;padding:10px 12px;font-weight:800;color:#0c1220;
+    background:linear-gradient(180deg,#9effd8,#67efb0);
+    cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.25);transition:.12s transform,.12s filter,.12s opacity;
+  }
+  button.alt{background:linear-gradient(180deg,#9ec3ff,#6f97ff)}
+  button.warn{background:linear-gradient(180deg,#ffb4c6,#ff6f91)}
+  button.gold{background:linear-gradient(180deg,#ffe48f,#ffd05c)}
+  button.dark{background:linear-gradient(180deg,#d4ddff,#aebbe8)}
+  button:active{transform:translateY(1px) scale(.99);filter:brightness(.95)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .right{
+    position:absolute;right:12px;top:12px;width:min(320px,calc(100vw - 24px));
+    display:flex;flex-direction:column;gap:10px;align-items:stretch;
+  }
+  .card{padding:12px}
+  .card h3{margin:0 0 8px 0;font-size:15px}
+  .card p{margin:4px 0;color:var(--muted);font-size:12px;line-height:1.35}
+  .miniRow{display:flex;gap:8px;flex-wrap:wrap}
+  .barWrap{height:10px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden}
+  .bar{height:100%;width:50%;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  .bar.red{background:linear-gradient(90deg,#ff8aa0,#ff5d7b)}
+  .bar.gold{background:linear-gradient(90deg,#ffe48f,#ffd05c)}
+  .shopGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .shopItem{
+    background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:8px
+  }
+  .shopItem small{display:block;color:var(--muted);font-size:11px}
+  .shopItem b{display:block;font-size:13px;margin-top:2px}
+  .shopItem span{display:block;font-size:12px;color:#d7e2ff;margin-top:5px}
+  .footerHint{
+    position:absolute;left:50%;bottom:12px;transform:translateX(-50%);
+    background:rgba(10,16,32,.65);border:1px solid rgba(255,255,255,.12);padding:8px 12px;border-radius:999px;
+    font-size:12px;color:#dbe6ff;box-shadow:var(--shadow);pointer-events:none;white-space:nowrap
+  }
+  .centerMsg{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    text-align:center;pointer-events:none;text-shadow:0 2px 10px rgba(0,0,0,.55)
+  }
+  .centerMsg h1{margin:0;font-size:20px}
+  .centerMsg p{margin:6px 0 0;color:#dbe6ff;font-size:13px}
+  .toast{
+    position:absolute;left:50%;top:78px;transform:translateX(-50%);
+    background:rgba(18,26,50,.92);border:1px solid rgba(255,255,255,.13);border-radius:14px;padding:10px 14px;
+    box-shadow:var(--shadow);font-size:13px;max-width:min(560px,calc(100vw - 24px));text-align:center;
+    opacity:0;transition:opacity .2s, transform .2s;pointer-events:none
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .inv{
+    display:flex;gap:8px;flex-wrap:wrap;margin-top:6px
+  }
+  .chip{
+    padding:6px 9px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);
+    font-size:12px
+  }
+  @media (max-width: 780px){
+    .stat{min-width:78px}
+    .right{top:auto;bottom:12px;right:12px;left:12px;width:auto}
+    .footerHint{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="c"></canvas>
+  <div class="ui">
+    <div class="topbar">
+      <div class="panel stats">
+        <div class="stat"><b>Coins</b><span id="coins">0</span></div>
+        <div class="stat"><b>Aura</b><span id="aura">1.00x</span></div>
+        <div class="stat"><b>Brains</b><span id="brains">0</span></div>
+        <div class="stat"><b>Cash</b><span id="cash">0</span></div>
+        <div class="stat"><b>Speed</b><span id="speed">0</span></div>
+      </div>
+      <div class="panel buttons">
+        <button id="clickAura" class="gold">Click for Aura</button>
+        <button id="dropBrain" class="warn">Drop Brainrot</button>
+        <button id="enterCar" class="alt">Enter/Exit Car</button>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel card">
+        <h3>Base Defense Upgrades</h3>
+        <div class="miniRow" style="margin-bottom:8px">
+          <button id="buyWall">Buy Wall</button>
+          <button id="buyTurret" class="dark">Buy Turret</button>
+          <button id="buyLock" class="dark">Buy Lock</button>
+        </div>
+        <p id="baseInfo">Your base becomes harder to raid with each upgrade.</p>
+      </div>
+
+      <div class="panel card">
+        <h3>Vehicle Dealership</h3>
+        <div class="shopGrid">
+          <div class="shopItem">
+            <small>Starter</small><b>Compact</b><span>Speed 1.1x<br><button data-buycar="compact">Buy 120</button></span>
+          </div>
+          <div class="shopItem">
+            <small>Sport</small><b>Roadster</b><span>Speed 1.45x<br><button data-buycar="roadster" class="alt">Buy 250</button></span>
+          </div>
+          <div class="shopItem">
+            <small>Escape</small><b>Interceptor</b><span>Speed 1.85x<br><button data-buycar="interceptor" class="gold">Buy 500</button></span>
+          </div>
+          <div class="shopItem">
+            <small>Elite</small><b>Hyper GT</b><span>Speed 2.3x<br><button data-buycar="hypergt" class="warn">Buy 950</button></span>
+          </div>
+        </div>
+        <p>Drive to outrun thieves and make heists safer. Customize with color and boost.</p>
+        <div class="miniRow">
+          <button id="paintCar">Paint</button>
+          <button id="upgradeBoost" class="alt">Boost</button>
+        </div>
+      </div>
+
+      <div class="panel card">
+        <h3>Pets & Progression</h3>
+        <div class="miniRow" style="margin-bottom:8px">
+          <button id="hatchPet">Hatch Pet 80</button>
+          <button id="upgradeBag" class="dark">Bag +1 Slot 60</button>
+        </div>
+        <div id="petList" class="inv"></div>
+        <p>Pets buff stealing, racing, and aura gain.</p>
+      </div>
+
+      <div class="panel card">
+        <h3>Controls</h3>
+        <p>WASD / Arrow Keys move. Space boost in vehicle. Click Aura to multiply income. Pick up Brainrot from center zone, but carrying slows you down and exposes you to theft.</p>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    <div class="centerMsg" id="centerMsg">
+      <h1>Brainrot Heist Racing</h1>
+      <p>Steal from the center, defend your base, buy getaway cars, and build your simulator stats.</p>
+    </div>
+    <div class="footerHint">Tip: Return Brainrot to your base to bank passive income. Other players can steal it while you carry it.</div>
+  </div>
+</div>
+
+<script>
+(()=> {
+  const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
+  let W=innerWidth,H=innerHeight,DPR=Math.min(2,devicePixelRatio||1);
+  function resize(){W=innerWidth;H=innerHeight;canvas.width=W*DPR;canvas.height=H*DPR;canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);}
+  addEventListener('resize',resize);resize();
+
+  const ui = {coins:qs('#coins'), aura:qs('#aura'), brains:qs('#brains'), cash:qs('#cash'), speed:qs('#speed'),
+    toast:qs('#toast'), baseInfo:qs('#baseInfo'), petList:qs('#petList'), centerMsg:qs('#centerMsg')};
+  function qs(s){return document.querySelector(s)}
+  const player = {
+    x: 520, y: 420, vx:0, vy:0, r:14, dir:0, coins:120, aura:1, brains:0, cash:0,
+    bag:2, carrying:0, car:null, carOwned:'compact', speedMul:1, boost:0, base: {wall:0,turret:0,lock:0},
+    pets: [], color:'#7cf7c1', auraClicks:0, invuln:0
+  };
+  const cars = {
+    compact:{name:'Compact', price:120, speed:1.1, accel:0.16, color:'#89d9ff'},
+    roadster:{name:'Roadster', price:250, speed:1.45, accel:0.18, color:'#ff8bc8'},
+    interceptor:{name:'Interceptor', price:500, speed:1.85, accel:0.2, color:'#ffd66b'},
+    hypergt:{name:'Hyper GT', price:950, speed:2.3, accel:0.23, color:'#a88cff'}
+  };
+  const pets = [
+    {name:'Spark', desc:'+5% Aura', aura:1.05, steal:1.0, race:1.0},
+    {name:'Byte', desc:'+8% Steal', aura:1.0, steal:1.08, race:1.0},
+    {name:'Nitro Pup', desc:'+8% Race', aura:1.0, steal:1.0, race:1.08},
+    {name:'Gremlin', desc:'+4% all', aura:1.04, steal:1.04, race:1.04}
+  ];
+  const brainZone = {x: W*0.5, y: H*0.5, r: 92};
+  const bases = [{x:120,y:120,id:0,color:'#67efb0'},{x:W-120,y:H-120,id:1,color:'#76a9ff'}];
+  const brains = [];
+  const npcs = [];
+  for(let i=0;i<10;i++) npcs.push(spawnNPC());
+  function spawnBrain(){ return {x:brainZone.x+(Math.random()*2-1)*60,y:brainZone.y+(Math.random()*2-1)*60,carriedBy:null,home:false};}
+  for(let i=0;i<18;i++) brains.push(spawnBrain());
+  function spawnNPC(){
+    return {x:Math.random()*W,y:Math.random()*H,vx:0,vy:0,r:13,car:null,holding:0,baseDef:Math.random()*3|0,thief:Math.random()<0.4,cd:0,color:`hsl(${Math.random()*360},80%,70%)`,target:null,stealTimer:0};
+  }
+  let keys={}, mouse={x:0,y:0,down:false};
+  addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true; if(e.key===' ') e.preventDefault();});
+  addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+  canvas.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY;});
+  canvas.addEventListener('mousedown',()=>mouse.down=true);
+  addEventListener('mouseup',()=>mouse.down=false);
+
+  function toast(t){ui.toast.textContent=t; ui.toast.classList.add('show'); clearTimeout(toast.t); toast.t=setTimeout(()=>ui.toast.classList.remove('show'),1800);}
+  function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+  function rectContains(x,y,r){return x>r.x && x<r.x+r.w && y>r.y && y<r.y+r.h;}
+  function bankBrain(){ if(player.carrying>0 && dist(player,bases[0])<70){ player.cash += Math.floor(player.carrying*25*player.aura); player.carrying=0; toast('Brains banked! Cash gained.'); } }
+
+  qs('#clickAura').onclick=()=>{ player.auraClicks++; player.aura = 1 + Math.min(3, player.auraClicks*0.03 + player.pets.reduce((s,p)=>s+(p.aura-1),0)); toast('Aura increased! Income multiplier boosted.'); };
+  qs('#dropBrain').onclick=()=>{ if(player.carrying>0){ for(let i=0;i<player.carrying;i++) brains.push({x:player.x+Math.random()*20-10,y:player.y+Math.random()*20-10,carriedBy:null,home:false}); player.carrying=0; toast('Dropped Brainrot!'); } else toast('You are not carrying any Brainrot.'); };
+  qs('#enterCar').onclick=()=>toggleCar();
+  qs('#buyWall').onclick=()=>buyBase('wall', 80, 'Wall');
+  qs('#buyTurret').onclick=()=>buyBase('turret', 140, 'Turret');
+  qs('#buyLock').onclick=()=>buyBase('lock', 220, 'Lock');
+  qs('#hatchPet').onclick=()=>{ if(player.coins>=80){ player.coins-=80; const p={...pets[(Math.random()*pets.length)|0], name: pets[(Math.random()*pets.length)|0].name + ' ' + (player.pets.length+1)}; player.pets.push(p); renderPets(); toast(`Hatched ${p.name}!`);} else toast('Need more coins for a pet egg.'); };
+  qs('#upgradeBag').onclick=()=>{ const cost=60+player.bag*25; if(player.coins>=cost){ player.coins-=cost; player.bag++; toast(`Bag upgraded! Slots: ${player.bag}`);} else toast(`Need ${cost} coins.`); };
+  qs('#paintCar').onclick=()=>{ player.color = `hsl(${Math.random()*360},85%,65%)`; toast('Car paint changed!'); };
+  qs('#upgradeBoost').onclick=()=>{ const cost=100; if(player.coins>=cost){ player.coins-=cost; player.speedMul*=1.06; toast('Vehicle boost improved!'); } else toast('Need 100 coins.'); };
+  document.querySelectorAll('[data-buycar]').forEach(btn=>btn.onclick=()=>buyCar(btn.dataset.buycar));
+  function buyCar(id){ const c=cars[id]; if(player.coins>=c.price){ player.coins-=c.price; player.carOwned=id; toast(`Bought ${c.name}!`);} else toast(`Need ${c.price} coins for ${c.name}.`); }
+  function buyBase(type,cost,label){ if(player.coins>=cost){ player.coins-=cost; player.base[type]++; toast(`${label} upgraded!`);} else toast(`Need ${cost} coins.`); }
+  function toggleCar(){ if(player.car){ player.car=null; toast('Exited vehicle.'); } else { player.car={id:player.carOwned,boost:0,color:player.color}; toast('Entered vehicle.'); } }
+  function renderPets(){ ui.petList.innerHTML=''; player.pets.forEach(p=>{const d=document.createElement('div'); d.className='chip'; d.textContent=p.name; d.title=p.desc; ui.petList.appendChild(d);}); }
+
+  function updateNPC(n){
+    n.cd-=dt;
+    if(!n.car && Math.random()<0.004){ n.car={id:Object.keys(cars)[(Math.random()*Object.keys(cars).length)|0],boost:0,color:n.color}; }
+    const target = n.thief ? brainZone : bases[0];
+    let tx=target.x, ty=target.y;
+    if(n.car && n.car.id) { n.vx += Math.sign(tx-n.x)*0.02; n.vy += Math.sign(ty-n.y)*0.02; }
+    else { n.vx += (Math.random()*2-1)*0.03; n.vy += (Math.random()*2-1)*0.03; }
+    const lim = n.car ? cars[n.car.id].speed*2.1 : 1.6;
+    const sp=Math.hypot(n.vx,n.vy); if(sp>lim){n.vx=n.vx/sp*lim;n.vy=n.vy/sp*lim;}
+    n.x+=n.vx; n.y+=n.vy; n.x=clamp(n.x,20,W-20); n.y=clamp(n.y,20,H-20);
+    if(n.thief && !n.holding && dist(n,brainZone)<brainZone.r){
+      n.holding=1; if(brains.length) brains.pop();
+    }
+    if(n.holding && dist(n,bases[0])<65){ player.coins += 10; n.holding=0; }
+  }
+
+  let last=performance.now(), dt=0;
+  function loop(t){
+    dt=Math.min(0.033,(t-last)/1000); last=t;
+    step(); draw(); requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  function step(){
+    const move = (keys['w']||keys['arrowup']?-1:0) + (keys['s']||keys['arrowdown']?1:0);
+    const strafe = (keys['a']||keys['arrowleft']?-1:0) + (keys['d']||keys['arrowright']?1:0);
+    const inCar = !!player.car;
+    const carCfg = inCar ? cars[player.car.id] : null;
+    let speed = inCar ? carCfg.accel*2.6*player.speedMul : 0.12*player.speedMul;
+    speed *= (1 + player.pets.reduce((s,p)=>s+(p.race-1),0));
+    if(inCar && keys[' ']) player.car.boost = Math.min(1, player.car.boost + 0.04);
+    else if(inCar) player.car.boost *= 0.94;
+    const boostMul = inCar ? 1 + player.car.boost*0.8 : 1;
+    const carryPenalty = 1 - player.carrying*0.08;
+    const targetSpeed = speed * boostMul * carryPenalty;
+    if(inCar){
+      player.vx += strafe * targetSpeed * 0.7;
+      player.vy += move * targetSpeed * 0.7;
+    }else{
+      player.vx += strafe * targetSpeed;
+      player.vy += move * targetSpeed;
+    }
+    const sp = Math.hypot(player.vx,player.vy);
+    const max = inCar ? carCfg.speed*3.2*boostMul : 2.7*carryPenalty;
+    if(sp>max){player.vx=player.vx/sp*max; player.vy=player.vy/sp*max;}
+    player.x += player.vx; player.y += player.vy; player.vx*=0.92; player.vy*=0.92;
+    player.x=clamp(player.x,16,W-16); player.y=clamp(player.y,16,H-16);
+    if(sp>0.2) player.dir = Math.atan2(player.vy,player.vx);
+
+    if(mouse.down && dist(player,{x:mouse.x,y:mouse.y})<80) player.invuln=0.2;
+
+    if(dist(player,brainZone)<brainZone.r+12 && player.carrying<player.bag && Math.random()<0.28){
+      const b = brains.find(b=>!b.carriedBy);
+      if(b){ b.carriedBy='player'; player.carrying++; toast('Picked up Brainrot! Carry it back to your base.'); }
+    }
+    brains.forEach(b=>{
+      if(b.carriedBy==='player'){ b.x=player.x+Math.cos(player.dir)*24; b.y=player.y+Math.sin(player.dir)*24; }
+      else if(!b.home && dist(b,brainZone)>brainZone.r+40){ b.x += (brainZone.x-b.x)*0.01; b.y += (brainZone.y-b.y)*0.01; }
+    });
+
+    if(player.carrying>0 && dist(player,bases[0])<72) bankBrain();
+    if(player.carrying>0 && dist(player,bases[1])<70 && player.base.lock>0){ player.cash += player.carrying*12; player.carrying=0; toast('Banked at secondary outpost!'); }
+
+    npcs.forEach(updateNPC);
+    player.coins += dt * (0.9 + player.base.wall*0.35 + player.base.turret*0.5) * player.aura;
+    player.cash += dt * player.carrying * 2.2 * player.aura;
+    player.invuln = Math.max(0, player.invuln-dt);
+
+    ui.coins.textContent = Math.floor(player.coins);
+    ui.aura.textContent = player.aura.toFixed(2)+'x';
+    ui.brains.textContent = player.carrying+'/'+player.bag;
+    ui.cash.textContent = Math.floor(player.cash);
+    ui.speed.textContent = (Math.hypot(player.vx,player.vy)+(player.car?1.5:0)).toFixed(1);
+    ui.baseInfo.textContent = `Wall ${player.base.wall} | Turret ${player.base.turret} | Lock ${player.base.lock} — Passive cash scales with defense.`;
+
+    if(Math.random()<0.01 && brains.length<28) brains.push(spawnBrain());
+    if(mouse.down && dist(player,brainZone)<140) player.aura += 0.0006;
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    drawGrid();
+    drawZone();
+    drawBases();
+    drawBrains();
+    drawNPCs();
+    drawPlayer();
+    drawHUDGhost();
+  }
+  function drawGrid(){
+    ctx.save();
+    ctx.globalAlpha=0.18;
+    ctx.strokeStyle='#9bb0d1';
+    for(let x=0;x<W;x+=44){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+    for(let y=0;y<H;y+=44){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+    ctx.restore();
+  }
+  function drawZone(){
+    const g=ctx.createRadialGradient(brainZone.x,brainZone.y,10,brainZone.x,brainZone.y,brainZone.r);
+    g.addColorStop(0,'rgba(124,247,193,.26)'); g.addColorStop(1,'rgba(124,247,193,.03)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(brainZone.x,brainZone.y,brainZone.r,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(124,247,193,.35)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(brainZone.x,brainZone.y,brainZone.r,0,Math.PI*2); ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,.8)'; ctx.font='700 13px system-ui'; ctx.textAlign='center';
+    ctx.fillText('Central Brainrot Zone',brainZone.x,brainZone.y-110);
+  }
+  function drawBases(){
+    bases.forEach((b,i)=>{
+      const bx=b.x,by=b.y;
+      ctx.save();
+      ctx.translate(bx,by);
+      ctx.fillStyle = i===0 ? 'rgba(103,239,176,.15)' : 'rgba(118,169,255,.15)';
+      ctx.strokeStyle = i===0 ? '#67efb0' : '#76a9ff';
+      ctx.lineWidth=3;
+      ctx.beginPath(); ctx.roundRect(-42,-42,84,84,16); ctx.fill(); ctx.stroke();
+      ctx.fillStyle='rgba(255,255,255,.85)'; ctx.font='700 13px system-ui'; ctx.textAlign='center';
+      ctx.fillText(i===0?'Your Base':'Outpost',0,-54);
+      ctx.fillStyle='rgba(255,255,255,.6)';
+      ctx.fillText(`W${player.base.wall} T${player.base.turret} L${player.base.lock}`,0,60);
+      ctx.restore();
+    });
+  }
+  function drawBrains(){
+    brains.forEach(b=>{
+      if(b.carriedBy==='player') return;
+      ctx.save(); ctx.translate(b.x,b.y); ctx.fillStyle='#ffd66b';
+      ctx.beginPath(); ctx.arc(0,0,7,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#3b2b00'; ctx.font='700 8px system-ui'; ctx.textAlign='center'; ctx.fillText('B',0,3); ctx.restore();
+    });
+    if(player.carrying>0){
+      ctx.fillStyle='rgba(255,214,107,.9)'; ctx.font='700 11px system-ui'; ctx.fillText(`Carrying ${player.carrying}`, player.x+18, player.y-18);
+    }
+  }
+  function drawNPCs(){
+    npcs.forEach(n=>{ ctx.fillStyle=n.color; ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2); ctx.fill();
+      if(n.holding){ctx.fillStyle='#ffd66b'; ctx.fillRect(n.x+8,n.y-4,8,8);}
+    });
+  }
+  function drawPlayer(){
+    ctx.save(); ctx.translate(player.x,player.y); ctx.rotate(player.dir);
+    if(player.car){
+      const c = cars[player.car.id];
+      ctx.fillStyle = player.color; ctx.strokeStyle='#fff'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.roundRect(-18,-10,36,20,8); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = c.color; ctx.fillRect(0,-8,18,16);
+      if(player.car.boost>0.2){ ctx.fillStyle='rgba(118,169,255,.6)'; ctx.beginPath(); ctx.moveTo(-20,0); ctx.lineTo(-34,-8); ctx.lineTo(-34,8); ctx.closePath(); ctx.fill(); }
+    } else {
+      ctx.fillStyle = player.invuln>0 ? '#ffffff' : player.color;
+      ctx.beginPath(); ctx.arc(0,0,player.r,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='rgba(255,255,255,.8)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(18,0); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function drawHUDGhost(){
+    if(player.car){
+      ctx.fillStyle='rgba(255,255,255,.16)';
+      ctx.font='700 12px system-ui'; ctx.textAlign='right';
+      ctx.fillText(`Vehicle: ${cars[player.car.id].name} | Boost ${(player.car.boost*100)|0}%`, W-14, H-16);
+    }
+  }
+})();
+</script>
+</body>
+</html>

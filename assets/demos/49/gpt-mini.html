@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Rabbit Race</title>
+  <style>
+    :root{
+      --bg:#8fd3ff;
+      --grass:#63c15a;
+      --track:#d9b28a;
+      --track2:#c89a70;
+      --ui:#16324f;
+      --good:#4caf50;
+      --bad:#e74c3c;
+      --card:#ffffffcc;
+    }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: linear-gradient(#8fd3ff 0%, #b7ecff 45%, #7ed36e 45%, #63c15a 100%);
+      touch-action: none;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #game {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: transparent;
+    }
+    .hud {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      padding: env(safe-area-inset-top) 10px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      box-sizing: border-box;
+      gap: 8px;
+    }
+    .panel {
+      background: var(--card);
+      color: var(--ui);
+      border-radius: 14px;
+      padding: 10px 12px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      font-weight: 700;
+      line-height: 1.25;
+      min-width: 120px;
+    }
+    .panel small { display:block; font-weight: 600; opacity: .8; }
+    .controls {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 10px 10px calc(env(safe-area-inset-bottom) + 10px);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 10px;
+      box-sizing: border-box;
+      pointer-events: none;
+    }
+    .btnWrap{
+      display:flex;
+      gap:10px;
+      pointer-events: auto;
+    }
+    button {
+      appearance: none;
+      border: none;
+      border-radius: 18px;
+      width: 72px;
+      height: 72px;
+      background: #ffffffdd;
+      color: #16324f;
+      font-size: 30px;
+      font-weight: 900;
+      box-shadow: 0 10px 22px rgba(0,0,0,0.18);
+      touch-action: none;
+    }
+    button:active { transform: scale(0.97); }
+    #boostBtn { background: linear-gradient(#fff2a8, #ffd34d); }
+    #slowBtn { background: linear-gradient(#ffd0c8, #ff8b7a); }
+    #restartBtn {
+      width: auto;
+      min-width: 110px;
+      height: 50px;
+      font-size: 16px;
+      padding: 0 16px;
+      background: linear-gradient(#e8f7ff, #cdeeff);
+      display: none;
+    }
+    .centerMsg {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .msgBox {
+      background: rgba(255,255,255,0.88);
+      color: #16324f;
+      border-radius: 22px;
+      padding: 18px 18px 16px;
+      max-width: 420px;
+      text-align: center;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.18);
+      display: none;
+    }
+    .msgBox h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+    .msgBox p {
+      margin: 6px 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .hint {
+      position: fixed;
+      right: 10px;
+      top: 86px;
+      background: rgba(255,255,255,0.8);
+      color: #16324f;
+      border-radius: 12px;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-weight: 700;
+      max-width: 220px;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.08);
+    }
+  </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="hud">
+  <div class="panel" id="raceInfo">
+    <small>Rabbit Race</small>
+    Ready to start
+  </div>
+  <div class="panel" id="leaderInfo">
+    <small>Leader</small>
+    —
+  </div>
+</div>
+
+<div class="hint">Collect carrots to speed up. Veggies help a little. Avoid obstacles—they slow rabbits down!</div>
+
+<div class="controls">
+  <div class="btnWrap">
+    <button id="boostBtn" aria-label="Boost">🥕</button>
+    <button id="slowBtn" aria-label="Sabotage">🪨</button>
+  </div>
+  <button id="restartBtn">Restart</button>
+</div>
+
+<div class="centerMsg">
+  <div class="msgBox" id="msgBox">
+    <h1 id="msgTitle">Rabbit Race</h1>
+    <p id="msgText">Tap to start the race.</p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const raceInfo = document.getElementById('raceInfo');
+  const leaderInfo = document.getElementById('leaderInfo');
+  const msgBox = document.getElementById('msgBox');
+  const msgTitle = document.getElementById('msgTitle');
+  const msgText = document.getElementById('msgText');
+  const restartBtn = document.getElementById('restartBtn');
+  const boostBtn = document.getElementById('boostBtn');
+  const slowBtn = document.getElementById('slowBtn');
+
+  let W=0,H=0,dpr=1;
+  const state = {
+    running: false,
+    finished: false,
+    time: 0,
+    finishX: 0,
+    cameraX: 0,
+    shake: 0,
+    winner: null,
+    particles: [],
+    items: [],
+    rabbits: [],
+    controls: { boost:false, slow:false }
+  };
+
+  const track = {
+    laneCount: 3,
+    laneHeight: 92,
+    top: 0,
+    left: 0,
+    width: 0,
+    roadX: 0,
+    roadY: 0,
+    roadH: 0
+  };
+
+  function resize() {
+    dpr = Math.max(1, Math.min(2.2, window.devicePixelRatio || 1));
+    W = Math.floor(window.innerWidth);
+    H = Math.floor(window.innerHeight);
+    canvas.width = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+
+    track.width = Math.min(1100, W * 0.9);
+    track.left = (W - track.width) / 2;
+    track.roadX = track.left;
+    track.roadY = Math.max(110, H * 0.18);
+    track.roadH = Math.min(360, H * 0.48);
+    track.laneHeight = track.roadH / track.laneCount;
+    state.finishX = 3000;
+  }
+
+  function rand(a,b){ return a + Math.random()*(b-a); }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+  class Rabbit {
+    constructor(name, lane, color, xOffset=0) {
+      this.name = name;
+      this.lane = lane;
+      this.color = color;
+      this.x = 0 + xOffset;
+      this.y = 0;
+      this.baseSpeed = rand(2.4, 3.0);
+      this.speed = this.baseSpeed;
+      this.targetLane = lane;
+      this.radius = 18;
+      this.bob = Math.random() * Math.PI * 2;
+      this.mood = 0;
+      this.effectTimer = 0;
+      this.scoreBoost = 0;
+    }
+    reset(lane, xOffset=0){
+      this.lane = lane;
+      this.targetLane = lane;
+      this.x = 0 + xOffset;
+      this.speed = this.baseSpeed = rand(2.4, 3.0);
+      this.effectTimer = 0;
+      this.scoreBoost = 0;
+      this.mood = 0;
+    }
+    update(dt){
+      this.bob += dt * 0.015;
+      if (this.effectTimer > 0) this.effectTimer -= dt;
+      const laneY = track.roadY + this.lane * track.laneHeight + track.laneHeight * 0.5;
+      this.y += (laneY - this.y) * 0.12;
+      if (this.targetLane !== this.lane) {
+        const dy = this.targetLane - this.lane;
+        if (Math.abs(dy) < 0.03) this.lane = this.targetLane;
+        else this.lane += dy * 0.12;
+      }
+      let s = this.baseSpeed + this.scoreBoost;
+      s += Math.sin(this.bob * 4) * 0.03;
+      if (this.effectTimer > 0) s *= this.mood;
+      this.x += s;
+      this.speed = s;
+    }
+    applyEffect(mult, duration){
+      this.mood = mult;
+      this.effectTimer = duration;
+    }
+    draw(camX){
+      const sx = this.x - camX + track.roadX + 50;
+      const sy = this.y || (track.roadY + this.lane * track.laneHeight + track.laneHeight*0.5);
+      const bob = Math.sin(this.bob*6)*2;
+      ctx.save();
+      ctx.translate(sx, sy + bob);
+      ctx.scale(1.1,1.05);
+
+      ctx.fillStyle = 'rgba(0,0,0,0.12)';
+      ctx.beginPath();
+      ctx.ellipse(0, 18, 24, 9, 0, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.fillStyle = this.color;
+      roundRabbitBody(0, 0, 22, 18);
+
+      ctx.fillStyle = '#fff';
+      roundRabbitBody(-7, -13, 8, 14);
+      roundRabbitBody(7, -13, 8, 14);
+
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.ellipse(0, -2, 16, 13, 0, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.ellipse(15, 2, 8, 10, -0.3, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.fillStyle = '#333';
+      ctx.beginPath();
+      ctx.arc(4, -4, 1.8, 0, Math.PI*2);
+      ctx.arc(10, -3, 1.8, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#ff8aa0';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(7, 0, 2.8, 0, Math.PI);
+      ctx.stroke();
+
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(18, 6, 3.2, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+  }
+
+  function roundRabbitBody(x, y, w, h){
+    const r = Math.min(w,h)/2;
+    ctx.beginPath();
+    ctx.moveTo(x-r, y-h/2);
+    ctx.arcTo(x+w-r, y-h/2, x+w-r, y+h/2, r);
+    ctx.arcTo(x+w-r, y+h/2, x-r, y+h/2, r);
+    ctx.arcTo(x-r, y+h/2, x-r, y-h/2, r);
+    ctx.arcTo(x-r, y-h/2, x+w-r, y-h/2, r);
+    ctx.fill();
+  }
+
+  function spawnItems() {
+    state.items = [];
+    const kinds = ['carrot','veg','rock'];
+    for (let i=0;i<55;i++){
+      const kind = kinds[Math.floor(Math.random()*kinds.length)];
+      const lane = Math.floor(Math.random()*track.laneCount);
+      state.items.push({
+        kind,
+        lane,
+        x: 220 + i * rand(45, 75) + rand(-30,30),
+        taken: false,
+        wobble: Math.random() * Math.PI * 2
+      });
+    }
+  }
+
+  function resetGame() {
+    state.running = false;
+    state.finished = false;
+    state.time = 0;
+    state.cameraX = 0;
+    state.shake = 0;
+    state.winner = null;
+    state.particles = [];
+    spawnItems();
+    state.rabbits = [
+      new Rabbit('You', 1, '#ffffff'),
+      new Rabbit('BunBun', 0, '#ffd9c2', -20),
+      new Rabbit('Hopper', 2, '#d7c7ff', -40)
+    ];
+    state.rabbits[0].x = 0;
+    state.rabbits[1].x = -10;
+    state.rabbits[2].x = -20;
+    msgBox.style.display = 'block';
+    msgTitle.textContent = 'Rabbit Race';
+    msgText.textContent = 'Tap anywhere or press Start to race. Collect rewards and reach the finish line first!';
+    restartBtn.style.display = 'none';
+    updateHud();
+  }
+
+  function startRace() {
+    if (state.finished) return;
+    state.running = true;
+    msgBox.style.display = 'none';
+  }
+
+  function finishRace(winner){
+    state.running = false;
+    state.finished = true;
+    state.winner = winner;
+    msgBox.style.display = 'block';
+    msgTitle.textContent = winner.name + ' Wins!';
+    msgText.textContent = winner.name === 'You' ? 'Great job! You crossed the finish line first.' : `${winner.name} reached the finish first. Try again!`;
+    restartBtn.style.display = 'inline-block';
+    updateHud();
+  }
+
+  function updateHud(){
+    const sorted = [...state.rabbits].sort((a,b)=>b.x-a.x);
+    const lead = sorted[0];
+    leaderInfo.innerHTML = `<small>Leader</small>${lead.name}`;
+    const me = state.rabbits[0];
+    raceInfo.innerHTML = `<small>Speed</small>${me.speed.toFixed(2)} &nbsp; <small>Position</small> ${Math.max(1, state.rabbits.filter(r=>r.x > me.x).length + 1)}/3`;
+  }
+
+  function itemEffect(kind){
+    if (kind === 'carrot') return { mult: 1.35, dur: 1800, text: '+Speed!' };
+    if (kind === 'veg') return { mult: 1.15, dur: 1400, text: '+Boost!' };
+    return { mult: 0.72, dur: 1300, text: '-Slow!' };
+  }
+
+  function burst(x,y,color,count=12,spd=2.5){
+    for(let i=0;i<count;i++){
+      const a = Math.random()*Math.PI*2;
+      const s = rand(0.4, spd);
+      state.particles.push({
+        x,y, vx: Math.cos(a)*s, vy: Math.sin(a)*s - 0.8,
+        life: rand(400,900), max: 900, color, size: rand(2,5)
+      });
+    }
+  }
+
+  function maybeCollect(rabbit){
+    for (const item of state.items) {
+      if (item.taken || item.lane !== Math.round(rabbit.lane)) continue;
+      const dx = item.x - rabbit.x;
+      if (Math.abs(dx) < 34) {
+        item.taken = true;
+        const eff = itemEffect(item.kind);
+        rabbit.applyEffect(eff.mult, eff.dur);
+        if (rabbit === state.rabbits[0]) {
+          burst(rabbit.x, rabbit.y, item.kind === 'rock' ? '#666' : item.kind === 'carrot' ? '#ff9b2f' : '#58c95b', 14, 3.2);
+        }
+        if (item.kind === 'carrot') state.shake = 7;
+        if (item.kind === 'rock') state.shake = 10;
+      }
+    }
+  }
+
+  function useControl(kind){
+    if (!state.running || state.finished) return;
+    const me = state.rabbits[0];
+    if (kind === 'boost') {
+      me.applyEffect(1.45, 900);
+      burst(me.x, me.y, '#ffcf40', 10, 3);
+    } else {
+      me.applyEffect(0.78, 850);
+      burst(me.x, me.y, '#8b6b4e', 8, 2.2);
+    }
+  }
+
+  function update(dt){
+    if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * 0.02);
+    if (!state.running || state.finished) {
+      updateHud();
+      return;
+    }
+    state.time += dt;
+
+    for (const r of state.rabbits) {
+      if (r !== state.rabbits[0] && Math.random() < 0.01) {
+        if (Math.random() < 0.5) r.targetLane = clamp(r.targetLane + (Math.random()<0.5?-1:1), 0, 2);
+      }
+      r.update(dt);
+      maybeCollect(r);
+      r.y = track.roadY + r.lane * track.laneHeight + track.laneHeight*0.5;
+    }
+
+    for (const item of state.items) {
+      item.wobble += dt * 0.005;
+    }
+
+    for (let i = state.particles.length - 1; i >= 0; i--) {
+      const p = state.particles[i];
+      p.life -= dt;
+      p.x += p.vx * dt * 0.06;
+      p.y += p.vy * dt * 0.06;
+      p.vy += 0.002 * dt;
+      if (p.life <= 0) state.particles.splice(i,1);
+    }
+
+    state.cameraX = Math.max(0, state.rabbits[0].x - 160);
+
+    for (const r of state.rabbits) {
+      if (r.x >= state.finishX) {
+        finishRace(r);
+        break;
+      }
+    }
+
+    updateHud();
+  }
+
+  function drawBackground(){
+    ctx.clearRect(0,0,W,H);
+
+    const skyGrad = ctx.createLinearGradient(0,0,0,H);
+    skyGrad.addColorStop(0, '#8fd3ff');
+    skyGrad.addColorStop(0.45, '#b7ecff');
+    skyGrad.addColorStop(0.46, '#78d965');
+    skyGrad.addColorStop(1, '#57b84f');
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0,0,W,H);
+
+    ctx.fillStyle = '#ffffff55';
+    for(let i=0;i<8;i++){
+      const x = (i*180 + (state.cameraX*0.2)%180) - 40;
+      const y = 40 + (i%3)*24;
+      cloud(x,y,70,22);
+    }
+
+    const roadX = track.roadX;
+    const roadY = track.roadY;
+    const roadW = track.width;
+    const roadH = track.roadH;
+
+    ctx.fillStyle = '#6a4b2d';
+    roundRect(roadX-18, roadY-18, roadW+36, roadH+36, 26, true);
+
+    ctx.fillStyle = '#d8ab7f';
+    roundRect(roadX, roadY, roadW, roadH, 20, true);
+
+    ctx.save();
+    ctx.beginPath();
+    roundRect(roadX, roadY, roadW, roadH, 20, false);
+    ctx.clip();
+
+    for(let i=0;i<18;i++){
+      const yy = roadY + i*(roadH/18);
+      ctx.strokeStyle = i%2 ? '#c99467' : '#dcb087';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(roadX, yy);
+      ctx.lineTo(roadX + roadW, yy);
+      ctx.stroke();
+    }
+    for(let i=1;i<3;i++){
+      const yy = roadY + i*track.laneHeight;
+      ctx.strokeStyle = '#fff7';
+      ctx.setLineDash([18,18]);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(roadX, yy);
+      ctx.lineTo(roadX + roadW, yy);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    for(let x = -((state.cameraX*0.7)%120); x < roadW + 120; x += 120) {
+      ctx.fillStyle = '#e7c69d';
+      ctx.fillRect(roadX + x, roadY + roadH - 8, 60, 8);
+    }
+
+    const finishLocalX = state.finishX - state.cameraX + roadX + 50;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(finishLocalX, roadY - 16, 10, roadH + 32);
+    for(let y=0; y<roadH; y+=18){
+      ctx.fillStyle = y%36===0 ? '#111' : '#fff';
+      ctx.fillRect(finishLocalX+10, roadY + y, 18, 18);
+      ctx.fillStyle = y%36===0 ? '#fff' : '#111';
+      ctx.fillRect(finishLocalX+28, roadY + y, 18, 18);
+    }
+    ctx.restore();
+
+    for (let i = 0; i < 3; i++) {
+      const yy = roadY + i*track.laneHeight + track.laneHeight*0.5;
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      ctx.beginPath();
+      ctx.arc(roadX + 18, yy, 2.5, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function cloud(x,y,w,h){
+    ctx.beginPath();
+    ctx.ellipse(x, y, w*0.42, h*0.7, 0, 0, Math.PI*2);
+    ctx.ellipse(x+w*0.28, y-6, w*0.34, h*0.84, 0, 0, Math.PI*2);
+    ctx.ellipse(x+w*0.55, y, w*0.42, h*0.7, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  function roundRect(x,y,w,h,r,fill=true){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    if (fill) ctx.fill(); else ctx.stroke();
+  }
+
+  function drawItems(){
+    for (const item of state.items) {
+      if (item.taken) continue;
+      const sx = item.x - state.cameraX + track.roadX + 50;
+      const sy = track.roadY + item.lane * track.laneHeight + track.laneHeight*0.5;
+      if (sx < track.roadX - 40 || sx > track.roadX + track.width + 40) continue;
+      const bob = Math.sin(item.wobble * 3) * 3;
+      ctx.save();
+      ctx.translate(sx, sy + bob);
+      if (item.kind === 'carrot') drawCarrot();
+      else if (item.kind === 'veg') drawVeg();
+      else drawRock();
+      ctx.restore();
+    }
+  }
+
+  function drawCarrot(){
+    ctx.fillStyle = '#ff8a1e';
+    ctx.beginPath();
+    ctx.moveTo(0, -14);
+    ctx.quadraticCurveTo(11, 0, 0, 18);
+    ctx.quadraticCurveTo(-11, 0, 0, -14);
+    ctx.fill();
+    ctx.strokeStyle = '#2f9d3a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-1, -13);
+    ctx.lineTo(-8, -23);
+    ctx.moveTo(0, -13);
+    ctx.lineTo(0, -25);
+    ctx.moveTo(1, -13);
+    ctx.lineTo(8, -23);
+    ctx.stroke();
+  }
+
+  function drawVeg(){
+    ctx.fillStyle = '#46bf5a';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 14, 12, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#7be37f';
+    for(let i=0;i<4;i++){
+      ctx.beginPath();
+      ctx.ellipse(-7 + i*5, -10 + (i%2)*2, 4, 8, -0.4 + i*0.2, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  function drawRock(){
+    ctx.fillStyle = '#7b6d63';
+    ctx.beginPath();
+    ctx.moveTo(-14, 10);
+    ctx.quadraticCurveTo(-12, -12, 0, -14);
+    ctx.quadraticCurveTo(16, -10, 14, 8);
+    ctx.quadraticCurveTo(4, 18, -14, 10);
+    ctx.fill();
+  }
+
+  function drawParticles(){
+    for (const p of state.particles) {
+      ctx.globalAlpha = Math.max(0, p.life / p.max);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x - state.cameraX + track.roadX + 50, p.y, p.size, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawRabbits(){
+    for (const r of state.rabbits) r.draw(state.cameraX);
+  }
+
+  function draw(){
+    drawBackground();
+    drawItems();
+    drawParticles();
+    drawRabbits();
+
+    if (!state.running && !state.finished) {
+      const me = state.rabbits[0];
+      const sx = me.x - state.cameraX + track.roadX + 50;
+      const sy = track.roadY + me.lane * track.laneHeight + track.laneHeight*0.5;
+      ctx.fillStyle = '#16324f';
+      ctx.font = '700 14px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('Tap to start', sx, sy - 42);
+    }
+
+    if (state.finished) {
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.fillRect(0,0,W,H);
+    }
+  }
+
+  function loop(ts){
+    if (!loop.last) loop.last = ts;
+    const dt = Math.min(34, ts - loop.last);
+    loop.last = ts;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function changeLane(delta){
+    if (!state.running || state.finished) return;
+    const me = state.rabbits[0];
+    me.targetLane = clamp(Math.round(me.targetLane + delta), 0, 2);
+  }
+
+  window.addEventListener('resize', resize);
+  window.addEventListener('pointerdown', (e) => {
+    if (e.target === boostBtn || e.target === slowBtn || e.target === restartBtn) return;
+    if (!state.running && !state.finished) startRace();
+  }, { passive: true });
+
+  boostBtn.addEventListener('click', (e) => { e.stopPropagation(); useControl('boost'); });
+  slowBtn.addEventListener('click', (e) => { e.stopPropagation(); useControl('slow'); });
+  restartBtn.addEventListener('click', resetGame);
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp') changeLane(-1);
+    if (e.key === 'ArrowDown') changeLane(1);
+    if (e.key === ' ' || e.key === 'Enter') {
+      if (!state.running && !state.finished) startRace();
+      else if (state.finished) resetGame();
+    }
+    if (e.key.toLowerCase() === 'z') useControl('boost');
+    if (e.key.toLowerCase() === 'x') useControl('slow');
+  });
+
+  resize();
+  resetGame();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

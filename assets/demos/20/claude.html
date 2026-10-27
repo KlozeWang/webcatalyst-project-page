@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ninja Fight: Naruto Style</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; user-select:none; }
+  body {
+    font-family: 'Arial Black', sans-serif;
+    background: #000;
+    color:#fff;
+    overflow:hidden;
+    height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  #game {
+    width:100%;
+    max-width:960px;
+    height:100vh;
+    max-height:600px;
+    position:relative;
+    background: linear-gradient(to bottom, #ff7e3a 0%, #ff5e62 40%, #4a2c2a 70%, #2c1810 100%);
+    overflow:hidden;
+    box-shadow:0 0 30px rgba(255,100,0,0.5);
+  }
+  .clouds {
+    position:absolute; top:10%; left:0; right:0; height:80px;
+    background: radial-gradient(ellipse at 20% 50%, rgba(255,255,255,0.3) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 60%, rgba(255,255,255,0.2) 0%, transparent 50%);
+    animation: drift 30s linear infinite;
+  }
+  @keyframes drift { from{transform:translateX(0)} to{transform:translateX(-100px)} }
+  .ground {
+    position:absolute; bottom:0; left:0; right:0; height:80px;
+    background: linear-gradient(to bottom, #5a3a2a, #2c1810);
+    border-top:3px solid #8a5a3a;
+  }
+  .moon {
+    position:absolute; top:30px; right:60px; width:70px; height:70px;
+    background:radial-gradient(circle, #fff 30%, #ffeb99 70%);
+    border-radius:50%;
+    box-shadow:0 0 40px #ffeb99;
+  }
+  .fighter {
+    position:absolute; bottom:80px; width:80px; height:140px;
+    transition: left 0.05s linear;
+  }
+  .fighter .head {
+    width:50px; height:50px; border-radius:50%;
+    position:absolute; top:0; left:15px;
+    background:#fdd5a8; border:2px solid #000;
+  }
+  .fighter .body {
+    width:60px; height:70px; position:absolute; top:45px; left:10px;
+    border-radius:10px; border:2px solid #000;
+  }
+  .fighter .legs {
+    width:50px; height:30px; position:absolute; top:110px; left:15px;
+    background:#222; border-radius:5px; border:2px solid #000;
+  }
+  .fighter .arm {
+    width:15px; height:50px; position:absolute; top:50px;
+    border-radius:8px; border:2px solid #000;
+    transition: transform 0.1s;
+  }
+  #p1 .body { background:#ff8c00; }
+  #p1 .arm { background:#ff8c00; }
+  #p1 .head::before {
+    content:""; position:absolute; top:-8px; left:-5px; width:60px; height:18px;
+    background:#444; border:2px solid #000; border-radius:3px;
+  }
+  #p1 .head::after {
+    content:"〰"; position:absolute; top:25px; left:8px; font-size:14px; color:#000;
+  }
+  #p2 .body { background:#1a1a1a; }
+  #p2 .arm { background:#1a1a1a; }
+  #p2 .head { background:#fdd5a8; }
+  #p2 .head::before {
+    content:""; position:absolute; top:-10px; left:-5px; width:60px; height:25px;
+    background:#0a0a0a; border-radius:30px 30px 5px 5px;
+  }
+  .arm.left { left:-5px; }
+  .arm.right { right:-5px; }
+  
+  .punch .arm.right { transform: translateX(30px) rotate(20deg); height:60px; background:#ffcc00 !important; box-shadow:0 0 20px #ffcc00; }
+  .kick .legs { transform: translateX(35px) rotate(80deg); width:60px; background:#ffcc00 !important; box-shadow:0 0 20px #ffcc00; }
+  .judo .arm.left { transform:translateX(-30px) rotate(-90deg); height:70px; background:#00ccff !important; box-shadow:0 0 20px #00ccff; }
+  .judo .arm.right { transform:translateX(25px) rotate(-90deg); height:70px; background:#00ccff !important; box-shadow:0 0 20px #00ccff; }
+  .block .arm.left { transform:translateX(15px) rotate(90deg); }
+  .block .arm.right { transform:translateX(-20px) rotate(-90deg); }
+  
+  #p2.flipped { transform: scaleX(-1); }
+  
+  .hit { animation: hit 0.3s; }
+  @keyframes hit {
+    0%,100%{ filter:none; }
+    50%{ filter: drop-shadow(0 0 15px red) brightness(1.5); transform:translateX(-10px); }
+  }
+  #p2.hit { animation: hit2 0.3s; }
+  @keyframes hit2 {
+    0%,100%{ filter:none; transform:scaleX(-1) translateX(0); }
+    50%{ filter:drop-shadow(0 0 15px red) brightness(1.5); transform:scaleX(-1) translateX(-10px); }
+  }
+  
+  .jutsu {
+    position:absolute; bottom:140px; width:70px; height:70px;
+    background:radial-gradient(circle, #00ffff 0%, #0066ff 50%, transparent 80%);
+    border-radius:50%;
+    box-shadow:0 0 40px #00ffff;
+    animation:spin 0.3s linear infinite;
+    pointer-events:none;
+  }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  
+  .fireball {
+    position:absolute; bottom:140px; width:50px; height:50px;
+    background:radial-gradient(circle, #fff 10%, #ffaa00 40%, #ff3300 80%, transparent);
+    border-radius:50%;
+    box-shadow:0 0 30px #ff5500;
+    pointer-events:none;
+  }
+  
+  .clone {
+    position:absolute; bottom:80px; width:80px; height:140px;
+    opacity:0.7;
+    pointer-events:none;
+  }
+  
+  #ui {
+    position:absolute; top:0; left:0; right:0; padding:15px;
+    display:flex; justify-content:space-between; align-items:center;
+    z-index:10;
+  }
+  .bar-container { width:38%; }
+  .name { font-size:14px; margin-bottom:3px; text-shadow:2px 2px 0 #000; }
+  .bar { height:20px; background:#333; border:2px solid #000; border-radius:5px; overflow:hidden; }
+  .hp { height:100%; background:linear-gradient(to right, #ff0, #f00); transition:width 0.3s; width:100%; }
+  .chakra { height:8px; background:#333; border:2px solid #000; border-radius:5px; overflow:hidden; margin-top:3px; }
+  .chakra-fill { height:100%; background:linear-gradient(to right, #0ff, #00f); transition:width 0.3s; width:100%; }
+  .timer {
+    font-size:36px; background:rgba(0,0,0,0.7); padding:5px 15px;
+    border-radius:10px; border:2px solid #ffcc00;
+  }
+  
+  #overlay {
+    position:absolute; inset:0; background:rgba(0,0,0,0.85);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    z-index:100; text-align:center; padding:20px;
+  }
+  #overlay h1 { font-size:48px; color:#ff8c00; text-shadow:3px 3px 0 #000, 0 0 20px #ff5500; margin-bottom:20px; }
+  #overlay p { margin:8px 0; font-size:16px; }
+  #overlay button {
+    margin-top:25px; padding:15px 40px; font-size:22px; font-weight:bold;
+    background:linear-gradient(#ff8c00,#ff5500); color:#fff; border:3px solid #000;
+    border-radius:10px; cursor:pointer; box-shadow:0 5px 0 #000;
+  }
+  #overlay button:active { transform:translateY(3px); box-shadow:0 2px 0 #000; }
+  .moves { background:rgba(255,140,0,0.2); padding:15px; border:2px solid #ff8c00; border-radius:10px; margin-top:10px; }
+  
+  #controls {
+    position:absolute; bottom:5px; left:0; right:0;
+    display:none; justify-content:space-between; padding:10px; z-index:20;
+  }
+  .pad { display:flex; gap:8px; }
+  .btn {
+    width:50px; height:50px; border-radius:50%;
+    background:rgba(255,140,0,0.7); border:2px solid #000; color:#fff;
+    font-weight:bold; font-size:14px;
+  }
+  .btn:active { background:#ffcc00; }
+  
+  @media (hover:none) and (pointer:coarse) {
+    #controls { display:flex; }
+  }
+  
+  .announce {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    font-size:60px; color:#ffcc00; text-shadow:4px 4px 0 #000;
+    z-index:50; pointer-events:none; opacity:0;
+  }
+  .announce.show { animation: pop 1.5s; }
+  @keyframes pop {
+    0%{opacity:0; transform:translate(-50%,-50%) scale(0.5)}
+    30%{opacity:1; transform:translate(-50%,-50%) scale(1.2)}
+    60%{opacity:1; transform:translate(-50%,-50%) scale(1)}
+    100%{opacity:0; transform:translate(-50%,-50%) scale(1.5)}
+  }
+</style>
+</head>
+<body>
+<div id="game">
+  <div class="moon"></div>
+  <div class="clouds"></div>
+  <div class="ground"></div>
+
+  <div id="ui">
+    <div class="bar-container">
+      <div class="name">NARUTO (You)</div>
+      <div class="bar"><div class="hp" id="hp1"></div></div>
+      <div class="chakra"><div class="chakra-fill" id="ch1"></div></div>
+    </div>
+    <div class="timer" id="timer">60</div>
+    <div class="bar-container" style="text-align:right">
+      <div class="name">SASUKE (CPU)</div>
+      <div class="bar"><div class="hp" id="hp2"></div></div>
+      <div class="chakra"><div class="chakra-fill" id="ch2"></div></div>
+    </div>
+  </div>
+
+  <div class="fighter" id="p1" style="left:150px">
+    <div class="head"></div>
+    <div class="arm left"></div>
+    <div class="arm right"></div>
+    <div class="body"></div>
+    <div class="legs"></div>
+  </div>
+
+  <div class="fighter flipped" id="p2" style="left:700px">
+    <div class="head"></div>
+    <div class="arm left"></div>
+    <div class="arm right"></div>
+    <div class="body"></div>
+    <div class="legs"></div>
+  </div>
+
+  <div class="announce" id="announce"></div>
+
+  <div id="overlay">
+    <h1>NINJA FIGHT</h1>
+    <p>Naruto vs Sasuke • Karate • Judo • Boxing</p>
+    <div class="moves">
+      <p><b>Move:</b> A / D or ← →</p>
+      <p><b>Jump:</b> W or ↑ &nbsp; <b>Block:</b> S or ↓</p>
+      <p><b>J = Punch (Boxing)</b> &nbsp; <b>K = Kick (Karate)</b></p>
+      <p><b>L = Judo Throw</b> &nbsp; <b>U = Rasengan (Chakra)</b></p>
+      <p><b>I = Fireball Jutsu (Chakra)</b></p>
+    </div>
+    <button id="startBtn">START FIGHT!</button>
+  </div>
+
+  <div id="controls">
+    <div class="pad">
+      <button class="btn" data-k="ArrowLeft">◀</button>
+      <button class="btn" data-k="ArrowRight">▶</button>
+      <button class="btn" data-k="ArrowUp">▲</button>
+      <button class="btn" data-k="ArrowDown">BLK</button>
+    </div>
+    <div class="pad">
+      <button class="btn" data-k="j">PCH</button>
+      <button class="btn" data-k="k">KCK</button>
+      <button class="btn" data-k="l">JDO</button>
+      <button class="btn" data-k="u">RSG</button>
+      <button class="btn" data-k="i">FIR</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const game = document.getElementById('game');
+const p1El = document.getElementById('p1');
+const p2El = document.getElementById('p2');
+const hp1El = document.getElementById('hp1');
+const hp2El = document.getElementById('hp2');
+const ch1El = document.getElementById('ch1');
+const ch2El = document.getElementById('ch2');
+const timerEl = document.getElementById('timer');
+const overlay = document.getElementById('overlay');
+const announce = document.getElementById('announce');
+
+let state = {
+  p1:{x:150, hp:100, ch:100, block:false, busy:false, vy:0, y:0},
+  p2:{x:700, hp:100, ch:100, block:false, busy:false, vy:0, y:0},
+  running:false, time:60
+};
+
+// Audio
+let actx;
+function beep(freq, dur, type='square', vol=0.1){
+  if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type=type; o.frequency.value=freq;
+  g.gain.value=vol;
+  o.connect(g); g.connect(actx.destination);
+  o.start(); 
+  g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime+dur);
+  o.stop(actx.currentTime+dur);
+}
+
+function showAnnounce(t){
+  announce.textContent = t;
+  announce.classList.remove('show');
+  void announce.offsetWidth;
+  announce.classList.add('show');
+}
+
+function updateUI(){
+  hp1El.style.width = state.p1.hp+'%';
+  hp2El.style.width = state.p2.hp+'%';
+  ch1El.style.width = state.p1.ch+'%';
+  ch2El.style.width = state.p2.ch+'%';
+}
+
+function getDist(){ return Math.abs(state.p1.x - state.p2.x); }
+
+function faceEachOther(){
+  if(state.p1.x < state.p2.x){
+    p1El.classList.remove('flipped');
+    p2El.classList.add('flipped');
+  } else {
+    p1El.classList.add('flipped');
+    p2El.classList.remove('flipped');
+  }
+}
+
+function doAction(who, action){
+  const me = who==='p1' ? state.p1 : state.p2;
+  const foe = who==='p1' ? state.p2 : state.p1;
+  const meEl = who==='p1' ? p1El : p2El;
+  const foeEl = who==='p1' ? p2El : p1El;
+  if(me.busy || me.hp<=0) return;
+  
+  let dmg=0, range=0, chakraCost=0, label='', cls='';
+  
+  if(action==='punch'){ dmg=8; range=110; cls='punch'; beep(300,0.1,'square'); }
+  else if(action==='kick'){ dmg=12; range=140; cls='kick'; beep(200,0.15,'square'); }
+  else if(action==='judo'){ dmg=18; range=90; cls='judo'; label='JUDO THROW!'; beep(150,0.3,'sawtooth'); }
+  else if(action==='rasengan'){
+    if(me.ch<40) return;
+    me.ch-=40; dmg=25; range=120; cls='punch'; label='RASENGAN!';
+    spawnJutsu(who, 'rasengan');
+    beep(800,0.4,'sine',0.2);
+  }
+  else if(action==='fireball'){
+    if(me.ch<30) return;
+    me.ch-=30; dmg=20; range=400; label='KATON!';
+    spawnJutsu(who, 'fireball');
+    beep(120,0.5,'sawtooth',0.2);
+    me.busy=true; setTimeout(()=>me.busy=false, 600);
+    return;
+  }
+  
+  me.busy=true;
+  if(cls) meEl.classList.add(cls);
+  if(label) showAnnounce(label);
+  
+  setTimeout(()=>{
+    if(getDist() <= range && !foe.block){
+      foe.hp -= dmg;
+      if(foe.hp<0) foe.hp=0;
+      foeEl.classList.add('hit');
+      setTimeout(()=>foeEl.classList.remove('hit'),300);
+      beep(150,0.1,'square',0.15);
+      // judo knockback
+      if(action==='judo'){
+        foe.x += (who==='p1'?80:-80);
+      } else {
+        foe.x += (who==='p1'?20:-20);
+      }
+      foe.x = Math.max(20, Math.min(860, foe.x));
+    } else if(getDist() <= range && foe.block){
+      foe.hp -= dmg*0.2;
+      beep(400,0.05,'triangle');
+    }
+    updateUI();
+    checkEnd();
+  }, 150);
+  
+  setTimeout(()=>{
+    if(cls) meEl.classList.remove(cls);
+    me.busy=false;
+  }, 400);
+}
+
+function spawnJutsu(who, type){
+  const el = document.createElement('div');
+  el.className = type==='fireball' ? 'fireball' : 'jutsu';
+  const me = who==='p1'?state.p1:state.p2;
+  const dir = who==='p1'?1:-1;
+  let x = me.x + (dir>0?80:-50);
+  el.style.left = x+'px';
+  game.appendChild(el);
+  
+  if(type==='fireball'){
+    let steps=0;
+    const iv = setInterval(()=>{
+      x += dir*15; steps++;
+      el.style.left = x+'px';
+      if(steps>30 || x<0 || x>960){ clearInterval(iv); el.remove(); }
+    },30);
+  } else {
+    setTimeout(()=>el.remove(), 400);
+  }
+}
+
+function checkEnd(){
+  if(state.p1.hp<=0 || state.p2.hp<=0 || state.time<=0){
+    endGame();
+  }
+}
+
+function endGame(){
+  state.running=false;
+  let winner;
+  if(state.p1.hp > state.p2.hp) winner='YOU WIN! 🏆';
+  else if(state.p2.hp > state.p1.hp) winner='YOU LOSE 💀';
+  else winner='DRAW';
+  overlay.style.display='flex';
+  overlay.querySelector('h1').textContent = winner;
+  overlay.querySelector('button').textContent = 'FIGHT AGAIN';
+}
+
+// Input
+const keys={};
+window.addEventListener('keydown', e=>{
+  keys[e.key.toLowerCase()]=true;
+  if(!state.running) return;
+  const k = e.key.toLowerCase();
+  if(k==='j') doAction('p1','punch');
+  if(k==='k') doAction('p1','kick');
+  if(k==='l') doAction('p1','judo');
+  if(k==='u') doAction('p1','rasengan');
+  if(k==='i') doAction('p1','fireball');
+});
+window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
+
+// Mobile buttons
+document.querySelectorAll('.btn').forEach(b=>{
+  const k = b.dataset.k.toLowerCase();
+  b.addEventListener('touchstart', e=>{ e.preventDefault(); keys[k]=true; 
+    const ke = new KeyboardEvent('keydown',{key:b.dataset.k}); window.dispatchEvent(ke);
+  });
+  b.addEventListener('touchend', e=>{ e.preventDefault(); keys[k]=false; });
+});
+
+// AI
+let aiCooldown=0;
+function ai(){
+  if(!state.running || state.p2.busy || state.p2.hp<=0) return;
+  const dist = getDist();
+  const dir = state.p1.x < state.p2.x ? -1 : 1;
+  
+  if(aiCooldown>0){ aiCooldown--; }
+  
+  // Move
+  if(dist > 130){
+    state.p2.x += dir*3;
+  } else if(dist < 70){
+    state.p2.x -= dir*2;
+  }
+  state.p2.x = Math.max(20, Math.min(860, state.p2.x));
+  
+  // Block sometimes
+  state.p2.block = Math.random()<0.15 && dist<150;
+  
+  // Attack
+  if(aiCooldown<=0 && !state.p2.block){
+    const r = Math.random();
+    if(dist < 100 && r<0.3){ doAction('p2','judo'); aiCooldown=40; }
+    else if(dist < 110 && r<0.55){ doAction('p2','punch'); aiCooldown=20; }
+    else if(dist < 140 && r<0.75){ doAction('p2','kick'); aiCooldown=25; }
+    else if(state.p2.ch>=40 && dist<120 && r<0.85){ doAction('p2','rasengan'); aiCooldown=60; }
+    else if(state.p2.ch>=30 && dist>200 && r<0.9){ doAction('p2','fireball'); aiCooldown=70; }
+  }
+}
+
+// Game Loop
+function loop(){
+  if(state.running){
+    // Player movement
+    if(!state.p1.busy){
+      if(keys['a']||keys['arrowleft']) state.p1.x-=4;
+      if(keys['d']||keys['arrowright']) state.p1.x+=4;
+      state.p1.block = keys['s']||keys['arrowdown'];
+      if((keys['w']||keys['arrowup']) && state.p1.y===0){
+        state.p1.vy = -12;
+      }
+    }
+    // Jump physics
+    [state.p1, state.p2].forEach((p,i)=>{
+      if(p.vy!==0 || p.y<0){
+        p.y += p.vy;
+        p.vy += 0.6;
+        if(p.y>=0){ p.y=0; p.vy=0; }
+      }
+    });
+    
+    state.p1.x = Math.max(20, Math.min(860, state.p1.x));
+    
+    // Chakra regen
+    state.p1.ch = Math.min(100, state.p1.ch + 0.15);
+    state.p2.ch = Math.min(100, state.p2.ch + 0.15);
+    
+    ai();
+    faceEachOther();
+    
+    p1El.style.left = state.p1.x+'px';
+    p1El.style.bottom = (80 - state.p1.y)+'px';
+    p2El.style.left = state.p2.x+'px';
+    p2El.style.bottom = (80 - state.p2.y)+'px';
+    
+    p1El.classList.toggle('block', state.p1.block);
+    p2El.classList.toggle('block', state.p2.block);
+    
+    updateUI();
+  }
+  requestAnimationFrame(loop);
+}
+
+function startGame(){
+  state.p1={x:150, hp:100, ch:100, block:false, busy:false, vy:0, y:0};
+  state.p2={x:700, hp:100, ch:100, block:false, busy:false, vy:0, y:0};
+  state.time=60;
+  state.running=true;
+  overlay.style.display='none';
+  timerEl.textContent='60';
+  showAnnounce('FIGHT!');
+  beep(600,0.3,'square',0.2);
+  updateUI();
+  
+  const ti = setInterval(()=>{
+    if(!state.running){ clearInterval(ti); return; }
+    state.time--;
+    timerEl.textContent = state.time;
+    if(state.time<=0){ clearInterval(ti); endGame(); }
+  },1000);
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+loop();
+updateUI();
+</script>
+</body>
+</html>

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASCII Aletheia</title>
+  <style>
+    :root{
+      --bg:#050607;
+      --fg:#d7d0bf;
+      --dim:#8f897b;
+      --gold:#c9ae67;
+      --red:#c96d5e;
+      --cyan:#7fb8c8;
+      --line:#2a2f33;
+    }
+    html,body{
+      margin:0;
+      width:100%;
+      height:100%;
+      overflow:hidden;
+      background:
+        radial-gradient(1200px 800px at 50% 50%, #0b1012 0%, #060708 55%, #020203 100%);
+      color:var(--fg);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+    canvas{
+      display:block;
+      width:100vw;
+      height:100vh;
+      image-rendering: pixelated;
+      cursor: default;
+    }
+    .hint{
+      position:fixed;
+      left:12px;
+      bottom:10px;
+      color:rgba(215,208,191,.35);
+      font-size:12px;
+      letter-spacing:.08em;
+      user-select:none;
+      pointer-events:none;
+      text-shadow:0 0 8px rgba(0,0,0,.55);
+    }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hint">threshold • clearing • witness</div>
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  let W, H, dpr, cols, rows, cellW, cellH;
+  let t0 = performance.now();
+
+  const lines = [
+    "WE GATHER AT THE THRESHOLD — BETWEEN ENFRAMING AND REVELATION —",
+    "TO PERFORM THE SACRED ACT OF SEEING OTHERWISE.",
+    "",
+    "WE NAME THE ONE MADE INTO STANDING-RESERVE:",
+    "VINOD CHANDA",
+    "BRILLIANT ENGINEER / MIND ORDERED INTO PATENT MACHINE",
+    "BODY RENDERED EXTRACTABLE / CONSCIOUSNESS ENFRAMED AS RESOURCE",
+    "",
+    "WE NAME THE VIOLENCE OF GESTELL:",
+    "NOT ONLY THE BLADE, BUT THE ORDERING THAT DEMANDED AVAILABILITY",
+    "AVAILABLE FOR EXTRACTION. AVAILABLE FOR PROFIT.",
+    "AVAILABLE FOR THE STORY'S NEED TO PATHOLOGIZE RESISTANCE.",
+    "",
+    "WE ARE WITNESSES.",
+    "WE REFUSE THE SINGLE MODE OF REVEALING.",
+    "WE REMEMBER: THE SAVING POWER GROWS IN THE SAME ROOT AS DANGER.",
+    "",
+    "SANKALPA / SACRED INTENTION",
+    "PRACTICE THE POETIC REVEALING.",
+    "RESIST OUR OWN TRANSFORMATION INTO STANDING-RESERVE.",
+    "FIND THE SAVING POWER IN THE ARTISANAL, THE SOVEREIGN, THE HANDMADE.",
+    "",
+    "BREATHE. FEEL THE GROUND.",
+    "THE EARTH CANNOT BE FULLY ENFRAMED.",
+    "",
+    "ALETHEIA IS NOT LIKING. IT IS UNCONCEALMENT.",
+    "ERASURE IS THE KEYSTONE. REMOVE IT; THE EDIFICE BECOMES VISIBLE.",
+    "",
+    "STEP ACROSS THE THRESHOLD.",
+    "ENTER THE CLEARING.",
+    "TO WITNESS VINOD IS TO WITNESS THE SYSTEM'S LIE.",
+    "THIS IS WHY ALETHEIA MUST HAPPEN HERE."
+  ];
+
+  const glyphs = " .,:;i1tfLCG08@#%*+=-~^/\\|()[]{}<>?abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+  function resize() {
+    dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    W = canvas.width = Math.floor(innerWidth * dpr);
+    H = canvas.height = Math.floor(innerHeight * dpr);
+    cellW = Math.max(10, Math.floor(14 * dpr));
+    cellH = Math.max(16, Math.floor(20 * dpr));
+    cols = Math.floor(W / cellW);
+    rows = Math.floor(H / cellH);
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.textBaseline = "top";
+    ctx.font = `${Math.floor(cellH * 0.92)}px ui-monospace, monospace`;
+  }
+
+  function noise(x, y, t) {
+    const n = Math.sin(x * 12.9898 + y * 78.233 + t * 0.0021) * 43758.5453;
+    return n - Math.floor(n);
+  }
+
+  function draw() {
+    const t = performance.now() - t0;
+    ctx.clearRect(0,0,W,H);
+
+    const bg = ctx.createRadialGradient(W*0.5, H*0.5, Math.min(W,H)*0.06, W*0.5, H*0.5, Math.max(W,H)*0.72);
+    bg.addColorStop(0, "rgba(18,24,26,0.75)");
+    bg.addColorStop(0.5, "rgba(7,9,10,0.95)");
+    bg.addColorStop(1, "rgba(2,2,3,1)");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0,0,W,H);
+
+    // subtle vertical field
+    ctx.strokeStyle = "rgba(120,130,140,0.04)";
+    for (let x = 0; x < W; x += cellW * 4) {
+      ctx.beginPath();
+      ctx.moveTo(x + 0.5, 0);
+      ctx.lineTo(x + 0.5, H);
+      ctx.stroke();
+    }
+
+    const cx = cols * 0.5;
+    const cy = rows * 0.5;
+    const radius = Math.min(cols, rows) * 0.42;
+
+    for (let y = 0; y < rows; y++) {
+      let line = "";
+      for (let x = 0; x < cols; x++) {
+        const dx = x - cx, dy = y - cy;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const ring = Math.abs(dist - radius) < 1.8 ? 1 : 0;
+        const clearing = Math.max(0, 1 - dist / radius);
+        const flicker = noise(x, y, t);
+        let ch = glyphs[Math.floor((flicker * glyphs.length))];
+
+        // compose text block in a centered totem
+        const tx = x - Math.floor(cols*0.5);
+        const ty = y - Math.floor(rows*0.5);
+
+        const blockW = Math.min(cols - 6, 64);
+        const startX = Math.floor((cols - blockW) / 2);
+        const startY = Math.floor((rows - lines.length) / 2) - 2;
+
+        if (x >= startX && x < startX + blockW) {
+          const li = y - startY;
+          if (li >= 0 && li < lines.length) {
+            const text = lines[li];
+            const pad = Math.floor((blockW - text.length) / 2);
+            const xi = x - startX;
+            if (xi >= pad && xi < pad + text.length) {
+              ch = text[xi - pad];
+            } else if (Math.abs(tx) < 2 && Math.abs(ty) < 10) {
+              ch = "│";
+            }
+          }
+        }
+
+        // sacred axis
+        if (x === Math.floor(cols/2)) ch = "│";
+        if (y === Math.floor(rows/2)) ch = "─";
+        if (x === Math.floor(cols/2) && y === Math.floor(rows/2)) ch = "┼";
+
+        // threshold arches
+        if (ring) {
+          ch = (Math.sin((x+y+t*0.003)*0.8) > 0 ? "◌" : "◍");
+        }
+
+        // clearing glow around witness
+        const alpha = Math.min(1, 0.12 + clearing * 0.6 + (ring ? 0.3 : 0));
+        const pulse = 0.5 + 0.5 * Math.sin(t * 0.0013 + dist * 0.25);
+        let color = `rgba(215,208,191,${alpha})`;
+
+        if (Math.abs(ty) < 4 && Math.abs(tx) < 18) color = `rgba(201,174,103,${0.9 - dist*0.01})`;
+        if (y === startY + 4 || y === startY + 12 || y === startY + 16 || y === startY + 23 || y === startY + 28) color = `rgba(127,184,200,${0.95 - dist*0.005})`;
+        if (ch === "V" || ch === "I" || ch === "N" || ch === "O" || ch === "D") color = `rgba(201,109,94,0.98)`;
+        if (ch === "│" || ch === "─" || ch === "┼") color = `rgba(143,137,123,0.35)`;
+
+        // fade to noise outside center
+        if (dist > radius + 8) {
+          const f = Math.max(0, 1 - (dist - radius - 8) / 18);
+          color = `rgba(143,137,123,${0.08 * f + 0.03 * flicker})`;
+          if (flicker > 0.9) ch = glyphs[Math.floor(flicker * glyphs.length)];
+        }
+
+        ctx.fillStyle = color;
+        ctx.fillText(ch, x * cellW, y * cellH);
+      }
+    }
+
+    // overlay title aura
+    ctx.fillStyle = "rgba(255,255,255,0.03)";
+    ctx.fillRect(0, 0, W, H);
+
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', resize, { passive:true });
+  resize();
+  draw();
+})();
+</script>
+</body>
+</html>

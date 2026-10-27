@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎯 Wein Dart Game</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+background: #1a0a2e;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+min-height: 100vh;
+font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+color: #fff;
+overflow: hidden;
+}
+h1 {
+font-size: 2.2em;
+margin-bottom: 5px;
+background: linear-gradient(90deg, #f7971e, #ffd200);
+-webkit-background-clip: text;
+-webkit-text-fill-color: transparent;
+text-shadow: none;
+letter-spacing: 2px;
+}
+.subtitle { font-size: 0.9em; color: #aaa; margin-bottom: 10px; }
+#gameContainer {
+display: flex;
+gap: 30px;
+align-items: flex-start;
+flex-wrap: wrap;
+justify-content: center;
+}
+canvas {
+border-radius: 10px;
+cursor: crosshair;
+box-shadow: 0 0 40px rgba(247, 151, 30, 0.3);
+}
+#sidebar {
+background: rgba(255,255,255,0.05);
+border-radius: 15px;
+padding: 20px;
+min-width: 220px;
+backdrop-filter: blur(10px);
+border: 1px solid rgba(255,255,255,0.1);
+}
+#sidebar h2 {
+font-size: 1.2em;
+margin-bottom: 15px;
+color: #ffd200;
+text-align: center;
+}
+.stat {
+display: flex;
+justify-content: space-between;
+padding: 8px 0;
+border-bottom: 1px solid rgba(255,255,255,0.1);
+font-size: 0.95em;
+}
+.stat-label { color: #aaa; }
+.stat-value { color: #fff; font-weight: bold; }
+#lastThrow {
+text-align: center;
+font-size: 1.4em;
+margin: 15px 0;
+padding: 10px;
+border-radius: 10px;
+background: rgba(255,255,255,0.05);
+min-height: 50px;
+display: flex;
+align-items: center;
+justify-content: center;
+}
+#lastThrow .points { color: #ffd200; font-weight: bold; font-size: 1.3em; }
+#lastThrow .multiplier { color: #ff6b6b; font-size: 0.7em; }
+.btn {
+width: 100%;
+padding: 12px;
+margin: 5px 0;
+border: none;
+border-radius: 8px;
+font-size: 1em;
+cursor: pointer;
+font-weight: bold;
+transition: all 0.3s;
+}
+.btn-primary {
+background: linear-gradient(135deg, #f7971e, #ffd200);
+color: #1a0a2e;
+}
+.btn-primary:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(255,210,0,0.4); }
+.btn-danger {
+background: linear-gradient(135deg, #ff416c, #ff4b2b);
+color: #fff;
+}
+.btn-danger:hover { transform: scale(1.05); }
+#throwHistory {
+max-height: 200px;
+overflow-y: auto;
+margin-top: 10px;
+font-size: 0.85em;
+}
+#throwHistory::-webkit-scrollbar { width: 5px; }
+#throwHistory::-webkit-scrollbar-thumb { background: #ffd200; border-radius: 5px; }
+.history-item {
+display: flex;
+justify-content: space-between;
+padding: 4px 8px;
+border-radius: 4px;
+margin: 2px 0;
+background: rgba(255,255,255,0.03);
+}
+.history-item .h-num { color: #888; }
+.history-item .h-score { color: #ffd200; font-weight: bold; }
+#instructions {
+margin-top: 15px;
+padding: 10px;
+background: rgba(255,255,255,0.03);
+border-radius: 8px;
+font-size: 0.8em;
+color: #888;
+line-height: 1.5;
+}
+#modeSelect {
+display: flex;
+gap: 5px;
+margin-bottom: 10px;
+}
+.mode-btn {
+flex: 1;
+padding: 8px;
+border: 1px solid rgba(255,255,255,0.2);
+background: transparent;
+color: #fff;
+border-radius: 6px;
+cursor: pointer;
+font-size: 0.8em;
+transition: all 0.3s;
+}
+.mode-btn.active {
+background: linear-gradient(135deg, #f7971e, #ffd200);
+color: #1a0a2e;
+font-weight: bold;
+border-color: transparent;
+}
+#targetInfo {
+position: absolute;
+background: rgba(0,0,0,0.8);
+color: #fff;
+padding: 5px 10px;
+border-radius: 5px;
+font-size: 0.85em;
+pointer-events: none;
+display: none;
+white-space: nowrap;
+}
+#animationOverlay {
+position: fixed;
+top: 0; left: 0;
+width: 100%; height: 100%;
+display: none;
+align-items: center;
+justify-content: center;
+z-index: 100;
+pointer-events: none;
+}
+.throw-result {
+font-size: 3em;
+font-weight: bold;
+animation: popIn 0.5s ease-out;
+text-shadow: 0 0 30px currentColor;
+}
+@keyframes popIn {
+0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+50% { transform: scale(1.3) rotate(5deg); opacity: 1; }
+100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes fadeOut {
+0% { opacity: 1; }
+100% { opacity: 0; }
+}
+#dartCount {
+text-align: center;
+font-size: 1.1em;
+margin: 10px 0;
+color: #ffd200;
+}
+</style>
+</head>
+<body>
+
+<h1>🎯 WEIN DART GAME</h1>
+<p class="subtitle">Klicke auf die Scheibe, um zu werfen!</p>
+
+<div id="gameContainer">
+<canvas id="dartboard" width="500" height="500"></canvas>
+
+<div id="sidebar">
+<h2>🏆 Spielstand</h2>
+
+<div id="modeSelect">
+<button class="mode-btn active" onclick="setMode('classic')">Classic</button>
+<button class="mode-btn" onclick="setMode('501')">501</button>
+<button class="mode-btn" onclick="setMode('cricket')">Cricket</button>
+</div>
+
+<div id="dartCount">🎯 Darts: 3/3</div>
+
+<div class="stat">
+<span class="stat-label">Runde:</span>
+<span class="stat-value" id="roundNum">1</span>
+</div>
+<div class="stat">
+<span class="stat-label">Gesamt:</span>
+<span class="stat-value" id="totalScore">0</span>
+</div>
+<div class="stat">
+<span class="stat-label">Ø pro Wurf:</span>
+<span class="stat-value" id="avgScore">0</span>
+</div>
+<div class="stat">
+<span class="stat-label">Ø pro Runde:</span>
+<span class="stat-value" id="avgRound">0</span>
+</div>
+<div class="stat">
+<span class="stat-label">Beste Runde:</span>
+<span class="stat-value" id="bestRound">0</span>
+</div>
+
+<div id="lastThrow">
+<span style="color:#888;">Noch nicht geworfen</span>
+</div>
+
+<button class="btn btn-primary" onclick="resetGame()">🔄 Neues Spiel</button>
+<button class="btn btn-danger" onclick="resetRound()">🗑️ Runde zurücksetzen</button>
+
+<div id="throwHistory">
+<div style="text-align:center;color:#666;margin-bottom:5px;">📜 Wurfverlauf</div>
+</div>
+
+<div id="instructions">
+<strong>Anleitung:</strong><br>
+🖱️ Klicke auf die Scheibe zum Werfen<br>
+🎯 3 Darts pro Runde<br>
+🍺 501: Starte mit 501, werfe auf 0<br>
+🏏 Cricket: Markiere 20-15, Bull, Bull<br>
+</div>
+</div>
+</div>
+
+<div id="targetInfo"></div>
+<div id="animationOverlay"></div>
+
+<script>
+const canvas = document.getElementById('dartboard');
+const ctx = canvas.getContext('2d');
+const centerX = canvas.width / 2;
+const centerY = canvas.height / 2;
+
+const SEGMENTS = [20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
+const SEG_ANGLE = (2 * Math.PI) / 20;
+
+const RINGS = {
+outerBull: { inner: 0, outer: 12, label: 'Bull', score: 25, color: '#2ecc40' },
+bull: { inner: 12, outer: 16, label: 'Bullseye', score: 50, color: '#e74c3c' },
+triple: { inner: 96, outer: 106, label: 'Triple', multiplier: 3, color: '#1a1a2e' },
+double: { inner: 162, outer: 172, label: 'Double', multiplier: 2, color: '#1a1a2e' },
+single: { inner: 16, outer: 96, color: '#f5e6c8' },
+singleOuter: { inner: 106, outer: 162, color: '#1a1a2e' }
+};
+
+const RADIUS_DOUBLE = 172;
+const RADIUS_TRIPLE = 106;
+const RADIUS_OUTER_BULL = 16;
+const RADIUS_BULLSEYE = 12;
+const RADIUS_SINGLE = 96;
+const RADIUS_SINGLE_OUTER = 162;
+
+let gameState = {
+mode: 'classic',
+round: 1,
+dartsRemaining: 3,
+totalScore: 0,
+totalThrows: 0,
+roundScores: [],
+bestRound: 0,
+currentRoundScore: 0,
+dartPositions: [],
+history: [],
+cricketProgress: { 20:0,19:0,18:0,17:0,16:0,15:0,25:0,50:0 },
+cricketTarget: [20,19,18,17,16,15,25,50],
+cricketFinished: [],
+fiveOneScore: 501
+};
+
+let mouseX = 0, mouseY = 0;
+let isAnimating = false;
+
+function getSegmentAngle(index) {
+return -Math.PI / 2 + index * SEG_ANGLE;
+}
+
+function getSegmentAtAngle(angle) {
+let a = angle + Math.PI / 2;
+a = ((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+let idx = Math.floor(a / SEG_ANGLE);
+return idx % 20;
+}
+
+function getDistance(x, y) {
+return Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
+}
+
+function getScoreAtPosition(px, py) {
+const dist = getDistance(px, py);
+const angle = Math.atan2(py - centerY, px - centerX);
+let segIdx = getSegmentAtAngle(angle);
+let num = SEGMENTS[segIdx];
+
+if (dist <= RADIUS_BULLSEYE) {
+return { number: 50, multiplier: 'Bullseye', label: 'Bullseye (50)', score: 50 };
+} else if (dist <= RADIUS_OUTER_BULL) {
+return { number: 25, multiplier: 'Bull', label: 'Bull (25)', score: 25 };
+} else if (dist <= RADIUS_TRIPLE) {
+return { number: num, multiplier: 'Single', label: num.toString(), score: num };
+} else if (dist <= RADIUS_DOUBLE) {
+return { number: num, multiplier: 'Triple', label: 'Triple ' + num, score: num * 3 };
+} else if (dist <= RADIUS_SINGLE_OUTER) {
+return { number: num, multiplier: 'Single', label: num.toString(), score: num };
+} else if (dist <= RADIUS_DOUBLE) {
+return { number: num, multiplier: 'Double', label: 'Double ' + num, score: num * 2 };
+} else {
+return { number: 0, multiplier: 'Miss', label: 'Verfehlt!', score: 0 };
+}
+}
+
+function drawDartboard() {
+ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+// Background
+ctx.fillStyle = '#2d1b4e';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+// Outer ring
+ctx.beginPath();
+ctx.arc(centerX, centerY, RADIUS_DOUBLE + 15, 0, 2 * Math.PI);
+ctx.fillStyle = '#1a0a2e';
+ctx.fill();
+
+for (let i = 0; i < 20; i++) {
+const startAngle = getSegmentAngle(i) - SEG_ANGLE / 2;
+const endAngle = getSegmentAngle(i) + SEG_ANGLE / 2;
+
+// Outer single
+drawSector(startAngle, endAngle, RADIUS_DOUBLE, RADIUS_SINGLE_OUTER,
+i % 2 === 0 ? '#f5e6c8' : '#1a1a2e');
+
+// Double ring
+drawSector(startAngle, endAngle, RADIUS_SINGLE_OUTER, RADIUS_DOUBLE,
+i % 2 === 0 ? '#e74c3c' : '#c0392b');
+
+// Inner single
+drawSector(startAngle, endAngle, RADIUS_TRIPLE, RADIUS_SINGLE,
+i % 2 === 0 ? '#1a1a2e' : '#f5e6c8');
+
+// Triple ring
+drawSector(startAngle, endAngle, RADIUS_OUTER_BULL, RADIUS_TRIPLE,
+i % 2 === 0 ? '#e74c3c' : '#c0392b');
+}
+
+// Bull
+ctx.beginPath();
+ctx.arc(centerX, centerY, RADIUS_OUTER_BULL, 0, 2 * Math.PI);
+ctx.fillStyle = '#2ecc40';
+ctx.fill();
+
+ctx.beginPath();
+ctx.arc(centerX, centerY, RADIUS_BULLSEYE, 0, 2 * Math.PI);
+ctx.fillStyle = '#e74c3c';
+ctx.fill();
+
+// Numbers
+ctx.font = 'bold 16px Arial';
+ctx.textAlign = 'center';
+ctx.textBaseline = 'middle';
+for (let i = 0; i < 20; i++) {
+const angle = getSegmentAngle(i);
+const numRadius = RADIUS_DOUBLE + 30;
+const x = centerX + Math.cos(angle) * numRadius;
+const y = centerY + Math.sin(angle) * numRadius;
+ctx.fillStyle = '#fff';
+ctx.strokeStyle = '#000';
+ctx.lineWidth = 3;
+ctx.strokeText(SEGMENTS[i].toString(), x, y);
+ctx.fillText(SEGMENTS[i].toString(), x, y);
+}
+
+// Draw dart positions
+gameState.dartPositions.forEach((pos, idx) => {
+drawDart(pos.x, pos.y, idx);
+});
+
+// Draw crosshair
+if (!isAnimating) {
+drawCrosshair(mouseX, mouseY);
+}
+
+// Cricket mode overlay
+if (gameState.mode === 'cricket') {
+drawCricketOverlay();
+}
+}
+
+function drawSector(startAngle, endAngle, innerR, outerR, color) {
+ctx.beginPath();
+ctx.arc(centerX, centerY, outerR, startAngle, endAngle);
+ctx.arc(centerX, centerY, innerR, endAngle, startAngle, true);
+ctx.closePath();
+ctx.fillStyle = color;
+ctx.fill();
+}
+
+function drawDart(x, y, index) {
+const dist = getDistance(x, y);
+if (dist > RADIUS_DOUBLE + 20) return;
+
+// Dart shadow
+ctx.beginPath();
+ctx.arc(x + 2, y + 2, 5, 0, 2 * Math.PI);
+ctx.fillStyle = 'rgba(0,0,0,0.5)';
+ctx.fill();
+
+// Dart tip
+ctx.beginPath();
+ctx.arc(x, y, 4, 0, 2 * Math.PI);
+ctx.fillStyle = '#ffd200';
+ctx.fill();
+ctx.strokeStyle = '#f7971e';
+ctx.lineWidth = 1.5;
+ctx.stroke();
+
+// Dart ring
+ctx.beginPath();
+ctx.arc(x, y, 7, 0, 2 * Math.PI);
+ctx.strokeStyle = 'rgba(255,210,0,0.4)';
+ctx.lineWidth = 2;
+ctx.stroke();
+}
+
+function drawCrosshair(x, y) {
+const dist = getDistance(x, y);
+if (dist > RADIUS_DOUBLE + 20) return;
+
+ctx.beginPath();
+ctx.arc(x, y, 8, 0, 2 * Math.PI);
+ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+ctx.lineWidth = 1.5;
+ctx.stroke();
+
+ctx.beginPath();
+ctx.moveTo(x - 12, y);
+ctx.lineTo(x - 5, y);
+ctx.moveTo(x + 5, y);
+ctx.lineTo(x + 12, y);
+ctx.moveTo(x, y - 12);
+ctx.lineTo(x, y - 5);
+ctx.moveTo(x, y + 5);
+ctx.lineTo(x, y + 12);
+ctx.stroke();
+
+// Score preview
+const scoreInfo = getScoreAtPosition(x, y);
+if (scoreInfo.score > 0) {
+ctx.font = 'bold 11px Arial';
+ctx.fillStyle = scoreInfo.multiplier === 'Bullseye' ? '#e74c3c' :
+scoreInfo.multiplier === 'Triple' ? '#ffd200' :
+scoreInfo.multiplier === 'Double' ? '#ff6b6b' : '#fff';
+ctx.textAlign = 'center';
+ctx.fillText(scoreInfo.label, x, y - 15);
+}
+}
+
+function drawCricketOverlay() {
+const padding = 10;
+const boxWidth = 180;
+const boxHeight = 180;
+const boxX = canvas.width - boxWidth - padding;
+const boxY = padding;
+
+ctx.fillStyle = 'rgba(0,0,0,0.7)';
+ctx.strokeStyle = '#ffd200';
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 10);
+ctx.fill();
+ctx.stroke();
+
+ctx.font = 'bold 12px Arial';
+ctx.fillStyle = '#ffd200';
+ctx.textAlign = 'center';
+ctx.fillText('CRICKET', boxX + boxWidth / 2, boxY + 18);
+
+const items = [20, 19, 18, 17, 16, 15, 25, 50];
+const labels = ['20', '19', '18', '17', '16', '15', 'Bull', 'Bull'];
+const startX = boxX + 20;
+const startY = boxY + 38;
+
+items.forEach((item, i) => {
+const y = startY + i * 18;
+const progress = gameState.cricketProgress[item];
+const finished = progress >= 3;
+
+ctx.font = 'bold 12px Arial';
+ctx.fillStyle = finished ? '#2ecc40' : '#fff';
+ctx.textAlign = 'left';
+ctx.fillText(labels[i], startX, y);
+
+// Progress dots
+for (let d = 0; d < 3; d++) {
+ctx.beginPath();
+ctx.arc(startX + 60 + d * 15, y - 4, 5, 0, 2 * Math.PI);
+ctx.fillStyle = d < progress ? '#ffd200' : 'rgba(255,255,255,0.2)';
+ctx.fill();
+if (d < progress) {
+ctx.strokeStyle = '#ffd200';
+ctx.lineWidth = 1;
+ctx.stroke();
+}
+}
+});
+}
+
+canvas.addEventListener('mousemove', (e) => {
+const rect = canvas.getBoundingClientRect();
+const scaleX = canvas.width / rect.width;
+const scaleY = canvas.height / rect.height;
+mouseX = (e.clientX - rect.left) * scaleX;
+mouseY = (e.clientY - rect.top) * scaleY;
+
+const targetInfo = document.getElementById('targetInfo');
+const dist = getDistance(mouseX, mouseY);
+if (dist <= RADIUS_DOUBLE + 15) {
+const scoreInfo = getScoreAtPosition(mouseX, mouseY);
+targetInfo.style.display = 'block';
+targetInfo.style.left = (e.clientX + 15) + 'px';
+targetInfo.style.top = (e.clientY - 30) + 'px';
+targetInfo.innerHTML = `<strong>${scoreInfo.label}</strong> — ${scoreInfo.score} Pkt`;
+} else {
+targetInfo.style.display = 'none';
+}
+});
+
+canvas.addEventListener('mouseleave', () => {
+document.getElementById('targetInfo').style.display = 'none';
+});
+
+canvas.addEventListener('click', (e) => {
+if (isAnimating) return;
+if (gameState.dartsRemaining <= 0) return;
+
+const rect = canvas.getBoundingClientRect();
+const scaleX = canvas.width / rect.width;
+const scaleY = canvas.height / rect.height;
+const clickX = (e.clientX - rect.left) * scaleX;
+const clickY = (e.clientY - rect.top) * scaleY;
+
+throwDart(clickX, clickY);
+});
+
+function throwDart(targetX, targetY) {
+isAnimating = true;
+
+// Add slight randomness for realism
+const spread = 5;
+const actualX = targetX + (Math.random() - 0.5) * spread;
+const actualY = targetY + (Math.random() - 0.5) * spread;
+
+// Animate dart flying
+let progress = 0;
+const animDuration = 300;
+const startTime = Date.now();
+
+function animateThrow() {
+const elapsed = Date.now() - startTime;
+progress = Math.min(elapsed / animDuration, 1);
+
+// Scale down effect
+const scale = 1 - progress * 0.3;
+
+ctx.save();
+ctx.translate(actualX, actualY);
+ctx.scale(scale, scale);
+ctx.restore();
+
+if (progress < 1) {
+requestAnimationFrame(animateThrow);
+} else {
+// Record dart
+gameState.dartPositions.push({ x: actualX, y: actualY });
+processThrow(actualX, actualY);
+isAnimating = false;
+drawDartboard();
+}
+}
+animateThrow();
+}
+
+function processThrow(x, y) {
+const dist = getDistance(x, y);
+const scoreInfo = getScoreAtPosition(x, y);
+
+if (gameState.mode === 'classic') {
+processClassic(scoreInfo);
+} else if (gameState.mode === '501') {
+process501(scoreInfo);
+} else if (gameState.mode === 'cricket') {
+processCricket(scoreInfo);
+}
+
+gameState.dartsRemaining--;
+updateUI();
+drawDartboard();
+
+// Show result
+showThrowResult(scoreInfo);
+}
+
+function processClassic(scoreInfo) {
+gameState.currentRoundScore += scoreInfo.score;
+gameState.totalScore += scoreInfo.score;
+gameState.totalThrows++;
+
+gameState.history.push({
+round: gameState.round,
+dart: 3 - gameState.dartsRemaining,
+score: scoreInfo.score,
+label: scoreInfo.label
+});
+
+if (gameState.dartsRemaining <= 0) {
+gameState.roundScores.push(gameState.currentRoundScore);
+if (gameState.currentRoundScore > gameState.bestRound) {
+gameState.bestRound = gameState.currentRoundScore;
+}
+gameState.round++;
+gameState.currentRoundScore = 0;
+}
+}
+
+function process501(scoreInfo) {
+if (scoreInfo.score === 0) return;
+
+gameState.fiveOneScore -= scoreInfo.score;
+gameState.totalScore += scoreInfo.score;
+gameState.totalThrows++;
+
+gameState.history.push({
+round: gameState.round,
+dart: 3 - gameState.dartsRemaining,
+score: scoreInfo.score,
+label: scoreInfo.label
+});
+
+if (gameState.dartsRemaining <= 0) {
+if (gameState.fiveOneScore === 0) {
+showWinScreen();
+} else if (gameState.fiveOneScore < 0) {
+// Bust - reset
+gameState.fiveOneScore += gameState.currentRoundScore;
+gameState.history.push({
+round: gameState.round,
+dart: 4,
+score: 0,
+label: 'BUST!'
+});
+}
+gameState.round++;
+gameState.currentRoundScore = 0;
+} else {
+gameState.currentRoundScore += scoreInfo.score;
+}
+}
+
+function processCricket(scoreInfo) {
+if (scoreInfo.score === 0) return;
+
+let target = null;
+if (scoreInfo.number === 25) target = 25;
+else if (scoreInfo.number === 50) target = 50;
+else if (gameState.cricketTarget.includes(scoreInfo.number)) {
+target = scoreInfo.number;
+}
+
+if (target !== null && !gameState.cricketFinished.includes(target)) {
+gameState.cricketProgress[target]++;
+
+if (gameState.cricketProgress[target] >= 3) {
+if (!gameState.cricketFinished.includes(target)) {
+gameState.cricketFinished.push(target);
+}
+}
+
+// Cricket scoring
+let cricketPoints = 0;
+if (scoreInfo.multiplier === 'Triple') cricketPoints = 3;
+else if (scoreInfo.multiplier === 'Double') cricketPoints = 2;
+else cricketPoints = 1;
+
+if (gameState.cricketFinished.includes(target)) {
+cricketPoints *= scoreInfo.number;
+}
+
+gameState.currentRoundScore += cricketPoints;
+gameState.totalScore += cricketPoints;
+gameState.totalThrows++;
+
+gameState.history.push({
+round: gameState.round,
+dart: 3 - gameState.dartsRemaining,
+score: cricketPoints,
+label: scoreInfo.label + (cricketPoints > 0 ? ` (+${cricketPoints})` : '')
+});
+
+if (gameState.cricketFinished.length >= 8) {
+gameState.roundScores.push(gameState.currentRoundScore);
+if (gameState.currentRoundScore > gameState.bestRound) {
+gameState.bestRound = gameState.currentRoundScore;
+}
+gameState.round++;
+gameState.currentRoundScore = 0;
+gameState.dartsRemaining = 3;
+}
+}
+
+if (gameState.dartsRemaining <= 0 && gameState.cricketFinished.length < 8) {
+gameState.roundScores.push(gameState.currentRoundScore);
+if (gameState.currentRoundScore > gameState.bestRound) {
+gameState.bestRound = gameState.currentRoundScore;
+}
+gameState.round++;
+gameState.currentRoundScore = 0;
+}
+}
+
+function showThrowResult(scoreInfo) {
+const overlay = document.getElementById('animationOverlay');
+const div = document.createElement('div');
+div.className = 'throw-result';
+
+if (scoreInfo.score === 0) {
+div.style.color = '#888';
+div.textContent = '❌ Verfehlt!';
+} else if (scoreInfo.multiplier === 'Bullseye') {
+div.style.color = '#e74c3c';
+div.textContent = '🎯 BULLSEYE! 50';
+} else if (scoreInfo.multiplier === 'Bull') {
+div.style.color = '#2ecc40';
+div.textContent = '🎯 BULL! 25';
+} else if (scoreInfo.multiplier === 'Triple') {
+div.style.color = '#ffd200';
+div.textContent = `🔥 TRIPLE ${scoreInfo.number}! ${scoreInfo.score}`;
+} else if (scoreInfo.multiplier === 'Double') {
+div.style.color = '#ff6b6b';
+div.textContent = `💥 DOUBLE ${scoreInfo.number}! ${scoreInfo.score}`;
+} else {
+div.style.color = '#fff';
+div.textContent = `${scoreInfo.number} Pkt`;
+}
+
+overlay.appendChild(div);
+overlay.style.display = 'flex';
+
+setTimeout(() => {
+div.style.animation = 'fadeOut 0.5s ease-out forwards';
+setTimeout(() => {
+overlay.removeChild(div);
+if (overlay.children.length === 0) {
+overlay.style.display = 'none';
+}
+}, 500);
+}, 1200);
+}
+
+function showWinScreen() {
+const overlay = document.getElementById('animationOverlay');
+overlay.style.display = 'flex';
+overlay.style.background = 'rgba(0,0,0,0.8)';
+
+const div = document.createElement('div');
+div.className = 'throw-result';
+div.style.color = '#ffd200';
+div.style.fontSize = '4em';
+div.innerHTML = '🏆 GEWONNEN! 🏆<br><span style="font-size:0.4em;color:#fff;">501 in ' + gameState.totalThrows + ' Würfen!</span>';
+overlay.appendChild(div);
+
+setTimeout(() => {
+overlay.style.display = 'none';
+overlay.style.background = '';
+}, 3000);
+}
+
+function updateUI() {
+document.getElementById('roundNum').textContent = gameState.round;
+document.getElementById('totalScore').textContent = gameState.totalScore;
+document.getElementById('avgScore').textContent =
+gameState.totalThrows > 0 ? (gameState.totalScore / gameState.totalThrows).toFixed(1) : '0';
+document.getElementById('avgRound').textContent =
+gameState.roundScores.length > 0 ?
+(gameState.roundScores.reduce((a, b) => a + b, 0) / gameState.roundScores.length).toFixed(1) : '0';
+document.getElementById('bestRound').textContent = gameState.bestRound;
+
+document.getElementById('dartCount').textContent =
+gameState.mode === '501' ?
+`🎯 Noch ${gameState.fiveOneScore} Pkt — ${gameState.dartsRemaining}/3 Darts` :
+`🎯 Darts: ${gameState.dartsRemaining}/3`;
+
+// Last throw
+const lastThrow = document.getElementById('lastThrow');
+if (gameState.history.length > 0) {
+const last = gameState.history[gameState.history.length - 1];
+lastThrow.innerHTML = `<span class="multiplier">${last.label}</span><br><span class="points">${last.score} Pkt</span>`;
+}
+
+// History
+const historyDiv = document.getElementById('throwHistory');
+let html = '<div style="text-align:center;color:#666;margin-bottom:5px;">📜 Wurfverlauf</div>';
+const recent = gameState.history.slice(-15);
+recent.forEach((h, i) => {
+const color = h.score === 0 ? '#888' : h.score >= 30 ? '#ffd200' : h.score >= 20 ? '#ff6b6b' : '#fff';
+html += `<div class="history-item">
+<span class="h-num">R${h.round} D${h.dart}</span>
+<span style="color:${color}">${h.label}</span>
+<span class="h-score">${h.score}</span>
+</div>`;
+});
+historyDiv.innerHTML = html;
+}
+
+function setMode(mode) {
+gameState.mode = mode;
+document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+event.target.classList.add('active');
+resetGame();
+}
+
+function resetGame() {
+gameState.round = 1;
+gameState.dartsRemaining = 3;
+gameState.totalScore = 0;
+gameState.totalThrows = 0;
+gameState.roundScores = [];
+gameState.bestRound = 0;
+gameState.currentRoundScore = 0;
+gameState.dartPositions = [];
+gameState.history = [];
+gameState.cricketProgress = { 20:0,19:0,18:0,17:0,16:0,15:0,25:0,50:0 };
+gameState.cricketFinished = [];
+gameState.fiveOneScore = 501;
+updateUI();
+drawDartboard();
+}
+
+function resetRound() {
+gameState.dartsRemaining = 3;
+gameState.currentRoundScore = 0;
+gameState.dartPositions = [];
+updateUI();
+drawDartboard();
+}
+
+// Polyfill for roundRect
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+if (typeof r === 'number') r = [r];
+const radii = r.map(v => Math.min(v, w/2, h/2));
+const rad = radii[0] || 0;
+this.moveTo(x + rad, y);
+this.arcTo(x + w, y, x + w, y + h, rad);
+this.arcTo(x + w, y + h, x, y + h, rad);
+this.arcTo(x, y + h, x, y, rad);
+this.arcTo(x, y, x + w, y, rad);
+this.closePath();
+};
+}
+
+// Initial draw
+drawDartboard();
+updateUI();
+</script>
+</body>
+</html>

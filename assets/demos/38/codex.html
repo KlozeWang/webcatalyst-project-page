@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Professional Unity Save System (No PlayerPrefs)</title>
+  <style>
+    :root { --bg:#0f1115; --panel:#171a21; --text:#dce3f0; --muted:#95a1b8; --accent:#66d9ef; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:Inter,Segoe UI,Roboto,Arial,sans-serif; }
+    .wrap { max-width:1100px; margin:24px auto; padding:0 16px; }
+    .card { background:var(--panel); border:1px solid #2a3040; border-radius:12px; overflow:hidden; }
+    .top { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid #2a3040; }
+    .title { font-size:14px; color:var(--muted); }
+    button { background:var(--accent); color:#001018; border:none; padding:8px 12px; border-radius:8px; font-weight:700; cursor:pointer; }
+    textarea {
+      width:100%; height:78vh; border:none; outline:none; resize:vertical;
+      background:#0d1016; color:#d7e1f5; font:13px/1.45 Consolas,Monaco,monospace; padding:16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="top">
+        <div class="title">UniversalSaveSystem.cs (encrypted file save, reusable, no PlayerPrefs)</div>
+        <button onclick="copyCode()">Copy</button>
+      </div>
+      <textarea id="code" readonly>using System;
+using System.IO;
+using System.IO.Compression;
+using System.Text;
+using System.Linq;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Security.Cryptography;
+using UnityEngine;
+
+/// <summary>
+/// Drop this file anywhere in your project.
+/// Usage:
+/// 1) SaveSystem.Initialize("profile1", "YOUR_LONG_SECRET_KEY");
+/// 2) SaveSystem.Set("coins", 50); SaveSystem.Set("pos", transform.position); SaveSystem.SetObject("settings", mySettings);
+/// 3) SaveSystem.Save();
+/// 4) var coins = SaveSystem.Get("coins", 0); var pos = SaveSystem.Get("pos", Vector3.zero);
+/// </summary>
+public static class SaveSystem
+{
+    [Serializable] private class SaveFile { public int version = 1; public long unixTime; public List<Entry> entries = new List<Entry>(); }
+    [Serializable] private class Entry { public string key; public string type; public string value; }
+
+    private struct RawValue
+    {
+        public string type;
+        public string value;
+        public RawValue(string t, string v) { type = t; value = v; }
+    }
+
+    private static readonly object _lock = new object();
+    private static readonly Dictionary<string, RawValue> _map = new Dictionary<string, RawValue>(256);
+
+    private static string _path;
+    private static string _secret;
+    private static bool _ready;
+
+    public static bool IsInitialized => _ready;
+    public static bool HasFile => !string.IsNullOrEmpty(_path) && File.Exists(_path);
+
+    public static void Initialize(string fileName = "profile", string secret = "CHANGE_ME_TO_A_LONG_RANDOM_SECRET")
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) fileName = "profile";
+        if (string.IsNullOrWhiteSpace(secret)) throw new ArgumentException("Secret cannot be empty.");
+
+        var dir = Path.Combine(Application.persistentDataPath, "Saves");
+        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+        _path = Path.Combine(dir, fileName + ".sav");
+        _secret = secret;
+        _ready = true;
+
+        Load(); // auto-load if exists
+    }
+
+    public static void Set<T>(string key, T value)
+    {
+        EnsureReady();
+        if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("Key is null/empty.");
+
+        var raw = Serializer.Serialize(value);
+        lock (_lock) _map[key] = raw;
+    }
+
+    public static T Get<T>(string key, T defaultValue = default)
+    {
+        EnsureReady();
+        if (string.IsNullOrWhiteSpace(key)) return defaultValue;
+
+        lock (_lock)
+        {
+            if (!_map.TryGetValue(key, out var raw)) return defaultValue;
+            if (Serializer.TryDeserialize(raw.type, raw.value, out T result)) return result;
+            return defaultValue;
+        }
+    }
+
+    public static bool TryGet<T>(string key, out T value)
+    {
+        EnsureReady();
+        value = default;
+        if (string.IsNullOrWhiteSpace(key)) return false;
+
+        lock (_lock)
+        {
+            if (!_map.TryGetValue(key, out var raw)) return false;
+            return Serializer.TryDeserialize(raw.type, raw.value, out value);
+        }
+    }
+
+    public static bool Contains(string key)
+    {
+        EnsureReady();
+        lock (_lock) return _map.ContainsKey(key);
+    }
+
+    public static bool Remove(string key)
+    {
+        EnsureReady();
+        lock (_lock) return _map.Remove(key);
+    }
+
+    public static void ClearMemory()
+    {
+        EnsureReady();
+        lock (_lock) _map.Clear();
+    }
+
+    public static void DeleteSaveFile()
+    {
+        EnsureReady();
+        lock (_lock)
+        {
+            _map.Clear();
+            if (File.Exists(_path)) File.Delete(_path);
+        }
+    }
+
+    public static void SetObject<T>(string key, T obj) where T : class
+    {
+        EnsureReady();
+        if (obj == null) { Remove(key); return; }
+        var typeName = typeof(T).AssemblyQualifiedName;
+        var json = JsonUtility.ToJson(obj);
+        lock (_lock) _map[key] = new RawValue("json|" + typeName, json);
+    }
+
+    public static T GetObject<T>(string key, T defaultValue = null) where T : class
+    {
+        EnsureReady();
+        lock (_lock)
+        {
+            if (!_map.TryGetValue(key, out var raw)) return defaultValue;
+            if (!raw.type.StartsWith("json|")) return defaultValue;
+            try { return JsonUtility.FromJson<T>(raw.value); } catch { return defaultValue; }
+        }
+    }
+
+    public static void Save()
+    {
+        EnsureReady();
+        SaveFile file = new SaveFile { unixTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
+
+        lock (_lock)
+        {
+            foreach (var kv in _map)
+                file.entries.Add(new Entry { key = kv.Key, type = kv.Value.type, value = kv.Value.value });
+        }
+
+        var json = JsonUtility.ToJson(file, false);
+        var plainBytes = Encoding.UTF8.GetBytes(json);
+        var compressed = Compress(plainBytes);
+        var encrypted = Encrypt(compressed, _secret);
+
+        var temp = _path + ".tmp";
+        File.WriteAllBytes(temp, encrypted);
+        if (File.Exists(_path)) File.Delete(_path);
+        File.Move(temp, _path);
+    }
+
+    public static bool Load()
+    {
+        EnsureReady();
+        if (!File.Exists(_path)) return false;
+
+        try
+        {
+            var encrypted = File.ReadAllBytes(_path);
+            var compressed = Decrypt(encrypted, _secret);
+            var plain = Decompress(compressed);
+            var json = Encoding.UTF8.GetString(plain);
+            var file = JsonUtility.FromJson<SaveFile>(json);
+            if (file == null) return false;
+
+            lock (_lock)
+            {
+                _map.Clear();
+                if (file.entries != null)
+                {
+                    foreach (var e in file.entries)
+                    {
+                        if (string.IsNullOrEmpty(e.key)) continue;
+                        _map[e.key] = new RawValue(e.type ?? "null", e.value ?? "");
+                    }
+                }
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("SaveSystem Load failed: " + ex.Message);
+            return false;
+        }
+    }
+
+    private static void EnsureReady()
+    {
+        if (!_ready) throw new InvalidOperationException("SaveSystem.Initialize(...) must be called first.");
+    }
+
+    private static byte[] Compress(byte[] data)
+    {
+        using var output = new MemoryStream();
+        using (var gzip = new GZipStream(output, CompressionLevel.Optimal))
+            gzip.Write(data, 0, data.Length);
+        return output.ToArray();
+    }
+
+    private static byte[] Decompress(byte[] data)
+    {
+        using var input = new MemoryStream(data);
+        using var gzip = new GZipStream(input, CompressionMode.Decompress);
+        using var output = new MemoryStream();
+        gzip.CopyTo(output);
+        return output.ToArray();
+    }
+
+    // format: [magic 4 bytes "USV1"][salt 16][iv 16][cipher...]
+    private static byte[] Encrypt(byte[] plain, string secret)
+    {
+        byte[] magic = Encoding.ASCII.GetBytes("USV1");
+        byte[] salt = RandomBytes(16);
+        byte[] iv = RandomBytes(16);
+
+        using var keyDeriver = new Rfc2898DeriveBytes(secret, salt, 100_000, HashAlgorithmName.SHA256);
+        byte[] key = keyDeriver.GetBytes(32);
+
+        using var aes = Aes.Create();
+        aes.KeySize = 256; aes.BlockSize = 128;
+        aes.Mode = CipherMode.CBC; aes.Padding = PaddingMode.PKCS7;
+        aes.Key = key; aes.IV = iv;
+
+        using var encryptor = aes.CreateEncryptor();
+        byte[] cipher = encryptor.TransformFinalBlock(plain, 0, plain.Length);
+
+        byte[] all = new byte[4 + 16 + 16 + cipher.Length];
+        Buffer.BlockCopy(magic, 0, all, 0, 4);
+        Buffer.BlockCopy(salt, 0, all, 4, 16);
+        Buffer.BlockCopy(iv, 0, all, 20, 16);
+        Buffer.BlockCopy(cipher, 0, all, 36, cipher.Length);
+        return all;
+    }
+
+    private static byte[] Decrypt(byte[] data, string secret)
+    {
+        if (data == null || data.Length < 36) throw new Exception("Invalid save file.");
+        if (Encoding.ASCII.GetString(data, 0, 4) != "USV1") throw new Exception("Unknown file header.");
+
+        byte[] salt = new byte[16];
+        byte[] iv = new byte[16];
+        byte[] cipher = new byte[data.Length - 36];
+
+        Buffer.BlockCopy(data, 4, salt, 0, 16);
+        Buffer.BlockCopy(data, 20, iv, 0, 16);
+        Buffer.BlockCopy(data, 36, cipher, 0, cipher.Length);
+
+        using var keyDeriver = new Rfc2898DeriveBytes(secret, salt, 100_000, HashAlgorithmName.SHA256);
+        byte[] key = keyDeriver.GetBytes(32);
+
+        using var aes = Aes.Create();
+        aes.KeySize = 256; aes.BlockSize = 128;
+        aes.Mode = CipherMode.CBC; aes.Padding = PaddingMode.PKCS7;
+        aes.Key = key; aes.IV = iv;
+
+        using var decryptor = aes.CreateDecryptor();
+        return decryptor.TransformFinalBlock(cipher, 0, cipher.Length);
+    }
+
+    private static byte[] RandomBytes(int len)
+    {
+        byte[] b = new byte[len];
+        RandomNumberGenerator.Fill(b);
+        return b;
+    }
+
+    private static class Serializer
+    {
+        private static readonly CultureInfo C = CultureInfo.InvariantCulture;
+
+        public static RawValue Serialize<T>(T val)
+        {
+            object v = val;
+
+            if (v == null) return new RawValue("null", "");
+
+            switch (v)
+            {
+                case int x: return new RawValue("int", x.ToString(C));
+                case long x: return new RawValue("long", x.ToString(C));
+                case float x: return new RawValue("float", x.ToString("R", C));
+                case double x: return new RawValue("double", x.ToString("R", C));
+                case bool x: return new RawValue("bool", x ? "1" : "0");
+                case string x: return new RawValue("string", x);
+                case Vector2 x: return new RawValue("Vector2", $"{x.x:R}|{x.y:R}");
+                case Vector3 x: return new RawValue("Vector3", $"{x.x:R}|{x.y:R}|{x.z:R}");
+                case Vector4 x: return new RawValue("Vector4", $"{x.x:R}|{x.y:R}|{x.z:R}|{x.w:R}");
+                case Quaternion x: return new RawValue("Quaternion", $"{x.x:R}|{x.y:R}|{x.z:R}|{x.w:R}");
+                case Color x: return new RawValue("Color", $"{x.r:R}|{x.g:R}|{x.b:R}|{x.a:R}");
+                case Color32 x: return new RawValue("Color32", $"{x.r}|{x.g}|{x.b}|{x.a}");
+                case Rect x: return new RawValue("Rect", $"{x.x:R}|{x.y:R}|{x.width:R}|{x.height:R}");
+                case Bounds x: return new RawValue("Bounds", $"{x.center.x:R}|{x.center.y:R}|{x.center.z:R}|{x.size.x:R}|{x.size.y:R}|{x.size.z:R}");
+                case int[] x: return new RawValue("int[]", string.Join(",", x));
+                case float[] x: return new RawValue("float[]", string.Join(",", x.Select(n => n.ToString("R", C))));
+                case bool[] x: return new RawValue("bool[]", string.Join(",", x.Select(b => b ? "1" : "0")));
+                case string[] x: return new RawValue("string[]", string.Join("|", x.Select(Base64Encode)));
+                case Vector3[] x: return new RawValue("Vector3[]", string.Join(";", x.Select(v3 => $"{v3.x:R},{v3.y:R},{v3.z:R}")));
+            }
+
+            var t = v.GetType();
+            if (t.IsEnum)
+                return new RawValue("enum|" + t.AssemblyQualifiedName, Convert.ToInt64(v, C).ToString(C));
+
+            return new RawValue("json|" + t.AssemblyQualifiedName, JsonUtility.ToJson(v));
+        }
+
+        public static bool TryDeserialize<T>(string type, string data, out T value)
+        {
+            value = default;
+            try
+            {
+                object obj = Deserialize(typeof(T), type, data);
+                if (obj == null && typeof(T).IsValueType) return false;
+                if (obj is T cast)
+                {
+                    value = cast;
+                    return true;
+                }
+
+                // numeric conversion fallback
+                if (obj != null)
+                {
+                    object converted = Convert.ChangeType(obj, typeof(T), C);
+                    if (converted is T c2) { value = c2; return true; }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private static object Deserialize(Type targetType, string type, string data)
+        {
+            if (type == "null") return null;
+
+            if (targetType == typeof(int) && type == "int") return int.Parse(data, C);
+            if (targetType == typeof(long) && type == "long") return long.Parse(data, C);
+            if (targetType == typeof(float) && type == "float") return float.Parse(data, C);
+            if (targetType == typeof(double) && type == "double") return double.Parse(data, C);
+            if (targetType == typeof(bool) && type == "bool") return data == "1";
+            if (targetType == typeof(string) && type == "string") return data;
+
+            if (targetType == typeof(Vector2) && type == "Vector2")
+            {
+                var p = Split(data, 2); return new Vector2(F(p[0]), F(p[1]));
+            }
+            if (targetType == typeof(Vector3) && type == "Vector3")
+            {
+                var p = Split(data, 3); return new Vector3(F(p[0]), F(p[1]), F(p[2]));
+            }
+            if (targetType == typeof(Vector4) && type == "Vector4")
+            {
+                var p = Split(data, 4); return new Vector4(F(p[0]), F(p[1]), F(p[2]), F(p[3]));
+            }
+            if (targetType == typeof(Quaternion) && type == "Quaternion")
+            {
+                var p = Split(data, 4); return new Quaternion(F(p[0]), F(p[1]), F(p[2]), F(p[3]));
+            }
+            if (targetType == typeof(Color) && type == "Color")
+            {
+                var p = Split(data, 4); return new Color(F(p[0]), F(p[1]), F(p[2]), F(p[3]));
+            }
+            if (targetType == typeof(Color32) && type == "Color32")
+            {
+                var p = Split(data, 4); return new Color32(byte.Parse(p[0]), byte.Parse(p[1]), byte.Parse(p[2]), byte.Parse(p[3]));
+            }
+            if (targetType == typeof(Rect) && type == "Rect")
+            {
+                var p = Split(data, 4); return new Rect(F(p[0]), F(p[1]), F(p[2]), F(p[3]));
+            }
+            if (targetType == typeof(Bounds) && type == "Bounds")
+            {
+                var p = Split(data, 6);
+                return new Bounds(new Vector3(F(p[0]), F(p[1]), F(p[2])), new Vector3(F(p[3]), F(p[4]), F(p[5])));
+            }
+
+            if (targetType == typeof(int[]) && type == "int[]")
+                return string.IsNullOrEmpty(data) ? Array.Empty<int>() : data.Split(',').Select(s => int.Parse(s, C)).ToArray();
+
+            if (targetType == typeof(float[]) && type == "float[]")
+                return string.IsNullOrEmpty(data) ? Array.Empty<float>() : data.Split(',').Select(s => float.Parse(s, C)).ToArray();
+
+            if (targetType == typeof(bool[]) && type == "bool[]")
+                return string.IsNullOrEmpty(data) ? Array.Empty<bool>() : data.Split(',').Select(s => s == "1").ToArray();
+
+            if (targetType == typeof(string[]) && type == "string[]")
+                return string.IsNullOrEmpty(data) ? Array.Empty<string>() : data.Split('|').Select(Base64Decode).ToArray();
+
+            if (targetType == typeof(Vector3[]) && type == "Vector3[]")
+            {
+                if (string.IsNullOrEmpty(data)) return Array.Empty<Vector3>();
+                var list = data.Split(';');
+                Vector3[] arr = new Vector3[list.Length];
+                for (int i = 0; i < list.Length; i++)
+                {
+                    var p = list[i].Split(',');
+                    arr[i] = new Vector3(F(p[0]), F(p[1]), F(p[2]));
+                }
+                return arr;
+            }
+
+            if (type.StartsWith("enum|"))
+            {
+                var enumType = Type.GetType(type.Substring(5));
+                if (enumType != null && targetType.IsEnum)
+                {
+                    long raw = long.Parse(data, C);
+                    return Enum.ToObject(targetType, raw);
+                }
+            }
+
+            if (type.StartsWith("json|"))
+            {
+                // deserialize as requested target type (best for custom classes/structs)
+                return JsonUtility.FromJson(data, targetType);
+            }
+
+            return null;
+        }
+
+        private static float F(string s) => float.Parse(s, C);
+
+        private static string[] Split(string s, int expected)
+        {
+            var p = s.Split('|');
+            if (p.Length != expected) throw new Exception("Invalid serialized data.");
+            return p;
+        }
+
+        private static string Base64Encode(string plain) =>
+            Convert.ToBase64String(Encoding.UTF8.GetBytes(plain ?? ""));
+
+        private static string Base64Decode(string b64) =>
+            Encoding.UTF8.GetString(Convert.FromBase64String(b64 ?? ""));
+    }
+}</textarea>
+    </div>
+  </div>
+
+  <script>
+    function copyCode() {
+      const el = document.getElementById('code');
+      el.select();
+      el.setSelectionRange(0, 999999);
+      navigator.clipboard.writeText(el.value);
+    }
+  </script>
+</body>
+</html>

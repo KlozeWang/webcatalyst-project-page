@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Top-Down A* Patrol & Chase Game</title>
+  <style>
+    :root {
+      --bg: #101418;
+      --panel: #1b232c;
+      --text: #e8f0ff;
+      --accent: #6ee7ff;
+      --danger: #ff7070;
+      --wall: #2f3a46;
+      --floor: #1a222b;
+    }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    body {
+      display: grid;
+      place-items: center;
+    }
+    .wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+    }
+    canvas {
+      border: 2px solid #3a4a5e;
+      background: #0f141a;
+      image-rendering: pixelated;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+    .hint {
+      font-size: 14px;
+      opacity: 0.9;
+      text-align: center;
+    }
+    .hint b { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <canvas id="game" width="768" height="576"></canvas>
+    <div class="hint">
+      Move: <b>WASD</b> or <b>Arrow Keys</b> &nbsp;|&nbsp; Avoid enemies &nbsp;|&nbsp; Press <b>R</b> to restart after game over
+    </div>
+  </div>
+
+  <script>
+    // ============================================================
+    // Utility helpers
+    // ============================================================
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+    const keyOf = (x, y) => `${x},${y}`;
+
+    // ============================================================
+    // Player class
+    // Handles input, smooth movement, and wall collision.
+    // ============================================================
+    class Player {
+      constructor(game, tileX, tileY) {
+        this.game = game;
+        this.w = 22;
+        this.h = 22;
+        this.radius = 11;
+        this.speed = 160; // pixels/second
+        const c = game.tileCenter(tileX, tileY);
+        this.x = c.x;
+        this.y = c.y;
+        this.color = "#66ff9e";
+        this.bobTime = 0;
+      }
+
+      update(dt, keys) {
+        let dx = 0, dy = 0;
+        if (keys["arrowleft"] || keys["a"]) dx -= 1;
+        if (keys["arrowright"] || keys["d"]) dx += 1;
+        if (keys["arrowup"] || keys["w"]) dy -= 1;
+        if (keys["arrowdown"] || keys["s"]) dy += 1;
+
+        // Normalize diagonal speed
+        if (dx !== 0 && dy !== 0) {
+          const inv = 1 / Math.sqrt(2);
+          dx *= inv;
+          dy *= inv;
+        }
+
+        const step = this.speed * dt;
+        this.moveWithCollision(dx * step, dy * step);
+        this.bobTime += dt * 8;
+      }
+
+      moveWithCollision(mx, my) {
+        // Move X axis, then resolve wall collisions
+        if (mx !== 0) {
+          const newX = this.x + mx;
+          if (!this.game.rectHitsWall(newX - this.w / 2, this.y - this.h / 2, this.w, this.h)) {
+            this.x = newX;
+          }
+        }
+
+        // Move Y axis, then resolve wall collisions
+        if (my !== 0) {
+          const newY = this.y + my;
+          if (!this.game.rectHitsWall(this.x - this.w / 2, newY - this.h / 2, this.w, this.h)) {
+            this.y = newY;
+          }
+        }
+      }
+
+      draw(ctx) {
+        const pulse = 1 + Math.sin(this.bobTime) * 0.06;
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.scale(pulse, pulse);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Simple "face" to show direction feel
+        ctx.fillStyle = "#102019";
+        ctx.beginPath();
+        ctx.arc(4, -3, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // ============================================================
+    // Enemy class
+    // AI:
+    // 1) Patrols fixed points when player is far
+    // 2) Chases player when within detection range
+    // 3) Uses A* to navigate around walls
+    // ============================================================
+    class Enemy {
+      constructor(game, tileX, tileY, patrolPoints, color = "#ff6b6b") {
+        this.game = game;
+        const c = game.tileCenter(tileX, tileY);
+        this.x = c.x;
+        this.y = c.y;
+
+        this.radius = 11;
+        this.speed = 120;
+        this.color = color;
+        this.patrolPoints = patrolPoints; // [{x,y}, ...] in tile coords
+        this.patrolIndex = 0;
+
+        this.mode = "patrol"; // "patrol" or "chase"
+        this.detectRange = 190; // pixels
+        this.path = []; // array of tile nodes to follow
+        this.repathTimer = 0;
+        this.lastTargetKey = "";
+      }
+
+      currentTile() {
+        return this.game.pixelToTile(this.x, this.y);
+      }
+
+      update(dt, player) {
+        const d = dist(this.x, this.y, player.x, player.y);
+        this.mode = d <= this.detectRange ? "chase" : "patrol";
+
+        // Decide target tile
+        let targetTile;
+        if (this.mode === "chase") {
+          targetTile = this.game.pixelToTile(player.x, player.y);
+        } else {
+          const p = this.patrolPoints[this.patrolIndex];
+          targetTile = { x: p.x, y: p.y };
+
+          // If close to current patrol target, advance to next point
+          const tc = this.game.tileCenter(p.x, p.y);
+          if (dist(this.x, this.y, tc.x, tc.y) < 10) {
+            this.patrolIndex = (this.patrolIndex + 1) % this.patrolPoints.length;
+          }
+        }
+
+        // Recompute A* path every short interval or when target changed
+        const targetKey = keyOf(targetTile.x, targetTile.y);
+        this.repathTimer -= dt;
+        const repathInterval = this.mode === "chase" ? 0.22 : 0.7;
+        if (this.repathTimer <= 0 || targetKey !== this.lastTargetKey || this.path.length === 0) {
+          this.repathTimer = repathInterval;
+          this.lastTargetKey = targetKey;
+          const start = this.currentTile();
+          const pathResult = this.game.aStar(start, targetTile);
+          // Remove first node (current tile) so enemy moves toward next
+          this.path = pathResult.length > 1 ? pathResult.slice(1) : [];
+        }
+
+        this.followPath(dt);
+      }
+
+      followPath(dt) {
+        if (this.path.length === 0) return;
+
+        const next = this.path[0];
+        const c = this.game.tileCenter(next.x, next.y);
+        const dx = c.x - this.x;
+        const dy = c.y - this.y;
+        const len = Math.hypot(dx, dy);
+
+        if (len < 2.2) {
+          this.path.shift();
+          return;
+        }
+
+        const vx = dx / len;
+        const vy = dy / len;
+        const step = this.speed * dt;
+        this.x += vx * Math.min(step, len);
+        this.y += vy * Math.min(step, len);
+      }
+
+      draw(ctx) {
+        // Draw path visualization
+        if (this.path.length > 0) {
+          ctx.save();
+          ctx.strokeStyle = this.mode === "chase" ? "rgba(255,120,120,0.8)" : "rgba(120,220,255,0.7)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(this.x, this.y);
+          for (const n of this.path) {
+            const c = this.game.tileCenter(n.x, n.y);
+            ctx.lineTo(c.x, c.y);
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eye to make it lively
+        ctx.fillStyle = "#2b0c0c";
+        ctx.beginPath();
+        ctx.arc(this.x + 3, this.y - 2, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // ============================================================
+    // Game class
+    // Owns map, entities, A* pathfinding, update loop, rendering, UI.
+    // ============================================================
+    class Game {
+      constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext("2d");
+        this.tileSize = 32;
+        this.cols = canvas.width / this.tileSize;
+        this.rows = canvas.height / this.tileSize;
+
+        this.keys = {};
+        this.state = "playing"; // or "gameover"
+        this.score = 0;
+
+        this.buildMap();
+        this.createActors();
+      }
+
+      reset() {
+        this.state = "playing";
+        this.score = 0;
+        this.buildMap();
+        this.createActors();
+      }
+
+      buildMap() {
+        // 0 = floor, 1 = wall
+        this.grid = Array.from({ length: this.rows }, () => Array(this.cols).fill(0));
+
+        // Border walls
+        for (let x = 0; x < this.cols; x++) {
+          this.grid[0][x] = 1;
+          this.grid[this.rows - 1][x] = 1;
+        }
+        for (let y = 0; y < this.rows; y++) {
+          this.grid[y][0] = 1;
+          this.grid[y][this.cols - 1] = 1;
+        }
+
+        // Internal obstacle layout
+        for (let y = 2; y <= 15; y++) if (![5, 11].includes(y)) this.grid[y][6] = 1;
+        for (let y = 2; y <= 15; y++) if (![8, 14].includes(y)) this.grid[y][12] = 1;
+        for (let y = 2; y <= 15; y++) if (![4, 10, 15].includes(y)) this.grid[y][17] = 1;
+
+        for (let x = 2; x <= 10; x++) if (![4, 8].includes(x)) this.grid[4][x] = 1;
+        for (let x = 8; x <= 21; x++) if (![14, 19].includes(x)) this.grid[9][x] = 1;
+        for (let x = 1; x <= 15; x++) if (![7, 12].includes(x)) this.grid[13][x] = 1;
+
+        // A few block obstacles
+        const blocks = [
+          [3, 7], [4, 7], [3, 8],
+          [20, 5], [20, 6], [21, 6],
+          [9, 15], [10, 15], [9, 14]
+        ];
+        for (const [x, y] of blocks) this.grid[y][x] = 1;
+      }
+
+      createActors() {
+        this.player = new Player(this, 2, 2);
+
+        // Multiple enemies with different patrol routes
+        this.enemies = [
+          new Enemy(this, 20, 2, [
+            { x: 20, y: 2 },
+            { x: 22, y: 7 },
+            { x: 19, y: 11 },
+            { x: 22, y: 15 }
+          ], "#ff6b6b"),
+          new Enemy(this, 3, 15, [
+            { x: 3, y: 15 },
+            { x: 10, y: 15 },
+            { x: 10, y: 10 },
+            { x: 2, y: 10 }
+          ], "#ff9f43")
+        ];
+      }
+
+      // Coordinate helpers
+      tileCenter(tx, ty) {
+        return {
+          x: tx * this.tileSize + this.tileSize / 2,
+          y: ty * this.tileSize + this.tileSize / 2
+        };
+      }
+
+      pixelToTile(px, py) {
+        return {
+          x: clamp(Math.floor(px / this.tileSize), 0, this.cols - 1),
+          y: clamp(Math.floor(py / this.tileSize), 0, this.rows - 1)
+        };
+      }
+
+      isWall(tx, ty) {
+        if (tx < 0 || ty < 0 || tx >= this.cols || ty >= this.rows) return true;
+        return this.grid[ty][tx] === 1;
+      }
+
+      rectHitsWall(x, y, w, h) {
+        const left = Math.floor(x / this.tileSize);
+        const right = Math.floor((x + w - 1) / this.tileSize);
+        const top = Math.floor(y / this.tileSize);
+        const bottom = Math.floor((y + h - 1) / this.tileSize);
+
+        for (let ty = top; ty <= bottom; ty++) {
+          for (let tx = left; tx <= right; tx++) {
+            if (this.isWall(tx, ty)) return true;
+          }
+        }
+        return false;
+      }
+
+      // A* pathfinding on 4-direction grid
+      aStar(start, goal) {
+        if (this.isWall(goal.x, goal.y) || this.isWall(start.x, start.y)) return [];
+
+        const open = [];
+        const openMap = new Map();
+        const closed = new Set();
+
+        const h = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+
+        const startNode = {
+          x: start.x, y: start.y,
+          g: 0,
+          f: h(start, goal),
+          parent: null
+        };
+
+        open.push(startNode);
+        openMap.set(keyOf(start.x, start.y), startNode);
+
+        while (open.length > 0) {
+          // Get node with smallest f (simple approach, beginner-friendly)
+          let bestIndex = 0;
+          for (let i = 1; i < open.length; i++) {
+            if (open[i].f < open[bestIndex].f) bestIndex = i;
+          }
+          const current = open.splice(bestIndex, 1)[0];
+          openMap.delete(keyOf(current.x, current.y));
+
+          if (current.x === goal.x && current.y === goal.y) {
+            // Rebuild path from goal -> start
+            const path = [];
+            let n = current;
+            while (n) {
+              path.push({ x: n.x, y: n.y });
+              n = n.parent;
+            }
+            return path.reverse();
+          }
+
+          closed.add(keyOf(current.x, current.y));
+
+          const neighbors = [
+            { x: current.x + 1, y: current.y },
+            { x: current.x - 1, y: current.y },
+            { x: current.x, y: current.y + 1 },
+            { x: current.x, y: current.y - 1 }
+          ];
+
+          for (const nb of neighbors) {
+            const nbKey = keyOf(nb.x, nb.y);
+            if (this.isWall(nb.x, nb.y) || closed.has(nbKey)) continue;
+
+            const tentativeG = current.g + 1;
+            const existing = openMap.get(nbKey);
+
+            if (!existing || tentativeG < existing.g) {
+              const node = {
+                x: nb.x,
+                y: nb.y,
+                g: tentativeG,
+                f: tentativeG + h(nb, goal),
+                parent: current
+              };
+
+              if (!existing) {
+                open.push(node);
+                openMap.set(nbKey, node);
+              } else {
+                existing.g = node.g;
+                existing.f = node.f;
+                existing.parent = current;
+              }
+            }
+          }
+        }
+
+        return []; // no path
+      }
+
+      update(dt) {
+        if (this.state !== "playing") return;
+
+        this.player.update(dt, this.keys);
+        for (const enemy of this.enemies) {
+          enemy.update(dt, this.player);
+
+          // Lose condition: enemy touches player
+          if (dist(enemy.x, enemy.y, this.player.x, this.player.y) < enemy.radius + this.player.radius - 2) {
+            this.state = "gameover";
+          }
+        }
+
+        this.score += dt * 10; // survival score
+      }
+
+      drawMap() {
+        const ctx = this.ctx;
+        for (let y = 0; y < this.rows; y++) {
+          for (let x = 0; x < this.cols; x++) {
+            const wall = this.grid[y][x] === 1;
+            ctx.fillStyle = wall ? "#2f3a46" : "#1a222b";
+            ctx.fillRect(x * this.tileSize, y * this.tileSize, this.tileSize, this.tileSize);
+
+            // Subtle tile grid lines
+            ctx.strokeStyle = "rgba(255,255,255,0.04)";
+            ctx.strokeRect(x * this.tileSize, y * this.tileSize, this.tileSize, this.tileSize);
+          }
+        }
+      }
+
+      drawUI() {
+        const ctx = this.ctx;
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.fillRect(8, 8, 210, 40);
+        ctx.fillStyle = "#e8f0ff";
+        ctx.font = "18px Arial";
+        ctx.fillText(`Score: ${Math.floor(this.score)}`, 18, 34);
+
+        if (this.state === "gameover") {
+          ctx.fillStyle = "rgba(0,0,0,0.6)";
+          ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+          ctx.fillStyle = "#ffb3b3";
+          ctx.font = "bold 44px Arial";
+          ctx.textAlign = "center";
+          ctx.fillText("GAME OVER", this.canvas.width / 2, this.canvas.height / 2 - 30);
+
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "24px Arial";
+          ctx.fillText(`Final Score: ${Math.floor(this.score)}`, this.canvas.width / 2, this.canvas.height / 2 + 16);
+
+          ctx.font = "20px Arial";
+          ctx.fillStyle = "#9fe8ff";
+          ctx.fillText("Press R to Restart", this.canvas.width / 2, this.canvas.height / 2 + 56);
+          ctx.textAlign = "left";
+        }
+      }
+
+      draw() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.drawMap();
+        this.player.draw(this.ctx);
+        for (const enemy of this.enemies) enemy.draw(this.ctx);
+        this.drawUI();
+      }
+    }
+
+    // ============================================================
+    // Main bootstrapping and game loop
+    // ============================================================
+    const canvas = document.getElementById("game");
+    const game = new Game(canvas);
+
+    window.addEventListener("keydown", (e) => {
+      const key = e.key.toLowerCase();
+      game.keys[key] = true;
+
+      // Prevent page scrolling with arrow keys/space
+      if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) {
+        e.preventDefault();
+      }
+
+      if (game.state === "gameover" && key === "r") {
+        game.reset();
+      }
+    });
+
+    window.addEventListener("keyup", (e) => {
+      game.keys[e.key.toLowerCase()] = false;
+    });
+
+    let lastTime = performance.now();
+    function loop(now) {
+      let dt = (now - lastTime) / 1000;
+      lastTime = now;
+
+      // Cap delta for stable behavior if tab was inactive
+      dt = Math.min(dt, 0.033);
+
+      game.update(dt);
+      game.draw();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scientific & Logical Calculator</title>
+  <style>
+    :root{
+      --bg:#0f172a;
+      --panel:#111827;
+      --panel2:#1f2937;
+      --text:#e5e7eb;
+      --muted:#9ca3af;
+      --accent:#22d3ee;
+      --accent2:#8b5cf6;
+      --danger:#ef4444;
+      --ok:#10b981;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;
+      background: radial-gradient(circle at top, #1e293b, var(--bg) 45%);
+      color:var(--text);
+      min-height:100vh;
+      display:flex;
+      align-items:flex-start;
+      justify-content:center;
+      padding:20px;
+    }
+    .app{
+      width:min(980px,100%);
+      display:grid;
+      grid-template-columns:1.35fr .85fr;
+      gap:16px;
+    }
+    @media (max-width: 900px){ .app{grid-template-columns:1fr;} }
+    .card{
+      background:linear-gradient(180deg,var(--panel),#0b1220);
+      border:1px solid #263246;
+      border-radius:16px;
+      box-shadow:0 12px 30px rgba(0,0,0,.35);
+      overflow:hidden;
+    }
+    .head{
+      padding:14px 16px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      border-bottom:1px solid #253044;
+      background:rgba(255,255,255,.02);
+    }
+    .title{font-size:15px;font-weight:700;letter-spacing:.3px}
+    .sub{font-size:12px;color:var(--muted)}
+    .display{
+      padding:16px;
+      border-bottom:1px solid #253044;
+      background:linear-gradient(180deg,#0c1423,#0a1120);
+    }
+    .expr{
+      min-height:28px;
+      font-size:18px;
+      color:#c7d2fe;
+      word-wrap:break-word;
+      opacity:.95;
+    }
+    .result{
+      min-height:38px;
+      font-size:30px;
+      font-weight:700;
+      margin-top:8px;
+      color:#f8fafc;
+      word-wrap:break-word;
+    }
+    .meta{
+      margin-top:8px;
+      font-size:12px;
+      color:var(--muted);
+      min-height:16px;
+    }
+    .keys{
+      padding:12px;
+      display:grid;
+      grid-template-columns:repeat(6,1fr);
+      gap:8px;
+    }
+    button{
+      border:1px solid #314155;
+      background:var(--panel2);
+      color:var(--text);
+      padding:12px 8px;
+      border-radius:10px;
+      font-size:15px;
+      cursor:pointer;
+      transition:.12s ease;
+    }
+    button:hover{transform:translateY(-1px);filter:brightness(1.08)}
+    button:active{transform:translateY(0)}
+    .op{background:#273449}
+    .fn{background:#24303f;color:#bfdbfe}
+    .logic{background:#2c344a;color:#ddd6fe}
+    .eq{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#04111f;font-weight:800}
+    .danger{background:#3a1f2a;color:#fecaca;border-color:#5c2736}
+    .ok{background:#11312d;color:#a7f3d0;border-color:#1e4f47}
+    .wide{grid-column:span 2}
+    .section{
+      padding:14px;
+    }
+    .row{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      margin-bottom:10px;
+    }
+    .field{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    label{font-size:12px;color:var(--muted)}
+    input,select{
+      width:100%;
+      padding:10px 11px;
+      border-radius:10px;
+      border:1px solid #334155;
+      background:#0b1324;
+      color:#e2e8f0;
+      outline:none;
+    }
+    input:focus,select:focus{border-color:#475569}
+    .logical-out{
+      margin-top:8px;
+      padding:12px;
+      border:1px solid #2f3f56;
+      border-radius:12px;
+      background:#0a1220;
+      font-size:14px;
+      line-height:1.6;
+    }
+    .small{font-size:12px;color:var(--muted)}
+    .pill{
+      font-size:12px;
+      padding:5px 10px;
+      border-radius:999px;
+      border:1px solid #32475f;
+      background:#0c182b;
+      color:#dbeafe;
+      cursor:pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section class="card">
+      <div class="head">
+        <div>
+          <div class="title">Scientific Calculator</div>
+          <div class="sub">Math + Bitwise expression support</div>
+        </div>
+        <button id="angleBtn" class="pill" title="Toggle angle mode">RAD</button>
+      </div>
+
+      <div class="display">
+        <div id="expr" class="expr"></div>
+        <div id="result" class="result">0</div>
+        <div id="meta" class="meta"></div>
+      </div>
+
+      <div class="keys" id="keys">
+        <button class="danger" data-action="clear">AC</button>
+        <button class="danger" data-action="del">DEL</button>
+        <button class="fn" data-insert="(">(</button>
+        <button class="fn" data-insert=")">)</button>
+        <button class="logic" data-insert="<<">&lt;&lt;</button>
+        <button class="logic" data-insert=">>">&gt;&gt;</button>
+
+        <button class="fn" data-insert="sin(">sin</button>
+        <button class="fn" data-insert="cos(">cos</button>
+        <button class="fn" data-insert="tan(">tan</button>
+        <button class="fn" data-insert="log(">log</button>
+        <button class="fn" data-insert="ln(">ln</button>
+        <button class="fn" data-insert="sqrt(">√</button>
+
+        <button class="fn" data-insert="asin(">asin</button>
+        <button class="fn" data-insert="acos(">acos</button>
+        <button class="fn" data-insert="atan(">atan</button>
+        <button class="fn" data-insert="abs(">abs</button>
+        <button class="fn" data-insert="exp(">exp</button>
+        <button class="fn" data-insert="!">x!</button>
+
+        <button class="fn" data-insert="pi">π</button>
+        <button class="fn" data-insert="e">e</button>
+        <button class="fn" data-action="ans">Ans</button>
+        <button class="op" data-insert="%">%</button>
+        <button class="op" data-insert="^">^</button>
+        <button class="op" data-insert="/">÷</button>
+
+        <button data-insert="7">7</button>
+        <button data-insert="8">8</button>
+        <button data-insert="9">9</button>
+        <button class="op" data-insert="*">×</button>
+        <button class="logic" data-insert="&">&amp; (AND)</button>
+        <button class="logic" data-insert="|">| (OR)</button>
+
+        <button data-insert="4">4</button>
+        <button data-insert="5">5</button>
+        <button data-insert="6">6</button>
+        <button class="op" data-insert="-">−</button>
+        <button class="logic" data-insert="^">^ (XOR)</button>
+        <button class="logic" data-insert="~">~ (NOT)</button>
+
+        <button data-insert="1">1</button>
+        <button data-insert="2">2</button>
+        <button data-insert="3">3</button>
+        <button class="op" data-insert="+">+</button>
+        <button class="fn" data-insert="pow(">pow(</button>
+        <button class="fn" data-insert=",">,</button>
+
+        <button class="wide" data-insert="0">0</button>
+        <button data-insert=".">.</button>
+        <button class="ok" data-action="neg">±</button>
+        <button class="eq wide" data-action="equals">=</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="head">
+        <div>
+          <div class="title">Logical Calculator</div>
+          <div class="sub">32-bit integer bitwise operations</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="row">
+          <div class="field">
+            <label for="aVal">A (integer)</label>
+            <input id="aVal" type="number" value="12" />
+          </div>
+          <div class="field">
+            <label for="bVal">B (integer)</label>
+            <input id="bVal" type="number" value="5" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="logicOp">Operation</label>
+          <select id="logicOp">
+            <option>AND</option>
+            <option>OR</option>
+            <option>XOR</option>
+            <option>NAND</option>
+            <option>NOR</option>
+            <option>XNOR</option>
+            <option>NOT A</option>
+            <option>NOT B</option>
+            <option>A &lt;&lt; B</option>
+            <option>A &gt;&gt; B</option>
+          </select>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <button id="logicCalc" class="ok wide">Calculate</button>
+          <button id="logicSwap" class="op">Swap A/B</button>
+        </div>
+
+        <div class="logical-out" id="logicOut">
+          Result: <b>0</b><br>
+          Binary: <code>0</code><br>
+          Hex: <code>0x0</code>
+        </div>
+        <div class="small" style="margin-top:8px;">Tip: bitwise ops use signed 32-bit integers in JavaScript.</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const exprEl = document.getElementById('expr');
+    const resultEl = document.getElementById('result');
+    const metaEl = document.getElementById('meta');
+    const angleBtn = document.getElementById('angleBtn');
+    const keys = document.getElementById('keys');
+
+    let expression = '';
+    let lastAnswer = 0;
+    let angleMode = 'RAD';
+
+    const fact = (n) => {
+      if (!Number.isFinite(n) || n < 0 || Math.floor(n) !== n) throw new Error('Invalid factorial');
+      if (n > 170) return Infinity;
+      let r = 1;
+      for (let i = 2; i <= n; i++) r *= i;
+      return r;
+    };
+
+    const fns = {
+      sin: (x)=> angleMode==='DEG' ? Math.sin(x*Math.PI/180) : Math.sin(x),
+      cos: (x)=> angleMode==='DEG' ? Math.cos(x*Math.PI/180) : Math.cos(x),
+      tan: (x)=> angleMode==='DEG' ? Math.tan(x*Math.PI/180) : Math.tan(x),
+      asin:(x)=> angleMode==='DEG' ? Math.asin(x)*180/Math.PI : Math.asin(x),
+      acos:(x)=> angleMode==='DEG' ? Math.acos(x)*180/Math.PI : Math.acos(x),
+      atan:(x)=> angleMode==='DEG' ? Math.atan(x)*180/Math.PI : Math.atan(x),
+      log:(x)=> Math.log10(x),
+      ln:(x)=> Math.log(x),
+      sqrt:Math.sqrt,
+      abs:Math.abs,
+      exp:Math.exp,
+      floor:Math.floor,
+      ceil:Math.ceil,
+      round:Math.round,
+      pow:Math.pow,
+      min:Math.min,
+      max:Math.max,
+      fact
+    };
+
+    function replaceFactorials(s){
+      let prev;
+      do{
+        prev = s;
+        s = s.replace(/(\d+(\.\d+)?|\([^()]*\))!/g, 'fact($1)');
+      } while (s !== prev);
+      return s;
+    }
+
+    function replacePercent(s){
+      let prev;
+      do{
+        prev = s;
+        s = s.replace(/(\d+(\.\d+)?|\([^()]*\))%/g,'($1/100)');
+      } while (s !== prev);
+      return s;
+    }
+
+    function normalizeExpression(raw){
+      let s = raw;
+      s = s.replace(/Ans/g, `(${lastAnswer})`);
+      s = s.replace(/π/g, 'pi');
+      s = s.replace(/÷/g,'/').replace(/×/g,'*');
+      s = s.replace(/\bAND\b/gi,'&')
+           .replace(/\bOR\b/gi,'|')
+           .replace(/\bXOR\b/gi,'^')
+           .replace(/\bNOT\b/gi,'~');
+      s = replaceFactorials(s);
+      s = replacePercent(s);
+      s = s.replace(/\^/g,'**');
+      return s;
+    }
+
+    function evaluate(raw){
+      const s = normalizeExpression(raw);
+      if (!/^[0-9+\-*/%().,<>|&~!_\sA-Za-z]*$/.test(s)) throw new Error('Invalid characters');
+
+      const scope = {
+        ...fns,
+        pi: Math.PI,
+        e: Math.E
+      };
+
+      const names = Object.keys(scope);
+      const vals = Object.values(scope);
+      const fn = new Function(...names, '"use strict"; return (' + s + ');');
+      let out = fn(...vals);
+
+      if (typeof out === 'boolean') out = out ? 1 : 0;
+      if (typeof out !== 'number' || Number.isNaN(out)) throw new Error('Math error');
+      return out;
+    }
+
+    function fmt(n){
+      if (!Number.isFinite(n)) return (n > 0 ? '∞' : '-∞');
+      if (Object.is(n, -0)) n = 0;
+      if (Math.abs(n) >= 1e12 || (Math.abs(n) > 0 && Math.abs(n) < 1e-9)) return n.toExponential(10).replace(/\.?0+e/,'e');
+      if (Number.isInteger(n)) return String(n);
+      return String(parseFloat(n.toFixed(12)));
+    }
+
+    function update(){
+      exprEl.textContent = expression || ' ';
+    }
+
+    function setResult(val, isError=false){
+      resultEl.textContent = val;
+      resultEl.style.color = isError ? '#fca5a5' : '#f8fafc';
+    }
+
+    function showMetaFor(n){
+      if (Number.isInteger(n) && Number.isFinite(n)) {
+        const u = n >>> 0;
+        metaEl.textContent = `bin: ${u.toString(2)}   hex: 0x${u.toString(16).toUpperCase()}`;
+      } else {
+        metaEl.textContent = '';
+      }
+    }
+
+    function doEval(){
+      if (!expression.trim()) return;
+      try{
+        const v = evaluate(expression);
+        lastAnswer = v;
+        setResult(fmt(v), false);
+        showMetaFor(v);
+      }catch(e){
+        setResult('Error', true);
+        metaEl.textContent = e.message;
+      }
+    }
+
+    keys.addEventListener('click', (e)=>{
+      const b = e.target.closest('button');
+      if(!b) return;
+
+      if (b.dataset.insert != null) {
+        expression += b.dataset.insert;
+        update();
+      } else {
+        const act = b.dataset.action;
+        if (act === 'clear') { expression=''; setResult('0'); metaEl.textContent=''; update(); }
+        if (act === 'del') { expression = expression.slice(0,-1); update(); }
+        if (act === 'equals') doEval();
+        if (act === 'ans') { expression += 'Ans'; update(); }
+        if (act === 'neg') { expression += '(-'; update(); }
+      }
+    });
+
+    angleBtn.addEventListener('click', ()=>{
+      angleMode = angleMode === 'RAD' ? 'DEG' : 'RAD';
+      angleBtn.textContent = angleMode;
+    });
+
+    document.addEventListener('keydown',(e)=>{
+      const k = e.key;
+      if ((k >= '0' && k <= '9') || '+-*/().,%'.includes(k)) {
+        expression += k;
+        update();
+      } else if (k === 'Enter') {
+        e.preventDefault();
+        doEval();
+      } else if (k === 'Backspace') {
+        expression = expression.slice(0,-1);
+        update();
+      } else if (k === 'Delete' || k === 'Escape') {
+        expression = '';
+        setResult('0');
+        metaEl.textContent = '';
+        update();
+      } else if (k === '^' || k === '&' || k === '|' || k === '~') {
+        expression += k;
+        update();
+      }
+    });
+
+    // Logical calculator
+    const aVal = document.getElementById('aVal');
+    const bVal = document.getElementById('bVal');
+    const logicOp = document.getElementById('logicOp');
+    const logicOut = document.getElementById('logicOut');
+    const logicCalc = document.getElementById('logicCalc');
+    const logicSwap = document.getElementById('logicSwap');
+
+    function asInt(v){
+      if (v === '' || v == null) return 0;
+      return (parseInt(v,10) | 0);
+    }
+
+    function logicCompute(){
+      const a = asInt(aVal.value);
+      const b = asInt(bVal.value);
+      const op = logicOp.value;
+      let r = 0;
+
+      switch(op){
+        case 'AND': r = a & b; break;
+        case 'OR': r = a | b; break;
+        case 'XOR': r = a ^ b; break;
+        case 'NAND': r = ~(a & b); break;
+        case 'NOR': r = ~(a | b); break;
+        case 'XNOR': r = ~(a ^ b); break;
+        case 'NOT A': r = ~a; break;
+        case 'NOT B': r = ~b; break;
+        case 'A << B': r = a << (b & 31); break;
+        case 'A >> B': r = a >> (b & 31); break;
+      }
+
+      const u = r >>> 0;
+      logicOut.innerHTML =
+        `Result: <b>${r}</b><br>` +
+        `Binary: <code>${u.toString(2)}</code><br>` +
+        `Hex: <code>0x${u.toString(16).toUpperCase()}</code>`;
+    }
+
+    logicCalc.addEventListener('click', logicCompute);
+    logicSwap.addEventListener('click', ()=>{
+      const t = aVal.value;
+      aVal.value = bVal.value;
+      bVal.value = t;
+      logicCompute();
+    });
+    [aVal,bVal,logicOp].forEach(el=>el.addEventListener('input', logicCompute));
+
+    update();
+    logicCompute();
+  </script>
+</body>
+</html>

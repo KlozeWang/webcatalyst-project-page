@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Wasteland Exodus (HTML5 Prototype)</title>
+<style>
+  :root{
+    --bg:#0b0f10;
+    --hud:#d6e2e1;
+    --accent:#8fd16a;
+    --danger:#e26b6b;
+    --warn:#e2c26b;
+  }
+  html,body{
+    margin:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:var(--bg);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+    color:var(--hud);
+  }
+  canvas{display:block;width:100%;height:100%;cursor:crosshair;}
+  #overlay, #gameOver {
+    position:fixed; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:none;
+  }
+  #panel{
+    pointer-events:auto;
+    background:rgba(8,12,14,.88);
+    border:1px solid rgba(180,210,205,.2);
+    border-radius:12px;
+    padding:20px 24px;
+    max-width:680px;
+    width:min(90vw,680px);
+    box-shadow:0 12px 36px rgba(0,0,0,.45);
+  }
+  h1{margin:0 0 10px;font-size:28px;letter-spacing:.5px}
+  p{margin:8px 0;line-height:1.4;color:#bfd0ce}
+  ul{margin:8px 0 0 18px;color:#bfd0ce}
+  button{
+    margin-top:14px;
+    background:#1f332f;
+    color:#d8ece8;
+    border:1px solid #39584f;
+    border-radius:8px;
+    padding:10px 16px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  button:hover{filter:brightness(1.1)}
+  #gameOver{display:none;}
+  #goPanel{
+    pointer-events:auto;
+    text-align:center;
+    background:rgba(10,14,16,.9);
+    border:1px solid rgba(180,210,205,.2);
+    border-radius:12px;
+    padding:24px;
+    min-width:320px;
+  }
+  #goTitle{font-size:28px;margin-bottom:8px}
+  #goText{color:#bfd0ce}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="overlay">
+  <div id="panel">
+    <h1>Wasteland Exodus</h1>
+    <p>A lightweight browser prototype inspired by post-apocalyptic survival shooters.</p>
+    <ul>
+      <li><b>Move:</b> WASD</li>
+      <li><b>Aim:</b> Mouse</li>
+      <li><b>Shoot:</b> Left Click</li>
+      <li><b>Reload:</b> R</li>
+      <li><b>Sprint:</b> Shift (uses stamina)</li>
+      <li><b>Extract:</b> Reach the train after timer and press E</li>
+    </ul>
+    <p>Scavenge crates for ammo and medkits. Avoid mutant swarms and radiation zones.</p>
+    <button id="startBtn">Start Run</button>
+  </div>
+</div>
+
+<div id="gameOver">
+  <div id="goPanel">
+    <div id="goTitle">Run Complete</div>
+    <div id="goText"></div>
+    <button id="restartBtn">Play Again</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const gameOverEl = document.getElementById('gameOver');
+  const goTitle = document.getElementById('goTitle');
+  const goText = document.getElementById('goText');
+  const restartBtn = document.getElementById('restartBtn');
+
+  let W=innerWidth, H=innerHeight;
+  canvas.width = W; canvas.height = H;
+  addEventListener('resize', () => {
+    W=innerWidth; H=innerHeight;
+    canvas.width=W; canvas.height=H;
+  });
+
+  const world = { w: 3200, h: 3200 };
+  const keys = Object.create(null);
+  const mouse = { x: W/2, y: H/2, down:false };
+  let running = false;
+  let ended = false;
+  let last = performance.now();
+
+  const rand = (a,b)=>Math.random()*(b-a)+a;
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  const dist2 = (a,b,c,d)=>{const dx=a-c,dy=b-d; return dx*dx+dy*dy;};
+
+  let player, bullets, enemies, crates, zones, particles, camera, extraction;
+  let spawnTimer, enemyBudget, gameTime, score;
+
+  function resetGame(){
+    player = {
+      x: world.w/2, y: world.h/2, r: 14,
+      hp: 100, maxHp:100,
+      ammo: 48, mag: 12, magSize:12, reloading:false, reloadT:0,
+      fireCd:0, speed:190, sprint:310, stamina:100, maxStamina:100,
+      hitCd:0
+    };
+    bullets = [];
+    enemies = [];
+    crates = [];
+    zones = [];
+    particles = [];
+    camera = { x:0, y:0 };
+    extraction = { active:false, x:0, y:0, r:52 };
+
+    spawnTimer = 0;
+    enemyBudget = 0;
+    gameTime = 0;
+    score = 0;
+
+    for(let i=0;i<34;i++){
+      crates.push({
+        x:rand(60,world.w-60), y:rand(60,world.h-60), r:16,
+        opened:false
+      });
+    }
+    for(let i=0;i<8;i++){
+      zones.push({
+        x:rand(200,world.w-200), y:rand(200,world.h-200),
+        r:rand(60,120), dps:rand(6,12)
+      });
+    }
+    ended = false;
+  }
+
+  function spawnEnemy(){
+    const side = Math.floor(Math.random()*4);
+    let x,y;
+    if(side===0){ x=rand(0,world.w); y=-40; }
+    else if(side===1){ x=world.w+40; y=rand(0,world.h); }
+    else if(side===2){ x=rand(0,world.w); y=world.h+40; }
+    else { x=-40; y=rand(0,world.h); }
+
+    enemies.push({
+      x,y,r:13,
+      hp: 28 + Math.min(40,gameTime*0.16),
+      speed: 65 + Math.min(75, gameTime*0.22),
+      dmg: 10,
+      wob: Math.random()*6.28
+    });
+  }
+
+  function begin(){
+    overlay.style.display='none';
+    gameOverEl.style.display='none';
+    resetGame();
+    running = true;
+    last = performance.now();
+    requestAnimationFrame(loop);
+  }
+
+  function end(win){
+    running = false;
+    ended = true;
+    gameOverEl.style.display='flex';
+    goTitle.textContent = win ? 'Extraction Successful' : 'You Died';
+    goText.textContent = win
+      ? `You survived ${(gameTime|0)}s. Score: ${score}`
+      : `Survived ${(gameTime|0)}s. Score: ${score}`;
+  }
+
+  function shoot(dt){
+    if(player.reloading || player.fireCd>0 || player.mag<=0) return;
+    if(!mouse.down) return;
+    player.fireCd = 0.13;
+    player.mag--;
+    const ang = Math.atan2(mouse.y - H/2, mouse.x - W/2);
+    const spread = rand(-0.04,0.04);
+    const a = ang + spread;
+    const speed = 700;
+    bullets.push({
+      x:player.x + Math.cos(a)*18,
+      y:player.y + Math.sin(a)*18,
+      vx:Math.cos(a)*speed,
+      vy:Math.sin(a)*speed,
+      life:1.0, r:3, dmg:20
+    });
+    particles.push({x:player.x,y:player.y,vx:Math.cos(a)*140,vy:Math.sin(a)*140,life:.08,c:'#ffd47a'});
+  }
+
+  function doReload(){
+    if(player.reloading || player.mag===player.magSize || player.ammo<=0) return;
+    player.reloading = true;
+    player.reloadT = 1.2;
+  }
+
+  function update(dt){
+    gameTime += dt;
+    spawnTimer -= dt;
+    player.fireCd = Math.max(0, player.fireCd - dt);
+    if(player.hitCd>0) player.hitCd -= dt;
+
+    if(gameTime>140 && !extraction.active){
+      extraction.active = true;
+      const edge = Math.floor(Math.random()*4);
+      if(edge===0){ extraction.x=80; extraction.y=rand(120,world.h-120); }
+      if(edge===1){ extraction.x=world.w-80; extraction.y=rand(120,world.h-120); }
+      if(edge===2){ extraction.y=80; extraction.x=rand(120,world.w-120); }
+      if(edge===3){ extraction.y=world.h-80; extraction.x=rand(120,world.w-120); }
+    }
+
+    let mx=0,my=0;
+    if(keys['KeyW']) my-=1;
+    if(keys['KeyS']) my+=1;
+    if(keys['KeyA']) mx-=1;
+    if(keys['KeyD']) mx+=1;
+    const moving = mx||my;
+    let s = player.speed;
+    if(keys['ShiftLeft'] && player.stamina>0 && moving){
+      s = player.sprint;
+      player.stamina = Math.max(0, player.stamina - 30*dt);
+    } else {
+      player.stamina = Math.min(player.maxStamina, player.stamina + 20*dt);
+    }
+    if(moving){
+      const n = 1/Math.hypot(mx,my);
+      player.x += mx*n*s*dt;
+      player.y += my*n*s*dt;
+    }
+    player.x = clamp(player.x, player.r, world.w-player.r);
+    player.y = clamp(player.y, player.r, world.h-player.r);
+
+    if(player.reloading){
+      player.reloadT -= dt;
+      if(player.reloadT<=0){
+        const need = player.magSize-player.mag;
+        const give = Math.min(need, player.ammo);
+        player.mag += give;
+        player.ammo -= give;
+        player.reloading = false;
+      }
+    }
+
+    shoot(dt);
+
+    for(let i=bullets.length-1;i>=0;i--){
+      const b = bullets[i];
+      b.x += b.vx*dt; b.y += b.vy*dt; b.life -= dt;
+      if(b.life<=0 || b.x<0 || b.y<0 || b.x>world.w || b.y>world.h){ bullets.splice(i,1); continue; }
+      let hit=false;
+      for(let j=enemies.length-1;j>=0;j--){
+        const e = enemies[j];
+        if(dist2(b.x,b.y,e.x,e.y) < (b.r+e.r)*(b.r+e.r)){
+          e.hp -= b.dmg;
+          hit = true;
+          particles.push({x:b.x,y:b.y,vx:rand(-60,60),vy:rand(-60,60),life:.22,c:'#c56d6d'});
+          if(e.hp<=0){
+            score += 10;
+            particles.push({x:e.x,y:e.y,vx:0,vy:0,life:.45,c:'#ff9a9a',big:true});
+            enemies.splice(j,1);
+          }
+          break;
+        }
+      }
+      if(hit) bullets.splice(i,1);
+    }
+
+    enemyBudget = 3 + Math.floor(gameTime/16);
+    if(spawnTimer<=0 && enemies.length<enemyBudget){
+      spawnEnemy();
+      spawnTimer = Math.max(0.35, 1.3 - gameTime*0.005);
+    }
+
+    for(let i=enemies.length-1;i>=0;i--){
+      const e = enemies[i];
+      const a = Math.atan2(player.y-e.y, player.x-e.x);
+      const sway = Math.sin((gameTime+e.wob)*4)*12;
+      e.x += Math.cos(a)*(e.speed+sway)*dt;
+      e.y += Math.sin(a)*(e.speed+sway)*dt;
+      if(dist2(e.x,e.y,player.x,player.y) < (e.r+player.r+2)*(e.r+player.r+2)){
+        if(player.hitCd<=0){
+          player.hp -= e.dmg;
+          player.hitCd = 0.5;
+          particles.push({x:player.x,y:player.y,vx:rand(-80,80),vy:rand(-80,80),life:.25,c:'#ff6f6f'});
+          if(player.hp<=0){ player.hp=0; end(false); }
+        }
+      }
+    }
+
+    for(const z of zones){
+      if(dist2(player.x,player.y,z.x,z.y) < (z.r+player.r)*(z.r+player.r)){
+        player.hp -= z.dps*dt;
+        if(player.hp<=0){ player.hp=0; end(false); }
+      }
+    }
+
+    for(const c of crates){
+      if(c.opened) continue;
+      if(dist2(player.x,player.y,c.x,c.y) < (c.r+player.r+8)*(c.r+player.r+8)){
+        c.opened = true;
+        const roll = Math.random();
+        if(roll<0.55){
+          const gain = 8 + (Math.random()*12|0);
+          player.ammo += gain;
+          score += 5;
+        } else {
+          const heal = 16 + (Math.random()*18|0);
+          player.hp = Math.min(player.maxHp, player.hp + heal);
+          score += 7;
+        }
+        particles.push({x:c.x,y:c.y,vx:0,vy:0,life:.5,c:'#9fe28a',big:true});
+      }
+    }
+
+    if(extraction.active && dist2(player.x,player.y,extraction.x,extraction.y) < (extraction.r+20)*(extraction.r+20) && keys['KeyE']){
+      end(true);
+    }
+
+    for(let i=particles.length-1;i>=0;i--){
+      const p=particles[i];
+      p.life-=dt;
+      p.x += (p.vx||0)*dt;
+      p.y += (p.vy||0)*dt;
+      if(p.life<=0) particles.splice(i,1);
+    }
+
+    camera.x = clamp(player.x - W/2, 0, world.w - W);
+    camera.y = clamp(player.y - H/2, 0, world.h - H);
+  }
+
+  function drawGround(){
+    ctx.fillStyle='#131a1d';
+    ctx.fillRect(0,0,W,H);
+
+    const grid=80;
+    ctx.strokeStyle='rgba(170,200,195,0.06)';
+    ctx.lineWidth=1;
+    const sx = - (camera.x % grid);
+    const sy = - (camera.y % grid);
+    for(let x=sx;x<W;x+=grid){
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+    }
+    for(let y=sy;y<H;y+=grid){
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+    }
+
+    ctx.fillStyle='rgba(255,255,255,0.03)';
+    for(let i=0;i<120;i++){
+      const rx = ((i*157)%world.w)-camera.x;
+      const ry = ((i*263)%world.h)-camera.y;
+      ctx.fillRect(rx,ry,3,3);
+    }
+  }
+
+  function draw(){
+    drawGround();
+
+    for(const z of zones){
+      const x=z.x-camera.x, y=z.y-camera.y;
+      const g = ctx.createRadialGradient(x,y,10,x,y,z.r);
+      g.addColorStop(0,'rgba(110,190,80,0.12)');
+      g.addColorStop(1,'rgba(110,190,80,0.02)');
+      ctx.fillStyle=g;
+      ctx.beginPath(); ctx.arc(x,y,z.r,0,6.283); ctx.fill();
+    }
+
+    for(const c of crates){
+      const x=c.x-camera.x, y=c.y-camera.y;
+      ctx.fillStyle = c.opened ? '#4a5a58' : '#9a845e';
+      ctx.fillRect(x-12,y-10,24,20);
+      if(!c.opened){
+        ctx.strokeStyle='#cfb485';
+        ctx.strokeRect(x-12,y-10,24,20);
+      }
+    }
+
+    if(extraction.active){
+      const x=extraction.x-camera.x, y=extraction.y-camera.y;
+      ctx.fillStyle='rgba(120,160,175,.22)';
+      ctx.beginPath(); ctx.arc(x,y,extraction.r,0,6.283); ctx.fill();
+      ctx.strokeStyle='rgba(170,220,240,.75)';
+      ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(x,y,extraction.r,0,6.283); ctx.stroke();
+      ctx.fillStyle='#cde6f3';
+      ctx.font='bold 14px sans-serif';
+      ctx.textAlign='center';
+      ctx.fillText('TRAIN EXTRACTION (E)',x,y-extraction.r-10);
+    }
+
+    for(const b of bullets){
+      ctx.fillStyle='#ffd37d';
+      ctx.beginPath();
+      ctx.arc(b.x-camera.x,b.y-camera.y,b.r,0,6.283);
+      ctx.fill();
+    }
+
+    for(const e of enemies){
+      const x=e.x-camera.x, y=e.y-camera.y;
+      ctx.fillStyle='#9c5959';
+      ctx.beginPath(); ctx.arc(x,y,e.r,0,6.283); ctx.fill();
+      ctx.fillStyle='#2b1717';
+      ctx.beginPath(); ctx.arc(x+4,y-2,2.4,0,6.283); ctx.fill();
+      ctx.beginPath(); ctx.arc(x-3,y-1,2.2,0,6.283); ctx.fill();
+    }
+
+    const px = player.x-camera.x, py = player.y-camera.y;
+    const a = Math.atan2(mouse.y-H/2, mouse.x-W/2);
+    ctx.save();
+    ctx.translate(px,py);
+    ctx.rotate(a);
+    ctx.fillStyle = player.hitCd>0 ? '#d98f8f' : '#6fb4b4';
+    ctx.beginPath(); ctx.arc(0,0,player.r,0,6.283); ctx.fill();
+    ctx.fillStyle='#cde6e6';
+    ctx.fillRect(4,-3,18,6);
+    ctx.restore();
+
+    for(const p of particles){
+      ctx.globalAlpha = clamp(p.life*3,0,1);
+      ctx.fillStyle = p.c || '#fff';
+      ctx.beginPath();
+      ctx.arc(p.x-camera.x,p.y-camera.y,p.big?6:2.4,0,6.283);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // Fog/vignette
+    const fog = ctx.createRadialGradient(W/2,H/2,80,W/2,H/2,Math.max(W,H)*0.62);
+    fog.addColorStop(0,'rgba(0,0,0,0)');
+    fog.addColorStop(1,'rgba(0,0,0,0.72)');
+    ctx.fillStyle=fog;
+    ctx.fillRect(0,0,W,H);
+
+    drawHUD();
+  }
+
+  function bar(x,y,w,h,v,max,c){
+    ctx.fillStyle='rgba(0,0,0,.45)'; ctx.fillRect(x,y,w,h);
+    ctx.fillStyle=c; ctx.fillRect(x,y,w*clamp(v/max,0,1),h);
+    ctx.strokeStyle='rgba(255,255,255,.15)'; ctx.strokeRect(x,y,w,h);
+  }
+
+  function drawHUD(){
+    ctx.textAlign='left';
+    ctx.font='14px sans-serif';
+    bar(18,H-64,220,14,player.hp,player.maxHp,'#d46f6f');
+    bar(18,H-42,220,10,player.stamina,player.maxStamina,'#76b6d6');
+    ctx.fillStyle='#d6e2e1';
+    ctx.fillText(`HP ${player.hp|0}/${player.maxHp}`, 245, H-52);
+    ctx.fillText(`Ammo ${player.mag}/${player.magSize}  |  Reserve ${player.ammo}`, 18, H-78);
+    if(player.reloading){
+      ctx.fillStyle='#e2c26b';
+      ctx.fillText('Reloading...', 18, H-92);
+    }
+
+    const t = Math.max(0,140-gameTime);
+    ctx.textAlign='right';
+    ctx.fillStyle='#d6e2e1';
+    ctx.fillText(`Score ${score}`, W-20, 28);
+    if(!extraction.active){
+      ctx.fillStyle='#e2c26b';
+      ctx.fillText(`Extraction ETA ${t|0}s`, W-20, 48);
+    } else {
+      ctx.fillStyle='#8fd16a';
+      ctx.fillText(`Extraction Available`, W-20, 48);
+    }
+
+    // Minimap
+    const mw=170,mh=170,mx=W-mw-16,my=H-mh-16;
+    ctx.fillStyle='rgba(0,0,0,.45)';
+    ctx.fillRect(mx,my,mw,mh);
+    ctx.strokeStyle='rgba(255,255,255,.18)';
+    ctx.strokeRect(mx,my,mw,mh);
+
+    const sx=mw/world.w, sy=mh/world.h;
+    for(const z of zones){
+      ctx.fillStyle='rgba(130,210,90,.35)';
+      ctx.beginPath();
+      ctx.arc(mx+z.x*sx,my+z.y*sy,Math.max(2,z.r*sx),0,6.283);
+      ctx.fill();
+    }
+    for(const e of enemies){
+      ctx.fillStyle='#c27676';
+      ctx.fillRect(mx+e.x*sx-1,my+e.y*sy-1,3,3);
+    }
+    if(extraction.active){
+      ctx.fillStyle='#9fd3f0';
+      ctx.beginPath();
+      ctx.arc(mx+extraction.x*sx,my+extraction.y*sy,4,0,6.283);
+      ctx.fill();
+    }
+    ctx.fillStyle='#8fd16a';
+    ctx.beginPath();
+    ctx.arc(mx+player.x*sx,my+player.y*sy,3.5,0,6.283);
+    ctx.fill();
+  }
+
+  function loop(ts){
+    if(!running) return;
+    const dt = Math.min(0.033, (ts-last)/1000);
+    last = ts;
+    update(dt);
+    draw();
+    if(running) requestAnimationFrame(loop);
+  }
+
+  addEventListener('keydown', e=>{
+    keys[e.code]=true;
+    if(e.code==='KeyR') doReload();
+  });
+  addEventListener('keyup', e=>keys[e.code]=false);
+  canvas.addEventListener('mousemove', e=>{ mouse.x=e.clientX; mouse.y=e.clientY; });
+  canvas.addEventListener('mousedown', ()=>mouse.down=true);
+  addEventListener('mouseup', ()=>mouse.down=false);
+
+  startBtn.onclick = begin;
+  restartBtn.onclick = begin;
+
+  // Ambient screen before start
+  resetGame();
+  draw();
+})();
+</script>
+</body>
+</html>

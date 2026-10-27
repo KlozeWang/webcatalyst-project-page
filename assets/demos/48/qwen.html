@@ -1,0 +1,1780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How a Hacker Thinks: Mindset, Recon & Exploitation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --green: #00ff41;
+    --dark-green: #00cc33;
+    --dim-green: #00802b;
+    --red: #ff3333;
+    --orange: #ff8800;
+    --blue: #00aaff;
+    --cyan: #00ffff;
+    --bg: #0a0a0a;
+    --bg2: #111111;
+    --bg3: #1a1a1a;
+    --bg4: #222222;
+    --text: #c0c0c0;
+    --white: #e0e0e0;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Fira Code', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Matrix Rain Background */
+  #matrix-bg {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 0;
+    opacity: 0.06;
+    pointer-events: none;
+  }
+
+  .game-container {
+    position: relative;
+    z-index: 1;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 30px 0 20px;
+    border-bottom: 1px solid var(--bg4);
+    margin-bottom: 30px;
+  }
+
+  .header h1 {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.8em;
+    color: var(--green);
+    text-shadow: 0 0 20px rgba(0,255,65,0.3);
+    margin-bottom: 8px;
+  }
+
+  .header .subtitle {
+    font-size: 0.85em;
+    color: var(--dim-green);
+  }
+
+  /* Progress Bar */
+  .progress-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 25px;
+    padding: 15px;
+    background: var(--bg2);
+    border: 1px solid var(--bg4);
+    border-radius: 8px;
+  }
+
+  .phase-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.75em;
+    font-weight: 600;
+    transition: all 0.3s;
+    border: 1px solid transparent;
+  }
+
+  .phase-indicator.active {
+    background: rgba(0,255,65,0.1);
+    border-color: var(--green);
+    color: var(--green);
+    box-shadow: 0 0 15px rgba(0,255,65,0.1);
+  }
+
+  .phase-indicator.completed {
+    background: rgba(0,255,65,0.05);
+    border-color: var(--dim-green);
+    color: var(--dim-green);
+  }
+
+  .phase-indicator.locked {
+    color: #444;
+  }
+
+  .phase-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #333;
+  }
+
+  .phase-indicator.active .phase-dot {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 1.5s infinite;
+  }
+
+  .phase-indicator.completed .phase-dot {
+    background: var(--dim-green);
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .progress-bar-track {
+    flex: 1;
+    height: 4px;
+    background: var(--bg4);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green), var(--cyan));
+    border-radius: 2px;
+    transition: width 0.5s ease;
+    width: 0%;
+  }
+
+  .score-display {
+    font-size: 0.8em;
+    color: var(--cyan);
+    font-weight: 600;
+  }
+
+  /* Screens */
+  .screen {
+    display: none;
+    animation: fadeIn 0.5s ease;
+  }
+
+  .screen.active {
+    display: block;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Terminal */
+  .terminal {
+    background: var(--bg2);
+    border: 1px solid var(--bg4);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+
+  .terminal-header {
+    background: var(--bg3);
+    padding: 8px 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid var(--bg4);
+  }
+
+  .terminal-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+  }
+
+  .terminal-dot.red { background: #ff5f56; }
+  .terminal-dot.yellow { background: #ffbd2e; }
+  .terminal-dot.green { background: #27c93f; }
+
+  .terminal-title {
+    font-size: 0.75em;
+    color: #666;
+    margin-left: 8px;
+  }
+
+  .terminal-body {
+    padding: 20px;
+    line-height: 1.7;
+    font-size: 0.85em;
+  }
+
+  .terminal-body .prompt {
+    color: var(--green);
+  }
+
+  .terminal-body .cmd {
+    color: var(--white);
+  }
+
+  .terminal-body .output {
+    color: var(--text);
+    margin: 8px 0;
+  }
+
+  .terminal-body .success {
+    color: var(--green);
+  }
+
+  .terminal-body .error {
+    color: var(--red);
+  }
+
+  .terminal-body .warning {
+    color: var(--orange);
+  }
+
+  .terminal-body .info {
+    color: var(--blue);
+  }
+
+  .terminal-body .highlight {
+    color: var(--cyan);
+    font-weight: 600;
+  }
+
+  /* Educational Content */
+  .edu-card {
+    background: var(--bg2);
+    border: 1px solid var(--bg4);
+    border-radius: 10px;
+    padding: 25px;
+    margin-bottom: 20px;
+    border-left: 3px solid var(--green);
+  }
+
+  .edu-card h3 {
+    color: var(--green);
+    margin-bottom: 12px;
+    font-size: 1.1em;
+  }
+
+  .edu-card p {
+    margin-bottom: 10px;
+    line-height: 1.7;
+    font-size: 0.85em;
+  }
+
+  .edu-card .concept-tag {
+    display: inline-block;
+    background: rgba(0,255,65,0.1);
+    color: var(--green);
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.75em;
+    margin: 2px;
+    border: 1px solid rgba(0,255,65,0.2);
+  }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Fira Code', monospace;
+    padding: 10px 24px;
+    border: 1px solid var(--green);
+    background: rgba(0,255,65,0.08);
+    color: var(--green);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85em;
+    transition: all 0.3s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn:hover {
+    background: rgba(0,255,65,0.15);
+    box-shadow: 0 0 20px rgba(0,255,65,0.15);
+    transform: translateY(-1px);
+  }
+
+  .btn:active {
+    transform: translateY(0);
+  }
+
+  .btn.secondary {
+    border-color: var(--dim-green);
+    color: var(--dim-green);
+    background: rgba(0,128,43,0.08);
+  }
+
+  .btn.danger {
+    border-color: var(--red);
+    color: var(--red);
+    background: rgba(255,51,51,0.08);
+  }
+
+  .btn-group {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+
+  /* Quiz */
+  .quiz-option {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    background: var(--bg3);
+    border: 1px solid var(--bg4);
+    border-radius: 8px;
+    color: var(--text);
+    cursor: pointer;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.85em;
+    transition: all 0.3s;
+    line-height: 1.5;
+  }
+
+  .quiz-option:hover {
+    border-color: var(--green);
+    background: rgba(0,255,65,0.05);
+    color: var(--white);
+  }
+
+  .quiz-option.correct {
+    border-color: var(--green);
+    background: rgba(0,255,65,0.15);
+    color: var(--green);
+  }
+
+  .quiz-option.incorrect {
+    border-color: var(--red);
+    background: rgba(255,51,51,0.15);
+    color: var(--red);
+  }
+
+  .quiz-option.disabled {
+    pointer-events: none;
+    opacity: 0.6;
+  }
+
+  .quiz-feedback {
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 15px;
+    font-size: 0.85em;
+    line-height: 1.6;
+    display: none;
+  }
+
+  .quiz-feedback.show { display: block; }
+
+  .quiz-feedback.correct {
+    background: rgba(0,255,65,0.08);
+    border: 1px solid rgba(0,255,65,0.2);
+    color: var(--green);
+  }
+
+  .quiz-feedback.incorrect {
+    background: rgba(255,51,51,0.08);
+    border: 1px solid rgba(255,51,51,0.2);
+    color: var(--red);
+  }
+
+  /* Recon Game */
+  .network-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+    margin: 20px 0;
+  }
+
+  .network-node {
+    background: var(--bg3);
+    border: 1px solid var(--bg4);
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    min-height: 100px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .network-node:hover {
+    border-color: var(--green);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+  }
+
+  .network-node.scanned {
+    border-color: var(--dim-green);
+    background: rgba(0,255,65,0.03);
+  }
+
+  .network-node.vulnerable {
+    border-color: var(--orange);
+    background: rgba(255,136,0,0.05);
+  }
+
+  .network-node.exploited {
+    border-color: var(--red);
+    background: rgba(255,51,51,0.08);
+  }
+
+  .node-icon {
+    font-size: 1.5em;
+  }
+
+  .node-label {
+    font-size: 0.7em;
+    color: #888;
+  }
+
+  .node-ip {
+    font-size: 0.7em;
+    color: var(--cyan);
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  .node-status {
+    font-size: 0.65em;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-top: 4px;
+  }
+
+  .node-status.open {
+    background: rgba(0,255,65,0.15);
+    color: var(--green);
+  }
+
+  .node-status.closed {
+    background: rgba(255,51,51,0.15);
+    color: var(--red);
+  }
+
+  .node-status.vuln {
+    background: rgba(255,136,0,0.15);
+    color: var(--orange);
+  }
+
+  /* Vulnerability Chain */
+  .vuln-chain {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 15px 0;
+    padding: 15px;
+    background: var(--bg3);
+    border-radius: 8px;
+    border: 1px solid var(--bg4);
+    min-height: 60px;
+  }
+
+  .vuln-slot {
+    width: 50px;
+    height: 50px;
+    border: 2px dashed var(--bg4);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7em;
+    color: #555;
+    transition: all 0.3s;
+  }
+
+  .vuln-slot.filled {
+    border-style: solid;
+    border-color: var(--green);
+    background: rgba(0,255,65,0.1);
+    color: var(--green);
+  }
+
+  .vuln-slot.current {
+    border-color: var(--cyan);
+    box-shadow: 0 0 10px rgba(0,255,255,0.2);
+  }
+
+  .vuln-arrow {
+    color: var(--dim-green);
+    font-size: 0.8em;
+  }
+
+  .vuln-pieces {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 15px 0;
+  }
+
+  .vuln-piece {
+    padding: 10px 16px;
+    background: var(--bg3);
+    border: 1px solid var(--bg4);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8em;
+    transition: all 0.3s;
+    user-select: none;
+  }
+
+  .vuln-piece:hover {
+    border-color: var(--cyan);
+    transform: translateY(-2px);
+  }
+
+  .vuln-piece.selected {
+    border-color: var(--cyan);
+    background: rgba(0,255,255,0.1);
+    color: var(--cyan);
+  }
+
+  .vuln-piece.used {
+    opacity: 0.3;
+    pointer-events: none;
+  }
+
+  /* Exploitation Terminal */
+  .exploit-terminal {
+    background: #000;
+    border: 1px solid var(--bg4);
+    border-radius: 8px;
+    padding: 20px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.85em;
+    line-height: 1.8;
+    margin: 15px 0;
+    position: relative;
+  }
+
+  .exploit-terminal .line {
+    margin-bottom: 2px;
+  }
+
+  .exploit-terminal .cursor {
+    display: inline-block;
+    width: 8px;
+    height: 16px;
+    background: var(--green);
+    animation: blink 1s step-end infinite;
+    vertical-align: middle;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  /* Typing effect */
+  .typing-text {
+    overflow: hidden;
+    white-space: nowrap;
+    border-right: 2px solid var(--green);
+    animation: typing 2s steps(40) forwards, blink-caret 0.75s step-end infinite;
+  }
+
+  @keyframes typing {
+    from { width: 0; }
+    to { width: 100%; }
+  }
+
+  @keyframes blink-caret {
+    50% { border-color: transparent; }
+  }
+
+  /* Stats */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
+    margin: 15px 0;
+  }
+
+  .stat-item {
+    background: var(--bg3);
+    border: 1px solid var(--bg4);
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
+  }
+
+  .stat-value {
+    font-size: 1.5em;
+    font-weight: 700;
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  .stat-label {
+    font-size: 0.7em;
+    color: #666;
+    margin-top: 4px;
+  }
+
+  /* Tooltip */
+  .tooltip {
+    position: relative;
+    display: inline-block;
+    border-bottom: 1px dashed var(--green);
+    cursor: help;
+    color: var(--green);
+  }
+
+  .tooltip .tooltip-text {
+    visibility: hidden;
+    background: var(--bg3);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--bg4);
+    font-size: 0.8em;
+    position: absolute;
+    z-index: 10;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 250px;
+    text-align: center;
+    opacity: 0;
+    transition: all 0.3s;
+    pointer-events: none;
+    line-height: 1.5;
+  }
+
+  .tooltip:hover .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+  }
+
+  /* Scanner animation */
+  .scanner-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--green), transparent);
+    animation: scan 2s linear infinite;
+    pointer-events: none;
+  }
+
+  @keyframes scan {
+    0% { top: 0; }
+    100% { top: 100%; }
+  }
+
+  /* Glitch effect */
+  .glitch {
+    animation: glitch 0.3s ease;
+  }
+
+  @keyframes glitch {
+    0% { transform: translate(0); }
+    20% { transform: translate(-2px, 2px); }
+    40% { transform: translate(2px, -2px); }
+    60% { transform: translate(-1px, -1px); }
+    80% { transform: translate(1px, 1px); }
+    100% { transform: translate(0); }
+  }
+
+  /* Score popup */
+  .score-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 2em;
+    font-weight: 700;
+    color: var(--green);
+    text-shadow: 0 0 30px rgba(0,255,65,0.5);
+    z-index: 100;
+    pointer-events: none;
+    animation: scorePop 1s ease forwards;
+  }
+
+  @keyframes scorePop {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+    30% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+    70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -60%) scale(0.8); }
+  }
+
+  /* Final screen */
+  .final-screen {
+    text-align: center;
+    padding: 40px 20px;
+  }
+
+  .final-screen h2 {
+    font-size: 1.5em;
+    color: var(--green);
+    margin-bottom: 20px;
+  }
+
+  .final-screen .rank {
+    font-size: 3em;
+    margin: 20px 0;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  .rank-bronze { color: #cd7f32; }
+  .rank-silver { color: #c0c0c0; }
+  .rank-gold { color: #ffd700; }
+  .rank-master { color: var(--green); text-shadow: 0 0 30px rgba(0,255,65,0.5); }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .header h1 { font-size: 1.3em; }
+    .network-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+    .phase-indicator { font-size: 0.65em; padding: 4px 8px; }
+    .edu-card { padding: 18px; }
+    .terminal-body { padding: 15px; font-size: 0.8em; }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--dim-green); }
+
+  .section-title {
+    color: var(--green);
+    font-size: 1.2em;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-title::before {
+    content: '>';
+    color: var(--dim-green);
+  }
+
+  .hint-box {
+    background: rgba(0,170,255,0.08);
+    border: 1px solid rgba(0,170,255,0.2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 15px 0;
+    font-size: 0.82em;
+    color: var(--blue);
+    line-height: 1.6;
+  }
+
+  .hint-box strong {
+    color: var(--cyan);
+  }
+
+  .password-input {
+    background: var(--bg);
+    border: 1px solid var(--bg4);
+    border-radius: 6px;
+    padding: 10px 14px;
+    color: var(--green);
+    font-family: 'Fira Code', monospace;
+    font-size: 0.9em;
+    width: 100%;
+    max-width: 300px;
+    outline: none;
+    transition: border-color 0.3s;
+  }
+
+  .password-input:focus {
+    border-color: var(--green);
+    box-shadow: 0 0 10px rgba(0,255,65,0.1);
+  }
+
+  .password-input::placeholder {
+    color: #444;
+  }
+
+  .input-group {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 15px 0;
+  }
+
+  .progress-ring {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .flag-display {
+    background: var(--bg3);
+    border: 1px solid var(--bg4);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--cyan);
+    font-size: 0.85em;
+    display: inline-block;
+    margin: 5px;
+  }
+
+  .flag-display.earned {
+    border-color: var(--green);
+    background: rgba(0,255,65,0.08);
+    color: var(--green);
+  }
+
+  .flags-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="matrix-bg"></canvas>
+
+<div class="game-container">
+  <div class="header">
+    <h1>⟨ HOW A HACKER THINKS ⟩</h1>
+    <div class="subtitle">Mindset • Reconnaissance • Exploitation — An Educational Cybersecurity Game</div>
+  </div>
+
+  <div class="progress-container">
+    <div class="phase-indicator active" id="phase1-ind">
+      <div class="phase-dot"></div>
+      <span>MINDSET</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progress-fill"></div>
+    </div>
+    <div class="phase-indicator locked" id="phase2-ind">
+      <div class="phase-dot"></div>
+      <span>RECON</span>
+    </div>
+    <div class="phase-indicator locked" id="phase3-ind">
+      <div class="phase-dot"></div>
+      <span>EXPLOIT</span>
+    </div>
+    <div class="score-display" id="score-display">SCORE: 0</div>
+  </div>
+
+  <!-- ==================== INTRO SCREEN ==================== -->
+  <div class="screen active" id="screen-intro">
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">welcome — hacker-mindset.exe</span>
+      </div>
+      <div class="terminal-body">
+        <div class="output"><span class="prompt">root@cyber-academy:~$</span> <span class="cmd">cat welcome.txt</span></div>
+        <div class="output" style="margin-top:12px;">
+          <span class="highlight">╔══════════════════════════════════════════╗</span><br>
+          <span class="highlight">║</span>  Welcome, Recruit. Today you learn to    <span class="highlight">║</span><br>
+          <span class="highlight">║</span>  think like a hacker.                    <span class="highlight">║</span><br>
+          <span class="highlight">║</span>                                          <span class="highlight">║</span><br>
+          <span class="highlight">║</span>  A hacker doesn't just break in — they   <span class="highlight">║</span><br>
+          <span class="highlight">║</span>  <span class="success">understand</span> the system first.           <span class="highlight">║</span><br>
+          <span class="highlight">║</span>  They observe, they plan, they adapt.    <span class="highlight">║</span><br>
+          <span class="highlight">║</span>                                          <span class="highlight">║</span><br>
+          <span class="highlight">║</span>  This game has <span class="warning">3 phases</span>:               <span class="highlight">║</span><br>
+          <span class="highlight">║</span>  1. <span class="success">MINDSET</span> — Learn how hackers think  <span class="highlight">║</span><br>
+          <span class="highlight">║</span>  2. <span class="success">RECON</span> — Gather intelligence        <span class="highlight">║</span><br>
+          <span class="highlight">║</span>  3. <span class="success">EXPLOITATION</span> — Chain vulnerabilities<span class="highlight">║</span><br>
+          <span class="highlight">║</span>                                          <span class="highlight">║</span><br>
+          <span class="highlight">║</span>  Earn <span class="cyan">flags</span> and <span class="cyan">points</span> at each stage.  <span class="highlight">║</span><br>
+          <span class="highlight">╚══════════════════════════════════════════╝</span>
+        </div>
+        <div class="output" style="margin-top:15px;">
+          <span class="info">ℹ</span> This is an <span class="success">educational</span> simulation. All targets are fictional.
+        </div>
+        <div class="output"><span class="prompt">root@cyber-academy:~$</span> <span class="cursor"></span></div>
+      </div>
+    </div>
+
+    <div class="edu-card">
+      <h3>🎯 What You'll Learn</h3>
+      <p><strong>The Hacker Mindset:</strong> Understanding that hacking is fundamentally about <span class="tooltip">creative problem-solving<span class="tooltip-text">Hackers see systems not as rigid structures but as puzzles with hidden paths. They ask "what if?" and "why not?" constantly.</span></span> — asking questions others don't think to ask.</p>
+      <p><strong>Reconnaissance:</strong> 80-90% of a real engagement is gathering information. Learning to collect data about targets without being detected.</p>
+      <p><strong>Exploitation:</strong> Understanding how vulnerabilities chain together. One weak link can compromise an entire system.</p>
+      <div style="margin-top:12px;">
+        <span class="concept-tag">Ethical Hacking</span>
+        <span class="concept-tag">Penetration Testing</span>
+        <span class="concept-tag">OSINT</span>
+        <span class="concept-tag">Vulnerability Assessment</span>
+        <span class="concept-tag">Defense in Depth</span>
+      </div>
+    </div>
+
+    <div class="btn-group" style="justify-content:center;">
+      <button class="btn" onclick="startGame()">[ INITIALIZE TRAINING ]</button>
+    </div>
+  </div>
+
+  <!-- ==================== PHASE 1: MINDSET ==================== -->
+  <div class="screen" id="screen-phase1">
+    <div class="section-title">PHASE 1: THE HACKER MINDSET</div>
+
+    <div class="edu-card">
+      <h3>🧠 Thinking Like a Hacker</h3>
+      <p>Before any tool is launched, a hacker develops a <strong>mental model</strong> of the target. They think about:</p>
+      <p>• <span class="success">Trust boundaries</span> — Where does the system trust input?</p>
+      <p>• <span class="success">Attack surface</span> — What can be reached from the outside?</p>
+      <p>• <span class="success">Assumptions</span> — What does the system assume is true that might be false?</p>
+      <p>• <span class="success">Chain of trust</span> — What happens if one component is compromised?</p>
+    </div>
+
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">mindset — scenario-01.txt</span>
+      </div>
+      <div class="terminal-body">
+        <div class="output"><span class="prompt">scenario@mindset:~$</span> <span class="cmd">load scenario --id=web-app-auth</span></div>
+        <div class="output" style="margin-top:10px;">
+          <span class="info">[SCENARIO]</span> You're analyzing a web application's login page.<br>
+          <span class="info">[OBSERVATION]</span> The login form has username/password fields.<br>
+          <span class="info">[OBSERVATION]</span> After 5 failed attempts, you get a "lockout" message.<br>
+          <span class="info">[OBSERVATION]</span> The error message says: <span class="warning">"Username not found"</span> vs <span class="warning">"Invalid password"</span><br>
+          <span class="info">[QUESTION]</span> What vulnerability does this reveal?
+        </div>
+      </div>
+    </div>
+
+    <div id="quiz1-container">
+      <p style="color:var(--white); margin-bottom:12px; font-size:0.9em;"><strong>Q1:</strong> The different error messages for "user not found" vs "wrong password" allow an attacker to:</p>
+      <button class="quiz-option" onclick="checkQuiz1(this, false)">A) Brute force the password faster</button>
+      <button class="quiz-option" onclick="checkQuiz1(this, true)">B) Enumerate valid usernames (user enumeration)</button>
+      <button class="quiz-option" onclick="checkQuiz1(this, false)">C) Bypass the login entirely</button>
+      <button class="quiz-option" onclick="checkQuiz1(this, false)">D) Crash the authentication server</button>
+      <div class="quiz-feedback" id="quiz1-feedback"></div>
+    </div>
+
+    <div id="quiz2-container" style="display:none; margin-top:25px;">
+      <div class="edu-card">
+        <h3>✅ Correct! User Enumeration</h3>
+        <p>Different error messages reveal whether a username exists in the system. An attacker can iterate through common usernames, then focus brute-force attacks on confirmed accounts. This is why systems should return <span class="highlight">generic error messages</span> like "Invalid username or password."</p>
+      </div>
+
+      <div class="terminal">
+        <div class="terminal-header">
+          <div class="terminal-dot red"></div>
+          <div class="terminal-dot yellow"></div>
+          <div class="terminal-dot green"></div>
+          <span class="terminal-title">mindset — scenario-02.txt</span>
+        </div>
+        <div class="terminal-body">
+          <div class="output"><span class="prompt">scenario@mindset:~$</span> <span class="cmd">load scenario --id=developer-assumption</span></div>
+          <div class="output" style="margin-top:10px;">
+            <span class="info">[SCENARIO]</span> A developer wrote this validation rule:<br>
+            <span class="highlight">if (user.role === "admin") { grantAccess(); }</span><br><br>
+            <span class="info">[QUESTION]</span> What's the fundamental flaw in this approach?
+          </div>
+        </div>
+      </div>
+
+      <p style="color:var(--white); margin:12px 0; font-size:0.9em;"><strong>Q2:</strong> This code assumes that:</p>
+      <button class="quiz-option" onclick="checkQuiz2(this, false)">A) All users have a role field</button>
+      <button class="quiz-option" onclick="checkQuiz2(this, false)">B) The admin role is assigned by the system</button>
+      <button class="quiz-option" onclick="checkQuiz2(this, true)">C) The role cannot be tampered with by the user</button>
+      <button class="quiz-option" onclick="checkQuiz2(this, false)">D) Admin users exist in the database</button>
+      <div class="quiz-feedback" id="quiz2-feedback"></div>
+    </div>
+
+    <div id="quiz3-container" style="display:none; margin-top:25px;">
+      <div class="edu-card">
+        <h3>✅ Correct! Trust Boundary Violation</h3>
+        <p>This is a classic <span class="tooltip">client-side trust<span class="tooltip-text">Never trust data from the client. If role checking happens in JavaScript on the user's browser, an attacker can modify the role field in browser dev tools before sending the request.</span></span> problem. If role validation happens on the client (browser), an attacker can modify the role in browser developer tools. Server-side validation is essential — <span class="highlight">never trust user input</span>.</p>
+      </div>
+
+      <div class="terminal">
+        <div class="terminal-header">
+          <div class="terminal-dot red"></div>
+          <div class="terminal-dot yellow"></div>
+          <div class="terminal-dot green"></div>
+          <span class="terminal-title">mindset — scenario-03.txt</span>
+        </div>
+        <div class="terminal-body">
+          <div class="output"><span class="prompt">scenario@mindset:~$</span> <span class="cmd">load scenario --id=security-by-obscurity</span></div>
+          <div class="output" style="margin-top:10px;">
+            <span class="info">[SCENARIO]</span> A company hides their admin panel at <span class="highlight">/admin/secret-panel-x9z2</span><br>
+            <span class="info">[OBSERVATION]</span> They have no firewall, no authentication,<br>
+            <span class="info">[OBSERVATION]</span> and use the default password "admin123"<br>
+            <span class="info">[QUESTION]</span> What security principle are they violating?
+          </div>
+        </div>
+      </div>
+
+      <p style="color:var(--white); margin:12px 0; font-size:0.9em;"><strong>Q3:</strong> Hiding the admin URL instead of securing it violates:</p>
+      <button class="quiz-option" onclick="checkQuiz3(this, false)">A) The principle of least privilege</button>
+      <button class="quiz-option" onclick="checkQuiz3(this, true)">B) Security by obscurity (Kerckhoffs's principle)</button>
+      <button class="quiz-option" onclick="checkQuiz3(this, false)">C) Defense in depth</button>
+      <button class="quiz-option" onclick="checkQuiz3(this, false)">D) Zero trust architecture</button>
+      <div class="quiz-feedback" id="quiz3-feedback"></div>
+    </div>
+
+    <div id="quiz4-container" style="display:none; margin-top:25px;">
+      <div class="edu-card">
+        <h3>✅ Correct! Security by Obscurity</h3>
+        <p><span class="tooltip">Kerckhoffs's principle<span class="tooltip-text">Named after cryptographer Auguste Kerckhoffs: a system should remain secure even if everything about the system, except the key, is public knowledge. Hiding the URL is not security — it's just making it harder to find.</span></span> states that a system should remain secure even if everything about it is known except the key. Hiding an admin URL provides <span class="warning">no real protection</span> — anyone who discovers the URL has full access. Real security requires <span class="highlight">authentication, authorization, and encryption</span>.</p>
+      </div>
+
+      <div class="edu-card">
+        <h3>🧠 Mindset Summary</h3>
+        <p>The hacker's mindset is built on three pillars:</p>
+        <p>1. <span class="success">Curiosity</span> — Question every assumption the system makes</p>
+        <p>2. <span class="success">Persistence</span> — If one path is blocked, find another</p>
+        <p>3. <span class="success">Systematic thinking</span> — Map the attack surface before acting</p>
+        <p style="margin-top:10px;">Now that you think like a hacker, it's time to <span class="highlight">gather intelligence</span>.</p>
+      </div>
+
+      <div class="btn-group" style="justify-content:center;">
+        <button class="btn" onclick="goToPhase(2)">[ PROCEED TO RECONNAISSANCE ]</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== PHASE 2: RECONNAISSANCE ==================== -->
+  <div class="screen" id="screen-phase2">
+    <div class="section-title">PHASE 2: RECONNAISSANCE</div>
+
+    <div class="edu-card">
+      <h3>🔍 Gathering Intelligence</h3>
+      <p>Reconnaissance is the most critical phase. A hacker collects information about the target to identify potential entry points. This includes:</p>
+      <p>• <span class="success">Network mapping</span> — Finding live hosts and open ports</p>
+      <p>• <span class="success">Service enumeration</span> — What's running on each port?</p>
+      <p>• <span class="success">Technology fingerprinting</span> — What software and versions?</p>
+      <p>• <span class="success">OSINT</span> — Open Source Intelligence from public sources</p>
+    </div>
+
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">recon — network-scan.sh</span>
+      </div>
+      <div class="terminal-body">
+        <div class="output"><span class="prompt">recon@target:~$</span> <span class="cmd">nmap -sV --script=vuln 10.0.0.0/24</span></div>
+        <div class="output" style="margin-top:10px;">
+          <span class="info">[SCANNING]</span> Network 10.0.0.0/24 — 256 hosts<br>
+          <span class="success">[ALERT]</span> 8 hosts found with open ports.<br>
+          <span class="info">[INSTRUCTION]</span> Click on each node to scan it. Identify vulnerabilities.
+        </div>
+      </div>
+    </div>
+
+    <div class="hint-box">
+      <strong>💡 Hint:</strong> Focus on nodes with open ports. Each node reveals different services. Look for outdated software versions and misconfigurations. You need to find at least <span style="color:var(--orange);">3 vulnerabilities</span> to proceed.
+    </div>
+
+    <div class="network-grid" id="network-grid">
+      <!-- Nodes generated by JS -->
+    </div>
+
+    <div id="recon-summary" style="display:none; margin-top:20px;">
+      <div class="edu-card">
+        <h3>📋 Reconnaissance Report</h3>
+        <div id="recon-details"></div>
+      </div>
+
+      <div class="btn-group" style="justify-content:center;">
+        <button class="btn" onclick="goToPhase(3)">[ PROCEED TO EXPLOITATION ]</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== PHASE 3: EXPLOITATION ==================== -->
+  <div class="screen" id="screen-phase3">
+    <div class="section-title">PHASE 3: EXPLOITATION — CHAINING VULNERABILITIES</div>
+
+    <div class="edu-card">
+      <h3>⛓️ The Exploit Chain</h3>
+      <p>Real-world breaches rarely exploit a single vulnerability. Hackers <span class="tooltip">chain multiple weaknesses<span class="tooltip-text">An exploit chain connects multiple vulnerabilities to achieve a goal. For example: XSS → Session Hijack → Privilege Escalation → Data Exfiltration.</span></span> to move from initial access to full compromise.</p>
+      <p>Build the correct exploit chain by selecting vulnerabilities in the right order.</p>
+    </div>
+
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">exploit — chain-builder.py</span>
+      </div>
+      <div class="terminal-body">
+        <div class="output"><span class="prompt">exploit@target:~$</span> <span class="cmd">python3 chain-builder.py --target=corp-server</span></div>
+        <div class="output" style="margin-top:10px;">
+          <span class="info">[TARGET]</span> corp-server.internal (10.0.0.5)<br>
+          <span class="info">[OBJECTIVE]</span> Achieve <span class="warning">root access</span><br>
+          <span class="info">[AVAILABLE]</span> Select vulnerabilities from the list below and chain them in the correct order.
+        </div>
+      </div>
+    </div>
+
+    <div class="edu-card" style="border-left-color: var(--orange);">
+      <h3>🎯 Goal: Build the Exploit Chain</h3>
+      <p>Click vulnerabilities in the order they should be exploited. The chain must logically progress from <span class="highlight">external access → internal access → privilege escalation → objective</span>.</p>
+      <p>Current chain: <span class="highlight" id="chain-status">empty</span></p>
+    </div>
+
+    <div class="vuln-chain" id="chain-display">
+      <div class="vuln-slot current" id="slot-0">1</div>
+      <span class="vuln-arrow">→</span>
+      <div class="vuln-slot" id="slot-1">2</div>
+      <span class="vuln-arrow">→</span>
+      <div class="vuln-slot" id="slot-2">3</div>
+      <span class="vuln-arrow">→</span>
+      <div class="vuln-slot" id="slot-3">4</div>
+    </div>
+
+    <div class="vuln-pieces" id="vuln-pieces">
+      <!-- Generated by JS -->
+    </div>
+
+    <div id="exploit-feedback" style="display:none;"></div>
+
+    <div class="btn-group" style="justify-content:center; margin-top:20px;">
+      <button class="btn secondary" onclick="resetChain()">[ RESET CHAIN ]</button>
+      <button class="btn" onclick="submitChain()">[ EXECUTE CHAIN ]</button>
+    </div>
+
+    <div id="exploitation-complete" style="display:none; margin-top:25px;">
+      <div class="edu-card">
+        <h3>🏆 Exploitation Complete!</h3>
+        <p>You've successfully chained vulnerabilities to compromise the target. Here's the complete chain:</p>
+        <div id="final-chain-display" style="margin:15px 0;"></div>
+        <p style="margin-top:15px;">
+          <span class="info">ℹ</span> In real engagements, defenders use <span class="highlight">defense in depth</span> — multiple security layers so that if one fails, others still protect the system.
+        </p>
+      </div>
+
+      <div class="btn-group" style="justify-content:center;">
+        <button class="btn" onclick="goToPhase(4)">[ VIEW FINAL REPORT ]</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== FINAL REPORT ==================== -->
+  <div class="screen" id="screen-final">
+    <div class="final-screen">
+      <h2>⟨ TRAINING COMPLETE ⟩</h2>
+
+      <div class="terminal" style="max-width:500px; margin:0 auto 20px;">
+        <div class="terminal-header">
+          <div class="terminal-dot red"></div>
+          <div class="terminal-dot yellow"></div>
+          <div class="terminal-dot green"></div>
+          <span class="terminal-title">final-report.txt</span>
+        </div>
+        <div class="terminal-body">
+          <div class="output"><span class="prompt">admin@academy:~$</span> <span class="cmd">generate-report</span></div>
+          <div class="output" style="margin-top:15px;">
+            <span class="highlight">╔══════════════════════════════════════╗</span><br>
+            <span class="highlight">║</span>  FINAL SCORE: <span class="success" id="final-score">0</span>        <span class="highlight">║</span><br>
+            <span class="highlight">║</span>  FLAGS: <span class="success" id="final-flags">0</span>/6              <span class="highlight">║</span><br>
+            <span class="highlight">╚══════════════════════════════════════╝</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="rank" id="final-rank"></div>
+      <div id="rank-title" style="font-size:1.2em; margin-bottom:20px;"></div>
+
+      <div class="stats-grid" style="max-width:600px; margin:0 auto 20px;">
+        <div class="stat-item">
+          <div class="stat-value" id="stat-mindset">0</div>
+          <div class="stat-label">Mindset Score</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="stat-recon">0</div>
+          <div class="stat-label">Recon Score</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="stat-exploit">0</div>
+          <div class="stat-label">Exploit Score</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="stat-flags">0</div>
+          <div class="stat-label">Flags Earned</div>
+        </div>
+      </div>
+
+      <div class="flags-container" style="justify-content:center; margin:20px 0;">
+        <span class="flag-display" id="flag-mindset">🏴 MINDSET</span>
+        <span class="flag-display" id="flag-recon">🏴 RECON</span>
+        <span class="flag-display" id="flag-exploit">🏴 EXPLOIT</span>
+        <span class="flag-display" id="flag-enum">🏴 ENUM</span>
+        <span class="flag-display" id="flag-trust">🏴 TRUST</span>
+        <span class="flag-display" id="flag-chain">🏴 CHAIN</span>
+      </div>
+
+      <div class="edu-card" style="text-align:left; max-width:600px; margin:0 auto;">
+        <h3>📚 Key Takeaways</h3>
+        <p>• <strong>Think first, act second.</strong> Understanding the system is more important than any tool.</p>
+        <p>• <strong>Recon is 80% of the work.</strong> The better you know your target, the easier the exploit.</p>
+        <p>• <strong>Chain vulnerabilities.</strong> Single vulnerabilities are often mitigated; chains bypass defenses.</p>
+        <p>• <strong>Defense in depth.</strong> Layer your security — no single point of failure.</p>
+        <p>• <strong>Never trust input.</strong> Validate everything, sanitize everything, authenticate everything.</p>
+      </div>
+
+      <div class="btn-group" style="justify-content:center; margin-top:30px;">
+        <button class="btn" onclick="restartGame()">[ RESTART TRAINING ]</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== GAME STATE ====================
+const state = {
+  currentPhase: 0,
+  score: 0,
+  flags: [],
+  phase1Score: 0,
+  phase2Score: 0,
+  phase3Score: 0,
+  quiz1Done: false,
+  quiz2Done: false,
+  quiz3Done: false,
+  scannedNodes: new Set(),
+  foundVulns: new Set(),
+  chain: [],
+  selectedVuln: null,
+  chainComplete: false
+};
+
+const correctChain = [
+  { id: 'xss', name: 'XSS on Login Page', desc: 'Cross-Site Scripting steals session cookies' },
+  { id: 'session', name: 'Session Hijack', desc: 'Use stolen cookie to impersonate user' },
+  { id: 'privesc', name: 'Privilege Escalation', desc: 'Exploit misconfigured sudo rules' },
+  { id: 'root', name: 'Root Access', desc: 'Full system compromise achieved' }
+];
+
+const vulnPool = [
+  { id: 'xss', name: 'XSS on Login Page', desc: 'Cross-Site Scripting steals session cookies', order: 0 },
+  { id: 'session', name: 'Session Hijack', desc: 'Use stolen cookie to impersonate user', order: 1 },
+  { id: 'privesc', name: 'Privilege Escalation', desc: 'Exploit misconfigured sudo rules', order: 2 },
+  { id: 'root', name: 'Root Access', desc: 'Full system compromise achieved', order: 3 },
+  { id: 'ddos', name: 'DDoS Attack', desc: 'Overwhelm the server with traffic', order: -1 },
+  { id: 'social', name: 'Social Engineering', desc: 'Trick employees into giving credentials', order: -1 },
+  { id: 'phish', name: 'Phishing Email', desc: 'Send malicious attachments to staff', order: -1 },
+  { id: 'brute', name: 'Brute Force SSH', desc: 'Guess SSH passwords with wordlist', order: -1 }
+];
+
+const networkNodes = [
+  { id: 'web', ip: '10.0.0.1', icon: '🌐', label: 'Web Server', port: '80/443', service: 'Apache 2.4.49', vuln: 'Apache Path Traversal (CVE-2021-41773)', found: false },
+  { id: 'mail', ip: '10.0.0.2', icon: '📧', label: 'Mail Server', port: '25/587', service: 'Postfix 3.4', vuln: 'Open Relay Configuration', found: false },
+  { id: 'db', ip: '10.0.0.3', icon: '🗄️', label: 'Database', port: '3306', service: 'MySQL 5.7', vuln: 'Default Credentials (root/root)', found: false },
+  { id: 'dns', ip: '10.0.0.4', icon: '🔗', label: 'DNS Server', port: '53', service: 'BIND 9.11', vuln: 'DNS Zone Transfer Allowed', found: false },
+  { id: 'ftp', ip: '10.0.0.5', icon: '📁', label: 'FTP Server', port: '21', service: 'vsftpd 3.0.3', vuln: 'Backdoor Command Execution', found: false },
+  { id: 'ssh', ip: '10.0.0.6', icon: '🔒', label: 'SSH Server', port: '22', service: 'OpenSSH 7.9', vuln: 'SSH Agent Forwarding Abuse', found: false },
+  { id: 'api', ip: '10.0.0.7', icon: '⚙️', label: 'API Gateway', port: '8080', service: 'Node.js/Express', vuln: 'Unauthenticated API Endpoint', found: false },
+  { id: 'backup', ip: '10.0.0.8', icon: '💾', label: 'Backup Server', port: '8443', service: 'Custom Web UI', vuln: 'Unencrypted Backup Data', found: false }
+];
+
+// ==================== MATRIX BACKGROUND ====================
+function initMatrix() {
+  const canvas = document.getElementById('matrix-bg');
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()アイウエオカキクケコ';
+  const fontSize = 14;
+  const columns = Math.floor(canvas.width / fontSize);
+  const drops = Array(columns).fill(1);
+
+  function draw() {
+    ctx.fillStyle = 'rgba(10, 10, 10, 0.05)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#00ff41';
+    ctx.font = fontSize + 'px monospace';
+
+    for (let i = 0; i < drops.length; i++) {
+      const text = chars[Math.floor(Math.random() * chars.length)];
+      ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+      if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+        drops[i] = 0;
+      }
+      drops[i]++;
+    }
+  }
+
+  setInterval(draw, 50);
+
+  window.addEventListener('resize', () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  });
+}
+
+// ==================== SCREEN MANAGEMENT ====================
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function updateProgress() {
+  const fill = document.getElementById('progress-fill');
+  const pct = (state.currentPhase / 4) * 100;
+  fill.style.width = pct + '%';
+
+  document.getElementById('score-display').textContent = 'SCORE: ' + state.score;
+
+  for (let i = 1; i <= 3; i++) {
+    const ind = document.getElementById('phase' + i + '-ind');
+    ind.classList.remove('active', 'completed', 'locked');
+    if (i < state.currentPhase) ind.classList.add('completed');
+    else if (i === state.currentPhase) ind.classList.add('active');
+    else ind.classList.add('locked');
+  }
+}
+
+// ==================== GAME FLOW ====================
+function startGame() {
+  state.currentPhase = 1;
+  updateProgress();
+  showScreen('screen-phase1');
+}
+
+function goToPhase(phase) {
+  state.currentPhase = phase;
+  updateProgress();
+
+  if (phase === 2) initRecon();
+  if (phase === 3) initExploitation();
+  if (phase === 4) showFinal();
+
+  showScreen('screen-phase' + phase);
+}
+
+// ==================== PHASE 1: QUIZZES ====================
+function checkQuiz1(btn, correct) {
+  if (state.quiz1Done) return;
+  state.quiz1Done = true;
+
+  const options = btn.parentElement.querySelectorAll('.quiz-option');
+  options.forEach(o => {
+    o.classList.add('disabled');
+    if (o === btn) o.classList.add(correct ? 'correct' : 'incorrect');
+  });
+
+  if (correct) {
+    state.score += 100;
+    state.phase1Score += 100;
+    state.flags.push('enum');
+    showScorePopup('+100');
+  }
+
+  const fb = document.getElementById('quiz1-feedback');
+  fb.className = 'quiz-feedback show ' + (correct ? 'correct' : 'incorrect');
+  fb.innerHTML = correct
+    ? '✅ <strong>Correct!</strong> Different error messages reveal whether a username exists — this is user enumeration.'
+    : '❌ Not quite. The different messages allow <strong>user enumeration</strong> — confirming valid usernames.';
+
+  setTimeout(() => {
+    document.getElementById('quiz2-container').style.display = 'block';
+    document.getElementById('quiz2-container').scrollIntoView({ behavior: 'smooth' });
+  }, 1500);
+}
+
+function checkQuiz2(btn, correct) {
+  if (state.quiz2Done) return;
+  state.quiz2Done = true;
+
+  const options = btn.parentElement.querySelectorAll('.quiz-option');
+  options.forEach(o => {
+    o.classList.add('disabled');
+    if (o === btn) o.classList.add(correct ? 'correct' : 'incorrect');
+  });
+
+  if (correct) {
+    state.score += 100;
+    state.phase1Score += 100;
+    state.flags.push('trust');
+    showScorePopup('+100');
+  }
+
+  const fb = document.getElementById('quiz2-feedback');
+  fb.className = 'quiz-feedback show ' + (correct ? 'correct' : 'incorrect');
+  fb.innerHTML = correct
+    ? '✅ <strong>Correct!</strong> This is a trust boundary violation. The code assumes the role field is trustworthy — but an attacker can modify it.'
+    : '❌ The fundamental flaw is that the code <strong>trusts user-supplied data</strong> without server-side validation.';
+
+  setTimeout(() => {
+    document.getElementById('quiz3-container').style.display = 'block';
+    document.getElementById('quiz3-container').scrollIntoView({ behavior: 'smooth' });
+  }, 1500);
+}
+
+function checkQuiz3(btn, correct) {
+  if (state.quiz3Done) return;
+  state.quiz3Done = true;
+
+  const options = btn.parentElement.querySelectorAll('.quiz-option');
+  options.forEach(o => {
+    o.classList.add('disabled');
+    if (o === btn) o.classList.add(correct ? 'correct' : 'incorrect');
+  });
+
+  if (correct) {
+    state.score += 100;
+    state.phase1Score += 100;
+    showScorePopup('+100');
+  }
+
+  const fb = document.getElementById('quiz3-feedback');
+  fb.className = 'quiz-feedback show ' + (correct ? 'correct' : 'incorrect');
+  fb.innerHTML = correct
+    ? '✅ <strong>Correct!</strong> Security by obscurity is not real security. Hiding the URL provides no protection if the URL is discovered.'
+    : '❌ This violates <strong>Kerckhoffs\'s principle</strong> — security should not depend on secrecy of the design.';
+
+  setTimeout(() => {
+    document.getElementById('quiz4-container').style.display = 'block';
+    document.getElementById('quiz4-container').scrollIntoView({ behavior: 'smooth' });
+  }, 1500);
+}
+
+// ==================== PHASE 2: RECON ====================
+function initRecon() {
+  const grid = document.getElementById('network-grid');
+  grid.innerHTML = '';
+
+  networkNodes.forEach(node => {
+    const div = document.createElement('div');
+    div.className = 'network-node';
+    div.id = 'node-' + node.id;
+    div.innerHTML = `
+      <div class="node-icon">${node.icon}</div>
+      <div class="node-ip">${node.ip}</div>
+      <div class="node-label">${node.label}</div>
+      <div class="node-status closed" id="status-${node.id}">SCANNING...</div>
+    `;
+    div.onclick = () => scanNode(node.id);
+    grid.appendChild(div);
+  });
+}
+
+function scanNode(id) {
+  if (state.scannedNodes.has(id)) return;
+  state.scannedNodes.add(id);
+
+  const node = networkNodes.find(n => n.id === id);
+  const el = document.getElementById('node-' + id);
+  const statusEl = document.getElementById('status-' + id);
+
+  el.classList.add('scanned');
+  el.innerHTML = `
+    <div class="node-icon">${node.icon}</div>
+    <div class="node-ip">${node.ip}</div>
+    <div class="node-label">${node.label}</div>
+    <div style="font-size:0.65em; color:var(--cyan); margin-top:4px;">Port: ${node.port}</div>
+    <div style="font-size:0.65em; color:var(--text); margin-top:2px;">${node.service}</div>
+    <div class="node-status open" id="status-${id}">PORT OPEN</div>
+  `;
+
+  // Simulate scanning delay
+  setTimeout(() => {
+    node.found = true;
+    state.foundVulns.add(id);
+    state.score += 50;
+    state.phase2Score += 50;
+
+    el.classList.add('vulnerable');
+    statusEl.className = 'node-status vuln';
+    statusEl.textContent = 'VULN FOUND';
+    el.innerHTML += `<div style="font-size:0.6em; color:var(--orange); margin-top:4px;">⚠ ${node.vuln}</div>`;
+
+    showScorePopup('+50');
+
+    // Check if all found
+    if (state.foundVulns.size >= 3) {
+      setTimeout(showReconSummary, 1000);
+    }
+  }, 800);
+}
+
+function showReconSummary() {
+  const summary = document.getElementById('recon-summary');
+  summary.style.display = 'block';
+
+  const details = document.getElementById('recon-details');
+  let html = '<div style="margin-top:10px;">';
+  state.foundVulns.forEach(id => {
+    const node = networkNodes.find(n => n.id === id);
+    html += `<div style="padding:8px 0; border-bottom:1px solid var(--bg4);">
+      <span style="color:var(--orange);">⚠</span> <span style="color:var(--cyan);">${node.ip}</span> — ${node.label}<br>
+      <span style="color:var(--text); font-size:0.85em;">${node.vuln}</span>
+    </div>`;
+  });
+  html += '</div>';
+  details.innerHTML = html;
+
+  state.flags.push('recon');
+}
+
+// ==================== PHASE 3: EXPLOITATION ====================
+function initExploitation() {
+  state.chain = [];
+  state.chainComplete = false;
+  state.selectedVuln = null;
+
+  renderChain();
+  renderVulnPieces();
+
+  document.getElementById('exploit-feedback').style.display = 'none';
+  document.getElementById('exploitation-complete').style.display = 'none';
+}
+
+function renderChain() {
+  for (let i = 0; i < 4; i++) {
+    const slot = document.getElementById('slot-' + i);
+    if (state.chain[i]) {
+      slot.textContent = state.chain[i].name.substring(0, 12) + '...';
+      slot.classList.add('filled');
+      slot.classList.remove('current');
+    } else {
+      slot.textContent = (i + 1);
+      slot.classList.remove('filled');
+      if (i === state.chain.length) slot.classList.add('current');
+      else slot.classList.remove('current');
+    }
+  }
+
+  const statusEl = document.getElementById('chain-status');
+  if (state.chain.length === 0) {
+    statusEl.textContent = 'empty — select vulnerabilities below';
+  } else {
+    statusEl.textContent = state.chain.map(v => v.name).join(' → ');
+  }
+}
+
+function renderVulnPieces() {
+  const container = document.getElementById('vuln-pieces');
+  container.innerHTML = '';
+
+  // Shuffle the pool
+  const shuffled = [...vulnPool].sort(() => Math.random() - 0.5);
+
+  shuffled.forEach(v => {
+    const div = document.createElement('div');
+    div.className = 'vuln-piece';
+    div.textContent = v.name;
+    div.title = v.desc;
+
+    if (state.chain.find(c => c.id === v.id)) {
+      div.classList.add('used');
+    }
+
+    div.onclick = () => selectVuln(v);
+    container.appendChild(div);
+  });
+}
+
+function selectVuln(v) {
+  if (state.chain.find(c => c.id === v.id)) return;
+
+  state.chain.push(v);
+  renderChain();
+  renderVulnPieces();
+
+  // Check if chain is complete
+  if (state.chain.length === 4) {
+    document.getElementById('exploit-feedback').style.display = 'block';
+  }
+}
+
+function resetChain() {
+  state.chain = [];
+  state.selectedVuln = null;
+  renderChain();
+  renderVulnPieces();
+  document.getElementById('exploit-feedback').style.display = 'none';
+}
+
+function submitChain() {
+  if (state.chain.length < 4) {
+    const fb = document.getElementById('exploit-feedback');
+    fb.style.display = 'block';
+    fb.innerHTML = `<div class="quiz-feedback show incorrect">⚠️ You need to select all 4 vulnerabilities in the chain.</div>`;
+    return;
+  }
+
+  // Check if chain is correct
+  const isCorrect = state.chain.every((v, i) => v.order === i);
+
+  const fb = document.getElementById('exploit-feedback');
+  fb.style.display = 'block';
+
+  if (isCorrect) {
+    state.score += 200;
+    state.phase3Score += 200;
+    state.flags.push('chain');
+    state.chainComplete = true;
+    showScorePopup('+200');
+
+    fb.innerHTML = `<div class="quiz-feedback show correct">
+      ✅ <strong>Perfect chain!</strong> You've successfully compromised the target.<br><br>
+      <span style="color:var(--cyan);">Chain executed:</span><br>
+      ${state.chain.map((v, i) => `<span style="color:var(--green);">${i+1}.</span> ${v.name} — ${v.desc}`).join('<br>')}
+    </div>`;
+
+    // Show final chain display
+    const finalDisplay = document.getElementById('final-chain-display');
+    finalDisplay.innerHTML = state.chain.map((v, i) =>
+      `<div style="display:flex; align-items:center; gap:8px; margin:8px 0; padding:10px; background:var(--bg3); border-radius:6px; border:1px solid var(--bg4);">
+        <span style="color:var(--green); font-weight:bold;">${i+1}.</span>
+        <div>
+          <div style="color:var(--cyan); font-weight:600;">${v.name}</div>
+          <div style="color:var(--text); font-size:0.85em;">${v.desc}</div>
+        </div>
+      </div>`
+    ).join('<span style="color:var(--dim-green);">→</span>');
+
+    setTimeout(() => {
+      document.getElementById('exploitation-complete').style.display = 'block';
+      document.getElementById('exploitation-complete').scrollIntoView({ behavior: 'smooth' });
+    }, 2000);
+  } else {
+    fb.innerHTML = `<div class="quiz-feedback show incorrect">
+      ❌ <strong>Chain failed.</strong> The order doesn't make logical sense.<br><br>
+      <span style="color:var(--text);">Hint: Think about the progression from external access → internal access → privilege escalation → objective.<br>
+      Try: XSS → Session Hijack → Privilege Escalation → Root Access</span>
+    </div>`;
+
+    // Reset chain after delay
+    setTimeout(() => {
+      state.chain = [];
+      renderChain();
+      renderVulnPieces();
+    }, 3000);
+  }
+}
+
+// ==================== FINAL REPORT ====================
+function showFinal() {
+  showScreen('screen-final');
+
+  document.getElementById('final-score').textContent = state.score;
+  document.getElementById('final-flags').textContent = state.flags.length + '/6';
+  document.getElementById('stat-mindset').textContent = state.phase1Score;
+  document.getElementById('stat-recon').textContent = state.phase2Score;
+  document.getElementById('stat-exploit').textContent = state.phase3Score;
+  document.getElementById('stat-flags').textContent = state.flags.length;
+
+  // Update flags
+  const flagMap = {
+    'enum': 'flag-enum',
+    'trust': 'flag-trust',
+    'recon': 'flag-recon',
+    'chain': 'flag-chain',
+    'mindset': 'flag-mindset',
+    'exploit': 'flag-exploit'
+  };
+
+  state.flags.forEach(f => {
+    const el = document.getElementById(flagMap[f]);
+    if (el) el.classList.add('earned');
+  });
+
+  // Determine rank
+  const rankEl = document.getElementById('final-rank');
+  const rankTitle = document.getElementById('rank-title');
+
+  if (state.score >= 600) {
+    rankEl.textContent = '🏆';
+    rankEl.className = 'rank rank-master';
+    rankTitle.innerHTML = '<span style="color:var(--green);">ZERO-DAY ACHIEVER</span>';
+  } else if (state.score >= 400) {
+    rankEl.textContent = '🥇';
+    rankEl.className = 'rank rank-gold';
+    rankTitle.innerHTML = '<span style="color:#ffd700;">ELITE HACKER</span>';
+  } else if (state.score >= 200) {
+    rankEl.textContent = '🥈';
+    rankEl.className = 'rank rank-silver';
+    rankTitle.innerHTML = '<span style="color:#c0c0c0;">PROMISING RECRUIT</span>';
+  } else {
+    rankEl.textContent = '🥉';
+    rankEl.className = 'rank rank-bronze';
+    rankTitle.innerHTML = '<span style="color:#cd7f32;">BEGINNER</span>';
+  }
+}
+
+function restartGame() {
+  state.currentPhase = 0;
+  state.score = 0;
+  state.flags = [];
+  state.phase1Score = 0;
+  state.phase2Score = 0;
+  state.phase3Score = 0;
+  state.quiz1Done = false;
+  state.quiz2Done = false;
+  state.quiz3Done = false;
+  state.scannedNodes.clear();
+  state.foundVulns.clear();
+  state.chain = [];
+  state.chainComplete = false;
+
+  // Reset quiz containers
+  document.getElementById('quiz1-container').style.display = 'block';
+  document.getElementById('quiz2-container').style.display = 'none';
+  document.getElementById('quiz3-container').style.display = 'none';
+  document.getElementById('quiz4-container').style.display = 'none';
+
+  // Reset quiz feedbacks
+  document.querySelectorAll('.quiz-feedback').forEach(f => {
+    f.className = 'quiz-feedback';
+    f.innerHTML = '';
+  });
+
+  // Reset quiz options
+  document.querySelectorAll('.quiz-option').forEach(o => {
+    o.classList.remove('correct', 'incorrect', 'disabled');
+  });
+
+  // Reset recon
+  document.getElementById('recon-summary').style.display = 'none';
+
+  // Reset exploitation
+  document.getElementById('exploitation-complete').style.display = 'none';
+
+  // Reset flags
+  document.querySelectorAll('.flag-display').forEach(f => f.classList.remove('earned'));
+
+  updateProgress();
+  showScreen('screen-intro');
+}
+
+// ==================== UTILITIES ====================
+function showScorePopup(text) {
+  const popup = document.createElement('div');
+  popup.className = 'score-popup';
+  popup.textContent = text;
+  document.body.appendChild(popup);
+  setTimeout(() => popup.remove(), 1000);
+}
+
+// ==================== INIT ====================
+window.addEventListener('DOMContentLoaded', () => {
+  initMatrix();
+});
+</script>
+</body>
+</html>

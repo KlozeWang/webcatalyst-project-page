@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sky Runner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; touch-action: none; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+        .interactive { pointer-events: auto; }
+        .hidden { display: none !important; }
+        
+        /* Custom progress bar for fuel */
+        .progress-bar {
+            width: 200px;
+            height: 20px;
+            background-color: rgba(0,0,0,0.5);
+            border-radius: 10px;
+            overflow: hidden;
+            border: 2px solid white;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff416c 0%, #ff4b2b 100%);
+            width: 100%;
+            transition: width 0.1s linear;
+        }
+        .text-shadow { text-shadow: 2px 2px 4px rgba(0,0,0,0.7); }
+    </style>
+</head>
+<body>
+
+    <div id="game-container"></div>
+
+    <div id="ui-layer" class="flex flex-col justify-between p-4">
+        
+        <!-- HUD -->
+        <div id="hud" class="hidden flex justify-between items-start w-full max-w-4xl mx-auto">
+            <div class="flex flex-col gap-2">
+                <div class="text-white text-2xl font-bold text-shadow">SCORE: <span id="scoreValue">0</span></div>
+                <div class="flex items-center gap-2">
+                    <span class="text-white font-bold text-shadow">FUEL:</span>
+                    <div class="progress-bar">
+                        <div id="fuelBar" class="progress-fill"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="text-white text-xl font-bold text-shadow text-right">
+                ALT: <span id="altValue">MID</span><br>
+                SPEED: <span id="speedValue">1.0</span>x
+            </div>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="startScreen" class="absolute inset-0 flex flex-col items-center justify-center bg-black/60 interactive backdrop-blur-sm">
+            <h1 class="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-white italic tracking-wider mb-2 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)]">SKY RUNNER</h1>
+            <p class="text-white text-xl mb-8">Aviation Endless Runner</p>
+            
+            <div class="bg-white/10 p-6 rounded-xl border border-white/20 text-white mb-8 max-w-md text-center">
+                <h3 class="font-bold text-xl mb-4 text-blue-300">CONTROLS</h3>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div><span class="font-bold bg-white/20 px-2 py-1 rounded">W / UP</span> Climb</div>
+                    <div><span class="font-bold bg-white/20 px-2 py-1 rounded">S / DOWN</span> Dive</div>
+                    <div><span class="font-bold bg-white/20 px-2 py-1 rounded">A / LEFT</span> Move Left</div>
+                    <div><span class="font-bold bg-white/20 px-2 py-1 rounded">D / RIGHT</span> Move Right</div>
+                </div>
+                <p class="mt-4 text-gray-300 italic">Or swipe on touch devices</p>
+                <div class="mt-4 text-left text-sm text-yellow-300">
+                    • Collect Green Orbs for Fuel<br>
+                    • Collect Gold Rings for Points<br>
+                    • Avoid Gray Storm Clouds & Towers
+                </div>
+            </div>
+
+            <button id="startBtn" class="px-10 py-4 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-400 hover:to-cyan-400 text-white font-bold text-2xl rounded-full shadow-[0_0_20px_rgba(0,191,255,0.5)] transform hover:scale-105 transition-all">START ENGINES</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="absolute inset-0 flex flex-col items-center justify-center bg-red-900/80 interactive hidden backdrop-blur-md">
+            <h1 class="text-7xl font-black text-white mb-2 drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)]">CRASHED!</h1>
+            <p id="gameOverReason" class="text-red-300 text-xl mb-6 font-bold uppercase tracking-widest"></p>
+            
+            <div class="text-white text-3xl mb-8 font-bold">
+                FINAL SCORE: <span id="finalScore" class="text-yellow-400">0</span>
+            </div>
+
+            <button id="restartBtn" class="px-10 py-4 bg-white text-red-600 hover:bg-gray-200 font-bold text-2xl rounded-full shadow-lg transform hover:scale-105 transition-all">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Web Audio API Setup ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            const now = audioCtx.currentTime;
+            
+            if (type === 'coin') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } else if (type === 'fuel') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.linearRampToValueAtTime(600, now + 0.1);
+                osc.frequency.linearRampToValueAtTime(800, now + 0.2);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'crash') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(100, now);
+                osc.frequency.exponentialRampToValueAtTime(10, now + 0.5);
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+            }
+        }
+
+        // --- Three.js Setup ---
+        const container = document.getElementById('game-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); // Sky blue
+        scene.fog = new THREE.Fog(0x87CEEB, 20, 150);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+        camera.position.set(0, 5, 12);
+        camera.lookAt(0, 2, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // --- Game Constants & Variables ---
+        const LANE_WIDTH = 5;
+        const ALT_STEP = 4;
+        const BASE_SPEED = 40; // Units per second
+        let currentSpeed = BASE_SPEED;
+        const MAX_FUEL = 100;
+        
+        let gameState = 'START'; // START, PLAY, OVER
+        let score = 0;
+        let fuel = MAX_FUEL;
+        let distanceTraveled = 0;
+        let lastTime = 0;
+
+        // Arrays for objects
+        const activeObstacles = [];
+        const activeCollectibles = [];
+        const sceneryObjects = [];
+
+        // --- Player Setup ---
+        let targetLane = 0; // -1 (Left), 0 (Center), 1 (Right)
+        let targetAlt = 0;  // -1 (Low), 0 (Mid), 1 (High)
+        const altNames = { '-1': 'LOW', '0': 'MID', '1': 'HIGH' };
+
+        const playerGroup = new THREE.Group();
+        
+        // Build a simple low-poly plane
+        const planeMat = new THREE.MeshStandardMaterial({ color: 0xff4500 });
+        const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        
+        // Fuselage
+        const bodyGeo = new THREE.BoxGeometry(1, 1, 3);
+        const body = new THREE.Mesh(bodyGeo, planeMat);
+        body.castShadow = true;
+        playerGroup.add(body);
+        
+        // Wings
+        const wingGeo = new THREE.BoxGeometry(5, 0.2, 1);
+        const wing = new THREE.Mesh(wingGeo, whiteMat);
+        wing.position.set(0, 0, 0);
+        wing.castShadow = true;
+        playerGroup.add(wing);
+
+        // Tail
+        const tailGeo = new THREE.BoxGeometry(2, 0.2, 0.8);
+        const tail = new THREE.Mesh(tailGeo, whiteMat);
+        tail.position.set(0, 0, -1.2);
+        playerGroup.add(tail);
+
+        const finGeo = new THREE.BoxGeometry(0.2, 1, 0.8);
+        const fin = new THREE.Mesh(finGeo, planeMat);
+        fin.position.set(0, 0.5, -1.2);
+        playerGroup.add(fin);
+
+        // Propeller
+        const propGeo = new THREE.BoxGeometry(2, 0.2, 0.1);
+        const propeller = new THREE.Mesh(propGeo, new THREE.MeshStandardMaterial({color: 0x333333}));
+        propeller.position.set(0, 0, 1.6);
+        playerGroup.add(propeller);
+
+        scene.add(playerGroup);
+
+        // --- Object Materials ---
+        const cloudMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, transparent: true, opacity: 0.8 });
+        const towerMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+        const fuelMat = new THREE.MeshStandardMaterial({ color: 0x00ff00, emissive: 0x00aa00 });
+        const coinMat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xaa8800 });
+
+        // --- Functions ---
+
+        function getTargetPosition() {
+            return {
+                x: targetLane * LANE_WIDTH,
+                y: 3 + (targetAlt * ALT_STEP),
+                z: 0
+            };
+        }
+
+        function spawnObstacle(zPos) {
+            const lane = Math.floor(Math.random() * 3) - 1;
+            const alt = Math.floor(Math.random() * 3) - 1;
+            
+            let mesh;
+            const type = Math.random() > 0.5 ? 'cloud' : 'tower';
+            let radius = 1.5;
+
+            if (type === 'cloud') {
+                mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(2), cloudMat);
+                mesh.position.set(lane * LANE_WIDTH, 3 + (alt * ALT_STEP), zPos);
+                radius = 2;
+            } else {
+                mesh = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.5, 10), towerMat);
+                // Towers come from ground, so alt is fixed relative to ground
+                mesh.position.set(lane * LANE_WIDTH, 0, zPos);
+                radius = 1.5;
+            }
+            
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+            activeObstacles.push({ mesh, type, radius });
+        }
+
+        function spawnCollectible(zPos) {
+            const lane = Math.floor(Math.random() * 3) - 1;
+            const alt = Math.floor(Math.random() * 3) - 1;
+            
+            const isFuel = Math.random() > 0.7; // 30% chance for fuel, 70% for coin
+            let mesh, radius;
+
+            if (isFuel) {
+                mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.8), fuelMat);
+                radius = 0.8;
+            } else {
+                mesh = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.2, 8, 16), coinMat);
+                radius = 0.8;
+            }
+
+            mesh.position.set(lane * LANE_WIDTH, 3 + (alt * ALT_STEP), zPos);
+            scene.add(mesh);
+            activeCollectibles.push({ mesh, isFuel, radius });
+        }
+
+        function generateChunk(zStart) {
+            const length = 50;
+            // Spawn 1-2 obstacles per chunk
+            for(let i=0; i<2; i++) {
+                if(Math.random() > 0.3) spawnObstacle(zStart - Math.random() * length);
+            }
+            // Spawn 1-3 collectibles
+            for(let i=0; i<3; i++) {
+                if(Math.random() > 0.2) spawnCollectible(zStart - Math.random() * length);
+            }
+        }
+
+        function resetGame() {
+            score = 0;
+            fuel = MAX_FUEL;
+            currentSpeed = BASE_SPEED;
+            distanceTraveled = 0;
+            targetLane = 0;
+            targetAlt = 0;
+            
+            const startPos = getTargetPosition();
+            playerGroup.position.set(startPos.x, startPos.y, startPos.z);
+            playerGroup.rotation.set(0,0,0);
+
+            // Clear old objects
+            [...activeObstacles, ...activeCollectibles].forEach(obj => {
+                scene.remove(obj.mesh);
+                if(obj.mesh.geometry) obj.mesh.geometry.dispose();
+            });
+            activeObstacles.length = 0;
+            activeCollectibles.length = 0;
+
+            // Generate initial path
+            for(let i=1; i<=4; i++) {
+                generateChunk(-i * 50);
+            }
+
+            updateUI();
+        }
+
+        function checkCollisions() {
+            const pBox = new THREE.Box3().setFromObject(body);
+            
+            // Obstacles
+            for (let i = activeObstacles.length - 1; i >= 0; i--) {
+                const obs = activeObstacles[i];
+                // Simple distance check for performance
+                const dist = playerGroup.position.distanceTo(obs.mesh.position);
+                
+                if (dist < obs.radius + 1.0) {
+                    gameOver(obs.type === 'cloud' ? 'Flew into a storm!' : 'Hit a tower!');
+                    return;
+                }
+            }
+
+            // Collectibles
+            for (let i = activeCollectibles.length - 1; i >= 0; i--) {
+                const col = activeCollectibles[i];
+                const dist = playerGroup.position.distanceTo(col.mesh.position);
+                
+                if (dist < col.radius + 1.5) {
+                    if (col.isFuel) {
+                        fuel = Math.min(MAX_FUEL, fuel + 25);
+                        playSound('fuel');
+                    } else {
+                        score += 50;
+                        playSound('coin');
+                    }
+                    
+                    scene.remove(col.mesh);
+                    activeCollectibles.splice(i, 1);
+                    updateUI();
+                }
+            }
+        }
+
+        function gameOver(reason) {
+            gameState = 'OVER';
+            playSound('crash');
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+            document.getElementById('finalScore').innerText = Math.floor(score);
+            document.getElementById('gameOverReason').innerText = reason;
+        }
+
+        function updateUI() {
+            document.getElementById('scoreValue').innerText = Math.floor(score);
+            document.getElementById('fuelBar').style.width = `${Math.max(0, (fuel/MAX_FUEL)*100)}%`;
+            
+            // Change fuel color if low
+            if(fuel < 20) {
+                document.getElementById('fuelBar').style.background = 'red';
+            } else {
+                document.getElementById('fuelBar').style.background = 'linear-gradient(90deg, #ff416c 0%, #ff4b2b 100%)';
+            }
+
+            document.getElementById('altValue').innerText = altNames[targetAlt.toString()];
+            document.getElementById('speedValue').innerText = (currentSpeed / BASE_SPEED).toFixed(1);
+        }
+
+        // --- Main Loop ---
+        function animate(currentTime) {
+            requestAnimationFrame(animate);
+
+            if (!lastTime) lastTime = currentTime;
+            const dt = (currentTime - lastTime) / 1000; // Delta time in seconds
+            lastTime = currentTime;
+
+            if (gameState === 'PLAY') {
+                // Logic updates
+                distanceTraveled += currentSpeed * dt;
+                score += currentSpeed * dt * 0.1;
+                fuel -= 5 * dt; // Consume fuel
+                currentSpeed += 0.5 * dt; // Gradually increase speed
+
+                if (fuel <= 0) {
+                    gameOver('Out of Fuel!');
+                }
+
+                // Animate Propeller
+                propeller.rotation.z += 20 * dt;
+
+                // Move Player (Lerp to target)
+                const targetPos = getTargetPosition();
+                playerGroup.position.x += (targetPos.x - playerGroup.position.x) * 10 * dt;
+                playerGroup.position.y += (targetPos.y - playerGroup.position.y) * 10 * dt;
+
+                // Banking animation based on horizontal movement
+                const bankAngle = (targetPos.x - playerGroup.position.x) * -0.2;
+                playerGroup.rotation.z += (bankAngle - playerGroup.rotation.z) * 10 * dt;
+                
+                // Pitch animation based on vertical movement
+                const pitchAngle = (targetPos.y - playerGroup.position.y) * 0.2;
+                playerGroup.rotation.x += (pitchAngle - playerGroup.rotation.x) * 10 * dt;
+
+                // Move world (objects towards player +Z)
+                const moveDist = currentSpeed * dt;
+
+                const updateObjArray = (arr) => {
+                    for (let i = arr.length - 1; i >= 0; i--) {
+                        arr[i].mesh.position.z += moveDist;
+                        
+                        // Rotate coins
+                        if(arr[i].mesh.geometry.type === 'TorusGeometry') {
+                            arr[i].mesh.rotation.y += 3 * dt;
+                        }
+
+                        // Remove passed objects
+                        if (arr[i].mesh.position.z > 10) {
+                            scene.remove(arr[i].mesh);
+                            arr.splice(i, 1);
+                        }
+                    }
+                };
+
+                updateObjArray(activeObstacles);
+                updateObjArray(activeCollectibles);
+
+                // Spawn new chunks
+                if (Math.floor(distanceTraveled) % 50 === 0) {
+                    generateChunk(-150); // Spawn ahead
+                    distanceTraveled++; // prevent multiple triggers
+                }
+
+                checkCollisions();
+                
+                // Throttle UI updates slightly
+                if(Math.random() < 0.2) updateUI();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Input Handling ---
+        function handleMove(dir) {
+            if (gameState !== 'PLAY') return;
+            if (dir === 'LEFT' && targetLane > -1) targetLane--;
+            if (dir === 'RIGHT' && targetLane < 1) targetLane++;
+            if (dir === 'UP' && targetAlt < 1) targetAlt++;
+            if (dir === 'DOWN' && targetAlt > -1) targetAlt--;
+        }
+
+        window.addEventListener('keydown', (e) => {
+            switch(e.key.toLowerCase()) {
+                case 'a': case 'arrowleft': handleMove('LEFT'); break;
+                case 'd': case 'arrowright': handleMove('RIGHT'); break;
+                case 'w': case 'arrowup': handleMove('UP'); break;
+                case 's': case 'arrowdown': handleMove('DOWN'); break;
+            }
+        });
+
+        // Touch/Swipe controls
+        let touchStartX = 0;
+        let touchStartY = 0;
+        
+        window.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, {passive: false});
+
+        window.addEventListener('touchend', e => {
+            if (gameState !== 'PLAY') return;
+            const touchEndX = e.changedTouches[0].screenX;
+            const touchEndY = e.changedTouches[0].screenY;
+            
+            const dx = touchEndX - touchStartX;
+            const dy = touchEndY - touchStartY;
+            
+            // Determine dominant swipe direction
+            if (Math.abs(dx) > Math.abs(dy)) {
+                if (Math.abs(dx) > 30) { // Threshold
+                    if (dx > 0) handleMove('RIGHT');
+                    else handleMove('LEFT');
+                }
+            } else {
+                if (Math.abs(dy) > 30) {
+                    if (dy > 0) handleMove('DOWN'); // Swipe down to dive
+                    else handleMove('UP'); // Swipe up to climb
+                }
+            }
+        }, {passive: false});
+        
+        // Prevent default touch actions (scrolling)
+        document.addEventListener('touchmove', function(e) { e.preventDefault(); }, { passive: false });
+
+        // --- UI Buttons ---
+        document.getElementById('startBtn').addEventListener('click', () => {
+            audioCtx.resume();
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            resetGame();
+            gameState = 'PLAY';
+        });
+
+        document.getElementById('restartBtn').addEventListener('click', () => {
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            resetGame();
+            gameState = 'PLAY';
+        });
+
+        // Window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start loop
+        requestAnimationFrame(animate);
+
+    </script>
+</body>
+</html>

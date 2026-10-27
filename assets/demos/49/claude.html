@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>🐰 Rabbit Race 🥕</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-tap-highlight-color:transparent}
+  body{font-family:'Trebuchet MS',sans-serif;background:linear-gradient(180deg,#87ceeb 0%,#b3e5a4 100%);min-height:100vh;display:flex;flex-direction:column;align-items:center;overflow:hidden;color:#222}
+  h1{margin:8px;font-size:clamp(20px,4vw,32px);text-shadow:1px 1px 0 #fff}
+  #hud{display:flex;gap:14px;font-weight:bold;margin-bottom:4px;font-size:14px;flex-wrap:wrap;justify-content:center}
+  #hud span{background:rgba(255,255,255,.7);padding:4px 10px;border-radius:14px}
+  #gameWrap{position:relative;width:min(95vw,500px);height:70vh;max-height:600px;border:4px solid #5a3825;border-radius:14px;overflow:hidden;background:#9bd96b;box-shadow:0 6px 14px rgba(0,0,0,.3)}
+  canvas{display:block;width:100%;height:100%}
+  #overlay{position:absolute;inset:0;background:rgba(0,0,0,.6);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;z-index:5}
+  #overlay h2{font-size:28px;margin-bottom:10px}
+  #overlay p{margin:6px 0;max-width:90%}
+  button{margin-top:14px;padding:10px 24px;font-size:18px;background:#ff8a3d;color:#fff;border:none;border-radius:30px;cursor:pointer;font-weight:bold;box-shadow:0 4px 0 #c45a1a}
+  button:active{transform:translateY(2px);box-shadow:0 2px 0 #c45a1a}
+  #controls{display:flex;gap:30px;margin-top:10px}
+  .ctrl{width:70px;height:70px;border-radius:50%;background:#ff8a3d;color:#fff;font-size:30px;display:flex;align-items:center;justify-content:center;font-weight:bold;box-shadow:0 4px 0 #c45a1a;touch-action:none}
+  .ctrl:active{transform:translateY(2px);box-shadow:0 2px 0 #c45a1a}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<h1>🐰 Rabbit Race 🥕</h1>
+<div id="hud">
+  <span id="speedTxt">Speed: 1.0x</span>
+  <span id="posTxt">Lane: 2</span>
+  <span id="distTxt">0%</span>
+</div>
+<div id="gameWrap">
+  <canvas id="cv"></canvas>
+  <div id="overlay">
+    <h2>Rabbit Race!</h2>
+    <p>You are the 🐰 white rabbit. Race 3 other bunnies to the finish line!</p>
+    <p>🥕 Carrots & 🥬 veggies = speed boost</p>
+    <p>🪨 Rocks & 🌵 cactus = slow down</p>
+    <p>Use ⬅️ ➡️ buttons or Arrow Keys to switch lanes.</p>
+    <button id="startBtn">START RACE</button>
+  </div>
+</div>
+<div id="controls">
+  <div class="ctrl" id="leftBtn">◀</div>
+  <div class="ctrl" id="rightBtn">▶</div>
+</div>
+
+<script>
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const overlay=document.getElementById('overlay'),startBtn=document.getElementById('startBtn');
+const speedTxt=document.getElementById('speedTxt'),posTxt=document.getElementById('posTxt'),distTxt=document.getElementById('distTxt');
+let W,H,laneW;
+function resize(){const r=cv.getBoundingClientRect();cv.width=r.width;cv.height=r.height;W=cv.width;H=cv.height;laneW=W/4;}
+resize();window.addEventListener('resize',resize);
+
+const LANES=4;
+const FINISH=2000; // distance in game units
+let rabbits=[],items=[],running=false,winner=null,scrollY=0;
+
+// audio
+let actx;
+function beep(f,d=0.1,t='square',v=0.15){try{if(!actx)actx=new (window.AudioContext||window.webkitAudioContext)();const o=actx.createOscillator(),g=actx.createGain();o.type=t;o.frequency.value=f;g.gain.value=v;o.connect(g);g.connect(actx.destination);o.start();g.gain.exponentialRampToValueAtTime(0.001,actx.currentTime+d);o.stop(actx.currentTime+d);}catch(e){}}
+
+function reset(){
+  rabbits=[];
+  const colors=['#ffffff','#d2a679','#888888','#f5b8c8'];
+  const names=['You','Brown','Gray','Pink'];
+  for(let i=0;i<4;i++){
+    rabbits.push({lane:i,targetLane:i,x:0,dist:0,speed:1,boost:1,color:colors[i],name:names[i],isPlayer:i===0,bob:Math.random()*6.28});
+  }
+  items=[];
+  // generate items along track
+  for(let d=200;d<FINISH-100;d+=40+Math.random()*60){
+    const lane=Math.floor(Math.random()*LANES);
+    const good=Math.random()<0.55;
+    const goods=['🥕','🥬','🥦','🍎'],bads=['🪨','🌵','🍂'];
+    items.push({dist:d,lane,emoji:good?goods[Math.floor(Math.random()*goods.length)]:bads[Math.floor(Math.random()*bads.length)],good,taken:false});
+  }
+  winner=null;scrollY=0;
+}
+
+function start(){reset();running=true;overlay.classList.add('hidden');}
+startBtn.addEventListener('click',start);
+
+function moveLane(dir){
+  if(!running)return;
+  const p=rabbits[0];
+  p.targetLane=Math.max(0,Math.min(LANES-1,p.targetLane+dir));
+  beep(400,0.05);
+}
+document.addEventListener('keydown',e=>{if(e.key==='ArrowLeft')moveLane(-1);else if(e.key==='ArrowRight')moveLane(1);});
+['leftBtn','rightBtn'].forEach(id=>{const b=document.getElementById(id);b.addEventListener('click',()=>moveLane(id==='leftBtn'?-1:1));});
+
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(0.05,(now-last)/1000);last=now;
+  if(running)update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+function update(dt){
+  for(const r of rabbits){
+    // ease lane
+    r.lane += (r.targetLane-r.lane)*Math.min(1,dt*8);
+    // AI: bots try to grab good items / avoid bad if near
+    if(!r.isPlayer){
+      // find nearest item within ~150
+      let best=null,bestScore=-Infinity;
+      for(const it of items){
+        if(it.taken)continue;
+        const dd=it.dist-r.dist;
+        if(dd>5&&dd<200){
+          const laneDiff=Math.abs(it.lane-r.targetLane);
+          const score=(it.good?10:-10)-laneDiff*2-dd*0.02;
+          if(score>bestScore){bestScore=score;best=it;}
+        }
+      }
+      if(best&&Math.random()<0.05){r.targetLane=best.good?best.lane:(best.lane===0?1:best.lane-1);}
+    }
+    // boost decay
+    r.boost += (1-r.boost)*Math.min(1,dt*0.5);
+    const baseSpeed=80+(r.isPlayer?0:Math.random()*4);
+    r.dist += baseSpeed*r.boost*dt;
+    r.bob += dt*10*r.boost;
+
+    // collisions
+    const curLane=Math.round(r.lane);
+    for(const it of items){
+      if(it.taken)continue;
+      if(it.lane===curLane&&Math.abs(it.dist-r.dist)<15){
+        it.taken=true;
+        if(it.good){r.boost=Math.min(2.2,r.boost+0.7);if(r.isPlayer)beep(800,0.15,'sine',0.2);}
+        else{r.boost=Math.max(0.4,r.boost-0.5);if(r.isPlayer)beep(150,0.2,'sawtooth',0.2);}
+      }
+    }
+    if(r.dist>=FINISH&&!winner){winner=r;running=false;showEnd();}
+  }
+  const p=rabbits[0];
+  speedTxt.textContent='Speed: '+p.boost.toFixed(2)+'x';
+  posTxt.textContent='Lane: '+(Math.round(p.lane)+1);
+  distTxt.textContent=Math.min(100,Math.floor(p.dist/FINISH*100))+'%';
+}
+
+function showEnd(){
+  overlay.classList.remove('hidden');
+  overlay.innerHTML=`<h2>${winner.isPlayer?'🎉 You Won!':'😢 '+winner.name+' Rabbit Won'}</h2>
+  <p>Distances:</p>
+  ${rabbits.map(r=>`<p>${r.isPlayer?'🐰 You':r.name}: ${Math.floor(r.dist)}</p>`).join('')}
+  <button onclick="location.reload()">PLAY AGAIN</button>`;
+  beep(winner.isPlayer?900:200,0.4,'sine',0.3);
+}
+
+function draw(){
+  // camera follows player
+  const p=rabbits[0];
+  const camDist=p.dist;
+  // background grass
+  ctx.fillStyle='#9bd96b';ctx.fillRect(0,0,W,H);
+  // track
+  const trackPad=10;
+  ctx.fillStyle='#c9a76b';
+  ctx.fillRect(trackPad,0,W-trackPad*2,H);
+  // lane lines
+  ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=2;ctx.setLineDash([12,12]);
+  for(let i=1;i<LANES;i++){const x=trackPad+(W-trackPad*2)*i/LANES;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  ctx.setLineDash([]);
+  // moving stripes for sense of speed
+  const off=(camDist*3)%40;
+  ctx.fillStyle='rgba(255,255,255,.15)';
+  for(let y=-40+off;y<H;y+=40){ctx.fillRect(0,y,W,4);}
+
+  // finish line if visible
+  const finScreenY=H*0.75 - (FINISH-camDist)*0.6;
+  if(finScreenY>-20&&finScreenY<H){
+    for(let i=0;i<LANES*2;i++){
+      ctx.fillStyle=i%2?'#000':'#fff';
+      ctx.fillRect(trackPad+(W-trackPad*2)*i/(LANES*2),finScreenY,(W-trackPad*2)/(LANES*2),14);
+    }
+  }
+
+  // items
+  ctx.font=Math.floor(laneW*0.55)+'px serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  for(const it of items){
+    if(it.taken)continue;
+    const sy=H*0.75 - (it.dist-camDist)*0.6;
+    if(sy<-30||sy>H+30)continue;
+    const sx=trackPad+(W-trackPad*2)*(it.lane+0.5)/LANES;
+    ctx.fillText(it.emoji,sx,sy);
+  }
+
+  // rabbits
+  // sort by dist so closer ones drawn last
+  const sorted=[...rabbits].sort((a,b)=>(a.dist-camDist)-(b.dist-camDist));
+  for(const r of sorted){
+    const sy=H*0.75 - (r.dist-camDist)*0.6;
+    if(sy<-40||sy>H+40)continue;
+    const sx=trackPad+(W-trackPad*2)*(r.lane+0.5)/LANES;
+    const bob=Math.sin(r.bob)*4;
+    drawRabbit(sx,sy+bob,r.color,r.isPlayer);
+  }
+
+  // boost indicator above player
+  if(p.boost>1.1){
+    ctx.fillStyle='gold';ctx.font='20px sans-serif';
+    const sx=trackPad+(W-trackPad*2)*(p.lane+0.5)/LANES;
+    ctx.fillText('💨',sx-30,H*0.75-20);
+  }else if(p.boost<0.9){
+    ctx.font='20px sans-serif';
+    const sx=trackPad+(W-trackPad*2)*(p.lane+0.5)/LANES;
+    ctx.fillText('💤',sx-30,H*0.75-20);
+  }
+}
+
+function drawRabbit(x,y,color,isPlayer){
+  ctx.save();ctx.translate(x,y);
+  // body
+  ctx.fillStyle=color;
+  ctx.beginPath();ctx.ellipse(0,8,20,16,0,0,Math.PI*2);ctx.fill();
+  // head
+  ctx.beginPath();ctx.ellipse(0,-10,14,12,0,0,Math.PI*2);ctx.fill();
+  // ears
+  ctx.beginPath();ctx.ellipse(-6,-25,4,12,0,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(6,-25,4,12,0,0,Math.PI*2);ctx.fill();
+  // inner ears
+  ctx.fillStyle='#ffb3c1';
+  ctx.beginPath();ctx.ellipse(-6,-25,2,8,0,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(6,-25,2,8,0,0,Math.PI*2);ctx.fill();
+  // eyes
+  ctx.fillStyle='#000';
+  ctx.beginPath();ctx.arc(-5,-12,2,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(5,-12,2,0,Math.PI*2);ctx.fill();
+  // nose
+  ctx.fillStyle='#ff77a9';ctx.beginPath();ctx.arc(0,-6,1.5,0,Math.PI*2);ctx.fill();
+  // tail
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(0,22,5,0,Math.PI*2);ctx.fill();
+  if(isPlayer){ctx.strokeStyle='#ff2244';ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,5,24,0,Math.PI*2);ctx.stroke();}
+  ctx.restore();
+}
+</script>
+</body>
+</html>

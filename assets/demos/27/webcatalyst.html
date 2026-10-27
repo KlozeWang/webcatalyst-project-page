@@ -1,0 +1,1294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A* Pathfinding Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        #gameContainer {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #ui {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 800px;
+            padding: 10px 20px;
+            background: #16213e;
+            border-radius: 10px 10px 0 0;
+            border: 2px solid #0f3460;
+            border-bottom: none;
+        }
+
+        #ui .stat {
+            color: #e94560;
+            font-size: 18px;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(233, 69, 96, 0.5);
+        }
+
+        #ui .stat span {
+            color: #fff;
+        }
+
+        #gameCanvas {
+            border: 2px solid #0f3460;
+            border-radius: 0 0 10px 10px;
+            cursor: none;
+        }
+
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(22, 33, 62, 0.95);
+            padding: 40px 60px;
+            border-radius: 20px;
+            text-align: center;
+            display: none;
+            border: 3px solid #e94560;
+            box-shadow: 0 0 30px rgba(233, 69, 96, 0.3);
+            z-index: 100;
+        }
+
+        #gameOver h1 {
+            color: #e94560;
+            font-size: 48px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
+        }
+
+        #gameOver p {
+            color: #fff;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        #gameOver button {
+            padding: 12px 30px;
+            font-size: 18px;
+            background: #e94560;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+
+        #gameOver button:hover {
+            background: #ff6b81;
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(233, 69, 96, 0.5);
+        }
+
+        #instructions {
+            color: #888;
+            font-size: 13px;
+            text-align: center;
+            margin-top: 5px;
+        }
+
+        #minimap {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            border: 2px solid #0f3460;
+            border-radius: 5px;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="ui">
+            <div class="stat">🏆 Score: <span id="score">0</span></div>
+            <div class="stat">❤️ Lives: <span id="lives">3</span></div>
+            <div class="stat">👾 Enemies: <span id="enemyCount">0</span></div>
+            <div class="stat">📍 Level: <span id="level">1</span></div>
+        </div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="instructions">
+            WASD / Arrow Keys to move | Collect coins 🪙 | Avoid enemies 👾 | Press R to restart
+        </div>
+
+        <div id="gameOver">
+            <h1>GAME OVER</h1>
+            <p>Final Score: <span id="finalScore">0</span></p>
+            <button onclick="game.restart()">🔄 Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // A* PATHFINDING ALGORITHM
+        // ============================================================
+        // A* is a popular pathfinding algorithm that finds the shortest
+        // path between two points. It uses heuristics to efficiently
+        // explore the most promising paths first.
+        //
+        // f(n) = g(n) + h(n)
+        // g(n) = cost from start to node n
+        // h(n) = heuristic estimate from node n to goal
+        // ============================================================
+
+        class AStar {
+            /**
+             * Constructor - initializes the A* pathfinder
+             * @param {number} width - Grid width in tiles
+             * @param {number} height - Grid height in tiles
+             * @param {number[][]} map - 2D array where 1 = wall, 0 = walkable
+             */
+            constructor(width, height, map) {
+                this.width = width;
+                this.height = height;
+                this.map = map;
+            }
+
+            /**
+             * Calculate heuristic distance between two points
+             * Uses Manhattan distance for grid-based movement
+             * @param {number} x1 - Start X
+             * @param {number} y1 - Start Y
+             * @param {number} x2 - End X
+             * @param {number} y2 - End Y
+             * @returns {number} Heuristic distance
+             */
+            heuristic(x1, y1, x2, y2) {
+                // Manhattan distance: |x1-x2| + |y1-y2|
+                return Math.abs(x1 - x2) + Math.abs(y1 - y2);
+            }
+
+            /**
+             * Check if a tile is walkable
+             * @param {number} x - Tile X coordinate
+             * @param {number} y - Tile Y coordinate
+             * @returns {boolean} True if walkable
+             */
+            isWalkable(x, y) {
+                // Check bounds
+                if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
+                    return false;
+                }
+                // Check if tile is a wall
+                return this.map[y][x] === 0;
+            }
+
+            /**
+             * Find the shortest path from start to goal using A* algorithm
+             * @param {number} startX - Start X tile coordinate
+             * @param {number} startY - Start Y tile coordinate
+             * @param {number} goalX - Goal X tile coordinate
+             * @param {number} goalY - Goal Y tile coordinate
+             * @returns {Array<{x:number, y:number}>} Array of tiles forming the path
+             */
+            findPath(startX, startY, goalX, goalY) {
+                // Open set: nodes to be evaluated (priority queue)
+                let openSet = [];
+                // Closed set: nodes already evaluated
+                let closedSet = new Set();
+                // Track how we got to each node (for path reconstruction)
+                let cameFrom = new Map();
+                // g-score: cost from start to this node
+                let gScore = new Map();
+                // f-score: estimated total cost (g + h)
+                let fScore = new Map();
+
+                // Initialize start node
+                let startKey = `${startX},${startY}`;
+                gScore.set(startKey, 0);
+                fScore.set(startKey, this.heuristic(startX, startY, goalX, goalY));
+                openSet.push({ x: startX, y: startY, f: fScore.get(startKey) });
+
+                // Direction vectors for 4-directional movement (up, down, left, right)
+                const directions = [
+                    { dx: 0, dy: -1 }, // Up
+                    { dx: 0, dy: 1 },  // Down
+                    { dx: -1, dy: 0 }, // Left
+                    { dx: 1, dy: 0 }   // Right
+                ];
+
+                let iterations = 0;
+                const maxIterations = 10000; // Prevent infinite loops
+
+                while (openSet.length > 0) {
+                    iterations++;
+                    if (iterations > maxIterations) break;
+
+                    // Find node with lowest f-score in open set
+                    openSet.sort((a, b) => a.f - b.f);
+                    let current = openSet.shift();
+                    let currentKey = `${current.x},${current.y}`;
+
+                    // Check if we reached the goal
+                    if (current.x === goalX && current.y === goalY) {
+                        return this.reconstructPath(cameFrom, currentKey);
+                    }
+
+                    // Add current node to closed set
+                    closedSet.add(currentKey);
+
+                    // Explore neighbors
+                    for (let dir of directions) {
+                        let neighborX = current.x + dir.dx;
+                        let neighborY = current.y + dir.dy;
+                        let neighborKey = `${neighborX},${neighborY}`;
+
+                        // Skip if out of bounds, wall, or already evaluated
+                        if (!this.isWalkable(neighborX, neighborY)) continue;
+                        if (closedSet.has(neighborKey)) continue;
+
+                        // Calculate g-score (cost to reach neighbor)
+                        let tentativeG = (gScore.get(currentKey) || 0) + 1;
+
+                        // If this path to neighbor is better, update it
+                        if (tentativeG < (gScore.get(neighborKey) || Infinity)) {
+                            cameFrom.set(neighborKey, currentKey);
+                            gScore.set(neighborKey, tentativeG);
+                            let f = tentativeG + this.heuristic(neighborX, neighborY, goalX, goalY);
+                            fScore.set(neighborKey, f);
+
+                            // Add to open set if not already there
+                            if (!openSet.some(n => n.x === neighborX && n.y === neighborY)) {
+                                openSet.push({ x: neighborX, y: neighborY, f: f });
+                            }
+                        }
+                    }
+                }
+
+                // No path found!
+                return [];
+            }
+
+            /**
+             * Reconstruct the path from start to goal
+             * @param {Map} cameFrom - Map of node connections
+             * @param {string} goalKey - Goal node key
+             * @returns {Array<{x:number, y:number}>} Path from start to goal
+             */
+            reconstructPath(cameFrom, goalKey) {
+                let path = [this.parseKey(goalKey)];
+                let current = goalKey;
+
+                while (cameFrom.has(current)) {
+                    current = cameFrom.get(current);
+                    path.unshift(this.parseKey(current));
+                }
+
+                return path;
+            }
+
+            /**
+             * Parse a key string back to coordinates
+             * @param {string} key - Key in format "x,y"
+             * @returns {{x:number, y:number}} Coordinates
+             */
+            parseKey(key) {
+                let parts = key.split(',');
+                return { x: parseInt(parts[0]), y: parseInt(parts[1]) };
+            }
+        }
+
+
+        // ============================================================
+        // PLAYER CLASS
+        // ============================================================
+        // Handles player movement, collision detection, and rendering
+        class Player {
+            /**
+             * Constructor for the Player
+             * @param {number} x - Starting X position (pixels)
+             * @param {number} y - Starting Y position (pixels)
+             * @param {number} size - Player size in pixels
+             * @param {number} speed - Movement speed in pixels per frame
+             */
+            constructor(x, y, size = 20, speed = 3) {
+                this.x = x;
+                this.y = y;
+                this.size = size;
+                this.speed = speed;
+                this.direction = { x: 0, y: 0 };
+                this.animFrame = 0;
+                this.animTimer = 0;
+                this.trail = []; // Movement trail for visual effect
+            }
+
+            /**
+             * Update player position based on input
+             * @param {Object} keys - Object containing pressed keys
+             * @param {number[][]} map - Game map for collision detection
+             * @param {number} tile_size - Size of each grid tile
+             */
+            update(keys, map, tile_size) {
+                // Reset direction
+                this.direction = { x: 0, y: 0 };
+
+                // Handle input - WASD or Arrow keys
+                if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+                    this.direction.y = -1;
+                }
+                if (keys['ArrowDown'] || keys['s'] || keys['S']) {
+                    this.direction.y = 1;
+                }
+                if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
+                    this.direction.x = -1;
+                }
+                if (keys['ArrowRight'] || keys['d'] || keys['D']) {
+                    this.direction.x = 1;
+                }
+
+                // Normalize diagonal movement
+                if (this.direction.x !== 0 && this.direction.y !== 0) {
+                    let length = Math.sqrt(
+                        this.direction.x * this.direction.x +
+                        this.direction.y * this.direction.y
+                    );
+                    this.direction.x /= length;
+                    this.direction.y /= length;
+                }
+
+                // Calculate new position
+                let newX = this.x + this.direction.x * this.speed;
+                let newY = this.y + this.direction.y * this.speed;
+
+                // Collision detection with walls
+                if (!this.collidesWithWall(newX, this.y, map, tile_size)) {
+                    this.x = newX;
+                }
+                if (!this.collidesWithWall(this.x, newY, map, tile_size)) {
+                    this.y = newY;
+                }
+
+                // Keep player in bounds
+                this.x = Math.max(this.size / 2, Math.min(800 - this.size / 2, this.x));
+                this.y = Math.max(this.size / 2, Math.min(600 - this.size / 2, this.y));
+
+                // Update animation
+                this.animTimer++;
+                if (this.animTimer > 8) {
+                    this.animFrame = (this.animFrame + 1) % 4;
+                    this.animTimer = 0;
+                }
+
+                // Update trail
+                if (this.direction.x !== 0 || this.direction.y !== 0) {
+                    this.trail.push({ x: this.x, y: this.y, alpha: 1 });
+                    if (this.trail.length > 10) this.trail.shift();
+                }
+                this.trail.forEach(t => t.alpha -= 0.1);
+                this.trail = this.trail.filter(t => t.alpha > 0);
+            }
+
+            /**
+             * Check if player collides with any wall
+             * @param {number} x - X position to check
+             * @param {number} y - Y position to check
+             * @param {number[][]} map - Game map
+             * @param {number} tile_size - Tile size
+             * @returns {boolean} True if collision detected
+             */
+            collidesWithWall(x, y, map, tile_size) {
+                // Check all four corners of the player
+                let corners = [
+                    { x: x - this.size / 2, y: y - this.size / 2 },
+                    { x: x + this.size / 2, y: y - this.size / 2 },
+                    { x: x - this.size / 2, y: y + this.size / 2 },
+                    { x: x + this.size / 2, y: y + this.size / 2 }
+                ];
+
+                for (let corner of corners) {
+                    let tileX = Math.floor(corner.x / tile_size);
+                    let tileY = Math.floor(corner.y / tile_size);
+
+                    if (tileY >= 0 && tileY < map.length && tileX >= 0 && tileX < map[0].length) {
+                        if (map[tileY][tileX] === 1) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
+            /**
+             * Draw the player on the canvas
+             * @param {CanvasRenderingContext2D} ctx - Canvas context
+             */
+            draw(ctx) {
+                // Draw movement trail
+                this.trail.forEach(t => {
+                    ctx.beginPath();
+                    ctx.arc(t.x, t.y, this.size / 3, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(0, 200, 255, ${t.alpha * 0.3})`;
+                    ctx.fill();
+                });
+
+                // Draw player body with glow effect
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#00c8ff';
+
+                // Main body
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size / 2, 0, Math.PI * 2);
+                ctx.fillStyle = '#00c8ff';
+                ctx.fill();
+
+                // Inner circle
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size / 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#0088cc';
+                ctx.fill();
+
+                // Eyes
+                let eyeOffsetX = this.direction.x * 3;
+                let eyeOffsetY = this.direction.y * 3;
+                ctx.shadowBlur = 0;
+
+                ctx.beginPath();
+                ctx.arc(this.x - 4 + eyeOffsetX, this.y - 3 + eyeOffsetY, 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(this.x + 4 + eyeOffsetX, this.y - 3 + eyeOffsetY, 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+
+                // Pupils
+                ctx.beginPath();
+                ctx.arc(this.x - 4 + eyeOffsetX * 1.5, this.y - 3 + eyeOffsetY * 1.5, 1.5, 0, Math.PI * 2);
+                ctx.fillStyle = '#000';
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(this.x + 4 + eyeOffsetX * 1.5, this.y - 3 + eyeOffsetY * 1.5, 1.5, 0, Math.PI * 2);
+                ctx.fillStyle = '#000';
+                ctx.fill();
+            }
+
+            /**
+             * Get the center position of the player
+             * @returns {{x:number, y:number}} Center coordinates
+             */
+            getCenter() {
+                return { x: this.x, y: this.y };
+            }
+        }
+
+
+        // ============================================================
+        // ENEMY CLASS
+        // ============================================================
+        // Handles enemy AI including patrol, chase, and A* pathfinding
+        class Enemy {
+            /**
+             * Constructor for an Enemy
+             * @param {number} x - Starting X position
+             * @param {number} y - Starting Y position
+             * @param {number} patrolPoints - Array of {x, y} patrol waypoints
+             * @param {number} chaseRange - Distance to start chasing player
+             * @param {number} speed - Movement speed
+             * @param {string} color - Enemy color
+             */
+            constructor(x, y, patrolPoints, chaseRange = 150, speed = 1.5, color = '#e94560') {
+                this.x = x;
+                this.y = y;
+                this.size = 18;
+                this.patrolPoints = patrolPoints;
+                this.currentPatrolIndex = 0;
+                this.chaseRange = chaseRange;
+                this.speed = speed;
+                this.color = color;
+                this.state = 'patrol'; // 'patrol' or 'chase'
+                this.path = [];
+                this.pathTimer = 0;
+                this.pathUpdateInterval = 15; // Re-path every N frames
+                this.animFrame = 0;
+                this.animTimer = 0;
+                this.pulseTimer = 0;
+            }
+
+            /**
+             * Update enemy AI state and movement
+             * @param {Player} player - Reference to the player
+             * @param {AStar} astar - A* pathfinder instance
+             * @param {number} tile_size - Grid tile size
+             */
+            update(player, astar, tile_size) {
+                // Calculate distance to player
+                let dx = player.x - this.x;
+                let dy = player.y - this.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+
+                // Update animation
+                this.animTimer++;
+                if (this.animTimer > 6) {
+                    this.animFrame = (this.animFrame + 1) % 4;
+                    this.animTimer = 0;
+                }
+                this.pulseTimer += 0.05;
+
+                // State machine: patrol or chase
+                if (distance < this.chaseRange) {
+                    this.state = 'chase';
+                } else if (distance > this.chaseRange * 1.5) {
+                    this.state = 'patrol';
+                }
+
+                // Update path based on state
+                this.pathTimer++;
+                if (this.pathTimer >= this.pathUpdateInterval) {
+                    this.pathTimer = 0;
+                    this.updatePath(player, astar, tile_size);
+                }
+
+                // Move along path or to patrol point
+                if (this.state === 'chase' && this.path.length > 1) {
+                    this.moveAlongPath();
+                } else if (this.state === 'patrol') {
+                    this.moveToPatrolPoint();
+                }
+            }
+
+            /**
+             * Calculate path using A* algorithm
+             * @param {Player} player - The player to chase
+             * @param {AStar} astar - A* pathfinder
+             * @param {number} tile_size - Tile size for coordinate conversion
+             */
+            updatePath(player, astar, tile_size) {
+                if (this.state === 'chase') {
+                    // Convert pixel positions to tile coordinates
+                    let startTileX = Math.floor(this.x / tile_size);
+                    let startTileY = Math.floor(this.y / tile_size);
+                    let goalTileX = Math.floor(player.x / tile_size);
+                    let goalTileY = Math.floor(player.y / tile_size);
+
+                    // Find path using A*
+                    this.path = astar.findPath(
+                        startTileX, startTileY,
+                        goalTileX, goalTileY
+                    );
+                }
+            }
+
+            /**
+             * Move towards the next point in the path
+             */
+            moveAlongPath() {
+                if (this.path.length < 2) return;
+
+                // Get next target tile
+                let nextTile = this.path[1];
+                let targetX = nextTile.x * this.size + this.size / 2;
+                let targetY = nextTile.y * this.size + this.size / 2;
+
+                // Move towards target
+                let dx = targetX - this.x;
+                let dy = targetY - this.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < this.speed) {
+                    // Reached the tile, remove it from path
+                    this.path.shift();
+                } else {
+                    // Move towards target
+                    this.x += (dx / distance) * this.speed;
+                    this.y += (dy / distance) * this.speed;
+                }
+            }
+
+            /**
+             * Move towards the current patrol point
+             */
+            moveToPatrolPoint() {
+                if (this.patrolPoints.length === 0) return;
+
+                let target = this.patrolPoints[this.currentPatrolIndex];
+                let targetX = target.x * this.size + this.size / 2;
+                let targetY = target.y * this.size + this.size / 2;
+
+                let dx = targetX - this.x;
+                let dy = targetY - this.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < this.speed + 2) {
+                    // Reached patrol point, move to next
+                    this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.patrolPoints.length;
+                } else {
+                    // Move towards target
+                    this.x += (dx / distance) * this.speed * 0.7;
+                    this.y += (dy / distance) * this.speed * 0.7;
+                }
+            }
+
+            /**
+             * Draw the enemy on the canvas
+             * @param {CanvasRenderingContext2D} ctx - Canvas context
+             * @param {boolean} showPath - Whether to draw the path
+             */
+            draw(ctx, showPath = true) {
+                // Draw path visualization
+                if (showPath && this.path.length > 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    for (let i = 1; i < this.path.length; i++) {
+                        let tile = this.path[i];
+                        ctx.lineTo(
+                            tile.x * this.size + this.size / 2,
+                            tile.y * this.size + this.size / 2
+                        );
+                    }
+                    ctx.strokeStyle = 'rgba(233, 69, 96, 0.3)';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    // Draw path nodes
+                    for (let i = 1; i < Math.min(this.path.length, 20); i++) {
+                        let tile = this.path[i];
+                        ctx.beginPath();
+                        ctx.arc(
+                            tile.x * this.size + this.size / 2,
+                            tile.y * this.size + this.size / 2,
+                            3, 0, Math.PI * 2
+                        );
+                        ctx.fillStyle = 'rgba(233, 69, 96, 0.5)';
+                        ctx.fill();
+                    }
+                }
+
+                // Draw chase range indicator (subtle)
+                if (this.state === 'chase') {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.chaseRange, 0, Math.PI * 2);
+                    ctx.strokeStyle = `rgba(233, 69, 96, ${0.1 + Math.sin(this.pulseTimer) * 0.05})`;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+
+                // Draw enemy body with glow
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = this.color;
+
+                // Main body
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size / 2, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+
+                // Inner pattern
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size / 3, 0, Math.PI * 2);
+                ctx.fillStyle = this.adjustColor(this.color, -30);
+                ctx.fill();
+
+                // Angry eyes
+                ctx.shadowBlur = 0;
+                let eyeSpread = 4;
+                let eyeSize = 3;
+
+                // Left eye
+                ctx.beginPath();
+                ctx.arc(this.x - eyeSpread, this.y - 3, eyeSize, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+
+                // Right eye
+                ctx.beginPath();
+                ctx.arc(this.x + eyeSpread, this.y - 3, eyeSize, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+
+                // Angry eyebrows
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(this.x - eyeSpread - 4, this.y - 8);
+                ctx.lineTo(this.x - eyeSpread + 2, this.y - 6);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(this.x + eyeSpread + 4, this.y - 8);
+                ctx.lineTo(this.x + eyeSpread - 2, this.y - 6);
+                ctx.stroke();
+
+                // Pupils (look towards player)
+                ctx.beginPath();
+                ctx.arc(this.x - eyeSpread, this.y - 3, 1.5, 0, Math.PI * 2);
+                ctx.fillStyle = '#000';
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(this.x + eyeSpread, this.y - 3, 1.5, 0, Math.PI * 2);
+                ctx.fillStyle = '#000';
+                ctx.fill();
+
+                // State indicator
+                if (this.state === 'chase') {
+                    ctx.fillStyle = '#ff0';
+                    ctx.font = '12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('!', this.x, this.y - 15);
+                }
+            }
+
+            /**
+             * Adjust color brightness
+             * @param {string} color - Hex color string
+             * @param {number} amount - Amount to adjust
+             * @returns {string} Adjusted hex color
+             */
+            adjustColor(color, amount) {
+                let r = parseInt(color.slice(1, 3), 16) + amount;
+                let g = parseInt(color.slice(3, 5), 16) + amount;
+                let b = parseInt(color.slice(5, 7), 16) + amount;
+                r = Math.max(0, Math.min(255, r));
+                g = Math.max(0, Math.min(255, g));
+                b = Math.max(0, Math.min(255, b));
+                return `rgb(${r},${g},${b})`;
+            }
+
+            /**
+             * Check if enemy collides with player
+             * @param {Player} player - The player
+             * @returns {boolean} True if collision
+             */
+            collidesWithPlayer(player) {
+                let dx = this.x - player.x;
+                let dy = this.y - player.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                return distance < (this.size + player.size) / 2;
+            }
+        }
+
+
+        // ============================================================
+        // COIN CLASS
+        // ============================================================
+        // Collectible items that increase the score
+        class Coin {
+            /**
+             * Constructor for a Coin
+             * @param {number} x - X position
+             * @param {number} y - Y position
+             */
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.size = 10;
+                this.collected = false;
+                this.animTimer = 0;
+                this.spawnTimer = 0;
+            }
+
+            /**
+             * Update coin animation
+             */
+            update() {
+                this.animTimer += 0.05;
+                this.spawnTimer += 0.02;
+            }
+
+            /**
+             * Check if player collected this coin
+             * @param {Player} player - The player
+             * @returns {boolean} True if collected
+             */
+            isCollectedBy(player) {
+                if (this.collected) return false;
+                let dx = this.x - player.x;
+                let dy = this.y - player.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                return distance < this.size + player.size / 2;
+            }
+
+            /**
+             * Draw the coin on the canvas
+             * @param {CanvasRenderingContext2D} ctx - Canvas context
+             */
+            draw(ctx) {
+                if (this.collected) return;
+
+                // Floating animation
+                let floatY = Math.sin(this.animTimer) * 3;
+
+                // Glow effect
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#ffd700';
+
+                // Coin body
+                ctx.beginPath();
+                ctx.arc(this.x, this.y + floatY, this.size / 2, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffd700';
+                ctx.fill();
+
+                // Inner circle
+                ctx.beginPath();
+                ctx.arc(this.x, this.y + floatY, this.size / 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffed4a';
+                ctx.fill();
+
+                // Dollar sign
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#b8860b';
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('$', this.x, this.y + floatY);
+            }
+        }
+
+
+        // ============================================================
+        // GAME CLASS
+        // ============================================================
+        // Main game controller - manages all game objects and logic
+        class Game {
+            /**
+             * Constructor for the Game
+             */
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.tile_size = 40;
+                this.map_width = 20;
+                this.map_height = 15;
+
+                // Game state
+                this.score = 0;
+                this.lives = 3;
+                this.level = 1;
+                this.gameOver = false;
+                this.paused = false;
+
+                // Input handling
+                this.keys = {};
+                this.setupInput();
+
+                // Game objects
+                this.player = null;
+                this.enemies = [];
+                this.coins = [];
+                this.astar = null;
+                this.map = [];
+
+                // Initialize game
+                this.initLevel();
+                this.gameLoop();
+            }
+
+            /**
+             * Set up keyboard input handlers
+             */
+            setupInput() {
+                document.addEventListener('keydown', (e) => {
+                    this.keys[e.key] = true;
+
+                    // Restart with R key
+                    if (e.key === 'r' || e.key === 'R') {
+                        this.restart();
+                    }
+
+                    // Prevent scrolling with arrow keys
+                    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+                        e.preventDefault();
+                    }
+                });
+
+                document.addEventListener('keyup', (e) => {
+                    this.keys[e.key] = false;
+                });
+            }
+
+            /**
+             * Generate a random map with walls
+             * @returns {number[][]} 2D array representing the map
+             */
+            generateMap() {
+                let map = [];
+
+                // Initialize map with all walls
+                for (let y = 0; y < this.map_height; y++) {
+                    map[y] = [];
+                    for (let x = 0; x < this.map_width; x++) {
+                        map[y][x] = 1; // All walls initially
+                    }
+                }
+
+                // Create rooms and corridors
+                let rooms = [];
+                let numRooms = 5 + Math.floor(Math.random() * 3);
+
+                for (let i = 0; i < numRooms; i++) {
+                    let roomWidth = 3 + Math.floor(Math.random() * 4);
+                    let roomHeight = 3 + Math.floor(Math.random() * 3);
+                    let roomX = 1 + Math.floor(Math.random() * (this.map_width - roomWidth - 2));
+                    let roomY = 1 + Math.floor(Math.random() * (this.map_height - roomHeight - 2));
+
+                    // Check for overlapping rooms
+                    let overlaps = false;
+                    for (let room of rooms) {
+                        if (roomX < room.x + room.w + 1 && roomX + roomWidth + 1 > room.x &&
+                            roomY < room.y + room.h + 1 && roomY + roomHeight + 1 > room.y) {
+                            overlaps = true;
+                            break;
+                        }
+                    }
+
+                    if (!overlaps) {
+                        rooms.push({ x: roomX, y: roomY, w: roomWidth, h: roomHeight });
+
+                        // Carve out the room
+                        for (let y = roomY; y < roomY + roomHeight; y++) {
+                            for (let x = roomX; x < roomX + roomWidth; x++) {
+                                map[y][x] = 0; // Floor
+                            }
+                        }
+                    }
+                }
+
+                // Connect rooms with corridors
+                for (let i = 1; i < rooms.length; i++) {
+                    let room1 = rooms[i - 1];
+                    let room2 = rooms[i];
+
+                    let x1 = Math.floor(room1.x + room1.w / 2);
+                    let y1 = Math.floor(room1.y + room1.h / 2);
+                    let x2 = Math.floor(room2.x + room2.w / 2);
+                    let y2 = Math.floor(room2.y + room2.h / 2);
+
+                    // Horizontal corridor
+                    let startX = Math.min(x1, x2);
+                    let endX = Math.max(x1, x2);
+                    for (let x = startX; x <= endX; x++) {
+                        map[y1][x] = 0;
+                    }
+
+                    // Vertical corridor
+                    let startY = Math.min(y1, y2);
+                    let endY = Math.max(y1, y2);
+                    for (let y = startY; y <= endY; y++) {
+                        map[y][x2] = 0;
+                    }
+                }
+
+                // Add some random walls for complexity
+                for (let i = 0; i < 15; i++) {
+                    let x = Math.floor(Math.random() * this.map_width);
+                    let y = Math.floor(Math.random() * this.map_height);
+                    if (map[y][x] === 0) {
+                        // Don't block important areas
+                        let centerX = Math.floor(this.map_width / 2);
+                        let centerY = Math.floor(this.map_height / 2);
+                        if (Math.abs(x - centerX) > 2 || Math.abs(y - centerY) > 2) {
+                            map[y][x] = 1;
+                        }
+                    }
+                }
+
+                return map;
+            }
+
+            /**
+             * Initialize a new level
+             */
+            initLevel() {
+                // Generate map
+                this.map = this.generateMap();
+
+                // Create A* pathfinder
+                this.astar = new AStar(this.map_width, this.map_height, this.map);
+
+                // Find valid spawn positions
+                let spawnPositions = this.getValidPositions(3);
+
+                // Create player at first spawn position
+                this.player = new Player(
+                    spawnPositions[0].x * this.tile_size + this.tile_size / 2,
+                    spawnPositions[0].y * this.tile_size + this.tile_size / 2
+                );
+
+                // Create enemies
+                this.enemies = [];
+                let numEnemies = 2 + this.level;
+                for (let i = 1; i <= numEnemies && i < spawnPositions.length; i++) {
+                    let pos = spawnPositions[i];
+                    let patrolPoints = this.getPatrolPoints(pos.x, pos.y);
+
+                    let colors = ['#e94560', '#ff6b6b', '#c0392b', '#e74c3c', '#ff4757'];
+                    let color = colors[i % colors.length];
+
+                    this.enemies.push(new Enemy(
+                        pos.x * this.tile_size + this.tile_size / 2,
+                        pos.y * this.tile_size + this.tile_size / 2,
+                        patrolPoints,
+                        120 + this.level * 10,
+                        1.2 + this.level * 0.1,
+                        color
+                    ));
+                }
+
+                // Create coins
+                this.coins = [];
+                let numCoins = 8 + this.level * 2;
+                let coinPositions = this.getValidPositions(numCoins);
+                for (let i = 0; i < numCoins && i < coinPositions.length; i++) {
+                    let pos = coinPositions[i];
+                    this.coins.push(new Coin(
+                        pos.x * this.tile_size + this.tile_size / 2,
+                        pos.y * this.tile_size + this.tile_size / 2
+                    ));
+                }
+
+                // Update UI
+                document.getElementById('enemyCount').textContent = this.enemies.length;
+                document.getElementById('level').textContent = this.level;
+            }
+
+            /**
+             * Get valid positions for spawning (floor tiles)
+             * @param {number} count - Number of positions needed
+             * @returns {Array<{x:number, y:number}>} Array of valid positions
+             */
+            getValidPositions(count) {
+                let positions = [];
+                let attempts = 0;
+
+                while (positions.length < count && attempts < 1000) {
+                    let x = Math.floor(Math.random() * this.map_width);
+                    let y = Math.floor(Math.random() * this.map_height);
+
+                    if (this.map[y][x] === 0) {
+                        // Check if position is already taken
+                        let taken = positions.some(p => p.x === x && p.y === y);
+                        if (!taken) {
+                            positions.push({ x, y });
+                        }
+                    }
+                    attempts++;
+                }
+
+                return positions;
+            }
+
+            /**
+             * Get patrol points around a position
+             * @param {number} centerX - Center X tile coordinate
+             * @param {number} centerY - Center Y tile coordinate
+             * @returns {Array<{x:number, y:number}>} Array of patrol points
+             */
+            getPatrolPoints(centerX, centerY) {
+                let points = [];
+                let radius = 3;
+
+                // Create patrol points in a pattern around the center
+                for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 2) {
+                    let px = centerX + Math.round(Math.cos(angle) * radius);
+                    let py = centerY + Math.round(Math.sin(angle) * radius);
+
+                    // Ensure patrol point is on walkable tile
+                    if (px >= 0 && px < this.map_width && py >= 0 && py < this.map_height) {
+                        if (this.map[py][px] === 0) {
+                            points.push({ x: px, y: py });
+                        }
+                    }
+                }
+
+                // If no valid points found, use center
+                if (points.length === 0) {
+                    points.push({ x: centerX, y: centerY });
+                }
+
+                return points;
+            }
+
+            /**
+             * Update all game objects
+             */
+            update() {
+                if (this.gameOver || this.paused) return;
+
+                // Update player
+                this.player.update(this.keys, this.map, this.tile_size);
+
+                // Update enemies
+                this.enemies.forEach(enemy => {
+                    enemy.update(this.player, this.astar, this.tile_size);
+                });
+
+                // Update coins
+                this.coins.forEach(coin => coin.update());
+
+                // Check coin collection
+                this.coins.forEach(coin => {
+                    if (coin.isCollectedBy(this.player)) {
+                        coin.collected = true;
+                        this.score += 10;
+                        document.getElementById('score').textContent = this.score;
+                    }
+                });
+
+                // Remove collected coins
+                this.coins = this.coins.filter(c => !c.collected);
+
+                // Check if all coins collected - next level
+                if (this.coins.length === 0) {
+                    this.level++;
+                    this.initLevel();
+                    return;
+                }
+
+                // Check enemy collisions
+                this.enemies.forEach(enemy => {
+                    if (enemy.collidesWithPlayer(this.player)) {
+                        this.lives--;
+                        document.getElementById('lives').textContent = this.lives;
+
+                        // Reset player position
+                        let spawnPos = this.getValidPositions(1)[0];
+                        this.player.x = spawnPos.x * this.tile_size + this.tile_size / 2;
+                        this.player.y = spawnPos.y * this.tile_size + this.tile_size / 2;
+
+                        // Check game over
+                        if (this.lives <= 0) {
+                            this.endGame();
+                        }
+                    }
+                });
+            }
+
+            /**
+             * Render the game
+             */
+            draw() {
+                // Clear canvas
+                this.ctx.fillStyle = '#0a0a1a';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // Draw map
+                this.drawMap();
+
+                // Draw coins
+                this.coins.forEach(coin => coin.draw(this.ctx));
+
+                // Draw enemies
+                this.enemies.forEach(enemy => enemy.draw(this.ctx, true));
+
+                // Draw player
+                this.player.draw(this.ctx);
+
+                // Draw game over overlay
+                if (this.gameOver) {
+                    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                }
+            }
+
+            /**
+             * Draw the game map
+             */
+            drawMap() {
+                for (let y = 0; y < this.map_height; y++) {
+                    for (let x = 0; x < this.map_width; x++) {
+                        let tileX = x * this.tile_size;
+                        let tileY = y * this.tile_size;
+
+                        if (this.map[y][x] === 1) {
+                            // Draw wall
+                            this.ctx.fillStyle = '#16213e';
+                            this.ctx.fillRect(tileX, tileY, this.tile_size, this.tile_size);
+
+                            // Wall border
+                            this.ctx.strokeStyle = '#0f3460';
+                            this.ctx.lineWidth = 1;
+                            this.ctx.strokeRect(tileX, tileY, this.tile_size, this.tile_size);
+
+                            // Wall highlight
+                            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+                            this.ctx.fillRect(tileX, tileY, this.tile_size, 2);
+                            this.ctx.fillRect(tileX, tileY, 2, this.tile_size);
+                        } else {
+                            // Draw floor
+                            this.ctx.fillStyle = '#1a1a2e';
+                            this.ctx.fillRect(tileX, tileY, this.tile_size, this.tile_size);
+
+                            // Floor grid
+                            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+                            this.ctx.lineWidth = 1;
+                            this.ctx.strokeRect(tileX, tileY, this.tile_size, this.tile_size);
+                        }
+                    }
+                }
+            }
+
+            /**
+             * Handle game over
+             */
+            endGame() {
+                this.gameOver = true;
+                document.getElementById('finalScore').textContent = this.score;
+                document.getElementById('gameOver').style.display = 'block';
+            }
+
+            /**
+             * Restart the game
+             */
+            restart() {
+                this.score = 0;
+                this.lives = 3;
+                this.level = 1;
+                this.gameOver = false;
+                this.keys = {};
+
+                document.getElementById('score').textContent = this.score;
+                document.getElementById('lives').textContent = this.lives;
+                document.getElementById('gameOver').style.display = 'none';
+
+                this.initLevel();
+            }
+
+            /**
+             * Main game loop
+             */
+            gameLoop() {
+                this.update();
+                this.draw();
+                requestAnimationFrame(() => this.gameLoop());
+            }
+        }
+
+
+        // ============================================================
+        // START THE GAME
+        // ============================================================
+        // Create the game instance when the page loads
+        let game;
+        window.addEventListener('load', () => {
+            game = new Game();
+        });
+    </script>
+</body>
+</html>

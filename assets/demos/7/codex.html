@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ground Digger</title>
+  <style>
+    :root{
+      --bg:#101820;
+      --panel:#1b2838;
+      --text:#eaf2ff;
+      --accent:#5ad1ff;
+      --danger:#ff6b6b;
+      --good:#78e08f;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      background:linear-gradient(180deg,#0a1220,#101820 55%,#1a140f);
+      color:var(--text);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      display:flex;
+      min-height:100vh;
+      align-items:center;
+      justify-content:center;
+      padding:14px;
+    }
+    .wrap{
+      width:min(96vw,840px);
+      background:rgba(20,28,42,0.9);
+      border:1px solid #2b3a4d;
+      border-radius:14px;
+      box-shadow:0 12px 30px rgba(0,0,0,0.35);
+      overflow:hidden;
+    }
+    .top{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px 18px;
+      align-items:center;
+      justify-content:space-between;
+      padding:10px 14px;
+      background:#152234;
+      border-bottom:1px solid #27384e;
+      font-size:14px;
+    }
+    .stats{
+      display:flex;
+      gap:14px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .pill{
+      background:#233449;
+      border:1px solid #385170;
+      border-radius:999px;
+      padding:5px 10px;
+      white-space:nowrap;
+    }
+    #msg{
+      color:var(--accent);
+      font-weight:700;
+      letter-spacing:.2px;
+    }
+    .bar{
+      width:140px;
+      height:11px;
+      border-radius:999px;
+      overflow:hidden;
+      background:#0f1a29;
+      border:1px solid #355072;
+      display:inline-block;
+      vertical-align:middle;
+      margin-left:6px;
+    }
+    .bar > span{
+      display:block;
+      height:100%;
+      width:100%;
+      background:linear-gradient(90deg,#5dd9ff,#7ef29c);
+      transition:width .12s linear, background .2s linear;
+    }
+    .canvas-wrap{
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      background:#0f1722;
+      padding:10px;
+    }
+    canvas{
+      width:100%;
+      max-width:768px;
+      image-rendering:pixelated;
+      image-rendering:crisp-edges;
+      border:1px solid #2b3d56;
+      border-radius:10px;
+      background:#89d2ff;
+      display:block;
+    }
+    .controls{
+      padding:10px 14px 14px;
+      border-top:1px solid #25364b;
+      color:#bed3ef;
+      font-size:13px;
+      display:flex;
+      justify-content:space-between;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+    .mobile{
+      display:grid;
+      grid-template-columns:repeat(3,56px);
+      grid-template-rows:repeat(2,56px);
+      gap:8px;
+      justify-content:center;
+      margin:8px auto 0;
+      user-select:none;
+      -webkit-user-select:none;
+      touch-action:none;
+    }
+    .btn{
+      border:none;
+      border-radius:10px;
+      background:#24364d;
+      color:#dff0ff;
+      font-size:24px;
+      font-weight:700;
+      box-shadow:inset 0 -2px 0 rgba(0,0,0,0.25);
+    }
+    .btn:active{transform:translateY(1px)}
+    .blank{visibility:hidden}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="stats">
+        <span class="pill">Score: <b id="score">0</b></span>
+        <span class="pill">Gems: <b id="gems">0</b>/<b id="gemsTotal">0</b></span>
+        <span class="pill">Depth: <b id="depth">0</b>m</span>
+        <span class="pill">Oxygen
+          <span class="bar"><span id="oxyFill"></span></span>
+        </span>
+      </div>
+      <div id="msg">Dig down and collect gems!</div>
+    </div>
+
+    <div class="canvas-wrap">
+      <canvas id="game" width="768" height="576"></canvas>
+    </div>
+
+    <div class="controls">
+      <div>Move: Arrow Keys / WASD • Dig by moving into dirt • R: Restart</div>
+      <div>Refill oxygen near surface (blue sky).</div>
+    </div>
+
+    <div class="mobile">
+      <button class="btn blank"></button>
+      <button class="btn" data-k="ArrowUp">▲</button>
+      <button class="btn blank"></button>
+      <button class="btn" data-k="ArrowLeft">◀</button>
+      <button class="btn" data-k="ArrowDown">▼</button>
+      <button class="btn" data-k="ArrowRight">▶</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const scoreEl = document.getElementById('score');
+    const gemsEl = document.getElementById('gems');
+    const gemsTotalEl = document.getElementById('gemsTotal');
+    const depthEl = document.getElementById('depth');
+    const msgEl = document.getElementById('msg');
+    const oxyFill = document.getElementById('oxyFill');
+
+    const TILE = 32;
+    const COLS = canvas.width / TILE;   // 24
+    const ROWS = canvas.height / TILE;  // 18
+    const SKY_ROWS = 2;
+
+    // Tile IDs
+    const EMPTY = 0;
+    const DIRT  = 1;
+    const ROCK  = 2;
+    const GEM   = 3;
+
+    let grid, player, score, gems, totalGems, oxygen, gameOver, won;
+    let keys = {};
+    let lastMove = 0;
+    let lastGravity = 0;
+    let lastTime = 0;
+
+    const MOVE_DELAY = 95;
+    const GRAVITY_DELAY = 80;
+
+    function init() {
+      grid = Array.from({length: ROWS}, (_, y) => {
+        return Array.from({length: COLS}, (_, x) => {
+          if (y < SKY_ROWS) return EMPTY;
+
+          // Keep side borders as rock deep down
+          if ((x === 0 || x === COLS - 1) && y > SKY_ROWS + 2) return ROCK;
+
+          const r = Math.random();
+          if (r < 0.74) return DIRT;
+          if (r < 0.90) return ROCK;
+          return GEM;
+        });
+      });
+
+      // Create a starting shaft
+      const sx = Math.floor(COLS / 2);
+      for (let y = 0; y < 4; y++) grid[y][sx] = EMPTY;
+      for (let y = 2; y < 5; y++) {
+        if (sx - 1 >= 0) grid[y][sx - 1] = DIRT;
+        if (sx + 1 < COLS) grid[y][sx + 1] = DIRT;
+      }
+
+      totalGems = 0;
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          if (grid[y][x] === GEM) totalGems++;
+        }
+      }
+
+      player = { x: sx, y: 1, bob: 0 };
+      score = 0;
+      gems = 0;
+      oxygen = 100;
+      gameOver = false;
+      won = false;
+      lastMove = 0;
+      lastGravity = 0;
+      msgEl.textContent = "Dig down and collect gems!";
+      updateUI();
+    }
+
+    function updateUI() {
+      scoreEl.textContent = score;
+      gemsEl.textContent = gems;
+      gemsTotalEl.textContent = totalGems;
+      depthEl.textContent = Math.max(0, player.y - (SKY_ROWS - 1));
+      oxyFill.style.width = Math.max(0, Math.min(100, oxygen)) + "%";
+      if (oxygen > 45) oxyFill.style.background = "linear-gradient(90deg,#5dd9ff,#7ef29c)";
+      else if (oxygen > 20) oxyFill.style.background = "linear-gradient(90deg,#ffd166,#f6b93b)";
+      else oxyFill.style.background = "linear-gradient(90deg,#ff8a8a,#ff4d4d)";
+    }
+
+    function tryMove(dx, dy) {
+      if (gameOver || won) return;
+      const nx = player.x + dx;
+      const ny = player.y + dy;
+      if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return;
+
+      const tile = grid[ny][nx];
+      if (tile === EMPTY) {
+        player.x = nx; player.y = ny;
+      } else if (tile === DIRT) {
+        grid[ny][nx] = EMPTY;
+        player.x = nx; player.y = ny;
+        score += 1;
+      } else if (tile === GEM) {
+        grid[ny][nx] = EMPTY;
+        player.x = nx; player.y = ny;
+        gems++;
+        score += 25;
+        if (gems >= totalGems) {
+          won = true;
+          msgEl.textContent = "You collected all gems! Press R to play again.";
+        }
+      } else if (tile === ROCK) {
+        // blocked
+      }
+      updateUI();
+    }
+
+    function applyGravity(now) {
+      if (now - lastGravity < GRAVITY_DELAY || gameOver || won) return;
+      lastGravity = now;
+      const by = player.y + 1;
+      if (by < ROWS && grid[by][player.x] === EMPTY) {
+        player.y++;
+        player.bob = 1;
+        updateUI();
+      } else {
+        player.bob = 0;
+      }
+    }
+
+    function update(dt, now) {
+      if (!gameOver && !won) {
+        // Oxygen logic
+        if (player.y < SKY_ROWS) oxygen += dt * 14; // refill near surface
+        else oxygen -= dt * 6.5; // drain underground
+        oxygen = Math.max(0, Math.min(100, oxygen));
+        if (oxygen <= 0) {
+          gameOver = true;
+          msgEl.textContent = "Out of oxygen! Press R to restart.";
+        }
+
+        // Movement
+        if (now - lastMove > MOVE_DELAY) {
+          if (keys["ArrowLeft"] || keys["a"] || keys["A"]) { tryMove(-1, 0); lastMove = now; }
+          else if (keys["ArrowRight"] || keys["d"] || keys["D"]) { tryMove(1, 0); lastMove = now; }
+          else if (keys["ArrowUp"] || keys["w"] || keys["W"]) { tryMove(0, -1); lastMove = now; }
+          else if (keys["ArrowDown"] || keys["s"] || keys["S"]) { tryMove(0, 1); lastMove = now; }
+        }
+
+        applyGravity(now);
+        updateUI();
+      }
+    }
+
+    function drawTile(x, y, id) {
+      const px = x * TILE, py = y * TILE;
+      if (id === EMPTY) {
+        if (y < SKY_ROWS) {
+          const g = ctx.createLinearGradient(0, py, 0, py + TILE);
+          g.addColorStop(0, "#95deff");
+          g.addColorStop(1, "#7cc8f3");
+          ctx.fillStyle = g;
+          ctx.fillRect(px, py, TILE, TILE);
+          // clouds
+          if ((x * 17 + y * 13) % 19 === 0) {
+            ctx.fillStyle = "rgba(255,255,255,0.4)";
+            ctx.fillRect(px + 8, py + 10, 16, 6);
+          }
+        } else {
+          ctx.fillStyle = "#19140f";
+          ctx.fillRect(px, py, TILE, TILE);
+          // tunnel texture
+          ctx.fillStyle = "rgba(255,255,255,0.03)";
+          ctx.fillRect(px + 5, py + 8, 3, 3);
+          ctx.fillRect(px + 20, py + 19, 2, 2);
+        }
+      } else if (id === DIRT) {
+        ctx.fillStyle = "#6e4d2f";
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.fillStyle = "#7d5938";
+        ctx.fillRect(px + 2, py + 3, TILE - 4, TILE - 6);
+        ctx.fillStyle = "#8b6645";
+        for (let i = 0; i < 5; i++) {
+          ctx.fillRect(px + 4 + ((i * 5) % 22), py + 6 + ((i * 7) % 18), 3, 2);
+        }
+      } else if (id === ROCK) {
+        ctx.fillStyle = "#49525d";
+        ctx.fillRect(px, py, TILE, TILE);
+        ctx.strokeStyle = "#66717e";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(px+3,py+8); ctx.lineTo(px+13,py+4); ctx.lineTo(px+25,py+9);
+        ctx.moveTo(px+6,py+20); ctx.lineTo(px+16,py+14); ctx.lineTo(px+27,py+20);
+        ctx.stroke();
+      } else if (id === GEM) {
+        // Dirt base
+        ctx.fillStyle = "#67482d";
+        ctx.fillRect(px, py, TILE, TILE);
+        // Gem
+        ctx.fillStyle = "#37f0ff";
+        ctx.beginPath();
+        ctx.moveTo(px + 16, py + 6);
+        ctx.lineTo(px + 25, py + 14);
+        ctx.lineTo(px + 20, py + 25);
+        ctx.lineTo(px + 12, py + 25);
+        ctx.lineTo(px + 7, py + 14);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.65)";
+        ctx.fillRect(px + 14, py + 10, 4, 4);
+      }
+    }
+
+    function drawPlayer() {
+      const px = player.x * TILE;
+      const py = player.y * TILE + (player.bob ? 1 : 0);
+
+      // body
+      ctx.fillStyle = "#ffd166";
+      ctx.fillRect(px + 8, py + 8, 16, 16);
+
+      // helmet
+      ctx.fillStyle = "#f3c14f";
+      ctx.fillRect(px + 6, py + 4, 20, 8);
+
+      // visor
+      ctx.fillStyle = "#89e8ff";
+      ctx.fillRect(px + 10, py + 10, 12, 5);
+
+      // drill/pick hint
+      ctx.fillStyle = "#cfd9e6";
+      ctx.fillRect(px + 22, py + 18, 8, 3);
+
+      // outline
+      ctx.strokeStyle = "rgba(0,0,0,0.35)";
+      ctx.strokeRect(px + 8, py + 8, 16, 16);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          drawTile(x, y, grid[y][x]);
+        }
+      }
+
+      // surface line
+      ctx.fillStyle = "rgba(255,255,255,0.25)";
+      ctx.fillRect(0, SKY_ROWS * TILE - 2, canvas.width, 2);
+
+      drawPlayer();
+
+      if (gameOver || won) {
+        ctx.fillStyle = "rgba(0,0,0,0.45)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.font = "bold 36px system-ui, sans-serif";
+        ctx.fillText(gameOver ? "Game Over" : "You Win!", canvas.width/2, canvas.height/2 - 18);
+        ctx.font = "20px system-ui, sans-serif";
+        ctx.fillText("Press R to Restart", canvas.width/2, canvas.height/2 + 20);
+      }
+    }
+
+    function loop(ts) {
+      const now = ts || 0;
+      const dt = Math.min(0.033, (now - lastTime) / 1000 || 0);
+      lastTime = now;
+
+      update(dt, now);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "r" || e.key === "R") {
+        init();
+        return;
+      }
+      if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault();
+      keys[e.key] = true;
+    });
+
+    window.addEventListener("keyup", (e) => {
+      keys[e.key] = false;
+    });
+
+    // Mobile buttons
+    document.querySelectorAll(".btn[data-k]").forEach(btn => {
+      const key = btn.getAttribute("data-k");
+      const down = (ev) => { ev.preventDefault(); keys[key] = true; };
+      const up = (ev) => { ev.preventDefault(); keys[key] = false; };
+      btn.addEventListener("touchstart", down, {passive:false});
+      btn.addEventListener("touchend", up, {passive:false});
+      btn.addEventListener("touchcancel", up, {passive:false});
+      btn.addEventListener("mousedown", down);
+      btn.addEventListener("mouseup", up);
+      btn.addEventListener("mouseleave", up);
+    });
+
+    init();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

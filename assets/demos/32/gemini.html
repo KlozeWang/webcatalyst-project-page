@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Rhythm Dance</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0f172a; /* Tailwind slate-900 */
+            touch-action: none;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            background: rgba(15, 23, 42, 0.8);
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+            pointer-events: auto;
+            backdrop-filter: blur(5px);
+        }
+        .screen.active {
+            display: flex;
+        }
+        button {
+            pointer-events: auto;
+            transition: all 0.2s ease;
+        }
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 15px currentColor;
+        }
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            color: white;
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-shadow: 0 0 5px rgba(255,255,255,0.5);
+            box-sizing: border-box;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { text-shadow: 0 0 10px #ec4899, 0 0 20px #ec4899; }
+            50% { text-shadow: 0 0 20px #ec4899, 0 0 30px #ec4899, 0 0 40px #ec4899; }
+        }
+        .title-glow {
+            animation: pulse-glow 2s infinite;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="hud" style="display: none;">
+        <div>Score: <span id="scoreDisplay">0</span></div>
+        <div>Combo: <span id="comboDisplay">x1</span></div>
+    </div>
+
+    <div id="ui-layer">
+        <!-- Start Screen -->
+        <div id="startScreen" class="screen active text-white text-center">
+            <h1 class="text-5xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-violet-500 title-glow">NEON DANCE</h1>
+            <p class="mb-8 text-gray-300">Catch the beats on the dance floor!</p>
+            <p class="mb-4 text-sm text-gray-400">Controls: Left/Right Arrows or Touch/Drag</p>
+            <button id="startBtn" class="px-8 py-3 bg-gradient-to-r from-pink-600 to-purple-600 rounded-full font-bold text-xl uppercase tracking-wider text-white border-2 border-pink-400">
+                Play Now
+            </button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="screen text-white text-center">
+            <h2 class="text-4xl font-black mb-2 text-red-500" style="text-shadow: 0 0 10px red;">DANCE OVER</h2>
+            <p class="text-xl mb-2">Final Score: <span id="finalScore" class="font-bold text-pink-400">0</span></p>
+            <p class="text-md mb-8 text-gray-400">Max Combo: <span id="maxCombo" class="font-bold text-purple-400">0</span></p>
+            <button id="restartBtn" class="px-8 py-3 bg-gradient-to-r from-pink-600 to-purple-600 rounded-full font-bold text-xl uppercase tracking-wider text-white border-2 border-pink-400">
+                Dance Again
+            </button>
+        </div>
+    </div>
+
+<script>
+/**
+ * Neon Rhythm Dance Game
+ */
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// UI Elements
+const startScreen = document.getElementById('startScreen');
+const gameOverScreen = document.getElementById('gameOverScreen');
+const hud = document.getElementById('hud');
+const scoreDisplay = document.getElementById('scoreDisplay');
+const comboDisplay = document.getElementById('comboDisplay');
+const finalScoreDisplay = document.getElementById('finalScore');
+const maxComboDisplay = document.getElementById('maxCombo');
+const startBtn = document.getElementById('startBtn');
+const restartBtn = document.getElementById('restartBtn');
+
+// Game State
+let gameState = 'start'; // start, playing, gameover
+let score = 0;
+let combo = 1;
+let maxCombo = 1;
+let health = 100;
+let baseSpeed = 3;
+let speedMultiplier = 1;
+let lastTime = 0;
+let beatTimer = 0;
+let beatInterval = 1000; // ms between beats spawning
+
+// Resize Canvas
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Audio System (Web Audio API)
+let audioCtx;
+const scales = [
+    [261.63, 329.63, 392.00, 523.25], // C Major chord notes
+    [440.00, 523.25, 659.25, 880.00]  // A Minor chord notes
+];
+let currentScale = scales[0];
+
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}
+
+function playSound(type) {
+    if (!audioCtx) return;
+
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    const now = audioCtx.currentTime;
+
+    if (type === 'hit') {
+        osc.type = 'sine';
+        const freq = currentScale[Math.floor(Math.random() * currentScale.length)];
+        osc.frequency.setValueAtTime(freq, now);
+        gainNode.gain.setValueAtTime(0.1, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+        osc.start(now);
+        osc.stop(now + 0.5);
+    } else if (type === 'miss') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(50, now + 0.3);
+        gainNode.gain.setValueAtTime(0.1, now);
+        gainNode.gain.linearRampToValueAtTime(0, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+    } else if (type === 'gameover') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(200, now);
+        osc.frequency.exponentialRampToValueAtTime(20, now + 1);
+        gainNode.gain.setValueAtTime(0.2, now);
+        gainNode.gain.linearRampToValueAtTime(0, now + 1);
+        osc.start(now);
+        osc.stop(now + 1);
+    }
+}
+
+// Entities
+class Player {
+    constructor() {
+        this.width = Math.min(100, canvas.width * 0.2);
+        this.height = 20;
+        this.x = canvas.width / 2 - this.width / 2;
+        this.y = canvas.height - 50;
+        this.vx = 0;
+        this.speed = 10;
+        this.color = '#a855f7'; // purple-500
+        this.glowColor = '#d8b4fe';
+    }
+
+    update() {
+        if (keys.left) this.vx = -this.speed;
+        else if (keys.right) this.vx = this.speed;
+        else this.vx *= 0.8; // friction
+
+        // Touch handling
+        if (targetX !== null) {
+            const dx = targetX - (this.x + this.width/2);
+            this.vx = dx * 0.2; // Smooth follow
+        }
+
+        this.x += this.vx;
+
+        // Bounds
+        if (this.x < 0) this.x = 0;
+        if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+        
+        // Update Y on resize
+        this.y = canvas.height - 50;
+    }
+
+    draw(ctx) {
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = this.glowColor;
+        ctx.fillStyle = this.color;
+        
+        // Draw main bar
+        ctx.beginPath();
+        ctx.roundRect(this.x, this.y, this.width, this.height, 10);
+        ctx.fill();
+
+        // Draw "dancers" (abstract circles on the bar)
+        ctx.fillStyle = '#ec4899'; // pink-500
+        ctx.shadowColor = '#fbcfe8';
+        const bounce = Math.sin(Date.now() / 150) * 5;
+        
+        ctx.beginPath();
+        ctx.arc(this.x + this.width*0.3, this.y - 15 + bounce, 12, 0, Math.PI*2);
+        ctx.fill();
+        
+        ctx.fillStyle = '#3b82f6'; // blue-500
+        ctx.shadowColor = '#bfdbfe';
+        ctx.beginPath();
+        ctx.arc(this.x + this.width*0.7, this.y - 15 - bounce, 12, 0, Math.PI*2);
+        ctx.fill();
+        
+        ctx.shadowBlur = 0;
+    }
+}
+
+class Beat {
+    constructor() {
+        this.radius = 15;
+        this.x = this.radius + Math.random() * (canvas.width - this.radius * 2);
+        this.y = -30;
+        this.vy = baseSpeed * speedMultiplier;
+        
+        const colors = [
+            { c: '#ec4899', g: '#fbcfe8' }, // pink
+            { c: '#3b82f6', g: '#bfdbfe' }, // blue
+            { c: '#10b981', g: '#a7f3d0' }, // emerald
+            { c: '#eab308', g: '#fef08a' }  // yellow
+        ];
+        const theme = colors[Math.floor(Math.random() * colors.length)];
+        this.color = theme.c;
+        this.glowColor = theme.g;
+        
+        // Wobble effect
+        this.wobbleSpeed = Math.random() * 0.1 + 0.05;
+        this.wobbleOffset = Math.random() * Math.PI * 2;
+        this.baseX = this.x;
+    }
+
+    update() {
+        this.y += this.vy;
+        this.x = this.baseX + Math.sin(this.y * this.wobbleSpeed + this.wobbleOffset) * 20;
+    }
+
+    draw(ctx) {
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = this.glowColor;
+        ctx.fillStyle = this.color;
+        
+        // Draw diamond shape
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y - this.radius);
+        ctx.lineTo(this.x + this.radius, this.y);
+        ctx.lineTo(this.x, this.y + this.radius);
+        ctx.lineTo(this.x - this.radius, this.y);
+        ctx.closePath();
+        ctx.fill();
+        
+        ctx.shadowBlur = 0;
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 10;
+        this.vy = (Math.random() - 0.5) * 10 - 2;
+        this.life = 1;
+        this.decay = Math.random() * 0.02 + 0.02;
+        this.color = color;
+        this.size = Math.random() * 4 + 2;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= this.decay;
+    }
+    draw(ctx) {
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+}
+
+// Background lines for effect
+const bgLines = Array.from({length: 10}, () => ({
+    x: Math.random() * window.innerWidth,
+    speed: Math.random() * 2 + 1,
+    width: Math.random() * 3 + 1,
+    alpha: Math.random() * 0.2 + 0.05
+}));
+
+// Game variables
+let player;
+let beats = [];
+let particles = [];
+let keys = { left: false, right: false };
+let targetX = null;
+
+// Input Handling
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'ArrowLeft') keys.left = true;
+    if (e.code === 'ArrowRight') keys.right = true;
+});
+window.addEventListener('keyup', (e) => {
+    if (e.code === 'ArrowLeft') keys.left = false;
+    if (e.code === 'ArrowRight') keys.right = false;
+});
+
+// Touch/Mouse handling
+function handlePointer(e) {
+    if (gameState !== 'playing') return;
+    e.preventDefault();
+    let clientX;
+    if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+    } else {
+        clientX = e.clientX;
+    }
+    targetX = clientX;
+}
+
+function handlePointerEnd() {
+    targetX = null;
+}
+
+canvas.addEventListener('touchstart', handlePointer, {passive: false});
+canvas.addEventListener('touchmove', handlePointer, {passive: false});
+canvas.addEventListener('touchend', handlePointerEnd);
+canvas.addEventListener('mousedown', (e) => { targetX = e.clientX; });
+canvas.addEventListener('mousemove', (e) => { if(targetX !== null) targetX = e.clientX; });
+canvas.addEventListener('mouseup', handlePointerEnd);
+canvas.addEventListener('mouseleave', handlePointerEnd);
+
+// Game Logic
+function startGame() {
+    initAudio();
+    gameState = 'playing';
+    score = 0;
+    combo = 1;
+    maxCombo = 1;
+    health = 100;
+    speedMultiplier = 1;
+    beatInterval = 1000;
+    beats = [];
+    particles = [];
+    player = new Player();
+    
+    startScreen.classList.remove('active');
+    gameOverScreen.classList.remove('active');
+    hud.style.display = 'flex';
+    updateHUD();
+    
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+}
+
+function gameOver() {
+    gameState = 'gameover';
+    playSound('gameover');
+    hud.style.display = 'none';
+    gameOverScreen.classList.add('active');
+    finalScoreDisplay.innerText = score;
+    maxComboDisplay.innerText = maxCombo;
+}
+
+function spawnBeat() {
+    beats.push(new Beat());
+}
+
+function createExplosion(x, y, color) {
+    for (let i = 0; i < 15; i++) {
+        particles.push(new Particle(x, y, color));
+    }
+}
+
+function updateHUD() {
+    scoreDisplay.innerText = score;
+    comboDisplay.innerText = `x${combo}`;
+    
+    // Scale bump effect
+    comboDisplay.style.transform = 'scale(1.5)';
+    comboDisplay.style.color = combo > 5 ? '#f472b6' : 'white';
+    setTimeout(() => {
+        comboDisplay.style.transform = 'scale(1)';
+    }, 100);
+}
+
+function drawBackground(ctx) {
+    // Slight fade for motion blur
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.3)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw grid lines
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.1)';
+    ctx.lineWidth = 1;
+    
+    // Perspective lines
+    const cx = canvas.width / 2;
+    for (let i = 0; i <= canvas.width; i += canvas.width/10) {
+        ctx.beginPath();
+        ctx.moveTo(cx, 0);
+        ctx.lineTo(i, canvas.height);
+        ctx.stroke();
+    }
+
+    // Moving vertical lines
+    bgLines.forEach(line => {
+        line.x += line.speed;
+        if(line.x > canvas.width) line.x = 0;
+        
+        ctx.fillStyle = `rgba(236, 72, 153, ${line.alpha})`;
+        ctx.fillRect(line.x, 0, line.width, canvas.height);
+    });
+}
+
+function gameLoop(timestamp) {
+    if (gameState !== 'playing') return;
+
+    const deltaTime = timestamp - lastTime;
+    lastTime = timestamp;
+
+    // Clear & Draw BG
+    drawBackground(ctx);
+
+    // Progression
+    beatTimer += deltaTime;
+    if (beatTimer > beatInterval) {
+        spawnBeat();
+        beatTimer = 0;
+        
+        // Increase difficulty
+        if (speedMultiplier < 3) {
+            speedMultiplier += 0.02;
+            beatInterval = Math.max(300, 1000 - (speedMultiplier * 200));
+        }
+        
+        // Change chord occasionally
+        if(Math.random() < 0.1) {
+            currentScale = currentScale === scales[0] ? scales[1] : scales[0];
+        }
+    }
+
+    // Update & Draw Player
+    player.update();
+    player.draw(ctx);
+
+    // Update & Draw Beats
+    for (let i = beats.length - 1; i >= 0; i--) {
+        const b = beats[i];
+        b.update();
+        b.draw(ctx);
+
+        // Collision Check (AABB with a little leniency)
+        const hitZoneY = player.y - 10;
+        if (b.y + b.radius > hitZoneY && b.y - b.radius < player.y + player.height) {
+            if (b.x + b.radius > player.x && b.x - b.radius < player.x + player.width) {
+                // Caught!
+                score += 10 * combo;
+                combo++;
+                if (combo > maxCombo) maxCombo = combo;
+                playSound('hit');
+                createExplosion(b.x, b.y, b.color);
+                beats.splice(i, 1);
+                updateHUD();
+                continue;
+            }
+        }
+
+        // Missed Check
+        if (b.y - b.radius > canvas.height) {
+            combo = 1;
+            health -= 25;
+            playSound('miss');
+            beats.splice(i, 1);
+            updateHUD();
+            
+            // Screen shake effect logic could go here
+            ctx.fillStyle = 'rgba(255,0,0,0.2)';
+            ctx.fillRect(0,0,canvas.width, canvas.height);
+
+            if (health <= 0) {
+                gameOver();
+                return; // Stop current frame
+            }
+        }
+    }
+
+    // Draw Health Bar at bottom
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fillRect(0, canvas.height - 5, canvas.width, 5);
+    ctx.fillStyle = health > 50 ? '#10b981' : (health > 25 ? '#eab308' : '#ef4444');
+    ctx.fillRect(0, canvas.height - 5, canvas.width * (health/100), 5);
+
+    // Update & Draw Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.update();
+        p.draw(ctx);
+        if (p.life <= 0) {
+            particles.splice(i, 1);
+        }
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+// Initial draw for background
+drawBackground(ctx);
+
+// Button Listeners
+startBtn.addEventListener('click', startGame);
+restartBtn.addEventListener('click', startGame);
+
+</script>
+</body>
+</html>

@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Eldoria: Sacred Crystals</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #08111f;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    background: radial-gradient(circle at center, #1a2a45 0%, #0d1524 55%, #05090f 100%);
+  }
+  .hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    color: #e8f3ff;
+    text-shadow: 0 2px 8px rgba(0,0,0,.7);
+  }
+  .topbar {
+    position: absolute;
+    left: 14px;
+    top: 10px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .chip {
+    background: rgba(10, 15, 25, 0.55);
+    border: 1px solid rgba(175, 220, 255, 0.18);
+    border-radius: 999px;
+    padding: 8px 12px;
+    backdrop-filter: blur(6px);
+  }
+  .healthWrap {
+    position: absolute;
+    left: 14px;
+    top: 52px;
+    width: 240px;
+    height: 16px;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .healthBar {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #42f57b, #d9ff4f);
+    box-shadow: 0 0 10px rgba(66,245,123,.45);
+    transition: width .15s linear;
+  }
+  .msg {
+    position: absolute;
+    left: 50%;
+    top: 14%;
+    transform: translateX(-50%);
+    text-align: center;
+    max-width: 90vw;
+    opacity: 0;
+    transition: opacity .35s ease;
+  }
+  .msg.show { opacity: 1; }
+  .msg .title {
+    font-size: clamp(28px, 5vw, 64px);
+    font-weight: 900;
+    letter-spacing: 1px;
+    color: #f7fbff;
+  }
+  .msg .sub {
+    margin-top: 8px;
+    font-size: clamp(14px, 2vw, 20px);
+    color: #d0e7ff;
+  }
+  .controls {
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    width: min(92vw, 720px);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 18px;
+  }
+  .pad, .buttons {
+    pointer-events: auto;
+  }
+  .pad {
+    width: 140px;
+    height: 140px;
+    position: relative;
+    opacity: .92;
+  }
+  .btn {
+    position: absolute;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.2);
+    background: rgba(25,35,55,.55);
+    color: white;
+    font-weight: 800;
+    display: grid;
+    place-items: center;
+    box-shadow: 0 8px 20px rgba(0,0,0,.25);
+    backdrop-filter: blur(4px);
+    pointer-events: auto;
+  }
+  .btn:active { transform: scale(.96); }
+  .up { left: 49px; top: 0; }
+  .down { left: 49px; bottom: 0; }
+  .left { top: 49px; left: 0; }
+  .right { top: 49px; right: 0; }
+  .centerHint {
+    position: absolute;
+    left: 50%;
+    bottom: 162px;
+    transform: translateX(-50%);
+    color: rgba(255,255,255,.8);
+    font-size: 13px;
+    background: rgba(0,0,0,.25);
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.12);
+  }
+  .buttons {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .action {
+    width: 82px;
+    height: 82px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.2);
+    background: radial-gradient(circle at 30% 30%, rgba(110,201,255,.9), rgba(36,87,179,.8));
+    color: #fff;
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: .5px;
+    box-shadow: 0 10px 24px rgba(0,0,0,.28), 0 0 24px rgba(80,160,255,.2);
+    pointer-events: auto;
+  }
+  .action:active { transform: scale(.97); }
+  .muted {
+    opacity: .85;
+    font-size: 12px;
+  }
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(circle at center, rgba(20,35,65,.25), rgba(0,0,0,.7));
+    display: grid;
+    place-items: center;
+    color: white;
+    text-align: center;
+    padding: 24px;
+  }
+  .card {
+    pointer-events: auto;
+    max-width: 720px;
+    background: rgba(8, 14, 28, 0.78);
+    border: 1px solid rgba(160,210,255,.18);
+    border-radius: 24px;
+    padding: 22px 20px 18px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.4);
+    backdrop-filter: blur(8px);
+  }
+  .card h1 {
+    margin: 0 0 8px;
+    font-size: clamp(28px, 5vw, 56px);
+    line-height: 1.02;
+  }
+  .card p {
+    margin: 8px 0;
+    color: #d7e8ff;
+    line-height: 1.5;
+    font-size: clamp(14px, 2vw, 18px);
+  }
+  .startRow {
+    margin-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+  }
+  .smallBtn {
+    pointer-events: auto;
+    border: 1px solid rgba(255,255,255,.16);
+    background: linear-gradient(180deg, rgba(110,201,255,.95), rgba(38,86,184,.85));
+    color: white;
+    font-weight: 900;
+    padding: 12px 16px;
+    border-radius: 14px;
+    box-shadow: 0 8px 20px rgba(0,0,0,.28);
+  }
+  .smallBtn.secondary {
+    background: rgba(20,30,48,.8);
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="hud">
+  <div class="topbar">
+    <div class="chip" id="scoreText">Crystals: 0 / 5</div>
+    <div class="chip" id="enemyText">Vexar Minions: 0</div>
+    <div class="chip" id="hintText">Move, attack, and collect Sacred Crystals</div>
+  </div>
+  <div class="healthWrap"><div class="healthBar" id="healthBar"></div></div>
+
+  <div class="msg" id="message">
+    <div class="title" id="messageTitle"></div>
+    <div class="sub" id="messageSub"></div>
+  </div>
+
+  <div class="centerHint" id="centerHint">Tap / click to begin. On mobile, use buttons. On desktop, WASD or arrows + Space.</div>
+
+  <div class="controls">
+    <div class="pad">
+      <div class="btn up" data-move="up">▲</div>
+      <div class="btn left" data-move="left">◀</div>
+      <div class="btn right" data-move="right">▶</div>
+      <div class="btn down" data-move="down">▼</div>
+    </div>
+    <div class="buttons">
+      <button class="action" id="attackBtn">ATTACK</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="card">
+    <h1>Eldoria: Sacred Crystals</h1>
+    <p>Dark Lord Vexar shattered the kingdom. Five Sacred Crystals were hidden across the ruined world.</p>
+    <p>Guide the last guardian through the lands, defeat minions, and restore Eldoria.</p>
+    <p><strong>Goal:</strong> collect all 5 crystals and survive Vexar's forces.</p>
+    <div class="startRow">
+      <button class="smallBtn" id="startBtn">Begin Quest</button>
+      <button class="smallBtn secondary" id="howBtn">Controls</button>
+    </div>
+    <p class="muted" id="howText" style="display:none;">
+      Move: WASD / Arrow Keys / touch pad. Attack: Space or ATTACK button. Collect crystals by touching them.
+    </p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreText = document.getElementById('scoreText');
+  const enemyText = document.getElementById('enemyText');
+  const healthBar = document.getElementById('healthBar');
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const howBtn = document.getElementById('howBtn');
+  const howText = document.getElementById('howText');
+  const attackBtn = document.getElementById('attackBtn');
+  const message = document.getElementById('message');
+  const messageTitle = document.getElementById('messageTitle');
+  const messageSub = document.getElementById('messageSub');
+  const centerHint = document.getElementById('centerHint');
+
+  let W=0,H=0,DPR=1, running=false, last=0, shake=0, shakeX=0, shakeY=0;
+  const input = {up:false,down:false,left:false,right:false,attack:false, pointer:false};
+  const keys = new Set();
+
+  function resize(){
+    DPR = Math.min(devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  addEventListener('resize', resize); resize();
+
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+
+  const player = {x: W*0.5, y: H*0.7, r: 16, hp: 100, speed: 220, facing: {x:0,y:-1}, atkCd:0, atkTime:0, inv:0};
+  let crystals=[], enemies=[], particles=[], stars=[], clouds=[], score=0, defeated=0, ended=false, victory=false, spawnTimer=0;
+
+  function reset(){
+    player.x = W*0.5; player.y = H*0.72; player.hp = 100; player.atkCd = 0; player.atkTime = 0; player.inv = 0;
+    crystals = []; enemies = []; particles = []; score = 0; defeated = 0; ended = false; victory = false; spawnTimer = 0;
+    for(let i=0;i<5;i++) crystals.push(spawnCrystal());
+    for(let i=0;i<9;i++) enemies.push(spawnEnemy(true));
+    stars = Array.from({length: 120}, ()=>({x: Math.random()*W, y: Math.random()*H, r: rand(0.7,2.2), s: rand(0.2,1)}));
+    clouds = Array.from({length: 7}, ()=>({x: Math.random()*W, y: Math.random()*H*0.6, w: rand(120,260), h: rand(38,74), v: rand(6,18)}));
+    updateHUD();
+  }
+  function spawnCrystal(){
+    return {x: rand(60, W-60), y: rand(90, H-90), r: 12, t: rand(0,Math.PI*2), alive:true};
+  }
+  function spawnEnemy(initial=false){
+    let edge = Math.floor(Math.random()*4);
+    let x,y;
+    if(edge===0){x=-30;y=rand(0,H);}
+    if(edge===1){x=W+30;y=rand(0,H);}
+    if(edge===2){x=rand(0,W);y=-30;}
+    if(edge===3){x=rand(0,W);y=H+30;}
+    return {x,y,r: 14, hp: 2, spd: initial?rand(55,90):rand(70,110), atk: 16, cd: rand(0,1.2), hue: rand(270,330)};
+  }
+  function puff(x,y,c,n=10){
+    for(let i=0;i<n;i++) particles.push({x,y,vx:rand(-1,1)*rand(30,180), vy:rand(-1,1)*rand(30,180), life:rand(0.3,0.9), age:0, c});
+  }
+  function flashMsg(t,s,d=1.4){
+    messageTitle.textContent = t; messageSub.textContent = s; message.classList.add('show');
+    clearTimeout(flashMsg._t); flashMsg._t = setTimeout(()=>message.classList.remove('show'), d*1000);
+  }
+  function updateHUD(){
+    scoreText.textContent = `Crystals: ${score} / 5`;
+    enemyText.textContent = `Vexar Minions: ${enemies.length}`;
+    healthBar.style.width = clamp(player.hp,0,100) + '%';
+  }
+
+  function drawBackground(dt){
+    ctx.clearRect(0,0,W,H);
+    const g = ctx.createRadialGradient(W*0.5+shakeX, H*0.4+shakeY, 40, W*0.5, H*0.5, Math.max(W,H)*0.85);
+    g.addColorStop(0,'#203a5f'); g.addColorStop(0.45,'#101b30'); g.addColorStop(1,'#04070d');
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+    for(const c of clouds){
+      c.x += c.v*dt*0.35; if(c.x - c.w > W+40) { c.x = -c.w-40; c.y = rand(0,H*0.55); }
+      ctx.fillStyle = 'rgba(180,210,255,0.04)';
+      for(let i=0;i<5;i++) ctx.beginPath(), ctx.ellipse(c.x+i*18, c.y+Math.sin(i)*4, c.w*0.22, c.h*0.46, 0, 0, Math.PI*2), ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    for(const s of stars){ ctx.globalAlpha = 0.4 + 0.6*Math.sin((performance.now()*0.001+s.x)*s.s)*0.5; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill(); }
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = 'rgba(120,180,255,0.12)';
+    for(let x=0;x<W;x+=64){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+    for(let y=0;y<H;y+=64){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  }
+
+  function drawCrystal(c){
+    if(!c.alive) return;
+    c.t += 0.02;
+    const glow = 0.6 + Math.sin(c.t*3)*0.2;
+    ctx.save();
+    ctx.translate(c.x,c.y);
+    ctx.shadowColor = '#7cf7ff';
+    ctx.shadowBlur = 24;
+    ctx.fillStyle = 'rgba(122,255,250,0.18)';
+    ctx.beginPath(); ctx.arc(0,0,24,0,Math.PI*2); ctx.fill();
+    ctx.rotate(c.t*0.8);
+    ctx.fillStyle = '#8ffcff';
+    ctx.beginPath();
+    ctx.moveTo(0,-18); ctx.lineTo(12,-2); ctx.lineTo(0,18); ctx.lineTo(-12,-2); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#e9ffff';
+    ctx.globalAlpha = glow;
+    ctx.beginPath(); ctx.moveTo(0,-12); ctx.lineTo(7,-1); ctx.lineTo(0,12); ctx.lineTo(-7,-1); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  function drawPlayer(){
+    const {x,y,r} = player;
+    ctx.save();
+    ctx.translate(x+shakeX,y+shakeY);
+    ctx.shadowColor = '#7bb8ff';
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = '#b6d9ff';
+    ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#22406f';
+    ctx.beginPath(); ctx.arc(0,-3,6,0,Math.PI*2); ctx.fill();
+    const fx = player.facing.x, fy = player.facing.y;
+    ctx.strokeStyle = '#dff4ff'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(fx*28, fy*28); ctx.stroke();
+    if(player.atkTime>0){
+      ctx.strokeStyle = 'rgba(120,220,255,0.8)';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(0,0,34,Math.atan2(fy,fx)-0.75,Math.atan2(fy,fx)+0.75);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function drawEnemy(e){
+    ctx.save();
+    ctx.translate(e.x+shakeX,e.y+shakeY);
+    ctx.shadowColor = `hsla(${e.hue},90%,60%,0.8)`;
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = `hsla(${e.hue},85%,58%,0.9)`;
+    ctx.beginPath(); ctx.arc(0,0,e.r,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#150717';
+    ctx.beginPath(); ctx.arc(-5,-2,3.2,0,Math.PI*2); ctx.arc(5,-2,3.2,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,220,255,0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-7,8); ctx.lineTo(0,12); ctx.lineTo(7,8); ctx.stroke();
+    ctx.restore();
+  }
+  function drawParticles(dt){
+    for(let i=particles.length-1;i>=0;i--){
+      const p = particles[i]; p.age += dt; p.x += p.vx*dt; p.y += p.vy*dt; p.vx*=0.98; p.vy*=0.98;
+      const a = 1 - p.age/p.life;
+      if(a<=0){ particles.splice(i,1); continue; }
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.c;
+      ctx.beginPath(); ctx.arc(p.x+shakeX,p.y+shakeY,2.3,0,Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  function attack(){
+    if(player.atkCd>0 || ended) return;
+    player.atkCd = 0.45;
+    player.atkTime = 0.14;
+    const fx = player.facing.x, fy = player.facing.y;
+    const ax = player.x + fx*28, ay = player.y + fy*28;
+    puff(ax, ay, 'rgba(160,240,255,0.9)', 12);
+    for(let i=enemies.length-1;i>=0;i--){
+      const e = enemies[i];
+      const d = Math.hypot(e.x-player.x, e.y-player.y);
+      const dot = ((e.x-player.x)/(d||1))*fx + ((e.y-player.y)/(d||1))*fy;
+      if(d < 54 && dot > 0.2){
+        e.hp -= 1; puff(e.x,e.y,'rgba(255,140,210,0.95)', 10); shake = 0.12;
+        if(e.hp<=0){ enemies.splice(i,1); defeated++; puff(e.x,e.y,'rgba(255,220,255,0.95)', 18); }
+      }
+    }
+    updateHUD();
+  }
+
+  function update(dt){
+    if(!running || ended) return;
+    if(shake>0){ shake-=dt; const s = shake*10; shakeX = rand(-s,s); shakeY = rand(-s,s); } else { shakeX=shakeY=0; }
+
+    let mx=0,my=0;
+    if(input.up || keys.has('ArrowUp') || keys.has('w') || keys.has('W')) my -= 1;
+    if(input.down || keys.has('ArrowDown') || keys.has('s') || keys.has('S')) my += 1;
+    if(input.left || keys.has('ArrowLeft') || keys.has('a') || keys.has('A')) mx -= 1;
+    if(input.right || keys.has('ArrowRight') || keys.has('d') || keys.has('D')) mx += 1;
+    if(keys.has(' ') || input.attack) { input.attack=false; keys.delete(' '); attack(); }
+    const len = Math.hypot(mx,my) || 1;
+    if(mx||my){ mx/=len; my/=len; player.facing.x=mx; player.facing.y=my; player.x += mx*player.speed*dt; player.y += my*player.speed*dt; }
+    player.x = clamp(player.x, 20, W-20); player.y = clamp(player.y, 20, H-20);
+
+    player.atkCd = Math.max(0, player.atkCd-dt);
+    player.atkTime = Math.max(0, player.atkTime-dt);
+    player.inv = Math.max(0, player.inv-dt);
+
+    for(const c of crystals){
+      if(!c.alive) continue;
+      if(dist(player,c) < player.r + c.r + 4){
+        c.alive = false; score++; puff(c.x,c.y,'rgba(124,247,255,0.95)', 24); flashMsg('Sacred Crystal Recovered', `${score} of 5 crystals restored to the light.`, 1.1);
+      }
+    }
+
+    spawnTimer += dt;
+    if(spawnTimer > 2.2 && enemies.length < 16){
+      spawnTimer = 0;
+      enemies.push(spawnEnemy());
+    }
+
+    for(const e of enemies){
+      const dx = player.x - e.x, dy = player.y - e.y, d = Math.hypot(dx,dy)||1;
+      e.x += dx/d * e.spd * dt;
+      e.y += dy/d * e.spd * dt;
+      e.cd -= dt;
+      if(d < e.r + player.r + 6 && e.cd <= 0){
+        e.cd = 0.75;
+        if(player.inv <= 0){
+          player.hp -= e.atk;
+          player.inv = 0.35;
+          shake = 0.18;
+          puff(player.x, player.y, 'rgba(255,100,120,0.9)', 14);
+          if(player.hp <= 0){ player.hp = 0; ended = true; victory = false; flashMsg('Eldoria Falls...', 'The darkness has consumed the guardian.', 999); overlay.style.display='grid'; startBtn.textContent='Try Again'; }
+        }
+      }
+    }
+
+    if(score >= 5 && !victory){
+      victory = true; ended = true;
+      flashMsg('Eldoria Restored!', 'The Sacred Crystals have banished Vexar’s darkness.', 999);
+      overlay.style.display='grid';
+      startBtn.textContent='Play Again';
+    }
+    updateHUD();
+  }
+
+  function render(dt){
+    drawBackground(dt);
+    for(const c of crystals) drawCrystal(c);
+    for(const e of enemies) drawEnemy(e);
+    drawPlayer();
+    drawParticles(dt);
+    if(player.inv > 0 && !ended){ ctx.fillStyle='rgba(255,255,255,0.12)'; ctx.fillRect(0,0,W,H); }
+    if(victory){
+      ctx.save();
+      ctx.fillStyle='rgba(255,255,255,0.1)';
+      ctx.fillRect(0,0,W,H);
+      ctx.restore();
+    }
+  }
+
+  function loop(t){
+    const dt = Math.min(0.033, (t-last)/1000 || 0); last = t;
+    update(dt); render(dt);
+    requestAnimationFrame(loop);
+  }
+
+  addEventListener('keydown', e => { keys.add(e.key); if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault(); });
+  addEventListener('keyup', e => keys.delete(e.key));
+  attackBtn.addEventListener('pointerdown', e => { e.preventDefault(); input.attack = true; if(!running) start(); });
+  document.querySelectorAll('[data-move]').forEach(btn => {
+    const dir = btn.dataset.move;
+    const set = (v) => input[dir] = v;
+    btn.addEventListener('pointerdown', e => { e.preventDefault(); set(true); if(!running) start(); });
+    btn.addEventListener('pointerup', () => set(false));
+    btn.addEventListener('pointercancel', () => set(false));
+    btn.addEventListener('pointerleave', () => set(false));
+  });
+
+  addEventListener('pointerdown', () => { if(!running) start(); }, {passive:true});
+  howBtn.onclick = () => howText.style.display = howText.style.display === 'none' ? 'block' : 'none';
+  startBtn.onclick = () => start();
+
+  function start(){
+    overlay.style.display = 'none';
+    running = true;
+    ended = false;
+    victory = false;
+    flashMsg('Quest Begun', 'Find all five Sacred Crystals!', 1.2);
+    reset();
+    centerHint.style.display = 'none';
+  }
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

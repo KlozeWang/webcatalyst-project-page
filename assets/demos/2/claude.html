@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Blaster Jump</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a1f; font-family: 'Arial', sans-serif; touch-action: none; }
+  #game { display: block; width: 100%; height: 100%; background: linear-gradient(180deg, #1a1a3e 0%, #4b1a5a 60%, #ff6b35 100%); }
+  #ui { position: fixed; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; color: #fff; font-size: 20px; font-weight: bold; text-shadow: 2px 2px 0 #000; pointer-events: none; z-index: 5; }
+  .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.7); color: #fff; text-align: center; z-index: 10; padding: 20px; }
+  .overlay h1 { font-size: 42px; margin-bottom: 10px; color: #ffd93d; text-shadow: 3px 3px 0 #ff6b35; }
+  .overlay p { font-size: 18px; margin: 8px 0; max-width: 320px; }
+  .overlay button { margin-top: 20px; padding: 14px 32px; font-size: 22px; font-weight: bold; background: #ffd93d; color: #1a1a3e; border: none; border-radius: 12px; cursor: pointer; box-shadow: 0 4px 0 #ff6b35; }
+  .overlay button:active { transform: translateY(2px); box-shadow: 0 2px 0 #ff6b35; }
+  .controls { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-between; padding: 20px; z-index: 4; pointer-events: none; }
+  .pad { display: flex; gap: 15px; pointer-events: auto; }
+  .btn { width: 70px; height: 70px; border-radius: 50%; background: rgba(255,255,255,0.2); border: 3px solid rgba(255,255,255,0.5); color: #fff; font-size: 28px; font-weight: bold; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+  .btn:active { background: rgba(255,217,61,0.6); }
+  .btn.fire { background: rgba(255,80,80,0.3); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui">
+  <div>Score: <span id="score">0</span></div>
+  <div>❤ <span id="lives">3</span></div>
+</div>
+
+<div class="controls" id="controls">
+  <div class="pad">
+    <div class="btn" id="left">◀</div>
+    <div class="btn" id="right">▶</div>
+  </div>
+  <div class="pad">
+    <div class="btn fire" id="fire">●</div>
+    <div class="btn" id="jump">▲</div>
+  </div>
+</div>
+
+<div class="overlay" id="startScreen">
+  <h1>BLASTER JUMP</h1>
+  <p>Run, jump on platforms and shoot enemies!</p>
+  <p>📱 Use on-screen buttons<br>⌨️ Or Arrow keys + Z (shoot) + X/Space (jump)</p>
+  <button id="startBtn">START</button>
+</div>
+
+<div class="overlay hidden" id="gameOverScreen">
+  <h1>GAME OVER</h1>
+  <p>Final Score: <span id="finalScore">0</span></p>
+  <button id="restartBtn">PLAY AGAIN</button>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Audio
+const AC = window.AudioContext || window.webkitAudioContext;
+const audio = new AC();
+function beep(freq, dur, type='square', vol=0.1) {
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.value = vol;
+  o.connect(g); g.connect(audio.destination);
+  o.start();
+  g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + dur);
+  o.stop(audio.currentTime + dur);
+}
+
+// Game state
+let state = 'start';
+let score = 0, lives = 3;
+let camX = 0;
+const GRAV = 0.7;
+
+const player = {
+  x: 100, y: 200, w: 30, h: 40, vx: 0, vy: 0, onGround: false, facing: 1, cooldown: 0, hurt: 0
+};
+
+let platforms = [];
+let enemies = [];
+let bullets = [];
+let coins = [];
+let particles = [];
+let worldEnd = 0;
+
+function generateWorld() {
+  platforms = [];
+  enemies = [];
+  coins = [];
+  let x = 0;
+  let y = H - 80;
+  platforms.push({x: 0, y: y, w: 400, h: 80});
+  x = 400;
+  for (let i = 0; i < 40; i++) {
+    const gap = 60 + Math.random() * 80;
+    const pw = 100 + Math.random() * 180;
+    y = H - 80 - (Math.random() * 180 - 30);
+    y = Math.max(H * 0.4, Math.min(H - 80, y));
+    platforms.push({x: x + gap, y: y, w: pw, h: 20});
+    if (Math.random() < 0.5) {
+      enemies.push({x: x + gap + pw/2, y: y - 30, w: 28, h: 28, vx: (Math.random() < 0.5 ? -1 : 1) * 1.2, platIdx: platforms.length - 1, alive: true});
+    }
+    for (let c = 0; c < 2; c++) {
+      if (Math.random() < 0.6) coins.push({x: x + gap + 20 + c * 40, y: y - 30, taken: false, t: Math.random()*Math.PI*2});
+    }
+    x += gap + pw;
+  }
+  worldEnd = x;
+}
+
+function reset() {
+  score = 0; lives = 3;
+  player.x = 100; player.y = 200; player.vx = 0; player.vy = 0;
+  camX = 0; bullets = []; particles = [];
+  generateWorld();
+  updateUI();
+}
+
+function updateUI() {
+  document.getElementById('score').textContent = score;
+  document.getElementById('lives').textContent = lives;
+}
+
+// Input
+const keys = {left:false, right:false, jump:false, fire:false};
+const bindBtn = (id, key) => {
+  const el = document.getElementById(id);
+  const on = e => { e.preventDefault(); keys[key] = true; };
+  const off = e => { e.preventDefault(); keys[key] = false; };
+  el.addEventListener('touchstart', on);
+  el.addEventListener('touchend', off);
+  el.addEventListener('touchcancel', off);
+  el.addEventListener('mousedown', on);
+  el.addEventListener('mouseup', off);
+  el.addEventListener('mouseleave', off);
+};
+bindBtn('left','left'); bindBtn('right','right'); bindBtn('jump','jump'); bindBtn('fire','fire');
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft') keys.left = true;
+  if (e.key === 'ArrowRight') keys.right = true;
+  if (e.key === 'ArrowUp' || e.key === ' ' || e.key === 'x' || e.key === 'X') keys.jump = true;
+  if (e.key === 'z' || e.key === 'Z') keys.fire = true;
+});
+window.addEventListener('keyup', e => {
+  if (e.key === 'ArrowLeft') keys.left = false;
+  if (e.key === 'ArrowRight') keys.right = false;
+  if (e.key === 'ArrowUp' || e.key === ' ' || e.key === 'x' || e.key === 'X') keys.jump = false;
+  if (e.key === 'z' || e.key === 'Z') keys.fire = false;
+});
+
+function shoot() {
+  if (player.cooldown > 0) return;
+  player.cooldown = 15;
+  bullets.push({x: player.x + player.w/2, y: player.y + player.h/2, vx: 10 * player.facing, life: 80});
+  beep(800, 0.08, 'square', 0.08);
+}
+
+function spawnParticles(x, y, color, n=8) {
+  for (let i = 0; i < n; i++) {
+    particles.push({x, y, vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5, life: 30, color});
+  }
+}
+
+function rectOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function update() {
+  if (state !== 'play') return;
+
+  // Player movement
+  if (keys.left) { player.vx = -4; player.facing = -1; }
+  else if (keys.right) { player.vx = 4; player.facing = 1; }
+  else player.vx *= 0.7;
+
+  if (keys.jump && player.onGround) {
+    player.vy = -14;
+    player.onGround = false;
+    beep(400, 0.1, 'square', 0.08);
+  }
+
+  if (keys.fire) shoot();
+  if (player.cooldown > 0) player.cooldown--;
+  if (player.hurt > 0) player.hurt--;
+
+  player.vy += GRAV;
+  if (player.vy > 18) player.vy = 18;
+
+  // Horizontal
+  player.x += player.vx;
+  for (const p of platforms) {
+    if (rectOverlap(player, p)) {
+      if (player.vx > 0) player.x = p.x - player.w;
+      else if (player.vx < 0) player.x = p.x + p.w;
+      player.vx = 0;
+    }
+  }
+
+  // Vertical
+  player.y += player.vy;
+  player.onGround = false;
+  for (const p of platforms) {
+    if (rectOverlap(player, p)) {
+      if (player.vy > 0) { player.y = p.y - player.h; player.vy = 0; player.onGround = true; }
+      else if (player.vy < 0) { player.y = p.y + p.h; player.vy = 0; }
+    }
+  }
+
+  // Fall death
+  if (player.y > H + 200) {
+    loseLife();
+  }
+
+  // Camera
+  const targetCam = player.x - W * 0.3;
+  camX += (targetCam - camX) * 0.1;
+  if (camX < 0) camX = 0;
+  if (camX > worldEnd - W) camX = worldEnd - W;
+
+  // Bullets
+  bullets.forEach(b => { b.x += b.vx; b.life--; });
+  bullets = bullets.filter(b => b.life > 0);
+
+  // Enemies
+  enemies.forEach(e => {
+    if (!e.alive) return;
+    e.x += e.vx;
+    const p = platforms[e.platIdx];
+    if (p) {
+      if (e.x < p.x) { e.x = p.x; e.vx *= -1; }
+      if (e.x + e.w > p.x + p.w) { e.x = p.x + p.w - e.w; e.vx *= -1; }
+      e.y = p.y - e.h;
+    }
+    // bullet hit
+    for (const b of bullets) {
+      if (rectOverlap({x:b.x-3,y:b.y-3,w:6,h:6}, e)) {
+        e.alive = false;
+        b.life = 0;
+        score += 100;
+        spawnParticles(e.x + e.w/2, e.y + e.h/2, '#ff6666', 12);
+        beep(200, 0.15, 'sawtooth', 0.1);
+        updateUI();
+      }
+    }
+    // player collision
+    if (e.alive && rectOverlap(player, e)) {
+      if (player.vy > 2 && player.y + player.h - e.y < 20) {
+        e.alive = false;
+        player.vy = -10;
+        score += 150;
+        spawnParticles(e.x + e.w/2, e.y + e.h/2, '#ff6666', 12);
+        beep(600, 0.12, 'square', 0.08);
+        updateUI();
+      } else if (player.hurt === 0) {
+        loseLife();
+      }
+    }
+  });
+
+  // Coins
+  coins.forEach(c => {
+    if (c.taken) return;
+    c.t += 0.1;
+    if (Math.abs(player.x + player.w/2 - c.x) < 20 && Math.abs(player.y + player.h/2 - c.y) < 25) {
+      c.taken = true;
+      score += 50;
+      spawnParticles(c.x, c.y, '#ffd93d', 8);
+      beep(1000, 0.1, 'sine', 0.08);
+      updateUI();
+    }
+  });
+
+  // Particles
+  particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.3; p.life--; });
+  particles = particles.filter(p => p.life > 0);
+
+  // Win
+  if (player.x > worldEnd - 100) {
+    score += 1000;
+    state = 'over';
+    document.getElementById('finalScore').textContent = score + ' (YOU WIN!)';
+    document.getElementById('gameOverScreen').classList.remove('hidden');
+  }
+}
+
+function loseLife() {
+  lives--;
+  player.hurt = 60;
+  beep(150, 0.3, 'sawtooth', 0.12);
+  spawnParticles(player.x + player.w/2, player.y + player.h/2, '#ff3030', 16);
+  updateUI();
+  if (lives <= 0) {
+    state = 'over';
+    document.getElementById('finalScore').textContent = score;
+    document.getElementById('gameOverScreen').classList.remove('hidden');
+  } else {
+    // respawn nearby
+    player.x = Math.max(100, camX + 100);
+    player.y = 100;
+    player.vx = 0; player.vy = 0;
+  }
+}
+
+function draw() {
+  // Sky gradient already on body; clear canvas with gradient
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#1a1a3e');
+  g.addColorStop(0.6, '#4b1a5a');
+  g.addColorStop(1, '#ff6b35');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // Parallax stars
+  ctx.fillStyle = '#fff';
+  for (let i = 0; i < 40; i++) {
+    const sx = (i * 137 - camX * 0.2) % W;
+    const sy = (i * 53) % (H * 0.5);
+    ctx.fillRect((sx + W) % W, sy, 2, 2);
+  }
+  // Parallax mountains
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  for (let i = 0; i < 20; i++) {
+    const mx = i * 300 - camX * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(mx, H);
+    ctx.lineTo(mx + 150, H - 200);
+    ctx.lineTo(mx + 300, H);
+    ctx.fill();
+  }
+
+  ctx.save();
+  ctx.translate(-camX, 0);
+
+  // Platforms
+  platforms.forEach(p => {
+    ctx.fillStyle = '#3a2540';
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.fillStyle = '#7c3aed';
+    ctx.fillRect(p.x, p.y, p.w, 6);
+  });
+
+  // Coins
+  coins.forEach(c => {
+    if (c.taken) return;
+    const s = Math.abs(Math.sin(c.t)) * 8 + 6;
+    ctx.fillStyle = '#ffd93d';
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, s, 12, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#ff9500';
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, s*0.5, 8, 0, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // Enemies
+  enemies.forEach(e => {
+    if (!e.alive) return;
+    ctx.fillStyle = '#ff3366';
+    ctx.fillRect(e.x, e.y, e.w, e.h);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(e.x + 5, e.y + 8, 5, 5);
+    ctx.fillRect(e.x + 18, e.y + 8, 5, 5);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(e.x + 6, e.y + 9, 3, 3);
+    ctx.fillRect(e.x + 19, e.y + 9, 3, 3);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(e.x + 8, e.y + 20, 12, 3);
+  });
+
+  // Bullets
+  bullets.forEach(b => {
+    ctx.fillStyle = '#ffd93d';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,150,0,0.5)';
+    ctx.beginPath();
+    ctx.arc(b.x - b.vx*0.5, b.y, 8, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // Player
+  if (player.hurt === 0 || Math.floor(player.hurt / 5) % 2 === 0) {
+    ctx.fillStyle = '#4ade80';
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+    ctx.fillStyle = '#fff';
+    const eyeX = player.facing > 0 ? player.x + 18 : player.x + 4;
+    ctx.fillRect(eyeX, player.y + 10, 8, 8);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(eyeX + 2, player.y + 12, 4, 4);
+    // gun
+    ctx.fillStyle = '#222';
+    if (player.facing > 0) ctx.fillRect(player.x + player.w, player.y + 20, 12, 6);
+    else ctx.fillRect(player.x - 12, player.y + 20, 12, 6);
+  }
+
+  // Particles
+  particles.forEach(p => {
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.life / 30;
+    ctx.fillRect(p.x, p.y, 4, 4);
+  });
+  ctx.globalAlpha = 1;
+
+  ctx.restore();
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  audio.resume();
+  reset();
+  state = 'play';
+  document.getElementById('startScreen').classList.add('hidden');
+});
+document.getElementById('restartBtn').addEventListener('click', () => {
+  reset();
+  state = 'play';
+  document.getElementById('gameOverScreen').classList.add('hidden');
+});
+
+loop();
+</script>
+</body>
+</html>

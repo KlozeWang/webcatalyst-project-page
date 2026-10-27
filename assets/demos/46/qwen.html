@@ -1,0 +1,2266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>FIFA Card Duel</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { background: #0a0a1a; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; touch-action: none; user-select: none; }
+canvas { display: block; margin: 0 auto; }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Responsive sizing
+const W = 420, H = 780;
+canvas.width = W;
+canvas.height = H;
+
+function fitCanvas() {
+    const ratio = W / H;
+    let w = window.innerWidth, h = window.innerHeight;
+    if (w / h > ratio) { w = h * ratio; } else { h = w / ratio; }
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+}
+fitCanvas();
+window.addEventListener('resize', fitCanvas);
+
+// ============ CARD DATABASE ============
+const CARD_DB = [
+    // GOLD CARDS (Special)
+    {id:1,name:"Messi",club:"PSG",nation:"Argentina",pos:"RW",rarity:"Special",stars:5,pac:92,sho:93,pas:91,dri:95,def:38,phy:65,price:5000},
+    {id:2,name:"Mbappé",club:"PSG",nation:"France",pos:"LW",rarity:"Special",stars:5,pac:97,sho:89,pas:80,dri:92,def:36,phy:78,price:4800},
+    {id:3,name:"Haaland",club:"Man City",nation:"Norway",pos:"ST",rarity:"Special",stars:5,pac:89,sho:93,pas:65,dri:80,def:45,phy:88,price:4600},
+    {id:4,name:"De Bruyne",club:"Man City",nation:"Belgium",pos:"CM",rarity:"Special",stars:5,pac:74,sho:84,pas:95,dri:88,def:64,phy:78,price:4200},
+    {id:5,name:"Vinícius Jr",club:"Real Madrid",nation:"Brazil",pos:"LW",rarity:"Special",stars:5,pac:95,sho:82,pas:78,dri:94,def:28,phy:62,price:4400},
+    {id:6,name:"Bellingham",club:"Real Madrid",nation:"England",pos:"CM",rarity:"Special",stars:5,pac:76,sho:81,pas:82,dri:86,def:72,phy:80,price:4000},
+    {id:7,name:"Salah",club:"Liverpool",nation:"Egypt",pos:"RW",rarity:"Special",stars:5,pac:90,sho:89,pas:82,dri:88,def:45,phy:74,price:3800},
+    {id:8,name:"Rodri",club:"Man City",nation:"Spain",pos:"CDM",rarity:"Special",stars:5,pac:58,sho:68,pas:80,dri:78,def:88,phy:84,price:3600},
+    {id:9,name:"Van Dijk",club:"Liverpool",nation:"Netherlands",pos:"CB",rarity:"Special",stars:5,pac:78,sho:60,pas:68,dri:72,def:92,phy:86,price:3500},
+    {id:10,name:"Alisson",club:"Liverpool",nation:"Brazil",pos:"GK",rarity:"Special",stars:5,pac:60,sho:10,pas:65,dri:55,def:88,phy:82,price:3200},
+    {id:11,name:"Bukayo Saka",club:"Arsenal",nation:"England",pos:"RW",rarity:"Special",stars:5,pac:86,sho:80,pas:82,dri:88,def:62,phy:68,price:3400},
+    {id:12,name:"Kane",club:"Bayern",nation:"England",pos:"ST",rarity:"Special",stars:5,pac:72,sho:92,pas:86,dri:82,def:62,phy:84,price:3600},
+    // GOLD CARDS
+    {id:13,name:"Ronaldo",club:"Al Nassr",nation:"Portugal",pos:"ST",rarity:"Gold",stars:4,pac:86,sho:91,pas:80,dri:86,def:36,phy:78,price:2800},
+    {id:14,name:"Neymar Jr",club:"Al Hilal",nation:"Brazil",pos:"LW",rarity:"Gold",stars:4,pac:85,sho:83,pas:88,dri:93,def:38,phy:60,price:2600},
+    {id:15,name:"Kroos",club:"Real Madrid",nation:"Germany",pos:"CM",rarity:"Gold",stars:4,pac:52,sho:72,pas:93,dri:82,def:68,phy:70,price:2400},
+    {id:16,name:"Courtois",club:"Real Madrid",nation:"Belgium",pos:"GK",rarity:"Gold",stars:4,pac:50,sho:10,pas:55,dri:40,def:90,phy:88,price:2200},
+    {id:17,name:"Silva",club:"Man City",nation:"Portugal",pos:"AM",rarity:"Gold",stars:4,pac:78,sho:80,pas:90,dri:90,def:55,phy:62,price:2400},
+    {id:18,name:"Kimmich",club:"Bayern",nation:"Germany",pos:"CDM",rarity:"Gold",stars:4,pac:70,sho:72,pas:86,dri:82,def:84,phy:78,price:2200},
+    {id:19,name:"Alexander-Arnold",club:"Liverpool",nation:"England",pos:"RB",rarity:"Gold",stars:4,pac:76,sho:68,pas:90,dri:80,def:78,phy:70,price:2200},
+    {id:20,name:"Odegaard",club:"Arsenal",nation:"Norway",pos:"CAM",rarity:"Gold",stars:4,pac:70,sho:78,pas:88,dri:86,def:62,phy:60,price:2200},
+    {id:21,name:"Saka",club:"Arsenal",nation:"England",pos:"RW",rarity:"Gold",stars:4,pac:84,sho:78,pas:80,dri:86,def:60,phy:66,price:2200},
+    {id:22,name:"Rice",club:"Arsenal",nation:"England",pos:"CDM",rarity:"Gold",stars:4,pac:68,sho:72,pas:78,dri:78,def:86,phy:82,price:2200},
+    // SILVER CARDS
+    {id:23,name:"Watkins",club:"Aston Villa",nation:"England",pos:"ST",rarity:"Silver",stars:3,pac:82,sho:78,pas:72,dri:76,def:52,phy:72,price:1200},
+    {id:24,name:"Palmer",club:"Chelsea",nation:"England",pos:"CAM",rarity:"Silver",stars:3,pac:74,sho:78,pas:82,dri:80,def:58,phy:64,price:1100},
+    {id:25,name:"Foden",club:"Man City",nation:"England",pos:"LW",rarity:"Silver",stars:3,pac:80,sho:80,pas:80,dri:86,def:54,phy:62,price:1200},
+    {id:26,name:"Solanke",club:"Bournemouth",nation:"England",pos:"ST",rarity:"Silver",stars:3,pac:80,sho:76,pas:68,dri:74,def:48,phy:76,price:1000},
+    {id:27,name:"Isak",club:"Newcastle",nation:"Sweden",pos:"ST",rarity:"Silver",stars:3,pac:84,sho:80,pas:66,dri:80,def:42,phy:74,price:1100},
+    {id:28,name:"Gvardiol",club:"Man City",nation:"Croatia",pos:"CB",rarity:"Silver",stars:3,pac:78,sho:52,pas:68,dri:72,def:84,phy:80,price:1100},
+    {id:29,name:"Rúben Dias",club:"Man City",nation:"Portugal",pos:"CB",rarity:"Silver",stars:3,pac:66,sho:48,pas:58,dri:62,def:88,phy:84,price:1100},
+    {id:30,name:"Ederson",club:"Man City",nation:"Brazil",pos:"GK",rarity:"Silver",stars:3,pac:56,sho:10,pas:70,dri:48,def:84,phy:80,price:1000},
+    {id:31,name:"Pickford",club:"Everton",nation:"England",pos:"GK",rarity:"Silver",stars:3,pac:50,sho:10,pas:52,dri:42,def:82,phy:78,price:900},
+    {id:32,name:"Trippier",club:"Newcastle",nation:"England",pos:"RB",rarity:"Silver",stars:3,pac:64,sho:66,pas:84,dri:72,def:76,phy:72,price:1000},
+    {id:33,name:"Havertz",club:"Arsenal",nation:"Germany",pos:"CAM",rarity:"Silver",stars:3,pac:74,sho:76,pas:78,dri:78,def:58,phy:72,price:1000},
+    {id:34,name:"Fernandes",club:"Man Utd",nation:"Portugal",pos:"CAM",rarity:"Silver",stars:3,pac:70,sho:78,pas:86,dri:80,def:62,phy:66,price:1100},
+    {id:35,name:"Bruno",club:"Man Utd",nation:"Portugal",pos:"CAM",rarity:"Silver",stars:3,pac:68,sho:76,pas:84,dri:78,def:60,phy:64,price:1000},
+    {id:36,name:"Mount",club:"Man Utd",nation:"England",pos:"CM",rarity:"Silver",stars:3,pac:72,sho:72,pas:78,dri:76,def:68,phy:66,price:900},
+    {id:37,name:"Pedri",club:"Barcelona",nation:"Spain",pos:"CM",rarity:"Silver",stars:3,pac:68,sho:68,pas:82,dri:86,def:58,phy:58,price:1000},
+    {id:38,name:"Gavi",club:"Barcelona",nation:"Spain",pos:"CM",rarity:"Silver",stars:3,pac:66,sho:64,pas:78,dri:82,def:64,phy:62,price:900},
+    {id:39,name:"Yamal",club:"Barcelona",nation:"Spain",pos:"RW",rarity:"Silver",stars:3,pac:82,sho:72,pas:76,dri:86,def:32,phy:52,price:1000},
+    {id:40,name:"Lewandowski",club:"Barcelona",nation:"Poland",pos:"ST",rarity:"Silver",stars:3,pac:72,sho:86,pas:74,dri:82,def:52,phy:82,price:1000},
+    // BRONZE CARDS
+    {id:41,name:"Garnacho",club:"Man Utd",nation:"Argentina",pos:"LW",rarity:"Bronze",stars:2,pac:80,sho:70,pas:66,dri:76,def:32,phy:58,price:400},
+    {id:42,name:"Eze",club:"Crystal Palace",nation:"England",pos:"CAM",rarity:"Bronze",stars:2,pac:72,sho:72,pas:76,dri:78,def:52,phy:60,price:350},
+    {id:43,name:"Solanke",club:"Bournemouth",nation:"England",pos:"ST",rarity:"Bronze",stars:2,pac:78,sho:74,pas:64,dri:72,def:46,phy:74,price:350},
+    {id:44,name:"Mbeumo",club:"Brentford",nation:"Cameroon",pos:"RW",rarity:"Bronze",stars:2,pac:80,sho:76,pas:72,dri:74,def:42,phy:64,price:350},
+    {id:45,name:"Toney",club:"Brentford",nation:"England",pos:"ST",rarity:"Bronze",stars:2,pac:70,sho:78,pas:68,dri:72,def:48,phy:80,price:350},
+    {id:46,name:"Semenyo",club:"Bournemouth",nation:"England",pos:"RW",rarity:"Bronze",stars:2,pac:82,sho:70,pas:62,dri:72,def:38,phy:68,price:300},
+    {id:47,name:"Mudryk",club:"Chelsea",nation:"Ukraine",pos:"LW",rarity:"Bronze",stars:2,pac:86,sho:64,pas:66,dri:76,def:28,phy:56,price:300},
+    {id:48,name:"Madueke",club:"Chelsea",nation:"England",pos:"RW",rarity:"Bronze",stars:2,pac:80,sho:70,pas:68,dri:74,def:36,phy:60,price:300},
+    {id:49,name:"Chukwueze",club:"AC Milan",nation:"Nigeria",pos:"RW",rarity:"Bronze",stars:2,pac:84,sho:66,pas:68,dri:78,def:34,phy:58,price:300},
+    {id:50,name:"Ademola Lookman",club:"Atalanta",nation:"Nigeria",pos:"LW",rarity:"Bronze",stars:2,pac:82,sho:72,pas:70,dri:76,def:36,phy:62,price:300},
+    {id:51,name:"Dendoncker",club:"Union SG",nation:"Belgium",pos:"CDM",rarity:"Bronze",stars:2,pac:58,sho:52,pas:62,dri:60,def:76,phy:74,price:250},
+    {id:52,name:"Vivian",club:"Leeds",nation:"England",pos:"CB",rarity:"Bronze",stars:2,pac:62,sho:42,pas:52,dri:56,def:78,phy:76,price:250},
+    {id:53,name:"Koch",club:"Leeds",nation:"Germany",pos:"LB",rarity:"Bronze",stars:2,pac:68,sho:44,pas:62,dri:60,def:74,phy:70,price:250},
+    {id:54,name:"Meslier",club:"Leeds",nation:"France",pos:"GK",rarity:"Bronze",stars:2,pac:48,sho:10,pas:48,dri:38,def:76,phy:74,price:250},
+    {id:55,name:"Turner",club:"Arsenal",nation:"USA",pos:"GK",rarity:"Bronze",stars:2,pac:52,sho:10,pas:50,dri:40,def:74,phy:72,price:250},
+    // TACTICS CARDS
+    {id:100,name:"4-3-3 Attack",type:"Tactics",club:"Tactical",nation:"Tactical",pos:"TACT",rarity:"Special",stars:4,pac:0,sho:0,pas:0,dri:0,def:0,phy:0,price:0,bonus:"attack",bonusVal:15},
+    {id:101,name:"4-2-3-1 Control",type:"Tactics",club:"Tactical",nation:"Tactical",pos:"TACT",rarity:"Gold",stars:4,pac:0,sho:0,pas:0,dri:0,def:0,phy:0,price:0,bonus:"midfield",bonusVal:12},
+    {id:102,name:"5-4-1 Defensive",type:"Tactics",club:"Tactical",nation:"Tactical",pos:"TACT",rarity:"Silver",stars:3,pac:0,sho:0,pas:0,dri:0,def:0,phy:0,price:0,bonus:"defense",bonusVal:15},
+    // REACTION CARDS
+    {id:200,name:"Counter Trap",type:"Reaction",club:"Tactical",nation:"Tactical",pos:"TRAP",rarity:"Gold",stars:4,pac:0,sho:0,pas:0,dri:0,def:0,phy:0,price:0,bonus:"counter",bonusVal:20},
+    {id:201,name:"High Press",type:"Reaction",club:"Tactical",nation:"Tactical",pos:"TRAP",rarity:"Silver",stars:3,pac:0,sho:0,pas:0,dri:0,phy:0,price:0,bonus:"press",bonusVal:10},
+    {id:202,name:"Low Block",type:"Reaction",club:"Tactical",nation:"Tactical",pos:"TRAP",rarity:"Bronze",stars:2,pac:0,sho:0,pas:0,dri:0,def:0,phy:0,price:0,bonus:"block",bonusVal:25},
+];
+
+// ============ GAME STATE ============
+const ZONES = ['GK','DEF','MID','ATT','ATT'];
+const POS_MAP = {'GK':['GK'],'DEF':['CB','LB','RB'],'MID':['CM','CDM','CAM','LM','RM'],'ATT':['ST','LW','RW','CF']};
+
+let game = {
+    state: 'MENU', // MENU, DECK_SETUP, QUICK_MATCH, RANKED, DRAFT, PLAYING, TURN, COMBAT, RESULT, GAME_OVER
+    mode: 'quick',
+    energy: 10,
+    maxEnergy: 10,
+    coins: 5000,
+    gems: 100,
+    rank: 0,
+    rankName: 'Division 10',
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    draftWins: 0,
+    draftLosses: 0,
+    draftCards: [],
+    draftChoices: [],
+    draftRound: 0,
+    turnTimer: 90,
+    turnTimerInterval: null,
+    currentTurn: 'player', // player or opponent
+    playerScore: 0,
+    opponentScore: 0,
+    round: 1,
+    maxRounds: 3,
+    playerField: {GK:null,DEF:null,MID:null,ATT:null,ATT:null},
+    opponentField: {GK:null,DEF:null,MID:null,ATT:null,ATT:null},
+    playerHand: [],
+    playerBench: [],
+    opponentHand: [],
+    opponentBench: [],
+    playerDeck: [],
+    opponentDeck: [],
+    selectedCard: null,
+    selectedZone: null,
+    combatPhase: null,
+    combatResult: null,
+    aiArchetype: 'balanced',
+    aiDifficulty: 1,
+    particles: [],
+    animating: false,
+    uiScale: 1,
+    lastTap: {x:0,y:0},
+    dragCard: null,
+    dragPos: null,
+    hoveredBtn: null,
+    hoveredCard: null,
+    turnPhase: 'DRAW', // DRAW, PLACE, ATTACK, END
+    placedThisTurn: 0,
+    attackPhase: false,
+    attackQueue: [],
+    combatAnim: null,
+    resultTimer: 0,
+    notifications: [],
+    energyTimer: null,
+    lastEnergyUpdate: Date.now(),
+    draftPicks: [],
+    draftPool: [],
+    selectedDraftCard: null,
+    menuTab: 0,
+    deckView: 0,
+    cardDetail: null,
+    showCardList: false,
+    cardListFilter: 'all',
+    settingsOpen: false,
+    shopOpen: false,
+    profileOpen: false,
+    notificationQueue: [],
+    animFrame: 0,
+    shakeTimer: 0,
+    shakeIntensity: 0,
+    flashTimer: 0,
+    flashColor: null,
+    goalAnim: 0,
+    goalTeam: '',
+    turnIndicator: 'player',
+    phaseText: '',
+    phaseTimer: 0,
+    comboCount: 0,
+    lastAttackResult: null,
+    streak: 0,
+    bestStreak: 0,
+    totalGoals: 0,
+    totalConceded: 0,
+    matchHistory: [],
+    iapStore: {
+        gems100: {price:1.99,gems:100},
+        gems500: {price:4.99,gems:500},
+        gems1200: {price:9.99,gems:1200},
+        gems3000: {price:19.99,gems:3000},
+        energyRefill: {price:0.99,count:5},
+        packBronze: {price:0,gems:100},
+        packSilver: {price:0,gems:300},
+        packGold: {price:0,gems:800},
+    }
+};
+
+// ============ UTILITY FUNCTIONS ============
+function rand(min,max) { return Math.floor(Math.random()*(max-min+1))+min; }
+function clamp(v,min,max) { return Math.max(min,Math.min(max,v)); }
+function lerp(a,b,t) { return a+(b-a)*t; }
+function easeOut(t) { return 1-Math.pow(1-t,3); }
+function easeInOut(t) { return t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2; }
+
+function getCardStats(card) {
+    let stats = {pac:card.pac,sho:card.sho,pas:card.pas,dri:card.dri,def:card.def,phy:card.phy};
+    if (card.type === 'Tactics' || card.type === 'Reaction') {
+        return stats;
+    }
+    return stats;
+}
+
+function getOverall(card) {
+    if (card.type === 'Tactics' || card.type === 'Reaction') return 0;
+    return Math.round((card.pac+card.sho+card.pas+card.dri+card.def+card.phy)/6);
+}
+
+function getCardColor(rarity) {
+    switch(rarity) {
+        case 'Special': return '#FFD700';
+        case 'Gold': return '#FFD700';
+        case 'Silver': return '#C0C0C0';
+        case 'Bronze': return '#CD7F32';
+        default: return '#888';
+    }
+}
+
+function getCardBg(rarity) {
+    switch(rarity) {
+        case 'Special': return 'linear-gradient(135deg, #1a0a2e, #2d1b69, #FFD700)';
+        case 'Gold': return 'linear-gradient(135deg, #1a1a0a, #3d3520, #FFD700)';
+        case 'Silver': return 'linear-gradient(135deg, #1a1a1a, #3d3d3d, #C0C0C0)';
+        case 'Bronze': return 'linear-gradient(135deg, #1a0a00, #3d2010, #CD7F32)';
+        default: return '#333';
+    }
+}
+
+function getPosColor(pos) {
+    switch(pos) {
+        case 'GK': return '#4CAF50';
+        case 'CB': return '#2196F3';
+        case 'LB': return '#2196F3';
+        case 'RB': return '#2196F3';
+        case 'CDM': return '#FF9800';
+        case 'CM': return '#FF9800';
+        case 'CAM': return '#FF9800';
+        case 'LM': return '#FF9800';
+        case 'RM': return '#FF9800';
+        case 'ST': return '#F44336';
+        case 'LW': return '#F44336';
+        case 'RW': return '#F44336';
+        case 'CF': return '#F44336';
+        case 'TACT': return '#9C27B0';
+        case 'TRAP': return '#E91E63';
+        default: return '#888';
+    }
+}
+
+function addParticle(x,y,type) {
+    for(let i=0;i<10;i++) {
+        game.particles.push({
+            x:x,y:y,
+            vx:(Math.random()-0.5)*8,
+            vy:(Math.random()-0.5)*8-2,
+            life:1,
+            type:type,
+            size:rand(2,5)
+        });
+    }
+}
+
+function addNotification(text,color) {
+    game.notifications.push({text,color:color||'#fff',y:H/2,life:120,alpha:1});
+}
+
+// ============ DECK BUILDING ============
+function buildDeck(rarity) {
+    let pool = CARD_DB.filter(c => c.rarity === rarity && (c.type !== 'Tactics' && c.type !== 'Reaction'));
+    let deck = [];
+    let used = new Set();
+    while(deck.length < 40 && used.size < pool.length) {
+        let idx = rand(0, pool.length-1);
+        if(!used.has(idx)) {
+            used.add(idx);
+            deck.push({...pool[idx], uid: Date.now()+Math.random()});
+        }
+    }
+    return deck;
+}
+
+function buildAIDeck(archetype) {
+    let deck = [];
+    let pool = CARD_DB.filter(c => c.rarity !== 'Special' || c.id <= 12);
+    let used = new Set();
+    while(deck.length < 40 && used.size < pool.length) {
+        let idx = rand(0, pool.length-1);
+        if(!used.has(idx)) {
+            used.add(idx);
+            let card = {...pool[idx], uid: Date.now()+Math.random()};
+            if(archetype === 'defensive' && (card.pos === 'ST' || card.pos === 'LW' || card.pos === 'RW')) {
+                card.def = Math.min(99, card.def + 10);
+            }
+            if(archetype === 'aggressive' && (card.pos === 'ST' || card.pos === 'LW' || card.pos === 'RW')) {
+                card.sho = Math.min(99, card.sho + 10);
+                card.pac = Math.min(99, card.pac + 8);
+            }
+            deck.push(card);
+        }
+    }
+    return deck;
+}
+
+function initMatch() {
+    game.playerDeck = buildDeck();
+    game.opponentDeck = buildAIDeck(game.aiArchetype);
+    game.playerField = {GK:null,DEF:null,MID:null,ATT:null,ATT:null};
+    game.opponentField = {GK:null,DEF:null,MID:null,ATT:null,ATT:null};
+    game.playerHand = [];
+    game.opponentHand = [];
+    game.playerBench = [];
+    game.opponentBench = [];
+    game.playerScore = 0;
+    game.opponentScore = 0;
+    game.round = 1;
+    game.maxRounds = 3;
+    game.turnTimer = 90;
+    game.currentTurn = 'player';
+    game.turnPhase = 'DRAW';
+    game.placedThisTurn = 0;
+    game.attackPhase = false;
+    game.attackQueue = [];
+    game.combatAnim = null;
+    game.resultTimer = 0;
+    game.comboCount = 0;
+    game.streak = 0;
+    game.phaseTimer = 0;
+
+    // Draw initial hands
+    for(let i=0;i<7;i++) {
+        if(game.playerDeck.length>0) game.playerHand.push(game.playerDeck.pop());
+        if(game.opponentDeck.length>0) game.opponentHand.push(game.opponentDeck.pop());
+    }
+
+    // Place random cards on field for opponent
+    let oppCards = game.opponentDeck.splice(0, 5);
+    let positions = ['GK','DEF','MID','ATT','ATT'];
+    oppCards.forEach((c,i) => {
+        game.opponentField[positions[i]] = c;
+    });
+
+    startTurn();
+}
+
+function startTurn() {
+    game.turnTimer = 90;
+    game.turnPhase = 'DRAW';
+    game.placedThisTurn = 0;
+    game.attackPhase = false;
+    game.attackQueue = [];
+    game.comboCount = 0;
+    game.currentTurn = 'player';
+    game.phaseText = 'YOUR TURN';
+    game.phaseTimer = 60;
+    game.turnIndicator = 'player';
+
+    if(game.turnTimerInterval) clearInterval(game.turnTimerInterval);
+    game.turnTimerInterval = setInterval(() => {
+        game.turnTimer--;
+        if(game.turnTimer <= 0) {
+            endTurn();
+        }
+    }, 1000);
+
+    // Draw a card if bench has space
+    if(game.playerBench.length < 5 && game.playerHand.length < 10) {
+        if(game.playerDeck.length > 0) {
+            game.playerHand.push(game.playerDeck.pop());
+        }
+    }
+}
+
+function endTurn() {
+    if(game.turnTimerInterval) clearInterval(game.turnTimerInterval);
+
+    // Process attacks
+    if(game.attackQueue.length > 0) {
+        processAttacks();
+    } else {
+        finishRound();
+    }
+}
+
+function processAttacks() {
+    let nextAttack = game.attackQueue.shift();
+    if(!nextAttack) { finishRound(); return; }
+
+    let attacker = nextAttack.attacker;
+    let zone = nextAttack.zone;
+    let defender = game.opponentField[zone];
+
+    game.combatAnim = {
+        attacker: attacker,
+        defender: defender,
+        zone: zone,
+        phase: 'resolve',
+        timer: 0,
+        result: null,
+        progress: 0
+    };
+
+    game.state = 'COMBAT';
+}
+
+function resolveCombat(combat) {
+    let atkStats = getCardStats(combat.attacker);
+    let defStats = combat.defender ? getCardStats(combat.defender) : null;
+
+    let atkPower = 0;
+    let defPower = 0;
+
+    if(combat.zone === 'ATT') {
+        atkPower = atkStats.sho + atkStats.pac;
+        if(defender) {
+            defPower = defStats.def + defStats.phy;
+        } else {
+            defPower = 30; // No defender
+        }
+    } else if(combat.zone === 'MID') {
+        atkPower = atkStats.pas + atkStats.dri;
+        if(defender) {
+            defPower = defStats.def + defStats.pac;
+        } else {
+            defPower = 30;
+        }
+    } else if(combat.zone === 'DEF') {
+        atkPower = atkStats.pac + atkStats.dri;
+        if(defender) {
+            defPower = defStats.def + defStats.phy;
+        } else {
+            defPower = 30;
+        }
+    } else if(combat.zone === 'GK') {
+        atkPower = atkStats.sho + atkStats.pac;
+        if(defender) {
+            defPower = defStats.def + 20;
+        } else {
+            defPower = 20;
+        }
+    }
+
+    // Random factor
+    atkPower += rand(-10, 10);
+    defPower += rand(-10, 10);
+
+    let result;
+    if(atkPower > defPower) {
+        if(combat.zone === 'GK') {
+            result = 'GOAL';
+            game.playerScore++;
+            game.totalGoals++;
+            game.streak++;
+            if(game.streak > game.bestStreak) game.bestStreak = game.streak;
+            game.comboCount++;
+            addParticle(W/2, H*0.3, 'goal');
+            game.shakeTimer = 20;
+            game.shakeIntensity = 8;
+            game.flashTimer = 15;
+            game.flashColor = 'rgba(255,255,0,0.3)';
+            game.goalAnim = 90;
+            game.goalTeam = 'player';
+        } else {
+            result = 'WIN';
+            game.streak++;
+            if(game.streak > game.bestStreak) game.bestStreak = game.streak;
+            game.comboCount++;
+            addParticle(W/2, H*0.4, 'win');
+        }
+    } else if(atkPower < defPower) {
+        result = 'LOSE';
+        game.streak = 0;
+        game.comboCount = 0;
+        addParticle(W/2, H*0.4, 'lose');
+        game.shakeTimer = 10;
+        game.shakeIntensity = 4;
+    } else {
+        result = 'DRAW';
+        game.streak = 0;
+    }
+
+    combat.result = result;
+    combat.progress = 1;
+
+    // Remove attacker from field
+    game.playerField[combat.zone] = null;
+
+    setTimeout(() => {
+        if(game.attackQueue.length > 0) {
+            processAttacks();
+        } else {
+            finishRound();
+        }
+    }, 800);
+}
+
+function finishRound() {
+    game.round++;
+    if(game.round > game.maxRounds) {
+        endMatch();
+        return;
+    }
+
+    // Draw new cards
+    if(game.playerDeck.length > 0 && game.playerHand.length < 7) {
+        game.playerHand.push(game.player.deck.pop());
+    }
+
+    // AI turn
+    game.currentTurn = 'opponent';
+    game.turnIndicator = 'opponent';
+    game.phaseText = 'OPPONENT\'S TURN';
+    game.phaseTimer = 60;
+
+    setTimeout(() => {
+        aiPlayTurn();
+    }, 1000);
+}
+
+function aiPlayTurn() {
+    let field = game.opponentField;
+    let hand = game.opponentHand;
+
+    // AI decides which card to attack with
+    let bestCard = null;
+    let bestZone = null;
+    let bestScore = -999;
+
+    for(let i=0; i<hand.length; i++) {
+        let card = hand[i];
+        let pos = card.pos;
+        for(let z of ZONES) {
+            let score = 0;
+            if(POS_MAP[z] && POS_MAP[z].includes(pos)) {
+                let def = field[z];
+                if(!def) {
+                    score = 100; // Free attack
+                } else {
+                    let atk = getCardStats(card);
+                    let defS = getCardStats(def);
+                    if(z === 'ATT') score = atk.sho + atk.pac - (defS.def + defS.phy);
+                    else if(z === 'MID') score = atk.pas + atk.dri - (defS.def + defS.pac);
+                    else if(z === 'DEF') score = atk.pac + atk.dri - (defS.def + defS.phy);
+                    else if(z === 'GK') score = atk.sho + atk.pac - (defS.def + 20);
+                }
+                // AI archetype bonuses
+                if(game.aiArchetype === 'aggressive' && z === 'ATT') score += 10;
+                if(game.aiArchetype === 'defensive' && z === 'DEF') score += 10;
+            }
+            if(score > bestScore) {
+                bestScore = score;
+                bestCard = card;
+                bestZone = z;
+            }
+        }
+    }
+
+    if(bestCard) {
+        hand.splice(hand.indexOf(bestCard), 1);
+        field[bestZone] = bestCard;
+        game.opponentHand.push(bestCard);
+        game.opponentHand = game.opponentHand.filter(c => c !== bestCard);
+        game.opponentHand.push(bestCard); // Put back in hand for attack
+
+        // Actually place on field
+        field[bestZone] = bestCard;
+
+        // Attack if player has a card in that zone
+        let playerCard = game.playerField[bestZone];
+        if(playerCard) {
+            game.attackQueue.push({attacker: bestCard, zone: bestZone});
+        }
+    }
+
+    // Process AI attacks
+    if(game.attackQueue.length > 0) {
+        // Swap queue for AI
+        let aiAttacks = game.attackQueue;
+        game.attackQueue = [];
+        game.state = 'COMBAT';
+
+        let processAIAttack = () => {
+            let attack = aiAttacks.shift();
+            if(!attack) {
+                // AI turn done, player's turn
+                game.currentTurn = 'player';
+                game.turnIndicator = 'player';
+                game.phaseText = 'YOUR TURN';
+                game.phaseTimer = 60;
+                game.turnTimer = 90;
+                game.turnPhase = 'DRAW';
+                game.placedThisTurn = 0;
+                game.attackPhase = false;
+                game.attackQueue = [];
+
+                if(game.turnTimerInterval) clearInterval(game.turnTimerInterval);
+                game.turnTimerInterval = setInterval(() => {
+                    game.turnTimer--;
+                    if(game.turnTimer <= 0) {
+                        endTurn();
+                    }
+                }, 1000);
+
+                if(game.playerDeck.length > 0 && game.playerHand.length < 10) {
+                    game.playerHand.push(game.playerDeck.pop());
+                }
+                return;
+            }
+
+            let defender = game.playerField[attack.zone];
+            let atkStats = getCardStats(attack.attacker);
+            let defStats = defender ? getCardStats(defender) : null;
+
+            let atkPower = 0, defPower = 0;
+            if(attack.zone === 'ATT') {
+                atkPower = atkStats.sho + atkStats.pac + rand(-10,10);
+                defPower = defender ? (defStats.def + defStats.phy + rand(-10,10)) : (30 + rand(-10,10));
+            } else if(attack.zone === 'MID') {
+                atkPower = atkStats.pas + atkStats.dri + rand(-10,10);
+                defPower = defender ? (defStats.def + defStats.pac + rand(-10,10)) : (30 + rand(-10,10));
+            } else if(attack.zone === 'DEF') {
+                atkPower = atkStats.pac + atkStats.dri + rand(-10,10);
+                defPower = defender ? (defStats.def + defStats.phy + rand(-10,10)) : (30 + rand(-10,10));
+            } else if(attack.zone === 'GK') {
+                atkPower = atkStats.sho + atkStats.pac + rand(-10,10);
+                defPower = defender ? (defStats.def + 20 + rand(-10,10)) : (20 + rand(-10,10));
+            }
+
+            let result;
+            if(atkPower > defPower) {
+                if(attack.zone === 'GK') {
+                    result = 'GOAL';
+                    game.opponentScore++;
+                    game.totalConceded++;
+                    game.streak = 0;
+                    game.comboCount = 0;
+                    game.shakeTimer = 20;
+                    game.shakeIntensity = 8;
+                    game.flashTimer = 15;
+                    game.flashColor = 'rgba(255,0,0,0.3)';
+                    game.goalAnim = 90;
+                    game.goalTeam = 'opponent';
+                } else {
+                    result = 'WIN';
+                }
+            } else {
+                result = 'LOSE';
+            }
+
+            game.opponentField[attack.zone] = null;
+            game.opponentHand.push(attack.attacker);
+
+            setTimeout(processAIAttack, 800);
+        };
+
+        processAIAttack();
+    } else {
+        // AI did nothing, player's turn
+        game.currentTurn = 'player';
+        game.turnIndicator = 'player';
+        game.phaseText = 'YOUR TURN';
+        game.phaseTimer = 60;
+        game.turnTimer = 90;
+        game.turnPhase = 'DRAW';
+        game.placedThisTurn = 0;
+        game.attackPhase = false;
+        game.attackQueue = [];
+
+        if(game.turnTimerInterval) clearInterval(game.turnTimerInterval);
+        game.turnTimerInterval = setInterval(() => {
+            game.turnTimer--;
+            if(game.turnTimer <= 0) {
+                endTurn();
+            }
+        }, 1000);
+
+        if(game.playerDeck.length > 0 && game.playerHand.length < 10) {
+            game.playerHand.push(game.playerDeck.pop());
+        }
+    }
+}
+
+function endMatch() {
+    if(game.turnTimerInterval) clearInterval(game.turnTimerInterval);
+
+    let won = game.playerScore > game.opponentScore;
+    let drew = game.playerScore === game.opponentScore;
+
+    if(won) {
+        game.wins++;
+        game.coins += 100 + game.round * 50;
+        game.energy = Math.max(0, game.energy - 1);
+        if(game.rank < 9) game.rank++;
+        addNotification('VICTORY! +' + (100 + game.round * 50) + ' coins', '#4CAF50');
+    } else if(drew) {
+        game.draws++;
+        game.coins += 50;
+        game.energy = Math.max(0, game.energy - 1);
+        addNotification('DRAW! +50 coins', '#FF9800');
+    } else {
+        game.losses++;
+        game.coins += 25;
+        game.energy = Math.max(0, game.energy - 1);
+        if(game.rank > 0) game.rank--;
+        addNotification('DEFEAT', '#F44336');
+    }
+
+    game.matchHistory.unshift({
+        result: won ? 'W' : drew ? 'D' : 'L',
+        score: game.playerScore + '-' + game.opponentScore,
+        round: game.round,
+        date: Date.now()
+    });
+
+    game.state = 'GAME_OVER';
+}
+
+// ============ DRAFT MODE ============
+function initDraft() {
+    game.draftWins = 0;
+    game.draftLosses = 0;
+    game.draftCards = [];
+    game.draftPicks = [];
+    game.draftRound = 0;
+    game.state = 'DRAFT';
+    game.draftPool = [];
+
+    // Generate draft pool
+    let pool = CARD_DB.filter(c => c.type !== 'Tactics' && c.type !== 'Reaction');
+    for(let i=0; i<30; i++) {
+        let card = {...pool[rand(0, pool.length-1)], uid: Date.now()+Math.random()};
+        game.draftPool.push(card);
+    }
+
+    showDraftRound();
+}
+
+function showDraftRound() {
+    game.draftRound++;
+    game.draftChoices = [];
+
+    // Pick 4 cards from remaining pool
+    let available = game.draftPool.filter(c => !game.draftCards.includes(c));
+    if(available.length < 4) {
+        endDraft();
+        return;
+    }
+
+    // Shuffle and pick 4
+    for(let i=available.length-1; i>0; i--) {
+        let j = rand(0, i);
+        [available[i], available[j]] = [available[j], available[i]];
+    }
+    game.draftChoices = available.slice(0, 4);
+}
+
+function draftPick(card) {
+    game.draftCards.push(card);
+    game.draftPool = game.draftPool.filter(c => c !== card);
+    game.selectedDraftCard = null;
+
+    if(game.draftCards.length >= 11) {
+        // Draft complete, play match
+        startDraftMatch();
+    } else {
+        showDraftRound();
+    }
+}
+
+function startDraftMatch() {
+    game.draftWins = 0;
+    game.draftLosses = 0;
+    game.state = 'DRAFT_MATCH';
+
+    // Build draft deck
+    game.playerDeck = game.draftCards.slice();
+    game.opponentDeck = buildAIDeck('balanced');
+    game.playerField = {GK:null,DEF:null,MID:null,ATT:null,ATT:null};
+    game.opponentField = {GK:null,DEF:null,MID:null,ATT:null,ATT:null};
+    game.playerHand = [];
+    game.opponentHand = [];
+    game.playerBench = [];
+    game.opponentBench = [];
+    game.playerScore = 0;
+    game.opponentScore = 0;
+    game.round = 1;
+    game.maxRounds = 3;
+    game.turnTimer = 90;
+    game.currentTurn = 'player';
+    game.turnPhase = 'DRAW';
+    game.placedThisTurn = 0;
+    game.attackPhase = false;
+    game.attackQueue = [];
+    game.comboCount = 0;
+    game.streak = 0;
+    game.phaseTimer = 0;
+
+    for(let i=0;i<7;i++) {
+        if(game.playerDeck.length>0) game.playerHand.push(game.playerDeck.pop());
+        if(game.opponentDeck.length>0) game.opponentHand.push(game.opponentDeck.pop());
+    }
+
+    let oppCards = game.opponentDeck.splice(0, 5);
+    let positions = ['GK','DEF','MID','ATT','ATT'];
+    oppCards.forEach((c,i) => { game.opponentField[positions[i]] = c; });
+
+    startTurn();
+}
+
+function endDraftMatch() {
+    if(game.turnTimerInterval) clearInterval(game.turnTimerInterval);
+
+    let won = game.playerScore > game.opponentScore;
+    if(won) game.draftWins++;
+    else game.draftLosses++;
+
+    if(game.draftWins >= 4) {
+        game.coins += 500;
+        game.gems += 50;
+        addNotification('DRAFT CHAMPION! +500 coins, +50 gems', '#FFD700');
+        game.state = 'MENU';
+    } else if(game.draftLosses >= 2) {
+        game.coins += 100;
+        addNotification('DRAFT ELIMINATED. +100 coins', '#F44336');
+        game.state = 'MENU';
+    } else {
+        // Continue draft
+        game.draftCards = [];
+        game.draftPool = [];
+        let pool = CARD_DB.filter(c => c.type !== 'Tactics' && c.type !== 'Reaction');
+        for(let i=0; i<30; i++) {
+            game.draftPool.push({...pool[rand(0, pool.length-1)], uid: Date.now()+Math.random()});
+        }
+        showDraftRound();
+    }
+}
+
+// ============ ENERGY SYSTEM ============
+function updateEnergy() {
+    let now = Date.now();
+    let elapsed = (now - game.lastEnergyUpdate) / 1000;
+    let regen = Math.floor(elapsed / 600); // 1 per 10 minutes
+    if(regen > 0) {
+        game.energy = Math.min(game.maxEnergy, game.energy + regen);
+        game.lastEnergyUpdate = now;
+    }
+}
+
+// ============ UI RENDERING ============
+function drawRoundedRect(x,y,w,h,r) {
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.lineTo(x+w-r,y);
+    ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+    ctx.lineTo(x+w,y+h-r);
+    ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    ctx.lineTo(x+r,y+h);
+    ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+    ctx.lineTo(x,y+r);
+    ctx.quadraticCurveTo(x,y,x+r,y);
+    ctx.closePath();
+}
+
+function drawCard(card, x, y, w, h, scale=1, selected=false, highlight=false) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+
+    let cw = w, ch = h;
+
+    // Shadow
+    ctx.shadowColor = selected ? '#FFD700' : 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = selected ? 20 : 8;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = selected ? 0 : 4;
+
+    // Card background
+    let bg = getCardBg(card.rarity);
+    ctx.fillStyle = bg;
+    drawRoundedRect(0, 0, cw, ch, 8);
+    ctx.fill();
+
+    ctx.shadowColor = 'transparent';
+
+    // Border
+    let borderColor = getCardColor(card.rarity);
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = selected ? 3 : 2;
+    drawRoundedRect(0, 0, cw, ch, 8);
+    ctx.stroke();
+
+    if(highlight) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4,4]);
+        drawRoundedRect(2, 2, cw-4, ch-4, 6);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    // Header
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    drawRoundedRect(4, 4, cw-8, 22, 4);
+    ctx.fill();
+
+    // Overall rating
+    let ov = getOverall(card);
+    if(ov > 0) {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(ov, 10, 20);
+    }
+
+    // Name
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(card.name, cw/2, 20);
+
+    // Position badge
+    let posColor = getPosColor(card.pos);
+    ctx.fillStyle = posColor;
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText(card.pos, cw-10, 20);
+
+    // Type indicator
+    if(card.type === 'Tactics') {
+        ctx.fillStyle = '#9C27B0';
+        ctx.font = 'bold 9px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('TACTICS', cw/2, 38);
+    } else if(card.type === 'Reaction') {
+        ctx.fillStyle = '#E91E63';
+        ctx.font = 'bold 9px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('REACTION', cw/2, 38);
+    }
+
+    // Player image area (simplified)
+    let imgY = card.type === 'Tactics' || card.type === 'Reaction' ? 28 : 40;
+    let imgH = card.type === 'Tactics' || card.type === 'Reaction' ? 50 : 38;
+
+    // Player silhouette
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.beginPath();
+    ctx.arc(cw/2, imgY + imgH*0.35, 14, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(cw/2, imgY + imgH*0.85, 16, 10, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Stats
+    if(card.type !== 'Tactics' && card.type !== 'Reaction') {
+        let stats = [
+            {label:'PAC', val:card.pac, y:imgY+imgH+8},
+            {label:'SHO', val:card.sho, y:imgY+imgH+20},
+            {label:'PAS', val:card.pas, y:imgY+imgH+32},
+            {label:'DRI', val:card.dri, y:imgY+imgH+44},
+            {label:'DEF', val:card.def, y:imgY+imgH+56},
+            {label:'PHY', val:card.phy, y:imgY+imgH+68}
+        ];
+
+        stats.forEach(s => {
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(6, s.y, cw-12, 10);
+
+            // Stat bar
+            let barW = (s.val/99) * (cw-16);
+            let barColor = s.val >= 85 ? '#4CAF50' : s.val >= 70 ? '#FF9800' : s.val >= 55 ? '#FFC107' : '#F44336';
+            ctx.fillStyle = barColor;
+            ctx.fillRect(8, s.y+1, barW, 8);
+
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 7px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(s.label, 10, s.y+8);
+            ctx.textAlign = 'right';
+            ctx.fillText(s.val, cw-10, s.y+8);
+        });
+    } else if(card.type === 'Tactics' || card.type === 'Reaction') {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        let bonusText = card.bonusVal ? '+' + card.bonusVal + ' ' + card.bonus.toUpperCase() : '';
+        ctx.fillText(bonusText, cw/2, imgY + imgH/2 + 5);
+    }
+
+    // Stars
+    if(card.stars > 0) {
+        for(let i=0; i<card.stars; i++) {
+            let sx = cw/2 - (card.stars-1)*6 + i*12;
+            let sy = ch - 10;
+            ctx.fillStyle = '#FFD700';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('★', sx, sy);
+        }
+    }
+
+    // Rarity label
+    ctx.fillStyle = borderColor;
+    ctx.font = 'bold 7px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(card.rarity.toUpperCase(), cw/2, ch - 2);
+
+    ctx.restore();
+}
+
+function drawButton(x, y, w, h, text, color='#2196F3', textColor='#fff', fontSize=14) {
+    ctx.save();
+    let isHovered = game.hoveredBtn && game.hoveredBtn.x === x && game.hoveredBtn.y === y;
+
+    // Shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.3)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 2;
+
+    let bgColor = isHovered ? lightenColor(color, 30) : color;
+    ctx.fillStyle = bgColor;
+    drawRoundedRect(x, y, w, h, 8);
+    ctx.fill();
+
+    ctx.shadowColor = 'transparent';
+
+    // Border
+    ctx.strokeStyle = isHovered ? '#fff' : 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 1;
+    drawRoundedRect(x, y, w, h, 8);
+    ctx.stroke();
+
+    ctx.fillStyle = textColor;
+    ctx.font = `bold ${fontSize}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + w/2, y + h/2);
+
+    ctx.restore();
+}
+
+function lightenColor(hex, amount) {
+    let r = parseInt(hex.slice(1,3),16);
+    let g = parseInt(hex.slice(3,5),16);
+    let b = parseInt(hex.slice(5,7),16);
+    r = Math.min(255, r+amount);
+    g = Math.min(255, g+amount);
+    b = Math.min(255, b+amount);
+    return `rgb(${r},${g},${b})`;
+}
+
+function drawField() {
+    let fieldX = 30, fieldY = 120, fieldW = W - 60, fieldH = 340;
+
+    // Field background
+    ctx.fillStyle = '#1a472a';
+    drawRoundedRect(fieldX, fieldY, fieldW, fieldH, 12);
+    ctx.fill();
+
+    // Field pattern
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    for(let i=0; i<fieldW; i+=40) {
+        ctx.fillRect(fieldX+i, fieldY, 20, fieldH);
+    }
+
+    // Field lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(fieldX, fieldY, fieldW, fieldH);
+
+    // Center line
+    ctx.beginPath();
+    ctx.moveTo(fieldX, fieldY + fieldH/2);
+    ctx.lineTo(fieldX + fieldW, fieldY + fieldH/2);
+    ctx.stroke();
+
+    // Center circle
+    ctx.beginPath();
+    ctx.arc(fieldX + fieldW/2, fieldY + fieldH/2, 30, 0, Math.PI*2);
+    ctx.stroke();
+
+    // Zones
+    let zoneH = fieldH / 5;
+    let zoneLabels = ['OPPONENT', '', '', '', 'YOUR FIELD'];
+
+    for(let i=0; i<5; i++) {
+        let zy = fieldY + i * zoneH;
+        let isPlayerZone = i >= 3;
+
+        // Zone background
+        ctx.fillStyle = isPlayerZone ? 'rgba(33,150,243,0.15)' : 'rgba(244,67,54,0.15)';
+        ctx.fillRect(fieldX, zy, fieldW, zoneH);
+
+        // Zone label
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.font = '9px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(ZONES[i], fieldX + fieldW/2, zy + 12);
+
+        // Zone card slot
+        let cardX = fieldX + fieldW/2 - 35;
+        let cardY = zy + zoneH/2 - 40;
+        let cardW = 70, cardH = 80;
+
+        let playerCard = game.playerField[ZONES[i]];
+        let opponentCard = game.opponentField[ZONES[i]];
+
+        if(playerCard) {
+            drawCard(playerCard, cardX, cardY, cardW, cardH, 0.7, false, false);
+        } else if(opponentCard) {
+            drawCard(opponentCard, cardX, cardY, cardW, cardH, 0.7, false, false);
+        } else {
+            // Empty slot
+            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4,4]);
+            drawRoundedRect(cardX, cardY, cardW, cardH, 8);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Empty', cardX + cardW/2, cardY + cardH/2 + 4);
+        }
+    }
+
+    // Score display
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    drawRoundedRect(W/2 - 60, fieldY - 30, 120, 30, 8);
+    ctx.fill();
+
+    ctx.fillStyle = '#F44336';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText(game.opponentScore, W/2 - 15, fieldY - 10);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('-', W/2, fieldY - 10);
+
+    ctx.fillStyle = '#2196F3';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(game.playerScore, W/2 + 15, fieldY - 10);
+
+    // Round indicator
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    drawRoundedRect(W/2 - 40, fieldY + fieldH + 8, 80, 20, 6);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Round ' + game.round + '/' + game.maxRounds, W/2, fieldY + fieldH + 22);
+}
+
+function drawHand() {
+    let handY = H - 130;
+    let cardW = 65, cardH = 85;
+    let totalW = game.playerHand.length * (cardW + 8);
+    let startX = clamp((W - totalW) / 2, 10, W - totalW - 10);
+
+    // Hand background
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    drawRoundedRect(10, handY - 5, W - 20, cardH + 35, 12);
+    ctx.fill();
+
+    // Label
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('HAND (' + game.playerHand.length + ')', 20, handY + 8);
+
+    game.hoveredCard = null;
+
+    game.playerHand.forEach((card, i) => {
+        let cx = startX + i * (cardW + 8);
+        let cy = handY + 15;
+        let isSelected = game.selectedCard === card;
+        let isHovered = game.lastTap.x >= cx && game.lastTap.x <= cx + cardW &&
+                        game.lastTap.y >= cy && game.lastTap.y <= cy + cardH;
+
+        if(isHovered) game.hoveredCard = card;
+
+        drawCard(card, cx, cy, cardW, cardH, 0.85, isSelected, false);
+
+        // Card index
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '8px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(i+1, cx + cardW/2, cy + cardH + 12);
+    });
+
+    // Bench
+    let benchY = handY + cardH + 25;
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '9px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('BENCH: ' + game.playerBench.length + '/5', 20, benchY + 5);
+
+    // Energy bar
+    let energyX = W - 100, energyY = benchY;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    drawRoundedRect(energyX, energyY, 90, 16, 6);
+    ctx.fill();
+
+    let energyW = (game.energy / game.maxEnergy) * 86;
+    ctx.fillStyle = game.energy > 3 ? '#4CAF50' : '#F44336';
+    drawRoundedRect(energyX + 2, energyY + 2, energyW, 12, 4);
+    ctx.fill();
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 9px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('⚡ ' + game.energy + '/' + game.maxEnergy, energyX + 45, energyY + 11);
+
+    // Coins
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('🪙 ' + game.coins, energyX, benchY + 28);
+}
+
+function drawTopBar() {
+    // Top bar background
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    drawRoundedRect(0, 0, W, 40, 0);
+    ctx.fill();
+
+    // Mode indicator
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'left';
+    let modeText = game.state === 'DRAFT' ? 'DRAFT' : game.state === 'DRAFT_MATCH' ? 'DRAFT MATCH' :
+                   game.state === 'RANKED' ? 'RANKED' : 'QUICK';
+    ctx.fillText(modeText, 10, 25);
+
+    // Rank
+    ctx.fillStyle = '#FFD700';
+    ctx.textAlign = 'center';
+    ctx.fillText(game.rankName, W/2, 25);
+
+    // W/L/D
+    ctx.fillStyle = '#4CAF50';
+    ctx.textAlign = 'right';
+    ctx.fillText('W:' + game.wins, W - 10, 18);
+    ctx.fillStyle = '#F44336';
+    ctx.fillText('L:' + game.losses, W - 10, 32);
+
+    // Timer
+    if(game.state === 'PLAYING' || game.state === 'COMBAT') {
+        let timerColor = game.turnTimer > 30 ? '#4CAF50' : game.turnTimer > 10 ? '#FF9800' : '#F44336';
+        ctx.fillStyle = timerColor;
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('⏱ ' + game.turnTimer + 's', W/2, 55);
+    }
+
+    // Phase text
+    if(game.phaseTimer > 0) {
+        game.phaseTimer--;
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        drawRoundedRect(W/2 - 80, 45, 160, 28, 8);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(game.phaseText, W/2, 63);
+    }
+}
+
+function drawParticles() {
+    game.particles.forEach((p, i) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.1;
+        p.life -= 0.02;
+
+        if(p.life > 0) {
+            ctx.globalAlpha = p.life;
+            if(p.type === 'goal') {
+                ctx.fillStyle = '#FFD700';
+                ctx.font = p.size * 3 + 'px Arial';
+                ctx.fillText('⚽', p.x, p.y);
+            } else if(p.type === 'win') {
+                ctx.fillStyle = '#4CAF50';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+                ctx.fill();
+            } else if(p.type === 'lose') {
+                ctx.fillStyle = '#F44336';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+        }
+    });
+    game.particles = game.particles.filter(p => p.life > 0);
+}
+
+function drawNotifications() {
+    game.notifications.forEach((n, i) => {
+        n.y -= 0.5;
+        n.life--;
+        if(n.life < 30) n.alpha = n.life / 30;
+
+        ctx.globalAlpha = n.alpha;
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        drawRoundedRect(W/2 - 120, n.y - 15, 240, 30, 8);
+        ctx.fill();
+        ctx.fillStyle = n.color;
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(n.text, W/2, n.y + 3);
+        ctx.globalAlpha = 1;
+    });
+    game.notifications = game.notifications.filter(n => n.life > 0);
+}
+
+function drawMenu() {
+    // Background
+    ctx.fillStyle = '#0a0a1a';
+    ctx.fillRect(0, 0, W, H);
+
+    // Animated background
+    game.animFrame++;
+    for(let i=0; i<20; i++) {
+        ctx.fillStyle = `rgba(33,150,243,${0.02 + Math.sin(game.animFrame*0.02+i)*0.01})`;
+        ctx.fillRect(
+            Math.sin(game.animFrame*0.01+i*0.5)*W/2 + W/2,
+            Math.cos(game.animFrame*0.008+i*0.3)*H/2 + H/2,
+            3, 3
+        );
+    }
+
+    // Logo
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 36px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('⚽ FIFA CARD', W/2, 120);
+    ctx.fillStyle = '#fff';
+    ctx.fillText('DUEL', W/2, 160);
+
+    // Subtitle
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '12px Arial';
+    ctx.fillText('Build Your Dream Team', W/2, 185);
+
+    // Menu tabs
+    let tabs = ['PLAY', 'DECK', 'DRAFT', 'SHOP', 'PROFILE'];
+    let tabW = W / tabs.length;
+
+    tabs.forEach((tab, i) => {
+        let tx = i * tabW;
+        let isActive = game.menuTab === i;
+
+        ctx.fillStyle = isActive ? 'rgba(33,150,243,0.3)' : 'rgba(255,255,255,0.05)';
+        drawRoundedRect(tx, 200, tabW, 35, 8);
+        ctx.fill();
+
+        if(isActive) {
+            ctx.strokeStyle = '#2196F3';
+            ctx.lineWidth = 2;
+            drawRoundedRect(tx, 200, tabW, 35, 8);
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = isActive ? '#2196F3' : 'rgba(255,255,255,0.6)';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(tab, tx + tabW/2, 222);
+    });
+
+    // Tab content
+    switch(game.menuTab) {
+        case 0: drawMenuPlay(); break;
+        case 1: drawMenuDeck(); break;
+        case 2: drawMenuDraft(); break;
+        case 3: drawMenuShop(); break;
+        case 4: drawMenuProfile(); break;
+    }
+
+    // Footer
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('FIFA Card Duel v1.0 | No P2W', W/2, H - 15);
+}
+
+function drawMenuPlay() {
+    let startY = 260;
+
+    // Quick Match
+    drawButton(W/2 - 120, startY, 240, 50, '⚡ Quick Match', '#2196F3', '#fff', 16);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('3 min matches • 1 energy', W/2, startY + 65);
+
+    // Ranked
+    drawButton(W/2 - 120, startY + 80, 240, 50, '🏆 Ranked', '#9C27B0', '#fff', 16);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Climb divisions • ' + game.rankName, W/2, startY + 145);
+
+    // AI difficulty
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('AI Archetype:', W/2, startY + 180);
+
+    let archetypes = [
+        {name:'Defensive', icon:'🛡️', color:'#4CAF50'},
+        {name:'Balanced', icon:'⚖️', color:'#FF9800'},
+        {name:'Aggressive', icon:'⚔️', color:'#F44336'}
+    ];
+
+    archetypes.forEach((a, i) => {
+        let ax = W/2 - 100 + i * 100;
+        let isSelected = game.aiArchetype === ['defensive','balanced','aggressive'][i];
+        drawButton(ax - 40, startY + 190, 80, 40, a.icon, isSelected ? a.color : 'rgba(255,255,255,0.1)', isSelected ? '#fff' : 'rgba(255,255,255,0.5)', 10);
+        ctx.fillStyle = isSelected ? a.color : 'rgba(255,255,255,0.3)';
+        ctx.font = '9px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(a.name, ax, startY + 245);
+    });
+
+    // Energy info
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Energy: ' + game.energy + '/' + game.maxEnergy + ' (Regens 1/10min)', W/2, startY + 270);
+}
+
+function drawMenuDeck() {
+    let startY = 260;
+
+    // Deck stats
+    let totalCards = CARD_DB.filter(c => c.type !== 'Tactics' && c.type !== 'Reaction').length;
+    let goldCount = CARD_DB.filter(c => c.rarity === 'Gold').length;
+    let silverCount = CARD_DB.filter(c => c.rarity === 'Silver').length;
+    let bronzeCount = CARD_DB.filter(c => c.rarity === 'Bronze').length;
+
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Card Database: ' + totalCards + ' cards', W/2, startY);
+
+    // Rarity breakdown
+    let rarities = [
+        {name:'Special', color:'#FFD700', count:12},
+        {name:'Gold', color:'#FFD700', count:goldCount},
+        {name:'Silver', color:'#C0C0C0', count:silverCount},
+        {name:'Bronze', color:'#CD7F32', count:bronzeCount}
+    ];
+
+    rarities.forEach((r, i) => {
+        let ry = startY + 25 + i * 30;
+        ctx.fillStyle = r.color;
+        ctx.font = 'bold 11px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(r.name + ':', 30, ry);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillText(r.count + ' cards', 120, ry);
+
+        // Bar
+        let barW = (r.count / 50) * (W - 160);
+        ctx.fillStyle = r.color + '40';
+        ctx.fillRect(200, ry - 8, barW, 12);
+    });
+
+    // Deck builder
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Build a 40-card deck (11 players min)', W/2, startY + 160);
+
+    drawButton(W/2 - 100, startY + 180, 200, 40, 'Build Random Deck', '#4CAF50', '#fff', 13);
+
+    // Show card list
+    drawButton(W/2 - 100, startY + 230, 200, 40, 'View All Cards', '#2196F3', '#fff', 13);
+
+    // Card detail
+    if(game.cardDetail) {
+        drawCardDetail(game.cardDetail);
+    }
+}
+
+function drawCardDetail(card) {
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(0, 0, W, H);
+
+    drawCard(card, W/2 - 80, 100, 160, 220, 1, true, false);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(card.name + ' - ' + card.club, W/2, 350);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '11px Arial';
+    ctx.fillText(card.nation + ' | ' + card.pos, W/2, 370);
+
+    if(card.type !== 'Tactics' && card.type !== 'Reaction') {
+        let stats = ['PAC','SHO','PAS','DRI','DEF','PHY'];
+        let vals = [card.pac,card.sho,card.pas,card.dri,card.def,card.phy];
+        let startY = 390;
+
+        stats.forEach((s, i) => {
+            let y = startY + i * 18;
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.font = 'bold 10px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(s, 80, y);
+            ctx.textAlign = 'right';
+            ctx.fillText(String(vals[i]), W-80, y);
+
+            let barW = (vals[i]/99) * (W - 200);
+            let barColor = vals[i] >= 85 ? '#4CAF50' : vals[i] >= 70 ? '#FF9800' : vals[i] >= 55 ? '#FFC107' : '#F44336';
+            ctx.fillStyle = barColor;
+            ctx.fillRect(120, y-7, barW, 10);
+        });
+    }
+
+    drawButton(W/2 - 60, H - 80, 120, 35, 'Close', '#666', '#fff', 12);
+}
+
+function drawMenuDraft() {
+    let startY = 260;
+
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Draft Mode: Pick 11 cards, win 4 matches', W/2, startY);
+
+    drawButton(W/2 - 100, startY + 30, 200, 50, '🎯 Start Draft', '#FF9800', '#fff', 16);
+
+    // Draft rules
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = '10px Arial';
+    ctx.fillText('Rules:', W/2, startY + 100);
+    ctx.fillText('• Pick from 4 random cards each round', W/2, startY + 118);
+    ctx.fillText('• Build a squad of 11 players', W/2, startY + 133);
+    ctx.fillText('• Win 4 matches to become champion', W/2, startY + 148);
+    ctx.fillText('• Lose 2 matches and you\'re out', W/2, startY + 163);
+
+    // Draft rewards
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 11px Arial';
+    ctx.fillText('Rewards: 500 coins + 50 gems (champion)', W/2, startY + 200);
+}
+
+function drawMenuShop() {
+    let startY = 260;
+
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('💎 Shop', W/2, startY);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '11px Arial';
+    ctx.fillText('Your balance: ' + game.gems + ' gems | ' + game.coins + ' coins', W/2, startY + 25);
+
+    // Gems
+    let gems = [
+        {amount:100, price:1.99},
+        {amount:500, price:4.99},
+        {amount:1200, price:9.99},
+        {amount:3000, price:19.99}
+    ];
+
+    gems.forEach((g, i) => {
+        let gy = startY + 50 + i * 55;
+        drawButton(W/2 - 100, gy, 200, 45, '💎 ' + g.amount + ' Gems', '#9C27B0', '#fff', 13);
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('$' + g.price, W/2, gy + 55);
+    });
+
+    // Energy refill
+    drawButton(W/2 - 100, startY + 270, 200, 45, '⚡ Energy Refill (5)', '#4CAF50', '#fff', 13);
+
+    // Card packs
+    drawButton(W/2 - 100, startY + 325, 200, 45, '📦 Bronze Pack (100💎)', '#CD7F32', '#fff', 12);
+    drawButton(W/2 - 100, startY + 375, 200, 45, '📦 Silver Pack (300💎)', '#C0C0C0', '#fff', 12);
+    drawButton(W/2 - 100, startY + 425, 200, 45, '📦 Gold Pack (800💎)', '#FFD700', '#333', 12);
+
+    // Cosmetic only notice
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '10px Arial';
+    ctx.fillText('Cosmetic purchases only - No Pay-to-Win!', W/2, H - 60);
+}
+
+function drawMenuProfile() {
+    let startY = 260;
+
+    // Avatar
+    ctx.fillStyle = '#2196F3';
+    ctx.beginPath();
+    ctx.arc(W/2, startY + 30, 35, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = '24px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('⚽', W/2, startY + 40);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px Arial';
+    ctx.fillText('Player ' + rand(1000,9999), W/2, startY + 80);
+
+    // Stats
+    let stats = [
+        {label:'Rank', value: game.rankName, color:'#FFD700'},
+        {label:'Wins', value: game.wins, color:'#4CAF50'},
+        {label:'Losses', value: game.losses, color:'#F44336'},
+        {label:'Draws', value: game.draws, color:'#FF9800'},
+        {label:'Best Streak', value: game.bestStreak, color:'#2196F3'},
+        {label:'Total Goals', value: game.totalGoals, color:'#4CAF50'},
+        {label:'Goals Conceded', value: game.totalConceded, color:'#F44336'},
+    ];
+
+    stats.forEach((s, i) => {
+        let sy = startY + 100 + i * 30;
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(s.label, 40, sy);
+        ctx.fillStyle = s.color;
+        ctx.font = 'bold 11px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(String(s.value), W - 40, sy);
+    });
+
+    // Settings button
+    drawButton(W/2 - 100, startY + 350, 200, 40, '⚙️ Settings', '#666', '#fff', 13);
+    drawButton(W/2 - 100, startY + 400, 200, 40, '🗑️ Reset Progress', '#F44336', '#fff', 13);
+}
+
+function drawCombatScreen() {
+    if(!game.combatAnim) return;
+
+    let combat = game.combatAnim;
+    let progress = easeOut(combat.progress);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, W, H);
+
+    // Attacker card
+    let atkX = W/2 - 100 - progress * 50;
+    let atkY = H/2 - 60;
+    drawCard(combat.attacker, atkX, atkY, 100, 130, 1, false, false);
+
+    // VS text
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 28px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('VS', W/2, H/2);
+
+    // Defender card
+    let defX = W/2 + 100 + progress * 50;
+    let defY = H/2 - 60;
+    if(combat.defender) {
+        drawCard(combat.defender, defX, defY, 100, 130, 1, false, false);
+    } else {
+        ctx.fillStyle = 'rgba(255,255,255,0.1)';
+        drawRoundedRect(defX, defY, 100, 130, 8);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.font = '12px Arial';
+        ctx.fillText('Empty', defX + 50, defY + 70);
+    }
+
+    // Result
+    if(combat.result) {
+        let resultColor = combat.result === 'GOAL' ? '#FFD700' :
+                          combat.result === 'WIN' ? '#4CAF50' : '#F44336';
+        ctx.fillStyle = resultColor;
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(combat.result, W/2, H/2 + 100);
+
+        if(combat.result === 'GOAL') {
+            ctx.font = 'bold 16px Arial';
+            ctx.fillText('⚽ GOAL! ⚽', W/2, H/2 + 130);
+        }
+
+        // Score update
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '12px Arial';
+        ctx.fillText(game.playerScore + ' - ' + game.opponentScore, W/2, H/2 + 160);
+    }
+
+    // Zone indicator
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = '11px Arial';
+    ctx.fillText('Attacking: ' + combat.zone + ' zone', W/2, H/2 - 90);
+}
+
+function drawGameOver() {
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0, 0, W, H);
+
+    let won = game.playerScore > game.opponentScore;
+    let drew = game.playerScore === game.opponentScore;
+
+    // Result banner
+    let bannerColor = won ? '#4CAF50' : drew ? '#FF9800' : '#F44336';
+    ctx.fillStyle = bannerColor;
+    drawRoundedRect(W/2 - 120, 150, 240, 60, 12);
+    ctx.fill();
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 28px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(won ? 'VICTORY!' : drew ? 'DRAW' : 'DEFEAT', W/2, 190);
+
+    // Score
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 48px Arial';
+    ctx.fillText(game.playerScore + ' - ' + game.opponentScore, W/2, 280);
+
+    // Stats
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '12px Arial';
+    ctx.fillText('Rounds played: ' + (game.round - 1), W/2, 330);
+    ctx.fillText('Best streak: ' + game.bestStreak, W/2, 350);
+    ctx.fillText('Combos: ' + game.comboCount, W/2, 370);
+
+    // Rewards
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 14px Arial';
+    let reward = won ? 100 + game.round * 50 : drew ? 50 : 25;
+    ctx.fillText('+ ' + reward + ' coins', W/2, 420);
+
+    // Buttons
+    drawButton(W/2 - 100, 460, 200, 45, '🏠 Menu', '#2196F3', '#fff', 14);
+    drawButton(W/2 - 100, 515, 200, 45, '🔄 Play Again', '#4CAF50', '#fff', 14);
+
+    // Match history
+    if(game.matchHistory.length > 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '10px Arial';
+        ctx.fillText('Recent: ' + game.matchHistory.slice(0,5).map(m => m.result).join(' '), W/2, 580);
+    }
+}
+
+function drawDraftScreen() {
+    ctx.fillStyle = '#0a0a1a';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = '#FF9800';
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('🎯 DRAFT - Pick ' + (11 - game.draftCards.length) + ' more', W/2, 40);
+
+    // Round info
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '12px Arial';
+    ctx.fillText('Round ' + game.draftRound, W/2, 65);
+
+    // Choices
+    if(game.draftChoices.length > 0) {
+        let cardW = 85, cardH = 110;
+        let totalW = game.draftChoices.length * (cardW + 15);
+        let startX = (W - totalW) / 2;
+
+        game.draftChoices.forEach((card, i) => {
+            let cx = startX + i * (cardW + 15);
+            let cy = 90;
+            drawCard(card, cx, cy, cardW, cardH, 1, false, false);
+
+            // Tap area
+            ctx.fillStyle = 'rgba(33,150,243,0.3)';
+            drawRoundedRect(cx, cy + cardH + 5, cardW, 30, 6);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('PICK', cx + cardW/2, cy + cardH + 24);
+        });
+    }
+
+    // Drafted cards
+    if(game.draftCards.length > 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('Drafted (' + game.draftCards.length + '/11):', 20, 250);
+
+        let startX = 20;
+        game.draftCards.forEach((card, i) => {
+            drawCard(card, startX, 260, 50, 65, 0.5, false, false);
+            startX += 55;
+        });
+    }
+}
+
+function drawDraftMatchUI() {
+    // Override top bar
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    drawRoundedRect(0, 0, W, 50, 0);
+    ctx.fill();
+
+    ctx.fillStyle = '#FF9800';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('DRAFT MATCH', W/2, 20);
+
+    ctx.fillStyle = '#4CAF50';
+    ctx.textAlign = 'left';
+    ctx.fillText('W:' + game.draftWins, 15, 38);
+    ctx.fillStyle = '#F44336';
+    ctx.textAlign = 'right';
+    ctx.fillText('L:' + game.draftLosses, W - 15, 38);
+
+    // Timer
+    ctx.fillStyle = game.turnTimer > 30 ? '#4CAF50' : game.turnTimer > 10 ? '#FF9800' : '#F44336';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('⏱ ' + game.turnTimer + 's', W/2, 42);
+}
+
+// ============ INPUT HANDLING ============
+function getCanvasPos(e) {
+    let rect = canvas.getBoundingClientRect();
+    let scaleX = W / rect.width;
+    let scaleY = H / rect.height;
+    let clientX, clientY;
+    if(e.touches) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+    } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+    }
+    return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+    };
+}
+
+function handleTap(pos) {
+    game.lastTap = pos;
+
+    if(game.state === 'MENU') {
+        handleMenuTap(pos);
+    } else if(game.state === 'PLAYING' || game.state === 'COMBAT') {
+        handleGameTap(pos);
+    } else if(game.state === 'GAME_OVER') {
+        handleGameOverTap(pos);
+    } else if(game.state === 'DRAFT') {
+        handleDraftTap(pos);
+    } else if(game.state === 'DRAFT_MATCH') {
+        handleGameTap(pos);
+    }
+}
+
+function handleMenuTap(pos) {
+    // Tabs
+    let tabs = ['PLAY', 'DECK', 'DRAFT', 'SHOP', 'PROFILE'];
+    let tabW = W / tabs.length;
+    for(let i=0; i<5; i++) {
+        if(pos.x >= i*tabW && pos.x <= (i+1)*tabW && pos.y >= 200 && pos.y <= 235) {
+            game.menuTab = i;
+            return;
+        }
+    }
+
+    let startY = 260;
+
+    if(game.menuTab === 0) {
+        // Quick Match
+        if(pos.x >= W/2-120 && pos.x <= W/2+120 && pos.y >= startY && pos.y <= startY+50) {
+            if(game.energy > 0) {
+                game.mode = 'quick';
+                game.energy--;
+                game.state = 'PLAYING';
+                game.aiArchetype = ['defensive','balanced','aggressive'][
+                    ['Quick Match','Ranked','Draft'].indexOf('Quick Match')
+                ];
+                initMatch();
+            } else {
+                addNotification('No energy! Wait for regen.', '#F44336');
+            }
+            return;
+        }
+        // Ranked
+        if(pos.x >= W/2-120 && pos.x <= W/2+120 && pos.y >= startY+80 && pos.y <= startY+130) {
+            if(game.energy > 0) {
+                game.mode = 'ranked';
+                game.energy--;
+                game.state = 'PLAYING';
+                game.aiArchetype = ['defensive','balanced','aggressive'][rand(0,2)];
+                game.rankName = 'Division ' + (10 - game.rank);
+                initMatch();
+            } else {
+                addNotification('No energy! Wait for regen.', '#F44336');
+            }
+            return;
+        }
+        // Archetype buttons
+        let archetypes = ['defensive','balanced','aggressive'];
+        archetypes.forEach((a, i) => {
+            let ax = W/2 - 100 + i * 100;
+            if(pos.x >= ax-40 && pos.x <= ax+40 && pos.y >= startY+190 && pos.y <= startY+230) {
+                game.aiArchetype = a;
+            }
+        });
+    } else if(game.menuTab === 1) {
+        // View All Cards
+        if(pos.x >= W/2-100 && pos.x <= W/2+100 && pos.y >= startY+230 && pos.y <= startY+270) {
+            game.showCardList = !game.showCardList;
+            return;
+        }
+        // Build Random Deck
+        if(pos.x >= W/2-100 && pos.x <= W/2+100 && pos.y >= startY+180 && pos.y <= startY+220) {
+            game.playerDeck = buildDeck();
+            addNotification('Deck built! 40 cards ready.', '#4CAF50');
+            return;
+        }
+        // Card detail
+        if(game.cardDetail) {
+            if(pos.x >= W/2-60 && pos.x <= W/2+60 && pos.y >= H-80 && pos.y <= H-45) {
+                game.cardDetail = null;
+            }
+            return;
+        }
+    } else if(game.menuTab === 2) {
+        // Start Draft
+        if(pos.x >= W/2-100 && pos.x <= W/2+100 && pos.y >= startY+30 && pos.y <= startY+80) {
+            if(game.energy > 0) {
+                game.energy--;
+                initDraft();
+            } else {
+                addNotification('No energy!', '#F44336');
+            }
+            return;
+        }
+    } else if(game.menuTab === 3) {
+        // Shop items
+        let gy = startY + 50;
+        for(let i=0; i<4; i++) {
+            if(pos.x >= W/2-100 && pos.x <= W/2+100 && pos.y >= gy+i*55 && pos.y <= gy+i*55+45) {
+                let gems = [100,500,1200,3000][i];
+                addNotification('Gems purchased! (Demo mode)', '#FFD700');
+                return;
+            }
+        }
+        // Energy refill
+        if(pos.x >= W/2-100 && pos.x <= W/2+100 && pos.y >= startY+270 && pos.y <= startY+315) {
+            game.energy = game.maxEnergy;
+            addNotification('Energy refilled!', '#4CAF50');
+            return;
+        }
+        // Card packs
+        if(pos.x >= W/2-100 && pos.x <= W/2+100 && pos.y >= startY+325 && pos.y <= startY+370) {
+            addNotification('Bronze Pack opened! (Demo)', '#CD7F32');
+            return;
+        }
+        if(pos.x >= W/2-100 && pos.x <= W/2+100 && pos.y >= startY+375 && pos.y <= startY+420) {
+            addNotification('Silver Pack opened! (Demo)', '#C0C0C0');
+            return;
+        }
+        if(pos.x >= W/2-100 && pos.x <= W/2+100 && pos.y >= startY+425 && pos.y <= startY+470) {
+            addNotification('Gold Pack opened! (Demo)', '#FFD700');
+            return;
+        }
+    } else if(game.menuTab === 4) {
+        // Settings
+        if(pos.x >= W/2-100 && pos.x <= W/2+100 && pos.y >= startY+350 && pos.y <= startY+390) {
+            game.settingsOpen = !game.settingsOpen;
+            return;
+        }
+        // Reset
+        if(pos.x >= W/2-100 && pos.x <= W/2+100 && pos.y >= startY+400 && pos.y <= startY+440) {
+            game.wins = 0; game.losses = 0; game.draws = 0;
+            game.rank = 0; game.coins = 5000; game.gems = 100;
+            addNotification('Progress reset!', '#F44336');
+            return;
+        }
+    }
+}
+
+function handleGameTap(pos) {
+    if(game.state === 'COMBAT') return;
+
+    // Check if tapping on hand
+    let handY = H - 130;
+    let cardW = 65, cardH = 85;
+    let totalW = game.playerHand.length * (cardW + 8);
+    let startX = clamp((W - totalW) / 2, 10, W - totalW - 10);
+
+    for(let i=0; i<game.playerHand.length; i++) {
+        let cx = startX + i * (cardW + 8);
+        let cy = handY + 15;
+        if(pos.x >= cx && pos.x <= cx + cardW && pos.y >= cy && pos.y <= cy + cardH) {
+            if(game.selectedCard === game.playerHand[i]) {
+                game.selectedCard = null;
+                game.selectedZone = null;
+            } else {
+                game.selectedCard = game.playerHand[i];
+                game.selectedZone = null;
+            }
+            return;
+        }
+    }
+
+    // Check if tapping on field zones
+    let fieldX = 30, fieldY = 120, fieldW = W - 60, fieldH = 340;
+    let zoneH = fieldH / 5;
+
+    for(let i=0; i<5; i++) {
+        let zy = fieldY + i * zoneH;
+        if(pos.x >= fieldX && pos.x <= fieldX + fieldW && pos.y >= zy && pos.y <= zy + zoneH) {
+            if(game.selectedCard && game.currentTurn === 'player') {
+                let card = game.selectedCard;
+                let zone = ZONES[i];
+
+                // Check if card can go in this zone
+                let canPlace = true;
+                if(card.type !== 'Tactics' && card.type !== 'Reaction') {
+                    if(!POS_MAP[zone] || !POS_MAP[zone].includes(card.pos)) {
+                        canPlace = false;
+                        addNotification('Position mismatch!', '#F44336');
+                    }
+                }
+
+                if(canPlace && !game.playerField[zone]) {
+                    game.playerField[zone] = card;
+                    game.playerHand = game.playerHand.filter(c => c !== card);
+                    game.selectedCard = null;
+                    game.placedThisTurn++;
+                    addNotification('Placed ' + card.name + ' in ' + zone, '#4CAF50');
+                    addParticle(pos.x, pos.y, 'win');
+                } else if(game.playerField[zone]) {
+                    addNotification('Zone occupied!', '#F44336');
+                }
+            }
+            return;
+        }
+    }
+
+    // End turn button (if cards placed)
+    if(game.placedThisTurn > 0 && game.selectedCard === null) {
+        // Auto-attack if player has cards on field
+        game.attackPhase = true;
+        game.attackQueue = [];
+
+        for(let zone of ZONES) {
+            if(game.playerField[zone]) {
+                game.attackQueue.push({attacker: game.playerField[zone], zone: zone});
+            }
+        }
+
+        if(game.attackQueue.length > 0) {
+            processAttacks();
+        } else {
+            finishRound();
+        }
+    }
+}
+
+function handleGameOverTap(pos) {
+    // Menu button
+    if(pos.x >= W/2-100 && pos.x <= W/2+100 && pos.y >= 460 && pos.y <= 505) {
+        game.state = 'MENU';
+        return;
+    }
+    // Play again
+    if(pos.x >= W/2-100 && pos.x <= W/2+100 && pos.y >= 515 && pos.y <= 560) {
+        if(game.energy > 0) {
+            game.energy--;
+            game.state = 'PLAYING';
+            initMatch();
+        } else {
+            addNotification('No energy!', '#F44336');
+        }
+        return;
+    }
+}
+
+function handleDraftTap(pos) {
+    if(!game.draftChoices.length) return;
+
+    let cardW = 85, cardH = 110;
+    let totalW = game.draftChoices.length * (cardW + 15);
+    let startX = (W - totalW) / 2;
+
+    game.draftChoices.forEach((card, i) => {
+        let cx = startX + i * (cardW + 15);
+        let cy = 90;
+        if(pos.x >= cx && pos.x <= cx + cardW && pos.y >= cy && pos.y <= cy + cardH + 30) {
+            draftPick(card);
+        }
+    });
+}
+
+// ============ EVENT LISTENERS ============
+canvas.addEventListener('click', (e) => {
+    let pos = getCanvasPos(e);
+    handleTap(pos);
+});
+
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    let pos = getCanvasPos(e);
+    handleTap(pos);
+}, {passive: false});
+
+// ============ MAIN GAME LOOP ============
+function gameLoop() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Screen shake
+    if(game.shakeTimer > 0) {
+        game.shakeTimer--;
+        let sx = (Math.random()-0.5) * game.shakeIntensity;
+        let sy = (Math.random()-0.5) * game.shakeIntensity;
+        ctx.save();
+        ctx.translate(sx, sy);
+    }
+
+    switch(game.state) {
+        case 'MENU':
+            drawMenu();
+            break;
+        case 'PLAYING':
+            drawField();
+            drawTopBar();
+            drawHand();
+            drawParticles();
+            drawNotifications();
+            break;
+        case 'COMBAT':
+            drawField();
+            drawTopBar();
+            drawHand();
+            drawCombatScreen();
+            drawParticles();
+            drawNotifications();
+            break;
+        case 'GAME_OVER':
+            drawField();
+            drawTopBar();
+            drawHand();
+            drawGameOver();
+            drawParticles();
+            break;
+        case 'DRAFT':
+            drawDraftScreen();
+            drawNotifications();
+            break;
+        case 'DRAFT_MATCH':
+            drawDraftMatchUI();
+            drawField();
+            drawHand();
+            drawParticles();
+            drawNotifications();
+            break;
+    }
+
+    // Flash effect
+    if(game.flashTimer > 0) {
+        game.flashTimer--;
+        ctx.fillStyle = game.flashColor;
+        ctx.fillRect(0, 0, W, H);
+    }
+
+    // Goal animation
+    if(game.goalAnim > 0) {
+        game.goalAnim--;
+        let alpha = game.goalAnim / 90;
+        ctx.fillStyle = game.goalTeam === 'player' ?
+            `rgba(33,150,243,${alpha * 0.3})` :
+            `rgba(244,67,54,${alpha * 0.3})`;
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+        ctx.font = 'bold 36px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('⚽ GOAL! ⚽', W/2, H/2);
+    }
+
+    if(game.shakeTimer > 0) {
+        ctx.restore();
+    }
+
+    // Update energy
+    updateEnergy();
+
+    requestAnimationFrame(gameLoop);
+}
+
+// ============ INITIALIZATION ============
+function init() {
+    game.lastEnergyUpdate = Date.now();
+    game.energy = 10;
+    game.coins = 5000;
+    game.gems = 100;
+    game.rank = 0;
+    game.rankName = 'Division 10';
+
+    // Load saved data
+    try {
+        let saved = localStorage.getItem('fifaCardDuel');
+        if(saved) {
+            let data = JSON.parse(saved);
+            game.coins = data.coins || 5000;
+            game.gems = data.gems || 100;
+            game.wins = data.wins || 0;
+            game.losses = data.losses || 0;
+            game.draws = data.draws || 0;
+            game.rank = data.rank || 0;
+            game.bestStreak = data.bestStreak || 0;
+            game.totalGoals = data.totalGoals || 0;
+            game.totalConceded = data.totalConceded || 0;
+            game.energy = data.energy || 10;
+            game.matchHistory = data.matchHistory || [];
+        }
+    } catch(e) {}
+
+    // Auto-save
+    setInterval(() => {
+        try {
+            localStorage.setItem('fifaCardDuel', JSON.stringify({
+                coins: game.coins,
+                gems: game.gems,
+                wins: game.wins,
+                losses: game.losses,
+                draws: game.draws,
+                rank: game.rank,
+                bestStreak: game.bestStreak,
+                totalGoals: game.totalGoals,
+                totalConceded: game.totalConceded,
+                energy: game.energy,
+                matchHistory: game.matchHistory
+            }));
+        } catch(e) {}
+    }, 5000);
+
+    gameLoop();
+}
+
+init();
+</script>
+</body>
+</html>

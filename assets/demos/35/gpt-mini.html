@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Frontier Outlaw</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #111;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    background: linear-gradient(#87c9ff 0%, #c9e9ff 40%, #f1d7a8 41%, #d2a56d 100%);
+  }
+  .hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    color: #fff;
+  }
+  .topbar {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-weight: 700;
+    text-shadow: 0 2px 3px rgba(0,0,0,0.6);
+    font-size: 14px;
+  }
+  .panel {
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 8px 10px;
+    backdrop-filter: blur(4px);
+  }
+  .centerMsg {
+    position: absolute;
+    left: 50%;
+    top: 18%;
+    transform: translateX(-50%);
+    text-align: center;
+    width: min(92vw, 520px);
+    pointer-events: none;
+  }
+  .centerMsg .title {
+    font-size: 28px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    text-shadow: 0 3px 8px rgba(0,0,0,0.55);
+  }
+  .centerMsg .sub {
+    font-size: 15px;
+    line-height: 1.4;
+    opacity: 0.96;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  }
+  .controls {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 40vh;
+    pointer-events: none;
+  }
+  .stickBase, .button {
+    position: absolute;
+    pointer-events: auto;
+    touch-action: none;
+  }
+  .stickBase {
+    left: 18px;
+    bottom: 18px;
+    width: 130px;
+    height: 130px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+  .stickKnob {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 58px;
+    height: 58px;
+    margin-left: -29px;
+    margin-top: -29px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.22);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15);
+  }
+  .button {
+    width: 78px;
+    height: 78px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(0,0,0,0.25);
+    color: white;
+    font-weight: 800;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+    display: grid;
+    place-items: center;
+    font-size: 14px;
+  }
+  #fireBtn { right: 18px; bottom: 22px; }
+  #jumpBtn { right: 110px; bottom: 92px; width: 70px; height: 70px; font-size: 13px; }
+  #restartOverlay {
+    position: fixed;
+    inset: 0;
+    display: none;
+    place-items: center;
+    background: rgba(0,0,0,0.45);
+    color: #fff;
+    text-align: center;
+  }
+  #restartOverlay .card {
+    background: rgba(20,20,20,0.72);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 18px;
+    padding: 20px 18px;
+    width: min(86vw, 360px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  }
+  .tiny {
+    font-size: 12px;
+    opacity: 0.9;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="hud">
+  <div class="topbar">
+    <div class="panel" id="stats">HP 100 | Ammo 6/24 | Bounty 0</div>
+    <div class="panel" id="mission">Ride to the camp and defeat outlaws</div>
+  </div>
+  <div class="centerMsg" id="message">
+    <div class="title">FRONTIER OUTLAW</div>
+    <div class="sub">Left stick to move. Fire to shoot. Jump to vault obstacles and dodge attacks. Survive the frontier and clear the camp.</div>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="stickBase" id="stickBase"><div class="stickKnob" id="stickKnob"></div></div>
+  <div class="button" id="jumpBtn">JUMP</div>
+  <div class="button" id="fireBtn">FIRE</div>
+</div>
+
+<div id="restartOverlay">
+  <div class="card">
+    <div style="font-size:28px;font-weight:900;margin-bottom:8px;">You were taken down</div>
+    <div class="tiny" style="margin-bottom:14px;">Tap Restart to ride again.</div>
+    <button id="restartBtn" style="pointer-events:auto;padding:12px 18px;border:none;border-radius:12px;background:#f0b35d;color:#1b1208;font-weight:900;font-size:16px;">RESTART</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const statsEl = document.getElementById('stats');
+  const missionEl = document.getElementById('mission');
+  const messageEl = document.getElementById('message');
+  const overlay = document.getElementById('restartOverlay');
+  const restartBtn = document.getElementById('restartBtn');
+
+  const stickBase = document.getElementById('stickBase');
+  const stickKnob = document.getElementById('stickKnob');
+  const fireBtn = document.getElementById('fireBtn');
+  const jumpBtn = document.getElementById('jumpBtn');
+
+  let W=0,H=0,DPR=1;
+  function resize(){
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    W = canvas.width = Math.floor(innerWidth * DPR);
+    H = canvas.height = Math.floor(innerHeight * DPR);
+    canvas.style.width = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+  }
+  addEventListener('resize', resize); resize();
+
+  const keys = {};
+  addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+  addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+  const input = {x:0,y:0, firing:false, jumping:false};
+  let stickTouch = null, stickCenter = {x:0,y:0};
+  function updateStickCenter(){
+    const r = stickBase.getBoundingClientRect();
+    stickCenter.x = r.left + r.width/2;
+    stickCenter.y = r.top + r.height/2;
+  }
+  updateStickCenter(); addEventListener('resize', updateStickCenter);
+
+  stickBase.addEventListener('pointerdown', (e) => {
+    stickTouch = e.pointerId; stickBase.setPointerCapture(e.pointerId);
+    moveStick(e);
+  });
+  stickBase.addEventListener('pointermove', (e) => { if(stickTouch===e.pointerId) moveStick(e); });
+  stickBase.addEventListener('pointerup', releaseStick);
+  stickBase.addEventListener('pointercancel', releaseStick);
+  function moveStick(e){
+    const dx = e.clientX - stickCenter.x, dy = e.clientY - stickCenter.y;
+    const max = 42;
+    const len = Math.hypot(dx,dy) || 1;
+    const k = Math.min(max, len);
+    const nx = dx / len * k, ny = dy / len * k;
+    stickKnob.style.transform = `translate(${nx}px, ${ny}px)`;
+    input.x = nx / max;
+    input.y = ny / max;
+  }
+  function releaseStick(e){
+    if(stickTouch !== e.pointerId) return;
+    stickTouch = null;
+    stickKnob.style.transform = `translate(0px, 0px)`;
+    input.x = 0; input.y = 0;
+  }
+  fireBtn.addEventListener('pointerdown', e => { input.firing = true; fireBtn.setPointerCapture(e.pointerId); });
+  fireBtn.addEventListener('pointerup', () => input.firing = false);
+  fireBtn.addEventListener('pointercancel', () => input.firing = false);
+  jumpBtn.addEventListener('pointerdown', e => { input.jumping = true; jumpBtn.setPointerCapture(e.pointerId); });
+  jumpBtn.addEventListener('pointerup', () => input.jumping = false);
+  jumpBtn.addEventListener('pointercancel', () => input.jumping = false);
+
+  const world = {scroll:0, targetScroll:0};
+  const player = {x:220, y:0, vx:0, vy:0, w:22, h:34, hp:100, ammo:6, reserve:24, facing:1, onGround:true, jumpCooldown:0, fireCooldown:0, invuln:0, bounty:0, score:0};
+  let bullets=[], enemies=[], obstacles=[], pickups=[], particles=[];
+  let gameOver=false, win=false, spawnTimer=0, campReached=false;
+
+  function reset(){
+    world.scroll = world.targetScroll = 0;
+    player.x=220; player.y=0; player.vx=0; player.vy=0; player.hp=100; player.ammo=6; player.reserve=24; player.facing=1; player.onGround=true; player.jumpCooldown=0; player.fireCooldown=0; player.invuln=0; player.bounty=0; player.score=0;
+    bullets=[]; enemies=[]; obstacles=[]; pickups=[]; particles=[];
+    gameOver=false; win=false; spawnTimer=0; campReached=false;
+    overlay.style.display='none';
+    messageEl.style.display='block';
+    missionEl.textContent = 'Ride to the camp and defeat outlaws';
+    for(let i=0;i<15;i++) obstacles.push(makeObstacle(500+i*280));
+    for(let i=0;i<8;i++) spawnEnemy(900+i*650);
+  }
+  function makeObstacle(x){
+    return {x, y: 0, w: 34 + Math.random()*22, h: 18 + Math.random()*24, type: Math.random() < 0.35 ? 'rock' : 'crate'};
+  }
+  function spawnEnemy(x){
+    enemies.push({x, y:0, vx:(Math.random()<0.5?-1:1)*(20+Math.random()*25), hp:30, w:22, h:34, shoot:0, dir:Math.random()<0.5?-1:1, state:'patrol'});
+  }
+
+  function shoot(){
+    if(player.fireCooldown>0 || player.ammo<=0 || gameOver || win) return;
+    player.fireCooldown = 0.22;
+    player.ammo--;
+    bullets.push({x:player.x + player.facing*18, y:player.y - 18, vx:player.facing*560, life:1.5, from:'player'});
+    for(let i=0;i<8;i++) particles.push({x:player.x + player.facing*18, y:player.y - 18, vx:(Math.random()*120+20)*player.facing, vy:(Math.random()*80-40), life:0.2, c:'#ffd36a'});
+  }
+  function jump(){
+    if(!player.onGround || player.jumpCooldown>0 || gameOver || win) return;
+    player.vy = -420;
+    player.onGround = false;
+    player.jumpCooldown = 0.35;
+  }
+
+  function hitFX(x,y,color,count=12){
+    for(let i=0;i<count;i++) particles.push({x,y,vx:(Math.random()*2-1)*160, vy:(Math.random()*2-1)*160, life:0.45+Math.random()*0.35, c:color});
+  }
+
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+  let last = performance.now();
+  function loop(now){
+    const dt = Math.min(0.033, (now-last)/1000); last = now;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  function update(dt){
+    if(keys[' '] || keys['z']) { if(!update._fireHeld){ shoot(); update._fireHeld=true; } } else update._fireHeld=false;
+    if(keys['x'] || keys['arrowup']) { if(!update._jumpHeld){ jump(); update._jumpHeld=true; } } else update._jumpHeld=false;
+
+    if(gameOver || win){ return; }
+
+    const moveX = (keys['a']||keys['arrowleft']?-1:0) + (keys['d']||keys['arrowright']?1:0) + input.x;
+    const moveY = (keys['w']||keys['arrowup']?-1:0) + (keys['s']||keys['arrowdown']?1:0) + input.y;
+
+    const desiredVX = clamp(moveX, -1, 1) * 220;
+    player.vx += (desiredVX - player.vx) * (1 - Math.pow(0.001, dt));
+    if (Math.abs(moveX) > 0.15) player.facing = moveX > 0 ? 1 : -1;
+
+    if ((input.firing || keys['k']) && !update._touchFireLatch) { shoot(); update._touchFireLatch = true; } 
+    if (!(input.firing || keys['k'])) update._touchFireLatch = false;
+    if ((input.jumping || keys['j']) && !update._touchJumpLatch) { jump(); update._touchJumpLatch = true; }
+    if (!(input.jumping || keys['j'])) update._touchJumpLatch = false;
+
+    world.targetScroll = Math.max(0, player.x - 240);
+    world.scroll += (world.targetScroll - world.scroll) * (1 - Math.pow(0.002, dt));
+
+    player.fireCooldown = Math.max(0, player.fireCooldown - dt);
+    player.jumpCooldown = Math.max(0, player.jumpCooldown - dt);
+    player.invuln = Math.max(0, player.invuln - dt);
+
+    player.vy += 980 * dt;
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
+
+    const groundY = getGroundY(player.x);
+    if (player.y >= groundY) {
+      player.y = groundY;
+      player.vy = 0;
+      player.onGround = true;
+    } else {
+      player.onGround = false;
+    }
+
+    if (player.x < 40) player.x = 40;
+    if (player.y > H/DPR + 300) hurtPlayer(20);
+
+    for (const o of obstacles){
+      if (Math.abs(player.x - o.x) < o.w*0.7 && player.y >= getGroundY(o.x)-o.h-20 && player.y <= getGroundY(o.x)-o.h+22){
+        if (player.vy > 0 && player.y < getGroundY(o.x)-o.h+8) { player.y = getGroundY(o.x)-o.h-22; player.vy = 0; player.onGround = true; }
+      }
+    }
+
+    spawnTimer -= dt;
+    if (spawnTimer <= 0){
+      spawnTimer = 2.8 + Math.random()*1.5;
+      spawnEnemy(player.x + 900 + Math.random()*500);
+      if (Math.random() < 0.35) pickups.push({x: player.x + 550 + Math.random()*700, y:0, type:'ammo'});
+    }
+
+    for (const e of enemies){
+      const dist = player.x - e.x;
+      e.dir = dist > 0 ? 1 : -1;
+      if (Math.abs(dist) < 350) {
+        e.vx += e.dir * 25 * dt * 60;
+        if (Math.abs(dist) < 280 && e.shoot <= 0) {
+          e.shoot = 1.3 + Math.random()*0.8;
+          bullets.push({x:e.x + e.dir*14, y:e.y-16, vx:e.dir*380, life:1.8, from:'enemy'});
+        }
+      } else e.vx += (Math.random()<0.5?-1:1) * 10 * dt * 60;
+      e.vx *= Math.pow(0.001, dt);
+      e.x += e.vx * dt;
+      e.y = getGroundY(e.x);
+      e.shoot = Math.max(0, e.shoot - dt);
+    }
+
+    for (const b of bullets){
+      b.x += b.vx * dt;
+      b.life -= dt;
+      b.y = b.y;
+      if (b.from === 'player'){
+        for (const e of enemies){
+          if (e.hp > 0 && Math.abs(b.x - e.x) < 18 && Math.abs((player.y - 18) - e.y) < 26){
+            e.hp -= 15;
+            b.life = 0;
+            hitFX(e.x, e.y-18, '#ffb56b', 12);
+            if (e.hp <= 0){
+              hitFX(e.x, e.y-12, '#7aff8f', 20);
+              player.bounty += 1;
+              player.score += 100;
+            }
+          }
+        }
+      } else {
+        if (Math.abs(b.x - player.x) < 16 && Math.abs(b.y - (player.y-18)) < 24) {
+          b.life = 0;
+          hurtPlayer(10);
+        }
+      }
+    }
+    bullets = bullets.filter(b => b.life > 0 && Math.abs(b.x - world.scroll*DPR) < 50000);
+
+    enemies = enemies.filter(e => e.hp > 0 && e.x > world.scroll - 300);
+    pickups = pickups.filter(p => {
+      p.y = getGroundY(p.x);
+      if (Math.abs(p.x - player.x) < 22 && Math.abs(p.y - player.y) < 28){
+        if (p.type === 'ammo') { player.reserve += 12; player.score += 25; hitFX(p.x, p.y-12, '#ffe46f', 10); }
+        return false;
+      }
+      return true;
+    });
+
+    particles.forEach(p => { p.x += (p.vx||0)*dt; p.y += (p.vy||0)*dt; p.vy = (p.vy||0) + 260*dt; p.life -= dt; });
+    particles = particles.filter(p => p.life > 0);
+
+    if (player.hp <= 0 && !gameOver){
+      gameOver = true;
+      overlay.style.display = 'grid';
+    }
+
+    if (player.x > 5800) {
+      campReached = true;
+      missionEl.textContent = 'Camp reached! Clear the outlaws!';
+      if (enemies.length === 0) {
+        win = true;
+        messageEl.style.display = 'block';
+        messageEl.querySelector('.title').textContent = 'VICTORY';
+        messageEl.querySelector('.sub').textContent = 'The frontier is yours. Tap Restart to ride again.';
+        overlay.style.display = 'grid';
+      }
+    }
+
+    if (campReached && enemies.length < 3 && Math.random() < 0.02) spawnEnemy(player.x + 500 + Math.random()*400);
+
+    statsEl.textContent = `HP ${Math.max(0, Math.floor(player.hp))} | Ammo ${player.ammo}/${player.reserve} | Bounty ${player.bounty}`;
+  }
+
+  function hurtPlayer(dmg){
+    if (player.invuln > 0) return;
+    player.hp -= dmg;
+    player.invuln = 0.8;
+    hitFX(player.x, player.y-16, '#ff6b6b', 16);
+  }
+
+  function getGroundY(x){
+    if (x < 900) return H/DPR*0.77;
+    if (x < 1800) return H/DPR*0.79 + Math.sin(x*0.006)*8;
+    if (x < 3200) return H/DPR*0.80;
+    if (x < 4500) return H/DPR*0.81 + Math.sin(x*0.01)*10;
+    return H/DPR*0.83;
+  }
+
+  function draw(){
+    const cw = canvas.width, ch = canvas.height;
+    ctx.clearRect(0,0,cw,ch);
+
+    drawSky();
+    drawHills();
+    drawRoad();
+    drawProps();
+
+    const camX = world.scroll;
+
+    for (const p of pickups) drawPickup(p, camX);
+    for (const b of bullets) drawBullet(b, camX);
+    for (const e of enemies) drawEnemy(e, camX);
+    drawPlayer(camX);
+
+    for (const p of particles) drawParticle(p, camX);
+
+    if (!gameOver && !win && player.x > 5200 && !campReached) {
+      missionEl.textContent = 'The outlaw camp is ahead!';
+    }
+
+    if (messageEl.style.display !== 'none' && (gameOver || win)) {
+      messageEl.style.display = 'none';
+    }
+  }
+
+  function drawSky(){
+    const g = ctx.createLinearGradient(0,0,0,canvas.height);
+    g.addColorStop(0,'#7ecbff');
+    g.addColorStop(0.45,'#dff4ff');
+    g.addColorStop(0.46,'#f0d6a2');
+    g.addColorStop(1,'#cc9c62');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    for(let i=0;i<6;i++){
+      const x = ((i*280 - world.scroll*0.12) % (canvas.width+300)) - 100;
+      const y = 80 + (i%3)*35;
+      cloud(x,y,70 + (i%2)*18);
+    }
+  }
+  function cloud(x,y,s){
+    ctx.beginPath();
+    ctx.ellipse(x,y,s*1.1,s*0.45,0,0,Math.PI*2);
+    ctx.ellipse(x+s*0.55,y-10,s*0.75,s*0.35,0,0,Math.PI*2);
+    ctx.ellipse(x-s*0.45,y-5,s*0.8,s*0.38,0,0,Math.PI*2);
+    ctx.fill();
+  }
+  function drawHills(){
+    ctx.fillStyle = '#8f6a3c';
+    ctx.beginPath();
+    ctx.moveTo(0, canvas.height*0.58);
+    for(let x=0;x<=canvas.width;x+=40){
+      const wx = x/DPR + world.scroll*0.25;
+      const y = canvas.height*0.58 + Math.sin(wx*0.004)*18 + Math.sin(wx*0.01)*8;
+      ctx.lineTo(x,y);
+    }
+    ctx.lineTo(canvas.width, canvas.height);
+    ctx.lineTo(0, canvas.height);
+    ctx.closePath();
+    ctx.fill();
+  }
+  function drawRoad(){
+    const y = canvas.height*0.82;
+    ctx.fillStyle = '#8a5a2d';
+    ctx.fillRect(0,y,canvas.width,canvas.height-y);
+    ctx.fillStyle = '#5b3a1c';
+    for(let i=0;i<20;i++){
+      const x = ((i*120 - (world.scroll*DPR)%120));
+      ctx.fillRect(x,y+18,70,8);
+    }
+  }
+  function drawProps(){
+    const base = Math.floor(world.scroll/220)*220;
+    for(let i=-2;i<10;i++){
+      const x = base + i*220;
+      const sx = (x - world.scroll) * DPR;
+      const gy = getGroundY(x) * DPR;
+      if (sx < -200 || sx > canvas.width+200) continue;
+      if (i % 3 === 0){
+        ctx.strokeStyle = '#4d2d12'; ctx.lineWidth = 8;
+        ctx.beginPath(); ctx.moveTo(sx,gy); ctx.lineTo(sx,gy-120); ctx.stroke();
+        ctx.strokeStyle = '#d7b46a'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(sx-18,gy-104); ctx.lineTo(sx+18,gy-104); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx-18,gy-86); ctx.lineTo(sx+18,gy-86); ctx.stroke();
+      } else if (i % 3 === 1){
+        ctx.fillStyle = '#6c3d1c';
+        ctx.fillRect(sx-10,gy-18,20,18);
+        ctx.fillRect(sx-16,gy-30,32,12);
+      } else {
+        ctx.fillStyle = '#7e5a32';
+        ctx.beginPath(); ctx.arc(sx,gy-8,12,0,Math.PI*2); ctx.fill();
+      }
+    }
+    if (campReached){
+      const cx = (5800 - world.scroll) * DPR;
+      const gy = getGroundY(5800) * DPR;
+      ctx.fillStyle = '#533018';
+      ctx.fillRect(cx-100, gy-90, 200, 90);
+      ctx.fillStyle = '#2a160b';
+      ctx.fillRect(cx-120, gy-110, 240, 20);
+      ctx.fillStyle = '#c79a5e';
+      ctx.fillText('CAMP', cx-22, gy-100);
+    }
+  }
+
+  function drawPlayer(camX){
+    const sx = (player.x - camX) * DPR;
+    const sy = player.y * DPR;
+    ctx.save();
+    ctx.translate(sx, sy);
+    if (player.invuln > 0 && Math.floor(performance.now()/80)%2===0) ctx.globalAlpha = 0.35;
+    ctx.scale(player.facing,1);
+    ctx.fillStyle = '#3a2412';
+    ctx.fillRect(-8,-34,16,18);
+    ctx.fillStyle = '#5d3818';
+    ctx.fillRect(-10,-16,20,22);
+    ctx.fillStyle = '#e6c08b';
+    ctx.fillRect(-7,-46,14,12);
+    ctx.fillStyle = '#1b1208';
+    ctx.fillRect(-12,-20,6,10);
+    ctx.fillRect(6,-20,6,10);
+    ctx.fillStyle = '#8b5a2b';
+    ctx.fillRect(8,-28,24,5);
+    ctx.fillRect(16,-30,8,14);
+    ctx.fillStyle = '#2a160b';
+    ctx.fillRect(-9,0,7,18);
+    ctx.fillRect(2,0,7,18);
+    ctx.fillStyle = '#4b2d14';
+    ctx.fillRect(-14,-6,28,8);
+    ctx.restore();
+  }
+  function drawEnemy(e, camX){
+    const sx = (e.x - camX) * DPR;
+    const sy = e.y * DPR;
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.scale(e.dir,1);
+    ctx.fillStyle = '#2a1b10';
+    ctx.fillRect(-7,-34,14,18);
+    ctx.fillStyle = '#7b2d20';
+    ctx.fillRect(-9,-16,18,22);
+    ctx.fillStyle = '#d8b98b';
+    ctx.fillRect(-7,-46,14,12);
+    ctx.fillStyle = '#1a0d08';
+    ctx.fillRect(-11,-19,5,9);
+    ctx.fillRect(6,-19,5,9);
+    ctx.fillStyle = '#3b2110';
+    ctx.fillRect(8,-25,20,5);
+    ctx.fillRect(15,-27,7,10);
+    ctx.restore();
+  }
+  function drawBullet(b, camX){
+    const sx = (b.x - camX) * DPR;
+    const sy = b.y * DPR;
+    ctx.fillStyle = b.from==='player' ? '#ffe06a' : '#ff7b5d';
+    ctx.fillRect(sx-4, sy-2, 8, 4);
+  }
+  function drawPickup(p, camX){
+    const sx = (p.x - camX) * DPR;
+    const sy = p.y * DPR - 12;
+    ctx.fillStyle = '#ffd84d';
+    ctx.beginPath(); ctx.arc(sx, sy, 10, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#6b441d';
+    ctx.fillRect(sx-3, sy-6, 6, 12);
+  }
+  function drawParticle(p, camX){
+    const sx = (p.x - camX) * DPR;
+    const sy = p.y * DPR;
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle = p.c;
+    ctx.fillRect(sx, sy, 3, 3);
+    ctx.globalAlpha = 1;
+  }
+
+  restartBtn.addEventListener('click', () => {
+    messageEl.querySelector('.title').textContent = 'FRONTIER OUTLAW';
+    messageEl.querySelector('.sub').textContent = 'Left stick to move. Fire to shoot. Jump to vault obstacles and dodge attacks. Survive the frontier and clear the camp.';
+    reset();
+  });
+
+  reset();
+})();
+</script>
+</body>
+</html>

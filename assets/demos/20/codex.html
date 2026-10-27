@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ninja Technique Fighting Game</title>
+  <style>
+    :root{
+      --bg1:#0f1222;
+      --bg2:#1d2342;
+      --accent:#ffb347;
+      --hp:#58e06f;
+      --hp2:#ff6b6b;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:Arial, Helvetica, sans-serif;
+      background:radial-gradient(circle at top,#1e2650 0%,#0a0d1d 60%,#05070f 100%);
+      color:#fff;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      min-height:100vh;
+      overflow:hidden;
+    }
+    #wrap{
+      width:min(100vw,1040px);
+      padding:12px;
+    }
+    canvas{
+      width:100%;
+      height:auto;
+      border:2px solid #9aa6ff55;
+      border-radius:14px;
+      box-shadow:0 15px 40px #0008;
+      background:#0b1022;
+      display:block;
+    }
+    .hud{
+      margin-top:8px;
+      font-size:14px;
+      line-height:1.35;
+      color:#d8defa;
+      text-align:center;
+    }
+    .key{
+      display:inline-block;
+      min-width:22px;
+      padding:2px 6px;
+      border:1px solid #9aa6ff88;
+      border-radius:6px;
+      margin:0 2px;
+      background:#1b2349;
+      color:#fff;
+      font-weight:bold;
+      font-size:12px;
+    }
+    .title{
+      text-align:center;
+      font-weight:700;
+      color:#ffd6a0;
+      margin-bottom:8px;
+      letter-spacing:.4px;
+      text-shadow:0 0 10px #ff9f4366;
+    }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div class="title">Naruto-Style Ninja Technique Fighter — Karate • Judo • Boxing • Ninja Arts</div>
+    <canvas id="game" width="1000" height="560"></canvas>
+    <div class="hud">
+      Move: <span class="key">A</span><span class="key">D</span> Jump: <span class="key">W</span> |
+      Boxing Jab: <span class="key">J</span> Karate Kick: <span class="key">K</span> Judo Throw: <span class="key">L</span> Ninja Shuriken: <span class="key">U</span> Shadow Combo: <span class="key">I</span> |
+      Restart: <span class="key">R</span>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const W = canvas.width;
+    const H = canvas.height;
+    const GROUND = 470;
+    const GRAVITY = 1600;
+
+    const keys = {};
+    const justPressed = {};
+
+    document.addEventListener('keydown', e => {
+      const k = e.key.toLowerCase();
+      if (!keys[k]) justPressed[k] = true;
+      keys[k] = true;
+      if (['a','d','w','j','k','l','u','i','r','arrowleft','arrowright','arrowup'].includes(k)) e.preventDefault();
+    });
+    document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+    const attackDefs = {
+      punch:   {duration:0.28, activeStart:0.10, activeEnd:0.18, damage:8,  range:74, knockX:210, knockY:-80,  cooldown:0.35, label:'BOXING JAB'},
+      kick:    {duration:0.42, activeStart:0.14, activeEnd:0.26, damage:12, range:98, knockX:270, knockY:-130, cooldown:0.55, label:'KARATE KICK'},
+      throw:   {duration:0.58, activeStart:0.20, activeEnd:0.32, damage:18, range:58, knockX:340, knockY:-240, cooldown:1.20, label:'JUDO THROW'},
+      shuriken:{duration:0.40, activeStart:0.14, activeEnd:0.16, damage:10, range:0,  knockX:200, knockY:-60,  cooldown:0.90, label:'NINJA SHURIKEN'},
+      special: {duration:0.75, activeStart:0.24, activeEnd:0.52, damage:22, range:118,knockX:390, knockY:-170, cooldown:2.40, label:'SHADOW COMBO'}
+    };
+
+    class Fighter {
+      constructor(opts){
+        this.name = opts.name;
+        this.x = opts.x;
+        this.y = GROUND;
+        this.vx = 0;
+        this.vy = 0;
+        this.width = 62;
+        this.height = 126;
+        this.facing = opts.facing || 1;
+        this.color = opts.color;
+        this.accent = opts.accent;
+        this.health = 100;
+        this.maxHealth = 100;
+        this.hitstun = 0;
+        this.flash = 0;
+        this.isAI = !!opts.isAI;
+        this.cooldowns = { punch:0, kick:0, throw:0, shuriken:0, special:0 };
+        this.currentAttack = null;
+        this.lastActionText = '';
+        this.lastActionTimer = 0;
+        this.aiThink = 0;
+        this.opponent = null;
+      }
+      get grounded(){ return this.y >= GROUND - 0.1; }
+
+      jump(){
+        if (this.grounded && this.hitstun <= 0) this.vy = -620;
+      }
+
+      startAttack(type){
+        const def = attackDefs[type];
+        if (!def) return false;
+        if (this.hitstun > 0) return false;
+        if (this.currentAttack) return false;
+        if (this.cooldowns[type] > 0) return false;
+        if (type === 'throw' && !this.grounded) return false;
+
+        this.currentAttack = { type, time:0, hitDone:false, spawned:false };
+        this.cooldowns[type] = def.cooldown;
+        this.lastActionText = def.label;
+        this.lastActionTimer = 0.6;
+        this.vx *= 0.3;
+        return true;
+      }
+
+      takeHit(dmg, kx, ky){
+        this.health = Math.max(0, this.health - dmg);
+        this.vx += kx;
+        this.vy = ky;
+        this.hitstun = 0.24;
+        this.flash = 0.13;
+      }
+
+      aiControl(dt){
+        if (!this.opponent || gameOver) return;
+        this.aiThink -= dt;
+        const dx = this.opponent.x - this.x;
+        const dist = Math.abs(dx);
+
+        if (this.hitstun <= 0 && !this.currentAttack) {
+          if (dist > 260) this.vx = Math.sign(dx) * 210;
+          else this.vx = Math.sign(dx) * 120;
+        }
+
+        if (this.aiThink > 0) return;
+        this.aiThink = 0.12 + Math.random() * 0.20;
+        if (this.hitstun > 0) return;
+
+        if (dist > 290) {
+          if (Math.random() < 0.45) this.startAttack('shuriken');
+          if (Math.random() < 0.08 && this.grounded) this.jump();
+          return;
+        }
+
+        if (dist < 70 && Math.random() < 0.30) { this.startAttack('throw'); return; }
+
+        const r = Math.random();
+        if (r < 0.28) this.startAttack('punch');
+        else if (r < 0.56) this.startAttack('kick');
+        else if (r < 0.78) this.startAttack('shuriken');
+        else this.startAttack('special');
+      }
+
+      update(dt){
+        this.flash = Math.max(0, this.flash - dt);
+        this.lastActionTimer = Math.max(0, this.lastActionTimer - dt);
+        this.hitstun = Math.max(0, this.hitstun - dt);
+
+        for (const k in this.cooldowns) this.cooldowns[k] = Math.max(0, this.cooldowns[k] - dt);
+
+        if (this.opponent) {
+          const dx = this.opponent.x - this.x;
+          if (Math.abs(dx) > 12) this.facing = dx >= 0 ? 1 : -1;
+        }
+
+        if (this.isAI) {
+          this.aiControl(dt);
+        } else {
+          const speed = 260;
+          if (this.hitstun <= 0 && !this.currentAttack) {
+            if (keys['a']) this.vx = -speed;
+            else if (keys['d']) this.vx = speed;
+            else this.vx *= 0.80;
+          } else {
+            this.vx *= 0.92;
+          }
+
+          if (justPressed['w']) this.jump();
+          if (justPressed['j']) this.startAttack('punch');
+          if (justPressed['k']) this.startAttack('kick');
+          if (justPressed['l']) this.startAttack('throw');
+          if (justPressed['u']) this.startAttack('shuriken');
+          if (justPressed['i']) this.startAttack('special');
+        }
+
+        if (this.currentAttack) {
+          this.currentAttack.time += dt;
+          const def = attackDefs[this.currentAttack.type];
+
+          if (this.currentAttack.type === 'shuriken' && !this.currentAttack.spawned && this.currentAttack.time >= def.activeStart) {
+            this.currentAttack.spawned = true;
+            spawnShuriken(this);
+          }
+
+          if (this.currentAttack.time >= def.duration) this.currentAttack = null;
+        }
+
+        this.vy += GRAVITY * dt;
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+
+        if (this.y > GROUND) {
+          this.y = GROUND;
+          this.vy = 0;
+        }
+
+        if (this.x < 40) { this.x = 40; this.vx = 0; }
+        if (this.x > W - 40) { this.x = W - 40; this.vx = 0; }
+      }
+
+      draw(){
+        const x = this.x, y = this.y;
+        const top = y - this.height;
+
+        // shadow
+        ctx.fillStyle = '#0006';
+        ctx.beginPath();
+        ctx.ellipse(x, GROUND + 6, 42, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // legs
+        ctx.fillStyle = shade(this.color, -18);
+        ctx.fillRect(x - 18, top + 82, 14, 42);
+        ctx.fillRect(x + 4,  top + 82, 14, 42);
+
+        // torso
+        ctx.fillStyle = this.color;
+        ctx.fillRect(x - 22, top + 34, 44, 56);
+
+        // chest accent
+        ctx.fillStyle = this.accent;
+        ctx.fillRect(x - 12, top + 42, 24, 18);
+
+        // arms
+        let armOffset = 22;
+        if (this.currentAttack && ['punch','kick','special','throw'].includes(this.currentAttack.type)) armOffset = 34;
+        ctx.fillStyle = shade(this.color, -8);
+        ctx.fillRect(x + this.facing * 8, top + 45, this.facing * armOffset, 10);
+        ctx.fillRect(x - this.facing * 8 - this.facing * 14, top + 56, this.facing * 14, 10);
+
+        // head
+        ctx.fillStyle = '#ffd9b3';
+        ctx.beginPath();
+        ctx.arc(x, top + 20, 14, 0, Math.PI * 2);
+        ctx.fill();
+
+        // headband
+        ctx.fillStyle = '#2f3f89';
+        ctx.fillRect(x - 15, top + 12, 30, 6);
+        ctx.fillStyle = '#d6d9e6';
+        ctx.fillRect(x - 6, top + 12, 12, 6);
+
+        // eye
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(x + this.facing * 4, top + 20, 3, 2);
+
+        // flash when hit
+        if (this.flash > 0) {
+          ctx.fillStyle = '#ffffff88';
+          ctx.fillRect(x - 26, top + 4, 52, 122);
+        }
+
+        // name
+        ctx.fillStyle = '#e9eeff';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(this.name, x, top - 10);
+
+        if (this.lastActionTimer > 0) {
+          ctx.fillStyle = '#ffd27d';
+          ctx.font = 'bold 13px Arial';
+          ctx.fillText(this.lastActionText, x, top - 28);
+        }
+      }
+    }
+
+    const projectiles = [];
+
+    function spawnShuriken(owner){
+      projectiles.push({
+        x: owner.x + owner.facing * 40,
+        y: owner.y - owner.height * 0.58,
+        vx: owner.facing * 500,
+        vy: -10,
+        r: 8,
+        owner,
+        damage: attackDefs.shuriken.damage,
+        life: 2
+      });
+    }
+
+    function updateProjectiles(dt){
+      for (let i = projectiles.length - 1; i >= 0; i--){
+        const p = projectiles[i];
+        p.life -= dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += 280 * dt;
+
+        const target = p.owner === player ? enemy : player;
+        if (Math.abs(p.x - target.x) < 28 && Math.abs(p.y - (target.y - target.height*0.55)) < 52) {
+          target.takeHit(p.damage, p.owner.facing * 230, -90);
+          projectiles.splice(i,1);
+          continue;
+        }
+        if (p.life <= 0 || p.x < -40 || p.x > W + 40 || p.y > H + 40) projectiles.splice(i,1);
+      }
+    }
+
+    function drawShuriken(p){
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate((performance.now() * 0.02) % (Math.PI * 2));
+      ctx.fillStyle = '#cfd5e8';
+      for (let i=0;i<4;i++){
+        ctx.rotate(Math.PI/2);
+        ctx.beginPath();
+        ctx.moveTo(0,0);
+        ctx.lineTo(13,3);
+        ctx.lineTo(8,0);
+        ctx.lineTo(13,-3);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.fillStyle = '#7885aa';
+      ctx.beginPath();
+      ctx.arc(0,0,3.2,0,Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function attackHits(attacker, defender){
+      const a = attacker.currentAttack;
+      if (!a || a.hitDone) return;
+      if (a.type === 'shuriken') return;
+      const def = attackDefs[a.type];
+      if (a.time < def.activeStart || a.time > def.activeEnd) return;
+
+      const dx = defender.x - attacker.x;
+      const dy = (defender.y - defender.height*0.55) - (attacker.y - attacker.height*0.55);
+      const inFront = attacker.facing * dx > -22;
+      const closeY = Math.abs(dy) < 84;
+      const closeX = Math.abs(dx) < def.range;
+
+      if (inFront && closeY && closeX) {
+        defender.takeHit(def.damage, attacker.facing * def.knockX, def.knockY);
+        if (a.type === 'throw') defender.x += attacker.facing * 18;
+        a.hitDone = true;
+      }
+    }
+
+    function shade(hex, amt){
+      const c = hex.replace('#','');
+      let r = parseInt(c.substring(0,2),16) + amt;
+      let g = parseInt(c.substring(2,4),16) + amt;
+      let b = parseInt(c.substring(4,6),16) + amt;
+      r=Math.max(0,Math.min(255,r));
+      g=Math.max(0,Math.min(255,g));
+      b=Math.max(0,Math.min(255,b));
+      return `rgb(${r},${g},${b})`;
+    }
+
+    function drawBackground(){
+      const g = ctx.createLinearGradient(0,0,0,H);
+      g.addColorStop(0,'#1a224d');
+      g.addColorStop(0.55,'#111735');
+      g.addColorStop(1,'#0a0e1f');
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,W,H);
+
+      // moon
+      ctx.fillStyle = '#f4f7ff22';
+      ctx.beginPath();
+      ctx.arc(860,90,46,0,Math.PI*2);
+      ctx.fill();
+
+      // mountains
+      ctx.fillStyle = '#1a2146';
+      ctx.beginPath();
+      ctx.moveTo(0,340); ctx.lineTo(110,260); ctx.lineTo(200,340); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(140,340); ctx.lineTo(300,220); ctx.lineTo(460,340); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(380,340); ctx.lineTo(560,230); ctx.lineTo(760,340); ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(680,340); ctx.lineTo(860,240); ctx.lineTo(1000,340); ctx.closePath(); ctx.fill();
+
+      // dojo floor
+      ctx.fillStyle = '#2a1f1a';
+      ctx.fillRect(0,GROUND, W, H-GROUND);
+      ctx.fillStyle = '#3f2d24';
+      for (let i=0;i<W;i+=60) ctx.fillRect(i, GROUND+18, 40, 4);
+
+      // ground line
+      ctx.strokeStyle = '#ffd39a44';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0,GROUND+0.5);
+      ctx.lineTo(W,GROUND+0.5);
+      ctx.stroke();
+    }
+
+    function drawBars(){
+      drawBar(24,22,430,18, player.health/player.maxHealth, '#5ee37a', '#1f4d2a', 'Naruto Hero');
+      drawBar(W-454,22,430,18, enemy.health/enemy.maxHealth, '#ff7676', '#5a2424', 'Rogue Ninja');
+      ctx.fillStyle = '#dce3ff';
+      ctx.font = '13px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText('Technique Cooldowns:', 24, 64);
+
+      const moves = [['J Jab','punch'],['K Kick','kick'],['L Throw','throw'],['U Shuriken','shuriken'],['I Shadow','special']];
+      let x = 24, y = 72;
+      moves.forEach(m=>{
+        const cd = player.cooldowns[m[1]];
+        const ready = cd <= 0.01;
+        ctx.fillStyle = ready ? '#5be07b' : '#ffb86c';
+        ctx.fillRect(x,y,90,12);
+        ctx.fillStyle = '#121727';
+        ctx.fillRect(x+1,y+1,88,10);
+        ctx.fillStyle = ready ? '#7eff9b' : '#ffcf9b';
+        const fill = ready ? 88 : 88*(1-Math.min(1,cd/attackDefs[m[1]].cooldown));
+        ctx.fillRect(x+1,y+1,fill,10);
+        ctx.fillStyle = '#e8edff';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(m[0], x+45, y+10);
+        x += 96;
+      });
+    }
+
+    function drawBar(x,y,w,h,pct,color,bg,label){
+      ctx.fillStyle = '#0007';
+      ctx.fillRect(x-2,y-2,w+4,h+4);
+      ctx.fillStyle = bg;
+      ctx.fillRect(x,y,w,h);
+      ctx.fillStyle = color;
+      ctx.fillRect(x,y,Math.max(0,w*pct),h);
+      ctx.strokeStyle = '#ffffff44';
+      ctx.strokeRect(x,y,w,h);
+      ctx.fillStyle = '#eef2ff';
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText(label, x, y-6);
+    }
+
+    let player, enemy, gameOver=false, winnerText='';
+
+    function resetGame(){
+      player = new Fighter({name:'Naruto Hero', x:220, facing:1, color:'#f08b3e', accent:'#2444d8', isAI:false});
+      enemy  = new Fighter({name:'Rogue Ninja', x:780, facing:-1, color:'#5a6be0', accent:'#2c2c2c', isAI:true});
+      player.opponent = enemy;
+      enemy.opponent = player;
+      projectiles.length = 0;
+      gameOver = false;
+      winnerText = '';
+    }
+    resetGame();
+
+    function update(dt){
+      if (gameOver) {
+        if (justPressed['r']) resetGame();
+        return;
+      }
+
+      player.update(dt);
+      enemy.update(dt);
+
+      attackHits(player, enemy);
+      attackHits(enemy, player);
+
+      updateProjectiles(dt);
+
+      if (player.health <= 0 || enemy.health <= 0){
+        gameOver = true;
+        winnerText = player.health <= 0 && enemy.health <= 0 ? 'DRAW!' :
+                     player.health <= 0 ? 'ROGUE NINJA WINS!' : 'NARUTO HERO WINS!';
+      }
+    }
+
+    function draw(){
+      drawBackground();
+      drawBars();
+
+      // depth order
+      const first = player.y < enemy.y ? player : enemy;
+      const second = first === player ? enemy : player;
+      first.draw();
+      second.draw();
+
+      for (const p of projectiles) drawShuriken(p);
+
+      if (gameOver){
+        ctx.fillStyle = '#000a';
+        ctx.fillRect(0,0,W,H);
+        ctx.fillStyle = '#ffe0ac';
+        ctx.font = 'bold 52px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(winnerText, W/2, H/2 - 10);
+        ctx.font = 'bold 22px Arial';
+        ctx.fillStyle = '#dbe4ff';
+        ctx.fillText('Press R to Fight Again', W/2, H/2 + 36);
+      }
+    }
+
+    let last = performance.now();
+    function frame(now){
+      const dt = Math.min(0.033, (now - last) / 1000);
+      last = now;
+      update(dt);
+      draw();
+      for (const k in justPressed) delete justPressed[k];
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>

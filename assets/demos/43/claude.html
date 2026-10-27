@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Noor Alam's 3D Cube Runner</title>
+<style>
+  body { margin:0; overflow:hidden; font-family: 'Segoe UI', sans-serif; background:#000; color:#fff; }
+  #ui { position:absolute; top:10px; left:10px; z-index:10; font-size:20px; text-shadow:0 0 8px #0ff;}
+  #owner { position:absolute; top:10px; right:10px; z-index:10; font-size:14px; color:#0ff; text-shadow:0 0 8px #0ff;}
+  #overlay {
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(0,0,0,0.75); z-index:20; text-align:center;
+  }
+  #overlay h1 { font-size:48px; margin:0 0 10px; color:#0ff; text-shadow:0 0 20px #0ff;}
+  #overlay p { font-size:18px; margin:6px;}
+  #overlay button {
+    margin-top:20px; padding:12px 30px; font-size:20px; background:#0ff; color:#000; border:none; border-radius:8px;
+    cursor:pointer; box-shadow:0 0 20px #0ff;
+  }
+  #overlay button:hover { background:#fff; }
+  .hidden { display:none !important; }
+  #controls { position:absolute; bottom:10px; left:50%; transform:translateX(-50%); font-size:14px; opacity:0.7; }
+</style>
+</head>
+<body>
+<div id="ui">Score: <span id="score">0</span> | Best: <span id="best">0</span></div>
+<div id="owner">👑 Owned by Noor Alam</div>
+<div id="controls">⬅️ A / ➡️ D or Arrow Keys / Tap Sides on Mobile | SPACE to Jump</div>
+
+<div id="overlay">
+  <h1>CUBE RUNNER 3D</h1>
+  <p>By Noor Alam</p>
+  <p>Dodge the red blocks. Survive as long as you can!</p>
+  <p>Use A/D or ← → to switch lanes. SPACE to jump.</p>
+  <button id="startBtn">START GAME</button>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x000022, 10, 50);
+scene.background = new THREE.Color(0x000022);
+
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 200);
+camera.position.set(0, 3, 6);
+camera.lookAt(0, 1, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// Lights
+scene.add(new THREE.AmbientLight(0x6666ff, 0.6));
+const dir = new THREE.DirectionalLight(0xffffff, 1);
+dir.position.set(5,10,5);
+scene.add(dir);
+
+// Ground (track)
+const trackGeo = new THREE.PlaneGeometry(6, 200, 1, 50);
+const trackMat = new THREE.MeshStandardMaterial({ color:0x111133, emissive:0x0a0a2a });
+const track = new THREE.Mesh(trackGeo, trackMat);
+track.rotation.x = -Math.PI/2;
+track.position.z = -90;
+scene.add(track);
+
+// Lane lines
+for (let i=-1; i<=1; i++) {
+  if (i===0) continue;
+  const line = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.05, 200),
+    new THREE.MeshBasicMaterial({ color:0x00ffff })
+  );
+  line.rotation.x = -Math.PI/2;
+  line.position.set(i, 0.01, -90);
+  scene.add(line);
+}
+
+// Player
+const playerGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+const playerMat = new THREE.MeshStandardMaterial({ color:0x00ffff, emissive:0x008888 });
+const player = new THREE.Mesh(playerGeo, playerMat);
+player.position.set(0, 0.4, 0);
+scene.add(player);
+
+// Stars background
+const starGeo = new THREE.BufferGeometry();
+const starPos = [];
+for (let i=0; i<500; i++) starPos.push((Math.random()-0.5)*100, Math.random()*50, -Math.random()*150);
+starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color:0xffffff, size:0.1 })));
+
+// Obstacles
+const obstacles = [];
+const lanes = [-1, 0, 1];
+let targetLane = 1;
+let currentX = 0;
+let velY = 0;
+let onGround = true;
+
+function spawnObstacle(zPos) {
+  const lane = lanes[Math.floor(Math.random()*3)];
+  const geo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+  const mat = new THREE.MeshStandardMaterial({ color:0xff2222, emissive:0x660000 });
+  const o = new THREE.Mesh(geo, mat);
+  o.position.set(lane, 0.4, zPos);
+  scene.add(o);
+  obstacles.push(o);
+}
+
+// Coins
+const coins = [];
+function spawnCoin(zPos) {
+  const lane = lanes[Math.floor(Math.random()*3)];
+  const c = new THREE.Mesh(
+    new THREE.TorusGeometry(0.2, 0.07, 8, 20),
+    new THREE.MeshStandardMaterial({ color:0xffdd00, emissive:0x886600 })
+  );
+  c.position.set(lane, 0.6, zPos);
+  c.rotation.x = Math.PI/2;
+  scene.add(c);
+  coins.push(c);
+}
+
+// Audio
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function beep(freq, dur=0.1, type='square', vol=0.1) {
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.value = vol;
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime + dur);
+}
+
+// State
+let speed = 0.25;
+let score = 0;
+let best = +localStorage.getItem('cubeBest') || 0;
+let running = false;
+let spawnTimer = 0;
+document.getElementById('best').textContent = best;
+
+// Controls
+addEventListener('keydown', e => {
+  if (!running) return;
+  if (e.key === 'ArrowLeft' || e.key==='a' || e.key==='A') {
+    if (targetLane>0) targetLane--;
+  } else if (e.key === 'ArrowRight' || e.key==='d' || e.key==='D') {
+    if (targetLane<2) targetLane++;
+  } else if (e.key === ' ' && onGround) {
+    velY = 0.25; onGround = false; beep(600,0.1);
+  }
+});
+
+// Touch
+addEventListener('touchstart', e => {
+  if (!running) return;
+  const x = e.touches[0].clientX;
+  if (x < innerWidth/3) { if (targetLane>0) targetLane--; }
+  else if (x > 2*innerWidth/3) { if (targetLane<2) targetLane++; }
+  else if (onGround) { velY=0.25; onGround=false; beep(600,0.1); }
+});
+
+function reset() {
+  obstacles.forEach(o => scene.remove(o));
+  coins.forEach(c => scene.remove(c));
+  obstacles.length = 0; coins.length = 0;
+  score = 0; speed = 0.25; targetLane = 1; currentX = 0;
+  player.position.set(0, 0.4, 0); velY=0; onGround=true;
+}
+
+document.getElementById('startBtn').addEventListener('click', () => {
+  document.getElementById('overlay').classList.add('hidden');
+  reset();
+  running = true;
+  if (audioCtx.state==='suspended') audioCtx.resume();
+});
+
+function gameOver() {
+  running = false;
+  beep(150, 0.4, 'sawtooth', 0.2);
+  if (score > best) { best = score; localStorage.setItem('cubeBest', best); }
+  const o = document.getElementById('overlay');
+  o.querySelector('h1').textContent = 'GAME OVER';
+  o.querySelector('p').textContent = `Score: ${score} | Best: ${best}`;
+  document.getElementById('startBtn').textContent = 'PLAY AGAIN';
+  o.classList.remove('hidden');
+  document.getElementById('best').textContent = best;
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (running) {
+    // Smooth lane move
+    const targetX = lanes[targetLane];
+    currentX += (targetX - currentX) * 0.2;
+    player.position.x = currentX;
+
+    // Jump
+    player.position.y += velY;
+    velY -= 0.018;
+    if (player.position.y <= 0.4) { player.position.y = 0.4; velY=0; onGround=true; }
+
+    player.rotation.x += 0.1;
+
+    // Spawn
+    spawnTimer++;
+    if (spawnTimer > Math.max(15, 30 - speed*20)) {
+      spawnTimer = 0;
+      spawnObstacle(-60);
+      if (Math.random() < 0.5) spawnCoin(-60 - Math.random()*10);
+    }
+
+    // Move obstacles
+    obstacles.forEach((o, i) => {
+      o.position.z += speed;
+      if (o.position.z > 5) { scene.remove(o); obstacles.splice(i,1); }
+      // collision
+      if (Math.abs(o.position.z - player.position.z) < 0.7 &&
+          Math.abs(o.position.x - player.position.x) < 0.7 &&
+          player.position.y < 1.0) {
+        gameOver();
+      }
+    });
+    coins.forEach((c, i) => {
+      c.position.z += speed;
+      c.rotation.z += 0.1;
+      if (c.position.z > 5) { scene.remove(c); coins.splice(i,1); }
+      if (Math.abs(c.position.z - player.position.z) < 0.7 &&
+          Math.abs(c.position.x - player.position.x) < 0.7 &&
+          Math.abs(c.position.y - player.position.y) < 0.7) {
+        scene.remove(c); coins.splice(i,1);
+        score += 10; beep(900, 0.08);
+      }
+    });
+
+    score += 0.1;
+    speed += 0.0003;
+    document.getElementById('score').textContent = Math.floor(score);
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

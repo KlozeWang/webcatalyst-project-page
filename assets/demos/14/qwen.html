@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Habit Tree - 3D</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #000; }
+canvas { display: block; }
+
+#ui-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 10;
+}
+
+#habit-panel {
+  position: fixed; top: 20px; right: 20px; width: 320px;
+  background: rgba(15, 25, 15, 0.92);
+  border: 1px solid rgba(100, 180, 100, 0.3);
+  border-radius: 16px; padding: 20px;
+  color: #e0f0e0; pointer-events: all;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+  max-height: calc(100vh - 40px); overflow-y: auto;
+}
+
+#habit-panel h2 {
+  font-size: 22px; margin-bottom: 4px;
+  background: linear-gradient(135deg, #7fdb8a, #4a9e5a);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  text-align: center;
+}
+
+#habit-panel .subtitle {
+  text-align: center; font-size: 11px; color: #6a9a6a;
+  margin-bottom: 16px; letter-spacing: 1px; text-transform: uppercase;
+}
+
+#add-habit-row {
+  display: flex; gap: 8px; margin-bottom: 16px;
+}
+
+#habit-input {
+  flex: 1; padding: 10px 14px; border: 1px solid rgba(100,180,100,0.3);
+  border-radius: 10px; background: rgba(0,20,0,0.6); color: #c0e0c0;
+  font-size: 14px; outline: none; transition: border-color 0.3s;
+}
+
+#habit-input:focus { border-color: rgba(100,220,100,0.6); }
+#habit-input::placeholder { color: #4a7a4a; }
+
+#add-btn {
+  padding: 10px 16px; border: none; border-radius: 10px;
+  background: linear-gradient(135deg, #3a8a4a, #2a6a3a);
+  color: #e0ffe0; font-size: 18px; cursor: pointer;
+  transition: all 0.3s; font-weight: bold;
+}
+
+#add-btn:hover { transform: scale(1.05); background: linear-gradient(135deg, #4aaa5a, #3a8a4a); }
+
+.habit-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px; margin-bottom: 8px;
+  background: rgba(0,30,0,0.4); border: 1px solid rgba(100,180,100,0.15);
+  border-radius: 12px; transition: all 0.3s;
+}
+
+.habit-item:hover { background: rgba(0,40,0,0.5); border-color: rgba(100,180,100,0.3); }
+
+.habit-item .habit-name {
+  flex: 1; font-size: 14px; color: #b0d8b0;
+}
+
+.habit-item .habit-streak {
+  font-size: 11px; color: #6aaa6a; white-space: nowrap;
+}
+
+.habit-item .habit-status {
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid #4a8a4a; flex-shrink: 0;
+  transition: all 0.3s;
+}
+
+.habit-item .habit-status.done {
+  background: #5adf5a; border-color: #5adf5a;
+  box-shadow: 0 0 8px rgba(90,223,90,0.5);
+}
+
+.habit-item .habit-status.missed {
+  background: #8a3a3a; border-color: #8a3a3a;
+  box-shadow: 0 0 8px rgba(138,58,58,0.5);
+}
+
+.check-btn {
+  width: 32px; height: 32px; border-radius: 8px;
+  border: 2px solid rgba(100,180,100,0.4); background: rgba(0,20,0,0.4);
+  color: #5adf5a; font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.3s; flex-shrink: 0;
+}
+
+.check-btn:hover { border-color: #5adf5a; background: rgba(0,40,0,0.6); }
+.check-btn.checked { background: rgba(90,223,90,0.2); border-color: #5adf5a; }
+
+.delete-btn {
+  width: 24px; height: 24px; border-radius: 6px;
+  border: none; background: rgba(100,30,30,0.3);
+  color: #aa5555; font-size: 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.3s; flex-shrink: 0;
+}
+
+.delete-btn:hover { background: rgba(150,40,40,0.5); color: #ff6666; }
+
+#tree-status {
+  margin-top: 16px; padding: 14px;
+  background: rgba(0,20,0,0.5); border-radius: 12px;
+  border: 1px solid rgba(100,180,100,0.15);
+}
+
+#tree-status .status-label {
+  font-size: 11px; color: #6a9a6a; text-transform: uppercase;
+  letter-spacing: 1px; margin-bottom: 6px;
+}
+
+#tree-status .status-value {
+  font-size: 16px; color: #a0d8a0; font-weight: 600;
+}
+
+#tree-health-bar {
+  margin-top: 10px; height: 6px; border-radius: 3px;
+  background: rgba(0,20,0,0.6); overflow: hidden;
+}
+
+#tree-health-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, #ff4444, #ffaa44, #44ff44);
+  transition: width 0.8s ease;
+}
+
+#season-indicator {
+  position: fixed; top: 20px; left: 20px;
+  background: rgba(15, 25, 15, 0.85);
+  border: 1px solid rgba(100,180,100,0.2);
+  border-radius: 12px; padding: 14px 20px;
+  color: #c0e0c0; pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+
+#season-indicator .season-name {
+  font-size: 18px; font-weight: 600;
+  background: linear-gradient(135deg, #7fdb8a, #4a9e5a);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+
+#season-indicator .season-date {
+  font-size: 11px; color: #6a9a6a; margin-top: 2px;
+}
+
+#notification {
+  position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+  background: rgba(15, 40, 15, 0.95); border: 1px solid rgba(100,180,100,0.4);
+  border-radius: 12px; padding: 14px 28px; color: #a0e0a0;
+  font-size: 14px; pointer-events: none;
+  opacity: 0; transition: opacity 0.4s, transform 0.4s;
+  backdrop-filter: blur(10px); z-index: 100;
+}
+
+#notification.show {
+  opacity: 1; transform: translateX(-50%) translateY(-10px);
+}
+
+#notification.grow { border-color: rgba(90,223,90,0.5); color: #7adf7a; }
+#notification.decay { border-color: rgba(223,90,90,0.5); color: #df7a7a; }
+
+#legend {
+  position: fixed; bottom: 20px; left: 20px;
+  background: rgba(15, 25, 15, 0.85);
+  border: 1px solid rgba(100,180,100,0.2);
+  border-radius: 12px; padding: 14px 18px;
+  color: #8aaa8a; font-size: 11px; pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+
+#legend div { margin-bottom: 4px; }
+#legend span { color: #b0d8b0; }
+
+#instructions {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: rgba(10, 20, 10, 0.95);
+  border: 1px solid rgba(100,180,100,0.3);
+  border-radius: 20px; padding: 40px; color: #c0e0c0;
+  text-align: center; pointer-events: all; z-index: 200;
+  backdrop-filter: blur(15px); max-width: 450px;
+}
+
+#instructions h1 {
+  font-size: 32px; margin-bottom: 8px;
+  background: linear-gradient(135deg, #7fdb8a, #4a9e5a);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+
+#instructions p { font-size: 14px; color: #8aaa8a; margin-bottom: 20px; line-height: 1.6; }
+
+#start-btn {
+  padding: 14px 40px; border: none; border-radius: 12px;
+  background: linear-gradient(135deg, #3a8a4a, #2a6a3a);
+  color: #e0ffe0; font-size: 16px; cursor: pointer;
+  transition: all 0.3s; font-weight: 600;
+}
+
+#start-btn:hover { transform: scale(1.05); background: linear-gradient(135deg, #4aaa5a, #3a8a4a); }
+
+#instructions .close-btn {
+  position: absolute; top: 12px; right: 16px;
+  background: none; border: none; color: #6a9a6a;
+  font-size: 20px; cursor: pointer;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: rgba(0,20,0,0.3); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(100,180,100,0.3); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div id="instructions">
+  <button class="close-btn" onclick="closeInstructions()">✕</button>
+  <h1>🌳 Habit Tree</h1>
+  <p>Build your habits and watch your tree grow. Each habit you log nurtures your tree with new branches and leaves. Miss your habits and branches will wither. Keep your tree alive!</p>
+  <button id="start-btn" onclick="closeInstructions()">Begin Growing</button>
+</div>
+
+<div id="ui-overlay">
+  <div id="season-indicator">
+    <div class="season-name" id="season-name">🌸 Spring</div>
+    <div class="season-date" id="season-date"></div>
+  </div>
+
+  <div id="habit-panel">
+    <h2>🌱 My Habits</h2>
+    <div class="subtitle">Nurture your tree daily</div>
+    <div id="add-habit-row">
+      <input type="text" id="habit-input" placeholder="Add a new habit..." maxlength="40">
+      <button id="add-btn" onclick="addHabit()">+</button>
+    </div>
+    <div id="habit-list"></div>
+    <div id="tree-status">
+      <div class="status-label">Tree Health</div>
+      <div class="status-value" id="tree-health-text">Growing...</div>
+      <div id="tree-health-bar"><div id="tree-health-fill" style="width:100%"></div></div>
+    </div>
+  </div>
+
+  <div id="legend">
+    <div>🖱️ <span>Left drag</span> — Rotate</div>
+    <div>🖱️ <span>Scroll</span> — Zoom</div>
+    <div>🖱️ <span>Right drag</span> — Pan</div>
+  </div>
+
+  <div id="notification"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ==================== SCENE SETUP ====================
+let scene, camera, renderer, clock;
+let treeGroup, groundMesh, skyMesh;
+let leafParticles = [];
+let fallingLeaves = [];
+let branchMeshes = [];
+let trunkMesh;
+let windStrength = 0.0003;
+let treeHealth = 100;
+let treeAge = 0;
+let habitData = {};
+let lastCheckDate = '';
+let particles = [];
+let fireflies = [];
+
+function init() {
+  clock = new THREE.Clock();
+  scene = new THREE.Scene();
+
+  camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(12, 8, 16);
+  camera.lookAt(0, 4, 0);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  document.body.insertBefore(renderer.domElement, document.getElementById('ui-overlay'));
+
+  createSky();
+  createGround();
+  createLights();
+  createTree();
+  createFireflies();
+  createGrass();
+
+  setupControls();
+  updateSeason();
+  loadHabits();
+  renderHabitList();
+
+  window.addEventListener('resize', onResize);
+  animate();
+}
+
+// ==================== SKY ====================
+function createSky() {
+  const skyGeo = new THREE.SphereGeometry(200, 32, 32);
+  const skyMat = new THREE.ShaderMaterial({
+    uniforms: {
+      topColor: { value: new THREE.Color(0x0077ff) },
+      bottomColor: { value: new THREE.Color(0x88ccee) },
+      offset: { value: 20 },
+      exponent: { value: 0.6 }
+    },
+    vertexShader: `
+      varying vec3 vWorldPosition;
+      void main() {
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPosition.xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 topColor;
+      uniform vec3 bottomColor;
+      uniform float offset;
+      uniform float exponent;
+      varying vec3 vWorldPosition;
+      void main() {
+        float h = normalize(vWorldPosition + offset).y;
+        gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+      }
+    `,
+    side: THREE.BackSide
+  });
+  skyMesh = new THREE.Mesh(skyGeo, skyMat);
+  scene.add(skyMesh);
+}
+
+// ==================== GROUND ====================
+function createGround() {
+  const groundGeo = new THREE.CircleGeometry(60, 64);
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x2a5a1a,
+    roughness: 0.9,
+    metalness: 0.0,
+  });
+  groundMesh = new THREE.Mesh(groundGeo, groundMat);
+  groundMesh.rotation.x = -Math.PI / 2;
+  groundMesh.receiveShadow = true;
+  scene.add(groundMesh);
+
+  // Dirt patch under tree
+  const dirtGeo = new THREE.CircleGeometry(4, 32);
+  const dirtMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 1.0 });
+  const dirt = new THREE.Mesh(dirtGeo, dirtMat);
+  dirt.rotation.x = -Math.PI / 2;
+  dirt.position.y = 0.01;
+  dirt.receiveShadow = true;
+  scene.add(dirt);
+
+  // Rocks
+  for (let i = 0; i < 15; i++) {
+    const rockGeo = new THREE.DodecahedronGeometry(0.15 + Math.random() * 0.3, 1);
+    const rockMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color().setHSL(0.08, 0.1, 0.25 + Math.random() * 0.15),
+      roughness: 0.95, metalness: 0.05
+    });
+    const rock = new THREE.Mesh(rockGeo, rockMat);
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 2 + Math.random() * 8;
+    rock.position.set(Math.cos(angle) * dist, 0.1, Math.sin(angle) * dist);
+    rock.rotation.set(Math.random(), Math.random(), Math.random());
+    rock.scale.y = 0.5 + Math.random() * 0.5;
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    scene.add(rock);
+  }
+}
+
+// ==================== LIGHTS ====================
+function createLights() {
+  const ambientLight = new THREE.AmbientLight(0x405060, 0.5);
+  scene.add(ambientLight);
+
+  const sunLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+  sunLight.position.set(15, 20, 10);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.width = 2048;
+  sunLight.shadow.mapSize.height = 2048;
+  sunLight.shadow.camera.near = 0.5;
+  sunLight.shadow.camera.far = 60;
+  sunLight.shadow.camera.left = -15;
+  sunLight.shadow.camera.right = 15;
+  sunLight.shadow.camera.top = 15;
+  sunLight.shadow.camera.bottom = -15;
+  sunLight.shadow.bias = -0.001;
+  scene.add(sunLight);
+
+  const fillLight = new THREE.DirectionalLight(0x88aacc, 0.3);
+  fillLight.position.set(-10, 5, -10);
+  scene.add(fillLight);
+
+  const rimLight = new THREE.DirectionalLight(0xffaa66, 0.2);
+  rimLight.position.set(-5, 3, 15);
+  scene.add(rimLight);
+}
+
+// ==================== TREE CREATION ====================
+function createTree() {
+  treeGroup = new THREE.Group();
+  scene.add(treeGroup);
+  rebuildTree();
+}
+
+function rebuildTree() {
+  // Remove old tree
+  while (treeGroup.children.length > 0) {
+    treeGroup.remove(treeGroup.children[0]);
+  }
+  leafParticles = [];
+  fallingLeaves = [];
+  branchMeshes = [];
+
+  const health = treeHealth / 100;
+  const age = Math.min(treeAge, 10);
+
+  // Trunk
+  const trunkSegments = 8;
+  const trunkHeight = 3 + age * 1.5;
+  const trunkRadius = 0.3 + age * 0.08;
+
+  const trunkGeo = new THREE.CylinderGeometry(
+    trunkRadius * 0.5, trunkRadius, trunkHeight, 12, 4
+  );
+
+  // Deform trunk for realism
+  const trunkPos = trunkGeo.attributes.position;
+  for (let i = 0; i < trunkPos.count; i++) {
+    const x = trunkPos.getX(i);
+    const y = trunkPos.getY(i);
+    const z = trunkPos.getZ(i);
+    const noise = Math.sin(y * 2.5) * 0.04 + Math.cos(y * 1.7) * 0.03;
+    trunkPos.setX(i, x + noise);
+    trunkPos.setZ(i, z + noise * 0.7);
+  }
+  trunkGeo.computeVertexNormals();
+
+  const trunkMat = new THREE.MeshStandardMaterial({
+    color: 0x4a3520,
+    roughness: 0.9,
+    metalness: 0.0,
+  });
+  trunkMesh = new THREE.Mesh(trunkGeo, trunkMat);
+  trunkMesh.position.y = trunkHeight / 2;
+  trunkMesh.castShadow = true;
+  trunkMesh.receiveShadow = true;
+  treeGroup.add(trunkMesh);
+
+  // Bark texture lines
+  for (let i = 0; i < 20; i++) {
+    const barkGeo = new THREE.BoxGeometry(0.02, 0.3 + Math.random() * 0.5, 0.02);
+    const barkMat = new THREE.MeshStandardMaterial({ color: 0x3a2515, roughness: 1.0 });
+    const bark = new THREE.Mesh(barkGeo, barkMat);
+    const angle = Math.random() * Math.PI * 2;
+    const h = Math.random() * trunkHeight * 0.9;
+    const r = trunkRadius * (1 - h / trunkHeight * 0.5) * 1.02;
+    bark.position.set(Math.cos(angle) * r, h, Math.sin(angle) * r);
+    bark.rotation.y = angle;
+    bark.rotation.z = (Math.random() - 0.5) * 0.3;
+    treeGroup.add(bark);
+  }
+
+  // Branches
+  const branchCount = Math.floor(3 + age * 3 * health);
+  const maxBranches = 15;
+  const actualBranches = Math.min(branchCount, maxBranches);
+
+  for (let b = 0; b < actualBranches; b++) {
+    const branchHealth = health;
+    const branchAngle = (b / actualBranches) * Math.PI * 2 + Math.random() * 0.5;
+    const branchHeight = trunkHeight * (0.4 + Math.random() * 0.5);
+    const branchLength = 1.5 + Math.random() * 2.5 * health;
+    const branchRadius = 0.06 + Math.random() * 0.08;
+    const branchUpAngle = 0.3 + Math.random() * 0.6;
+
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, branchHeight, 0),
+      new THREE.Vector3(
+        Math.cos(branchAngle) * branchLength * 0.3,
+        branchHeight + Math.sin(branchUpAngle) * branchLength * 0.5,
+        Math.sin(branchAngle) * branchLength * 0.3
+      ),
+      new THREE.Vector3(
+        Math.cos(branchAngle) * branchLength * 0.7,
+        branchHeight + Math.sin(branchUpAngle) * branchLength * 0.8,
+        Math.sin(branchAngle) * branchLength * 0.7
+      ),
+      new THREE.Vector3(
+        Math.cos(branchAngle) * branchLength,
+        branchHeight + Math.sin(branchUpAngle) * branchLength,
+        Math.sin(branchAngle) * branchLength
+      )
+    ]);
+
+    const branchGeo = new THREE.TubeGeometry(curve, 12, branchRadius, 8, false);
+    const branchColor = new THREE.Color().setHSL(0.07, 0.4, 0.15 + branchHealth * 0.1);
+    const branchMat = new THREE.MeshStandardMaterial({
+      color: branchColor,
+      roughness: 0.9,
+      metalness: 0.0
+    });
+    const branchMesh = new THREE.Mesh(branchGeo, branchMat);
+    branchMesh.castShadow = true;
+    branchMesh.receiveShadow = true;
+    treeGroup.add(branchMesh);
+    branchMeshes.push({ mesh: branchMesh, health: branchHealth, curve: curve });
+
+    // Sub-branches
+    if (health > 0.4 && b < actualBranches * 0.6) {
+      const subCount = Math.floor(1 + Math.random() * 2);
+      for (let s = 0; s < subCount; s++) {
+        const subAngle = branchAngle + (Math.random() - 0.5) * 1.2;
+        const subHeight = branchHeight + Math.sin(branchUpAngle) * branchLength * (0.5 + Math.random() * 0.4);
+        const subLength = 0.5 + Math.random() * 1.2 * health;
+        const subRadius = branchRadius * 0.5;
+
+        const subCurve = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(0, 0, 0),
+          new THREE.Vector3(
+            Math.cos(subAngle) * subLength * 0.5,
+            Math.sin(branchUpAngle) * subLength * 0.4,
+            Math.sin(subAngle) * subLength * 0.5
+          ),
+          new THREE.Vector3(
+            Math.cos(subAngle) * subLength,
+            Math.sin(branchUpAngle) * subLength * 0.8,
+            Math.sin(subAngle) * subLength
+          )
+        ]);
+
+        const subGeo = new THREE.TubeGeometry(subCurve, 8, subRadius, 6, false);
+        const subMat = new THREE.MeshStandardMaterial({
+          color: new THREE.Color().setHSL(0.07, 0.35, 0.18 + branchHealth * 0.08),
+          roughness: 0.9
+        });
+        const subMesh = new THREE.Mesh(subGeo, subMat);
+        subMesh.position.set(
+          Math.cos(branchAngle) * branchLength * 0.7,
+          branchHeight + Math.sin(branchUpAngle) * branchLength * 0.7,
+          Math.sin(branchAngle) * branchLength * 0.7
+        );
+        subMesh.castShadow = true;
+        treeGroup.add(subMesh);
+        branchMeshes.push({ mesh: subMesh, health: branchHealth, curve: subCurve });
+      }
+    }
+  }
+
+  // Leaves / Canopy
+  if (health > 0.1) {
+    const leafCount = Math.floor(50 + age * 40 * health);
+    const leafColors = [
+      new THREE.Color(0x2d8a2d),
+      new THREE.Color(0x3a9a3a),
+      new THREE.Color(0x4aaa4a),
+      new THREE.Color(0x1a7a1a),
+      new THREE.Color(0x5ab85a),
+      new THREE.Color(0x2a6a2a),
+    ];
+
+    // Seasonal colors
+    const season = getCurrentSeason();
+    if (season === 'autumn') {
+      leafColors.push(new THREE.Color(0xcc6622));
+      leafColors.push(new THREE.Color(0xdd8833));
+      leafColors.push(new THREE.Color(0xaa4411));
+      leafColors.push(new THREE.Color(0xddaa44));
+    } else if (season === 'winter') {
+      leafColors.length = 0;
+      leafColors.push(new THREE.Color(0x8899aa));
+      leafColors.push(new THREE.Color(0x99aabb));
+    }
+
+    for (let i = 0; i < leafCount; i++) {
+      const leafSize = 0.15 + Math.random() * 0.35;
+      const leafGeo = new THREE.SphereGeometry(leafSize, 6, 4);
+
+      // Flatten leaves
+      const leafPos = leafGeo.attributes.position;
+      for (let j = 0; j < leafPos.count; j++) {
+        leafPos.setY(j, leafPos.getY(j) * 0.3);
+      }
+      leafGeo.computeVertexNormals();
+
+      const colorIndex = Math.floor(Math.random() * leafColors.length);
+      const leafMat = new THREE.MeshStandardMaterial({
+        color: leafColors[colorIndex],
+        roughness: 0.7,
+        metalness: 0.0,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.85 + Math.random() * 0.15
+      });
+
+      const leaf = new THREE.Mesh(leafGeo, leafMat);
+
+      // Position in canopy shape
+      const canopyRadius = 2 + age * 1.2;
+      const canopyHeight = 3 + age * 1.0;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI * 0.6;
+      const r = Math.random() * canopyRadius;
+
+      leaf.position.set(
+        Math.cos(theta) * r * Math.sin(phi),
+        trunkHeight * 0.6 + Math.cos(phi) * canopyHeight * 0.5 + Math.random() * canopyHeight * 0.3,
+        Math.sin(theta) * r * Math.sin(phi)
+      );
+
+      leaf.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      leaf.castShadow = true;
+      leaf.receiveShadow = true;
+
+      leaf.userData = {
+        basePos: leaf.position.clone(),
+        phase: Math.random() * Math.PI * 2,
+        swaySpeed: 0.5 + Math.random() * 1.5,
+        health: health,
+        color: leafColors[colorIndex].clone()
+      };
+
+      treeGroup.add(leaf);
+      leafParticles.push(leaf);
+    }
+  }
+
+  // Roots
+  const rootCount = 5 + Math.floor(age * 2);
+  for (let r = 0; r < rootCount; r++) {
+    const rootAngle = (r / rootCount) * Math.PI * 2;
+    const rootLength = 1 + Math.random() * 2;
+    const rootRadius = 0.08 + Math.random() * 0.06;
+
+    const rootCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(
+        Math.cos(rootAngle) * rootLength * 0.3,
+        -0.1,
+        Math.sin(rootAngle) * rootLength * 0.3
+      ),
+      new THREE.Vector3(
+        Math.cos(rootAngle) * rootLength * 0.7,
+        -0.15,
+        Math.sin(rootAngle) * rootLength * 0.7
+      ),
+      new THREE.Vector3(
+        Math.cos(rootAngle) * rootLength,
+        -0.05,
+        Math.sin(rootAngle) * rootLength
+      )
+    ]);
+
+    const rootGeo = new THREE.TubeGeometry(rootCurve, 8, rootRadius, 6, false);
+    const rootMat = new THREE.MeshStandardMaterial({
+      color: 0x3a2515,
+      roughness: 0.95
+    });
+    const root = new THREE.Mesh(rootGeo, rootMat);
+    root.castShadow = true;
+    treeGroup.add(root);
+  }
+
+  // Grass tufts around tree
+  for (let i = 0; i < 30; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 1.5 + Math.random() * 5;
+    createGrassTuft(Math.cos(angle) * dist, Math.sin(angle) * dist);
+  }
+}
+
+function createGrassTuft(x, z) {
+  const grassGroup = new THREE.Group();
+  const bladeCount = 3 + Math.floor(Math.random() * 4);
+
+  for (let b = 0; b < bladeCount; b++) {
+    const bladeGeo = new THREE.PlaneGeometry(0.04, 0.3 + Math.random() * 0.4);
+    const bladeMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color().setHSL(0.28 + Math.random() * 0.08, 0.6, 0.25 + Math.random() * 0.15),
+      roughness: 0.8,
+      side: THREE.DoubleSide
+    });
+    const blade = new THREE.Mesh(bladeGeo, bladeMat);
+    blade.position.set((Math.random() - 0.5) * 0.15, 0.2, (Math.random() - 0.5) * 0.15);
+    blade.rotation.y = Math.random() * Math.PI;
+    blade.rotation.z = (Math.random() - 0.5) * 0.3;
+    grassGroup.add(blade);
+  }
+
+  grassGroup.position.set(x, 0, z);
+  scene.add(grassGroup);
+}
+
+// ==================== FIREFLIES ====================
+function createFireflies() {
+  const fireflyGeo = new THREE.BufferGeometry();
+  const positions = new Float32Array(30 * 3);
+  const colors = new Float32Array(30 * 3);
+
+  for (let i = 0; i < 30; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 2 + Math.random() * 10;
+    positions[i * 3] = Math.cos(angle) * dist;
+    positions[i * 3 + 1] = 1 + Math.random() * 6;
+    positions[i * 3 + 2] = Math.sin(angle) * dist;
+
+    const brightness = 0.5 + Math.random() * 0.5;
+    colors[i * 3] = 0.8 + Math.random() * 0.2;
+    colors[i * 3 + 1] = 0.9 + Math.random() * 0.1;
+    colors[i * 3 + 2] = 0.3 + Math.random() * 0.3;
+
+    fireflies.push({
+      baseX: positions[i * 3],
+      baseY: positions[i * 3 + 1],
+      baseZ: positions[i * 3 + 2],
+      phase: Math.random() * Math.PI * 2,
+      speed: 0.3 + Math.random() * 0.7,
+      radius: 0.5 + Math.random() * 1.5
+    });
+  }
+
+  fireflyGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  fireflyGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  const fireflyMat = new THREE.PointsMaterial({
+    size: 0.15,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.8,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+
+  const fireflyMesh = new THREE.Points(fireflyGeo, fireflyMat);
+  scene.add(fireflyMesh);
+  window._fireflyMesh = fireflyMesh;
+}
+
+// ==================== CONTROLS ====================
+function setupControls() {
+  let isDragging = false;
+  let isPanning = false;
+  let prevMouse = { x: 0, y: 0 };
+  let spherical = { theta: 0.8, phi: 1.0, radius: 20 };
+  let target = new THREE.Vector3(0, 4, 0);
+  let panOffset = new THREE.Vector3();
+
+  function updateCamera() {
+    const x = spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta);
+    const y = spherical.radius * Math.cos(spherical.phi);
+    const z = spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta);
+    camera.position.set(x + target.x, y + target.y, z + target.z);
+    camera.lookAt(target);
+  }
+
+  updateCamera();
+
+  renderer.domElement.addEventListener('mousedown', (e) => {
+    if (e.button === 0) isDragging = true;
+    if (e.button === 2) isPanning = true;
+    prevMouse = { x: e.clientX, y: e.clientY };
+  });
+
+  renderer.domElement.addEventListener('mousemove', (e) => {
+    const dx = e.clientX - prevMouse.x;
+    const dy = e.clientY - prevMouse.y;
+
+    if (isDragging) {
+      spherical.theta -= dx * 0.005;
+      spherical.phi = Math.max(0.3, Math.min(Math.PI - 0.1, spherical.phi - dy * 0.005));
+      updateCamera();
+    }
+
+    if (isPanning) {
+      const right = new THREE.Vector3();
+      const up = new THREE.Vector3();
+      camera.getWorldDirection(new THREE.Vector3());
+      right.crossVectors(camera.up, new THREE.Vector3().subVectors(camera.position, target)).normalize();
+      up.copy(camera.up);
+      target.add(right.multiplyScalar(-dx * 0.02));
+      target.add(up.multiplyScalar(dy * 0.02));
+      updateCamera();
+    }
+
+    prevMouse = { x: e.clientX, y: e.clientY };
+  });
+
+  renderer.domElement.addEventListener('mouseup', () => { isDragging = false; isPanning = false; });
+  renderer.domElement.addEventListener('mouseleave', () => { isDragging = false; isPanning = false; });
+
+  renderer.domElement.addEventListener('wheel', (e) => {
+    spherical.radius = Math.max(8, Math.min(40, spherical.radius + e.deltaY * 0.02));
+    updateCamera();
+  });
+
+  renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // Touch support
+  let touchStart = null;
+  let touchDist = 0;
+
+  renderer.domElement.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2) {
+      touchDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+    }
+  });
+
+  renderer.domElement.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (e.touches.length === 1 && touchStart) {
+      const dx = e.touches[0].clientX - touchStart.x;
+      const dy = e.touches[0].clientY - touchStart.y;
+      spherical.theta -= dx * 0.005;
+      spherical.phi = Math.max(0.3, Math.min(Math.PI - 0.1, spherical.phi - dy * 0.005));
+      updateCamera();
+      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2) {
+      const newDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      spherical.radius = Math.max(8, Math.min(40, spherical.radius - (newDist - touchDist) * 0.05));
+      touchDist = newDist;
+      updateCamera();
+    }
+  }, { passive: false });
+
+  renderer.domElement.addEventListener('touchend', () => { touchStart = null; });
+}
+
+// ==================== ANIMATION ====================
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+  const elapsed = clock.getElapsedTime();
+
+  // Animate leaves
+  leafParticles.forEach(leaf => {
+    if (leaf.userData.health > 0) {
+      const sway = Math.sin(elapsed * leaf.userData.swaySpeed + leaf.userData.phase) * 0.1;
+      leaf.position.x = leaf.userData.basePos.x + sway;
+      leaf.position.z = leaf.userData.basePos.z + sway * 0.7;
+      leaf.rotation.y += delta * 0.2;
+    }
+  });
+
+  // Animate fireflies
+  if (window._fireflyMesh) {
+    const positions = window._fireflyMesh.geometry.attributes.position.array;
+    for (let i = 0; i < fireflies.length; i++) {
+      const f = fireflies[i];
+      positions[i * 3] = f.baseX + Math.sin(elapsed * f.speed + f.phase) * f.radius;
+      positions[i * 3 + 1] = f.baseY + Math.sin(elapsed * f.speed * 0.7 + f.phase) * f.radius * 0.5;
+      positions[i * 3 + 2] = f.baseZ + Math.cos(elapsed * f.speed + f.phase) * f.radius;
+    }
+    window._fireflyMesh.geometry.attributes.position.needsUpdate = true;
+    window._fireflyMesh.material.opacity = 0.4 + Math.sin(elapsed * 2) * 0.3;
+  }
+
+  // Gentle tree sway
+  if (treeGroup) {
+    treeGroup.rotation.z = Math.sin(elapsed * 0.3) * 0.005 * (1 - treeHealth / 100);
+  }
+
+  renderer.render(scene, camera);
+}
+
+// ==================== HABIT SYSTEM ====================
+function addHabit() {
+  const input = document.getElementById('habit-input');
+  const name = input.value.trim();
+  if (!name) return;
+
+  const id = 'habit_' + Date.now();
+  habitData[id] = {
+    name: name,
+    lastLogged: null,
+    streak: 0,
+    totalLogged: 0,
+    missed: 0
+  };
+
+  saveHabits();
+  input.value = '';
+  renderHabitList();
+  rebuildTree();
+  showNotification(`🌱 "${name}" added! Your tree begins to grow.`, 'grow');
+}
+
+function checkHabit(id) {
+  if (!habitData[id]) return;
+
+  const today = new Date().toDateString();
+  if (habitData[id].lastLogged === today) {
+    showNotification('Already logged today!', '');
+    return;
+  }
+
+  habitData[id].lastLogged = today;
+  habitData[id].streak++;
+  habitData[id].totalLogged++;
+
+  // Increase tree health
+  treeHealth = Math.min(100, treeHealth + 5);
+  treeAge += 0.5;
+
+  saveHabits();
+  renderHabitList();
+  rebuildTree();
+  showNotification(`✅ "${habitData[id].name}" logged! Tree grows stronger!`, 'grow');
+}
+
+function deleteHabit(id) {
+  if (!habitData[id]) return;
+  treeHealth = Math.max(0, treeHealth - 10);
+  delete habitData[id];
+  saveHabits();
+  renderHabitList();
+  rebuildTree();
+  showNotification(`🍂 "${habitData[id]?.name || 'Habit'}" removed. Tree loses vitality.`, 'decay');
+}
+
+function renderHabitList() {
+  const list = document.getElementById('habit-list');
+  list.innerHTML = '';
+
+  const today = new Date().toDateString();
+
+  Object.entries(habitData).forEach(([id, habit]) => {
+    const isDone = habit.lastLogged === today;
+    const isMissed = habit.lastLogged && habit.lastLogged !== today && isDayAfter(habit.lastLogged);
+
+    const item = document.createElement('div');
+    item.className = 'habit-item';
+    item.innerHTML = `
+      <button class="check-btn ${isDone ? 'checked' : ''}" onclick="checkHabit('${id}')">
+        ${isDone ? '✓' : ''}
+      </button>
+      <div style="flex:1">
+        <div class="habit-name">${habit.name}</div>
+        <div class="habit-streak">🔥 ${habit.streak} day streak · ${habit.totalLogged} total</div>
+      </div>
+      <div class="habit-status ${isDone ? 'done' : (isMissed ? 'missed' : '')}"></div>
+      <button class="delete-btn" onclick="deleteHabit('${id}')">✕</button>
+    `;
+    list.appendChild(item);
+  });
+
+  updateTreeStatus();
+}
+
+function isDayAfter(dateStr) {
+  const d = new Date(dateStr);
+  const today = new Date();
+  const diff = (today - d) / (1000 * 60 * 60 * 24);
+  return diff >= 1;
+}
+
+function checkMissedHabits() {
+  const today = new Date().toDateString();
+  let missedCount = 0;
+
+  Object.entries(habitData).forEach(([id, habit]) => {
+    if (habit.lastLogged && habit.lastLogged !== today) {
+      if (isDayAfter(habit.lastLogged)) {
+        habit.missed++;
+        habit.streak = 0;
+        missedCount++;
+        treeHealth = Math.max(0, treeHealth - 3);
+      }
+    }
+  });
+
+  if (missedCount > 0) {
+    saveHabits();
+    renderHabitList();
+    rebuildTree();
+    showNotification(`🍂 ${missedCount} habit${missedCount > 1 ? 's' : ''} missed! Branches are withering...`, 'decay');
+  }
+}
+
+function updateTreeStatus() {
+  const fill = document.getElementById('tree-health-fill');
+  const text = document.getElementById('tree-health-text');
+
+  fill.style.width = treeHealth + '%';
+
+  if (treeHealth > 70) {
+    text.textContent = '🌳 Thriving!';
+    text.style.color = '#5adf5a';
+  } else if (treeHealth > 40) {
+    text.textContent = '🌿 Growing';
+    text.style.color = '#a0d8a0';
+  } else if (treeHealth > 20) {
+    text.textContent = '🥀 Struggling';
+    text.style.color = '#d8a050';
+  } else {
+    text.textContent = '💀 Dying...';
+    text.style.color = '#df7a7a';
+  }
+}
+
+// ==================== SEASONS ====================
+function getCurrentSeason() {
+  const month = new Date().getMonth();
+  if (month >= 2 && month <= 4) return 'spring';
+  if (month >= 5 && month <= 7) return 'summer';
+  if (month >= 8 && month <= 10) return 'autumn';
+  return 'winter';
+}
+
+function updateSeason() {
+  const season = getCurrentSeason();
+  const seasonNames = {
+    spring: '🌸 Spring',
+    summer: '☀️ Summer',
+    autumn: '🍂 Autumn',
+    winter: '❄️ Winter'
+  };
+
+  document.getElementById('season-name').textContent = seasonNames[season];
+  document.getElementById('season-date').textContent = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+
+  // Update sky colors based on season
+  if (skyMesh) {
+    const skyColors = {
+      spring: { top: 0x5599dd, bottom: 0xaaddff },
+      summer: { top: 0x2266cc, bottom: 0x88ccee },
+      autumn: { top: 0x667799, bottom: 0xddaa88 },
+      winter: { top: 0x556688, bottom: 0xbbccdd }
+    };
+    const colors = skyColors[season] || skyColors.spring;
+    skyMesh.material.uniforms.topColor.value.setHex(colors.top);
+    skyMesh.material.uniforms.bottomColor.value.setHex(colors.bottom);
+  }
+}
+
+// ==================== NOTIFICATIONS ====================
+function showNotification(message, type) {
+  const el = document.getElementById('notification');
+  el.textContent = message;
+  el.className = 'show ' + type;
+  setTimeout(() => { el.className = ''; }, 3000);
+}
+
+// ==================== STORAGE ====================
+function saveHabits() {
+  localStorage.setItem('habitTreeData', JSON.stringify({
+    habits: habitData,
+    treeHealth: treeHealth,
+    treeAge: treeAge,
+    lastCheck: new Date().toDateString()
+  }));
+}
+
+function loadHabits() {
+  const saved = localStorage.getItem('habitTreeData');
+  if (saved) {
+    const data = JSON.parse(saved);
+    habitData = data.habits || {};
+    treeHealth = data.treeHealth || 100;
+    treeAge = data.treeAge || 0;
+
+    // Check if it's a new day
+    const lastCheck = data.lastCheck;
+    if (lastCheck && lastCheck !== new Date().toDateString()) {
+      checkMissedHabits();
+    }
+  }
+}
+
+// ==================== UTILS ====================
+function closeInstructions() {
+  document.getElementById('instructions').style.display = 'none';
+}
+
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// Enter key for adding habits
+document.getElementById('habit-input').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') addHabit();
+});
+
+// Initialize
+init();
+</script>
+</body>
+</html>

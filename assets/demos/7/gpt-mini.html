@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Ground Digging Game</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: linear-gradient(#87ceeb 0%, #87ceeb 45%, #6b4f2a 45%, #5a4324 100%);
+    font-family: Arial, Helvetica, sans-serif;
+    touch-action: none;
+    user-select: none;
+  }
+  canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    background: transparent;
+  }
+  .hud {
+    position: fixed;
+    left: 12px;
+    top: 12px;
+    color: #fff;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+    font-weight: bold;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .hud .title {
+    font-size: 20px;
+    margin-bottom: 4px;
+  }
+  .hud .row {
+    font-size: 14px;
+    opacity: 0.95;
+    margin-bottom: 3px;
+  }
+  .help {
+    position: fixed;
+    right: 12px;
+    top: 12px;
+    color: #fff;
+    text-align: right;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+    font-size: 14px;
+    z-index: 10;
+    pointer-events: none;
+    max-width: 40vw;
+    line-height: 1.35;
+  }
+  .centerMsg {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 20;
+  }
+  .card {
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    padding: 18px 22px;
+    border-radius: 14px;
+    text-align: center;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+    max-width: 420px;
+    margin: 16px;
+  }
+  .card h1 {
+    margin: 0 0 8px 0;
+    font-size: 24px;
+  }
+  .card p {
+    margin: 6px 0;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  .btnHint {
+    display: inline-block;
+    margin-top: 10px;
+    background: #ffd54f;
+    color: #222;
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+<div class="hud">
+  <div class="title">Ground Digging</div>
+  <div class="row" id="scoreText">Depth: 0 m</div>
+  <div class="row" id="oreText">Ore: 0</div>
+  <div class="row" id="energyText">Energy: 100%</div>
+</div>
+<div class="help">
+  Click/tap and drag to dig.<br>
+  Reach deeper layers and collect gems.<br>
+  Avoid digging too fast when energy is low.
+</div>
+<div class="centerMsg" id="startOverlay">
+  <div class="card">
+    <h1>Ground Digging Game</h1>
+    <p>Drag on the dirt to dig downward and reveal treasure.</p>
+    <p>Mine ores, collect gems, and see how deep you can go!</p>
+    <div class="btnHint">Tap or click to start digging</div>
+  </div>
+</div>
+<canvas id="game"></canvas>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreText = document.getElementById('scoreText');
+  const oreText = document.getElementById('oreText');
+  const energyText = document.getElementById('energyText');
+  const startOverlay = document.getElementById('startOverlay');
+
+  let W, H, dpr;
+  let worldW = 1400;
+  let worldH = 2200;
+  let cameraY = 0;
+  let gameStarted = false;
+
+  const cols = 70;
+  const rows = 110;
+  const cellW = worldW / cols;
+  const cellH = worldH / rows;
+
+  const grid = [];
+  let ores = 0;
+  let energy = 100;
+  let depthMeters = 0;
+  let lastTime = performance.now();
+  let particles = [];
+  let pickaxeTrail = [];
+
+  const player = {
+    x: worldW * 0.5,
+    y: 80,
+    vx: 0,
+    vy: 0,
+    targetX: worldW * 0.5,
+    targetY: 80,
+    radius: 16,
+    digging: false
+  };
+
+  function resize() {
+    dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    W = canvas.width = Math.floor(innerWidth * dpr);
+    H = canvas.height = Math.floor(innerHeight * dpr);
+    canvas.style.width = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  function initGrid() {
+    for (let r = 0; r < rows; r++) {
+      grid[r] = [];
+      for (let c = 0; c < cols; c++) {
+        const y = r * cellH;
+        let type = 'dirt';
+        if (r < 5) type = 'air';
+        else {
+          const depthFactor = r / rows;
+          const oreChance = depthFactor > 0.15 ? 0.02 + depthFactor * 0.08 : 0.01;
+          const gemChance = depthFactor > 0.5 ? 0.003 + depthFactor * 0.02 : 0.001;
+          const rockChance = 0.08 + depthFactor * 0.18;
+          const voidChance = depthFactor > 0.7 ? 0.01 : 0;
+          const roll = Math.random();
+          if (roll < voidChance) type = 'air';
+          else if (roll < voidChance + gemChance) type = 'gem';
+          else if (roll < voidChance + gemChance + oreChance) type = 'ore';
+          else if (roll < voidChance + gemChance + oreChance + rockChance) type = 'rock';
+        }
+        grid[r][c] = { type, dug: type === 'air' };
+      }
+    }
+    for (let c = 0; c < cols; c++) grid[0][c].type = 'air', grid[0][c].dug = true;
+    carveSpawn();
+  }
+
+  function carveSpawn() {
+    const cx = Math.floor(cols / 2);
+    for (let r = 0; r < 8; r++) {
+      for (let c = cx - 2; c <= cx + 2; c++) {
+        if (grid[r] && grid[r][c]) {
+          grid[r][c].type = 'air';
+          grid[r][c].dug = true;
+        }
+      }
+    }
+  }
+
+  function cellAt(x, y) {
+    const c = Math.floor(x / cellW);
+    const r = Math.floor(y / cellH);
+    if (r < 0 || r >= rows || c < 0 || c >= cols) return null;
+    return { c, r, cell: grid[r][c] };
+  }
+
+  function digAt(x, y, power = 1) {
+    const info = cellAt(x, y);
+    if (!info) return;
+    const { c, r, cell } = info;
+    if (cell.type === 'air') return;
+
+    if (cell.type === 'rock') {
+      if (power < 1.5) return;
+      if (Math.random() < 0.35) return;
+    }
+
+    const centerX = c * cellW + cellW / 2;
+    const centerY = r * cellH + cellH / 2;
+    spawnParticles(centerX, centerY, cell.type);
+    if (cell.type === 'ore') ores += 1;
+    if (cell.type === 'gem') ores += 3;
+    cell.type = 'air';
+    cell.dug = true;
+    energy = clamp(energy - (cell.type === 'rock' ? 2.0 : 0.8), 0, 100);
+  }
+
+  function spawnParticles(x, y, type) {
+    const colors = type === 'ore'
+      ? ['#d7b56d', '#b68a45', '#8a6a35']
+      : type === 'gem'
+      ? ['#4fffd6', '#5ea7ff', '#d86bff']
+      : ['#8b5a2b', '#a36a37', '#6d431f'];
+    for (let i = 0; i < 10; i++) {
+      particles.push({
+        x, y,
+        vx: rand(-2.5, 2.5),
+        vy: rand(-3.5, 1.5),
+        life: rand(20, 45),
+        color: colors[(Math.random() * colors.length) | 0],
+        size: rand(1.5, 4.5)
+      });
+    }
+  }
+
+  function drawBackground() {
+    const skyH = Math.max(0, 160 - cameraY * 0.08);
+    const grd = ctx.createLinearGradient(0, 0, 0, innerHeight);
+    grd.addColorStop(0, '#87ceeb');
+    grd.addColorStop(0.48, '#87ceeb');
+    grd.addColorStop(0.49, '#7c5a30');
+    grd.addColorStop(1, '#4a341c');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, innerWidth, innerHeight);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    for (let i = 0; i < 6; i++) {
+      const x = (i * 220 + (cameraY * 0.02)) % (innerWidth + 260) - 130;
+      const y = 30 + (i % 3) * 22;
+      cloud(x, y, 1.0 - i * 0.08);
+    }
+
+    ctx.fillStyle = '#6b4f2a';
+    ctx.fillRect(0, skyH, innerWidth, innerHeight - skyH);
+  }
+
+  function cloud(x, y, s) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(s, s);
+    ctx.beginPath();
+    ctx.arc(20, 20, 14, 0, Math.PI * 2);
+    ctx.arc(38, 15, 18, 0, Math.PI * 2);
+    ctx.arc(58, 22, 13, 0, Math.PI * 2);
+    ctx.arc(36, 28, 17, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawWorld() {
+    const startRow = clamp(Math.floor(cameraY / cellH) - 2, 0, rows - 1);
+    const endRow = clamp(Math.ceil((cameraY + innerHeight) / cellH) + 2, 0, rows);
+
+    for (let r = startRow; r < endRow; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cell = grid[r][c];
+        if (cell.type === 'air') continue;
+        const x = c * cellW;
+        const y = r * cellH - cameraY;
+
+        if (cell.type === 'dirt') ctx.fillStyle = '#7b4f28';
+        else if (cell.type === 'rock') ctx.fillStyle = '#66696f';
+        else if (cell.type === 'ore') ctx.fillStyle = '#b58b3f';
+        else if (cell.type === 'gem') ctx.fillStyle = '#43d4c6';
+
+        ctx.fillRect(x, y, cellW + 1, cellH + 1);
+
+        if (cell.type === 'rock') {
+          ctx.fillStyle = 'rgba(255,255,255,0.12)';
+          ctx.fillRect(x + 2, y + 2, cellW * 0.35, cellH * 0.18);
+        }
+        if (cell.type === 'ore') {
+          ctx.fillStyle = 'rgba(255,255,255,0.16)';
+          ctx.fillRect(x + cellW * 0.15, y + cellH * 0.18, cellW * 0.25, cellH * 0.12);
+        }
+        if (cell.type === 'gem') {
+          ctx.fillStyle = 'rgba(255,255,255,0.24)';
+          ctx.beginPath();
+          ctx.arc(x + cellW * 0.5, y + cellH * 0.5, Math.min(cellW, cellH) * 0.18, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+  }
+
+  function drawPlayer() {
+    const px = player.x;
+    const py = player.y - cameraY;
+
+    ctx.save();
+    ctx.translate(px, py);
+
+    ctx.fillStyle = '#3b2a1c';
+    ctx.beginPath();
+    ctx.arc(0, 0, player.radius + 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffd54f';
+    ctx.beginPath();
+    ctx.arc(0, -2, player.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#333';
+    ctx.beginPath();
+    ctx.arc(-5, -5, 2, 0, Math.PI * 2);
+    ctx.arc(5, -5, 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#cfd8dc';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(10, 4);
+    ctx.lineTo(24, 12);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#8d6e63';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(24, 12);
+    ctx.lineTo(34, 4);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = clamp(p.life / 45, 0, 1);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y - cameraY, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function update(dt) {
+    if (gameStarted) {
+      const dy = Math.max(0, player.y - 60);
+      depthMeters = Math.floor(dy / 18);
+      cameraY = clamp(player.y - innerHeight * 0.35, 0, worldH - innerHeight);
+
+      if (energy < 100) energy = clamp(energy + dt * 1.5, 0, 100);
+
+      const targetCell = cellAt(player.targetX, player.targetY);
+      if (player.digging && targetCell) {
+        const dist = Math.hypot(player.targetX - player.x, player.targetY - player.y);
+        const power = dist < 60 ? 2 : 1;
+        digAt(player.targetX, player.targetY, power);
+      }
+
+      player.x += (player.targetX - player.x) * Math.min(1, dt * 10);
+      player.y += (player.targetY - player.y) * Math.min(1, dt * 7);
+
+      player.x = clamp(player.x, 20, worldW - 20);
+      player.y = clamp(player.y, 20, worldH - 20);
+
+      if (player.y > worldH - 30) {
+        player.y = worldH - 30;
+        player.targetY = player.y;
+      }
+    }
+
+    for (const p of particles) {
+      p.life -= dt * 60;
+      p.vy += dt * 8;
+      p.x += p.vx;
+      p.y += p.vy;
+    }
+    particles = particles.filter(p => p.life > 0);
+
+    pickaxeTrail = pickaxeTrail.filter(p => p.life > 0);
+    for (const t of pickaxeTrail) t.life -= dt * 60;
+
+    scoreText.textContent = `Depth: ${depthMeters} m`;
+    oreText.textContent = `Ore: ${ores}`;
+    energyText.textContent = `Energy: ${Math.floor(energy)}%`;
+    energyText.style.color = energy < 25 ? '#ff8a80' : '#fff';
+  }
+
+  function render() {
+    drawBackground();
+    drawWorld();
+    drawParticles();
+    drawPlayer();
+
+    if (player.digging) {
+      ctx.strokeStyle = 'rgba(255, 213, 79, 0.7)';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(player.x, player.y - cameraY);
+      ctx.lineTo(player.targetX, player.targetY - cameraY);
+      ctx.stroke();
+    }
+  }
+
+  function loop(t) {
+    const dt = Math.min(0.033, (t - lastTime) / 1000);
+    lastTime = t;
+    update(dt);
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  function pointerPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (innerWidth / rect.width);
+    const y = (e.clientY - rect.top) * (innerHeight / rect.height);
+    return { x, y };
+  }
+
+  function onDown(e) {
+    gameStarted = true;
+    startOverlay.style.display = 'none';
+    const p = pointerPos(e);
+    player.digging = true;
+    player.targetX = p.x;
+    player.targetY = p.y + cameraY;
+    player.x = p.x;
+    player.y = clamp(p.y + cameraY, 20, worldH - 20);
+    canvas.setPointerCapture?.(e.pointerId);
+  }
+
+  function onMove(e) {
+    if (!player.digging) return;
+    const p = pointerPos(e);
+    player.targetX = p.x;
+    player.targetY = p.y + cameraY;
+    if (gameStarted) {
+      pickaxeTrail.push({ x: p.x, y: p.y + cameraY, life: 18 });
+    }
+  }
+
+  function onUp(e) {
+    player.digging = false;
+    try { canvas.releasePointerCapture?.(e.pointerId); } catch {}
+  }
+
+  window.addEventListener('resize', resize);
+  canvas.addEventListener('pointerdown', onDown);
+  canvas.addEventListener('pointermove', onMove);
+  canvas.addEventListener('pointerup', onUp);
+  canvas.addEventListener('pointercancel', onUp);
+  canvas.addEventListener('pointerleave', onUp);
+
+  resize();
+  initGrid();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

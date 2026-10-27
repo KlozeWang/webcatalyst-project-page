@@ -1,0 +1,2704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>FitFlux — AI Fitness Companion</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Orbitron:wght@400;500;600;700;800;900&display=swap');
+
+  :root {
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #12121a;
+    --bg-tertiary: #1a1a2e;
+    --bg-card: rgba(255,255,255,0.03);
+    --neon-blue: #00d4ff;
+    --neon-red: #ff3366;
+    --neon-purple: #8b5cf6;
+    --neon-green: #10b981;
+    --neon-orange: #f59e0b;
+    --text-primary: #ffffff;
+    --text-secondary: #a0a0b0;
+    --text-muted: #6b6b80;
+    --glass-border: rgba(255,255,255,0.08);
+    --glass-bg: rgba(255,255,255,0.05);
+    --shadow-blue: 0 0 30px rgba(0,212,255,0.3);
+    --shadow-red: 0 0 30px rgba(255,51,102,0.3);
+    --shadow-purple: 0 0 30px rgba(139,92,246,0.3);
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    overflow: hidden;
+    position: relative;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(ellipse at 30% 20%, rgba(0,212,255,0.05) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(255,51,102,0.05) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(139,92,246,0.03) 0%, transparent 70%);
+    animation: bgFloat 20s ease-in-out infinite;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  @keyframes bgFloat {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    33% { transform: translate(2%, -2%) rotate(1deg); }
+    66% { transform: translate(-1%, 1%) rotate(-1deg); }
+  }
+
+  .app-container {
+    position: relative;
+    z-index: 1;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    max-width: 480px;
+    margin: 0 auto;
+    overflow: hidden;
+  }
+
+  /* Header */
+  .app-header {
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(10,10,15,0.8);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--glass-border);
+    flex-shrink: 0;
+    z-index: 100;
+  }
+
+  .app-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .app-logo-icon {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple));
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    box-shadow: var(--shadow-blue);
+    animation: logoPulse 3s ease-in-out infinite;
+  }
+
+  @keyframes logoPulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(0,212,255,0.3); }
+    50% { box-shadow: 0 0 30px rgba(0,212,255,0.5); }
+  }
+
+  .app-logo-text {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: 1px;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .header-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 16px;
+  }
+
+  .header-btn:hover {
+    background: rgba(255,255,255,0.1);
+    color: var(--neon-blue);
+    border-color: var(--neon-blue);
+  }
+
+  /* Pages */
+  .pages-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .page {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 20px;
+    padding-bottom: 100px;
+    opacity: 0;
+    transform: translateX(30px);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+    scrollbar-width: none;
+  }
+
+  .page::-webkit-scrollbar {
+    display: none;
+  }
+
+  .page.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: all;
+  }
+
+  .page.exit-left {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+
+  /* Bottom Navigation */
+  .bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 480px;
+    background: rgba(10,10,15,0.95);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    border-top: 1px solid var(--glass-border);
+    display: flex;
+    justify-content: space-around;
+    padding: 8px 0;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    z-index: 100;
+  }
+
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 16px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    min-width: 64px;
+  }
+
+  .nav-item::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%) scaleX(0);
+    width: 24px;
+    height: 3px;
+    background: var(--neon-blue);
+    border-radius: 0 0 3px 3px;
+    transition: transform 0.3s ease;
+  }
+
+  .nav-item.active::before {
+    transform: translateX(-50%) scaleX(1);
+  }
+
+  .nav-item.active {
+    background: rgba(0,212,255,0.1);
+  }
+
+  .nav-icon {
+    font-size: 22px;
+    transition: all 0.3s ease;
+  }
+
+  .nav-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .nav-item.active .nav-label {
+    color: var(--neon-blue);
+  }
+
+  .nav-item.active .nav-icon {
+    color: var(--neon-blue);
+  }
+
+  /* Home Page - Rock Chat */
+  .rock-header {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  .rock-avatar-container {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 16px;
+  }
+
+  .rock-avatar {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    position: relative;
+    z-index: 2;
+    box-shadow: 0 0 40px rgba(0,212,255,0.4);
+    animation: avatarFloat 4s ease-in-out infinite;
+  }
+
+  @keyframes avatarFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+
+  .rock-avatar-ring {
+    position: absolute;
+    top: -5px;
+    left: -5px;
+    right: -5px;
+    bottom: -5px;
+    border-radius: 50%;
+    border: 2px solid var(--neon-blue);
+    opacity: 0.3;
+    animation: ringPulse 2s ease-in-out infinite;
+  }
+
+  .rock-avatar-ring:nth-child(2) {
+    top: -10px;
+    left: -10px;
+    right: -10px;
+    bottom: -10px;
+    animation-delay: 0.5s;
+    border-color: var(--neon-purple);
+  }
+
+  @keyframes ringPulse {
+    0%, 100% { transform: scale(1); opacity: 0.3; }
+    50% { transform: scale(1.05); opacity: 0.1; }
+  }
+
+  .rock-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    background: rgba(16,185,129,0.1);
+    border: 1px solid rgba(16,185,129,0.3);
+    border-radius: 20px;
+    font-size: 12px;
+    color: var(--neon-green);
+    margin-bottom: 12px;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--neon-green);
+    border-radius: 50%;
+    animation: statusBlink 2s ease-in-out infinite;
+  }
+
+  @keyframes statusBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .rock-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 24px;
+    font-weight: 800;
+    margin-bottom: 4px;
+    background: linear-gradient(135deg, #fff, var(--neon-blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .rock-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  /* Daily Tip */
+  .daily-tip {
+    background: linear-gradient(135deg, rgba(139,92,246,0.1), rgba(0,212,255,0.1));
+    border: 1px solid rgba(139,92,246,0.2);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .daily-tip::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--neon-purple), var(--neon-blue), var(--neon-purple));
+    animation: tipGradient 3s linear infinite;
+    background-size: 200% 100%;
+  }
+
+  @keyframes tipGradient {
+    0% { background-position: 0% 0%; }
+    100% { background-position: 200% 0%; }
+  }
+
+  .daily-tip-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--neon-purple);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .daily-tip-text {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+
+  /* Chat Container */
+  .chat-container {
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    min-height: 300px;
+    max-height: 450px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
+  }
+
+  .chat-messages::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .chat-messages::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .chat-messages::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+  }
+
+  .message {
+    display: flex;
+    gap: 10px;
+    max-width: 85%;
+    animation: messageSlide 0.3s ease-out;
+  }
+
+  @keyframes messageSlide {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .message.user {
+    align-self: flex-end;
+    flex-direction: row-reverse;
+  }
+
+  .message-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .message.rock .message-avatar {
+    background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple));
+    box-shadow: 0 0 15px rgba(0,212,255,0.3);
+  }
+
+  .message.user .message-avatar {
+    background: linear-gradient(135deg, var(--neon-red), var(--neon-orange));
+    box-shadow: 0 0 15px rgba(255,51,102,0.3);
+  }
+
+  .message-bubble {
+    padding: 12px 16px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.5;
+    position: relative;
+  }
+
+  .message.rock .message-bubble {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--glass-border);
+    border-top-left-radius: 4px;
+    color: var(--text-primary);
+  }
+
+  .message.user .message-bubble {
+    background: linear-gradient(135deg, rgba(0,212,255,0.2), rgba(139,92,246,0.2));
+    border: 1px solid rgba(0,212,255,0.3);
+    border-top-right-radius: 4px;
+    color: var(--text-primary);
+  }
+
+  .message-time {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    display: block;
+  }
+
+  .typing-indicator {
+    display: flex;
+    gap: 4px;
+    padding: 12px 16px;
+    align-items: center;
+  }
+
+  .typing-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--neon-blue);
+    border-radius: 50%;
+    animation: typingBounce 1.4s ease-in-out infinite;
+  }
+
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes typingBounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
+    30% { transform: translateY(-8px); opacity: 1; }
+  }
+
+  /* Chat Input */
+  .chat-input-container {
+    padding: 12px 16px;
+    border-top: 1px solid var(--glass-border);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background: rgba(0,0,0,0.2);
+  }
+
+  .chat-input {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 10px 16px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    outline: none;
+    transition: all 0.3s ease;
+  }
+
+  .chat-input:focus {
+    border-color: var(--neon-blue);
+    box-shadow: 0 0 20px rgba(0,212,255,0.1);
+  }
+
+  .chat-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .chat-send-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple));
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 20px rgba(0,212,255,0.3);
+  }
+
+  .chat-send-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(0,212,255,0.5);
+  }
+
+  .chat-send-btn:active {
+    transform: scale(0.95);
+  }
+
+  .chat-voice-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+  }
+
+  .chat-voice-btn:hover {
+    background: rgba(255,51,102,0.1);
+    border-color: var(--neon-red);
+    color: var(--neon-red);
+  }
+
+  /* Quick Actions */
+  .quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  .quick-action-btn {
+    padding: 8px 14px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .quick-action-btn:hover {
+    background: rgba(0,212,255,0.1);
+    border-color: var(--neon-blue);
+    color: var(--neon-blue);
+    transform: translateY(-2px);
+  }
+
+  /* CTA Button */
+  .cta-container {
+    margin-top: 20px;
+  }
+
+  .cta-button {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple));
+    border: none;
+    border-radius: 16px;
+    color: white;
+    font-size: 16px;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 30px rgba(0,212,255,0.3);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cta-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.5s ease;
+  }
+
+  .cta-button:hover::before {
+    left: 100%;
+  }
+
+  .cta-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 40px rgba(0,212,255,0.5);
+  }
+
+  .cta-button:active {
+    transform: translateY(0);
+  }
+
+  /* Calorie Tracker Page */
+  .page-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, #fff, var(--neon-blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .page-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+  }
+
+  /* Food Upload */
+  .food-upload-area {
+    background: var(--bg-card);
+    border: 2px dashed var(--glass-border);
+    border-radius: 20px;
+    padding: 32px 20px;
+    text-align: center;
+    margin-bottom: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .food-upload-area:hover {
+    border-color: var(--neon-blue);
+    background: rgba(0,212,255,0.05);
+  }
+
+  .food-upload-area.dragover {
+    border-color: var(--neon-blue);
+    background: rgba(0,212,255,0.1);
+    transform: scale(1.02);
+  }
+
+  .upload-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    display: block;
+  }
+
+  .upload-text {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  .upload-subtext {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .upload-preview {
+    width: 100%;
+    max-height: 200px;
+    object-fit: cover;
+    border-radius: 12px;
+    margin-top: 12px;
+    display: none;
+  }
+
+  .analyze-btn {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, var(--neon-red), var(--neon-orange));
+    border: none;
+    border-radius: 14px;
+    color: white;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 25px rgba(255,51,102,0.3);
+    margin-top: 16px;
+    display: none;
+  }
+
+  .analyze-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 35px rgba(255,51,102,0.5);
+  }
+
+  /* Food Result */
+  .food-result {
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    display: none;
+    animation: resultSlide 0.4s ease-out;
+  }
+
+  @keyframes resultSlide {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .food-result-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .food-result-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--neon-green), var(--neon-blue));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+  }
+
+  .food-result-name {
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .food-result-confidence {
+    font-size: 12px;
+    color: var(--neon-green);
+  }
+
+  .nutrition-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .nutrition-item {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 12px;
+    text-align: center;
+  }
+
+  .nutrition-value {
+    font-size: 20px;
+    font-weight: 800;
+    font-family: 'Orbitron', sans-serif;
+    margin-bottom: 4px;
+  }
+
+  .nutrition-value.calories { color: var(--neon-orange); }
+  .nutrition-value.protein { color: var(--neon-blue); }
+  .nutrition-value.carbs { color: var(--neon-purple); }
+  .nutrition-value.fat { color: var(--neon-red); }
+
+  .nutrition-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Daily Log */
+  .daily-log {
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .log-title {
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .log-total {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 14px;
+    color: var(--neon-orange);
+  }
+
+  .log-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--glass-border);
+  }
+
+  .log-entry:last-child {
+    border-bottom: none;
+  }
+
+  .log-entry-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .log-entry-emoji {
+    font-size: 24px;
+  }
+
+  .log-entry-name {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .log-entry-time {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .log-entry-cal {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 14px;
+    color: var(--neon-orange);
+    font-weight: 700;
+  }
+
+  /* Progress Bar */
+  .progress-container {
+    margin-top: 16px;
+  }
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .progress-bar {
+    width: 100%;
+    height: 8px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--neon-green), var(--neon-blue));
+    border-radius: 4px;
+    transition: width 0.5s ease;
+    position: relative;
+  }
+
+  .progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    animation: progressShine 2s ease-in-out infinite;
+  }
+
+  @keyframes progressShine {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  /* Wellness Page */
+  .wellness-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .wellness-card {
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .wellness-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, transparent, rgba(255,255,255,0.02));
+    pointer-events: none;
+  }
+
+  .wellness-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--neon-blue);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  }
+
+  .wellness-card-icon {
+    font-size: 32px;
+    margin-bottom: 12px;
+    display: block;
+  }
+
+  .wellness-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .wellness-card-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* BMI Calculator */
+  .bmi-calculator {
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    padding: 24px;
+    margin-bottom: 20px;
+    display: none;
+  }
+
+  .bmi-calculator.active {
+    display: block;
+    animation: resultSlide 0.4s ease-out;
+  }
+
+  .bmi-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .input-group {
+    margin-bottom: 16px;
+  }
+
+  .input-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    display: block;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .input-field {
+    width: 100%;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-family: 'Inter', sans-serif;
+    outline: none;
+    transition: all 0.3s ease;
+  }
+
+  .input-field:focus {
+    border-color: var(--neon-blue);
+    box-shadow: 0 0 20px rgba(0,212,255,0.1);
+  }
+
+  .input-field::placeholder {
+    color: var(--text-muted);
+  }
+
+  .bmi-result {
+    text-align: center;
+    padding: 20px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 16px;
+    margin-top: 16px;
+    display: none;
+  }
+
+  .bmi-result.active {
+    display: block;
+    animation: resultSlide 0.4s ease-out;
+  }
+
+  .bmi-value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 42px;
+    font-weight: 900;
+    margin-bottom: 8px;
+  }
+
+  .bmi-category {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .bmi-info {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .bmi-scale {
+    display: flex;
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 16px;
+    gap: 2px;
+  }
+
+  .bmi-scale-segment {
+    flex: 1;
+    border-radius: 3px;
+  }
+
+  .bmi-scale-segment.underweight { background: var(--neon-blue); }
+  .bmi-scale-segment.normal { background: var(--neon-green); }
+  .bmi-scale-segment.overweight { background: var(--neon-orange); }
+  .bmi-scale-segment.obese { background: var(--neon-red); }
+
+  .bmi-indicator {
+    width: 12px;
+    height: 12px;
+    background: white;
+    border-radius: 50%;
+    position: relative;
+    margin-top: -8px;
+    margin-left: calc(var(--bmi-pos) * 1% - 6px);
+    box-shadow: 0 0 10px rgba(255,255,255,0.5);
+    transition: margin-left 0.5s ease;
+  }
+
+  /* Daily Tips Section */
+  .tips-section {
+    margin-bottom: 20px;
+  }
+
+  .tips-section-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tip-card {
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 10px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    transition: all 0.3s ease;
+  }
+
+  .tip-card:hover {
+    border-color: var(--neon-purple);
+    transform: translateX(4px);
+  }
+
+  .tip-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+  }
+
+  .tip-content {
+    flex: 1;
+  }
+
+  .tip-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .tip-text {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  /* Water Tracker */
+  .water-tracker {
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    padding: 24px;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+
+  .water-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .water-glasses {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .water-glass {
+    width: 40px;
+    height: 50px;
+    border: 2px solid var(--glass-border);
+    border-radius: 8px 8px 12px 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-end;
+  }
+
+  .water-glass.filled {
+    border-color: var(--neon-blue);
+  }
+
+  .water-glass.filled::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 100%;
+    background: linear-gradient(180deg, rgba(0,212,255,0.3), var(--neon-blue));
+    animation: waterFill 0.3s ease-out;
+  }
+
+  @keyframes waterFill {
+    from { height: 0; }
+    to { height: 100%; }
+  }
+
+  .water-glass:hover {
+    transform: scale(1.1);
+    border-color: var(--neon-blue);
+  }
+
+  .water-count {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--neon-blue);
+    margin-bottom: 4px;
+  }
+
+  .water-goal {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .modal-overlay.active {
+    display: flex;
+    animation: modalFadeIn 0.3s ease-out;
+  }
+
+  @keyframes modalFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .modal-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    padding: 24px;
+    max-width: 400px;
+    width: 100%;
+    max-height: 80vh;
+    overflow-y: auto;
+    animation: modalSlideIn 0.3s ease-out;
+  }
+
+  @keyframes modalSlideIn {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .modal-title {
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .modal-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 16px;
+  }
+
+  .modal-close:hover {
+    background: rgba(255,51,102,0.1);
+    border-color: var(--neon-red);
+    color: var(--neon-red);
+  }
+
+  /* Loading Spinner */
+  .spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(255,255,255,0.1);
+    border-top-color: var(--neon-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Responsive */
+  @media (max-width: 480px) {
+    .app-container {
+      max-width: 100%;
+    }
+    .bottom-nav {
+      max-width: 100%;
+    }
+  }
+
+  /* Scrollbar for pages */
+  .page::-webkit-scrollbar {
+    width: 0;
+  }
+
+  /* Animations */
+  .fade-in {
+    animation: fadeIn 0.5s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .glow-text {
+    text-shadow: 0 0 10px currentColor;
+  }
+
+  /* Stats Row */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    padding: 14px;
+    text-align: center;
+  }
+
+  .stat-value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Workout suggestion */
+  .workout-suggestion {
+    background: linear-gradient(135deg, rgba(255,51,102,0.1), rgba(139,92,246,0.1));
+    border: 1px solid rgba(255,51,102,0.2);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+
+  .workout-suggestion-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .workout-suggestion-text {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  /* Notification badge */
+  .notification-badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    background: var(--neon-red);
+    border-radius: 50%;
+    animation: badgePulse 2s ease-in-out infinite;
+  }
+
+  @keyframes badgePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+  }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <!-- Header -->
+  <header class="app-header">
+    <div class="app-logo">
+      <div class="app-logo-icon">💪</div>
+      <span class="app-logo-text">FitFlux</span>
+    </div>
+    <div class="header-actions">
+      <div class="header-btn" onclick="showNotifications()">🔔</div>
+      <div class="header-btn" onclick="showSettings()">⚙️</div>
+    </div>
+  </header>
+
+  <!-- Pages Container -->
+  <div class="pages-container">
+    <!-- Home Page - Rock AI Coach -->
+    <div class="page active" id="page-home">
+      <div class="rock-header">
+        <div class="rock-avatar-container">
+          <div class="rock-avatar">🤖</div>
+          <div class="rock-avatar-ring"></div>
+          <div class="rock-avatar-ring"></div>
+        </div>
+        <div class="rock-status">
+          <span class="status-dot"></span>
+          Online — Ready to help
+        </div>
+        <h1 class="rock-title">Rock</h1>
+        <p class="rock-subtitle">Your AI Fitness Coach</p>
+      </div>
+
+      <!-- Daily Tip -->
+      <div class="daily-tip">
+        <div class="daily-tip-label">
+          ✨ Today's Tip
+        </div>
+        <p class="daily-tip-text" id="dailyTip">Stay consistent! Small daily improvements lead to stunning results over time. Remember: progress, not perfection.</p>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="quick-actions">
+        <button class="quick-action-btn" onclick="sendQuickMessage('Create a workout plan for me')">🏋️ Workout Plan</button>
+        <button class="quick-action-btn" onclick="sendQuickMessage('Give me a nutrition tip')">🥗 Nutrition Tip</button>
+        <button class="quick-action-btn" onclick="sendQuickMessage('How do I lose weight?')">🔥 Weight Loss</button>
+        <button class="quick-action-btn" onclick="sendQuickMessage('Suggest a stretching routine')">🧘 Stretching</button>
+      </div>
+
+      <!-- Chat Container -->
+      <div class="chat-container">
+        <div class="chat-messages" id="chatMessages">
+          <div class="message rock">
+            <div class="message-avatar">🤖</div>
+            <div>
+              <div class="message-bubble">
+                Hey there! I'm <strong>Rock</strong>, your AI fitness coach. 💪 I can help you with workout plans, nutrition advice, weight loss strategies, and much more. What would you like to work on today?
+              </div>
+              <span class="message-time">Just now</span>
+            </div>
+          </div>
+        </div>
+        <div class="chat-input-container">
+          <button class="chat-voice-btn" onclick="toggleVoiceInput()" id="voiceBtn">🎤</button>
+          <input type="text" class="chat-input" id="chatInput" placeholder="Ask Rock anything about fitness..." onkeypress="handleChatKeypress(event)">
+          <button class="chat-send-btn" onclick="sendMessage()">➤</button>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div class="cta-container">
+        <button class="cta-button" onclick="navigateTo('calorie')">
+          🔥 Go to Calorie Tracker
+        </button>
+      </div>
+    </div>
+
+    <!-- Calorie Tracker Page -->
+    <div class="page" id="page-calorie">
+      <h1 class="page-title">Smart Calorie Tracker</h1>
+      <p class="page-subtitle">Upload a food photo or type to track your calories</p>
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-value" style="color: var(--neon-orange);" id="totalCalories">0</div>
+          <div class="stat-label">Calories</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color: var(--neon-blue);" id="totalProtein">0g</div>
+          <div class="stat-label">Protein</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color: var(--neon-purple);" id="totalMeals">0</div>
+          <div class="stat-label">Meals</div>
+        </div>
+      </div>
+
+      <!-- Food Upload -->
+      <div class="food-upload-area" id="foodUploadArea" onclick="document.getElementById('foodInput').click()">
+        <span class="upload-icon">📸</span>
+        <div class="upload-text">Upload Food Photo</div>
+        <div class="upload-subtext">Tap to take a photo or choose from gallery</div>
+        <img class="upload-preview" id="uploadPreview" alt="Preview">
+        <input type="file" id="foodInput" accept="image/*" style="display:none" onchange="handleFileUpload(event)">
+      </div>
+
+      <button class="analyze-btn" id="analyzeBtn" onclick="analyzeFood()">🔍 Analyze Food</button>
+
+      <!-- Manual Entry -->
+      <div style="margin-top: 16px;">
+        <div class="input-group">
+          <label class="input-label">Or type food name manually</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" class="input-field" id="manualFoodInput" placeholder="e.g., Grilled Chicken Salad" style="flex:1;">
+            <button class="chat-send-btn" onclick="addManualFood()" style="width: auto; padding: 0 20px;">Add</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Food Result -->
+      <div class="food-result" id="foodResult">
+        <div class="food-result-header">
+          <div class="food-result-icon">🍽️</div>
+          <div>
+            <div class="food-result-name" id="foodResultName">—</div>
+            <div class="food-result-confidence" id="foodResultConfidence">Confidence: —</div>
+          </div>
+        </div>
+        <div class="nutrition-grid">
+          <div class="nutrition-item">
+            <div class="nutrition-value calories" id="resultCalories">0</div>
+            <div class="nutrition-label">Calories</div>
+          </div>
+          <div class="nutrition-item">
+            <div class="nutrition-value protein" id="resultProtein">0g</div>
+            <div class="nutrition-label">Protein</div>
+          </div>
+          <div class="nutrition-item">
+            <div class="nutrition-value carbs" id="resultCarbs">0g</div>
+            <div class="nutrition-label">Carbs</div>
+          </div>
+          <div class="nutrition-item">
+            <div class="nutrition-value fat" id="resultFat">0g</div>
+            <div class="nutrition-label">Fat</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Daily Log -->
+      <div class="daily-log">
+        <div class="log-header">
+          <span class="log-title">📋 Today's Log</span>
+          <span class="log-total" id="logTotal">0 cal</span>
+        </div>
+        <div id="logEntries">
+          <div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 14px;">
+            No meals logged yet. Start tracking!
+          </div>
+        </div>
+        <div class="progress-container">
+          <div class="progress-header">
+            <span>Daily Goal</span>
+            <span id="progressPercent">0%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Wellness Page -->
+    <div class="page" id="page-wellness">
+      <h1 class="page-title">Wellness Tools</h1>
+      <p class="page-subtitle">Track your health metrics and get daily insights</p>
+
+      <!-- Wellness Grid -->
+      <div class="wellness-grid">
+        <div class="wellness-card" onclick="toggleBMICalculator()">
+          <span class="wellness-card-icon">⚖️</span>
+          <div class="wellness-card-title">BMI Calculator</div>
+          <div class="wellness-card-desc">Check your body mass index</div>
+        </div>
+        <div class="wellness-card" onclick="toggleWaterTracker()">
+          <span class="wellness-card-icon">💧</span>
+          <div class="wellness-card-title">Water Tracker</div>
+          <div class="wellness-card-desc">Stay hydrated daily</div>
+        </div>
+        <div class="wellness-card" onclick="showSleepTracker()">
+          <span class="wellness-card-icon">😴</span>
+          <div class="wellness-card-title">Sleep Tracker</div>
+          <div class="wellness-card-desc">Monitor your sleep quality</div>
+        </div>
+        <div class="wellness-card" onclick="showStepCounter()">
+          <span class="wellness-card-icon">👟</span>
+          <div class="wellness-card-title">Step Counter</div>
+          <div class="wellness-card-desc">Track your daily steps</div>
+        </div>
+      </div>
+
+      <!-- BMI Calculator -->
+      <div class="bmi-calculator" id="bmiCalculator">
+        <div class="bmi-title">⚖️ BMI Calculator</div>
+        <div class="input-group">
+          <label class="input-label">Height (cm)</label>
+          <input type="number" class="input-field" id="bmiHeight" placeholder="e.g., 175">
+        </div>
+        <div class="input-group">
+          <label class="input-label">Weight (kg)</label>
+          <input type="number" class="input-field" id="bmiWeight" placeholder="e.g., 70">
+        </div>
+        <button class="cta-button" onclick="calculateBMI()" style="margin-top: 8px;">
+          Calculate BMI
+        </button>
+        <div class="bmi-result" id="bmiResult">
+          <div class="bmi-value" id="bmiValue">0</div>
+          <div class="bmi-category" id="bmiCategory">—</div>
+          <div class="bmi-info" id="bmiInfo">Enter your height and weight to calculate</div>
+          <div class="bmi-scale">
+            <div class="bmi-scale-segment underweight"></div>
+            <div class="bmi-scale-segment normal"></div>
+            <div class="bmi-scale-segment overweight"></div>
+            <div class="bmi-scale-segment obese"></div>
+          </div>
+          <div class="bmi-indicator" id="bmiIndicator" style="--bmi-pos: 0;"></div>
+        </div>
+      </div>
+
+      <!-- Water Tracker -->
+      <div class="water-tracker" id="waterTracker" style="display: none;">
+        <div class="water-title">💧 Water Tracker</div>
+        <div class="water-glasses" id="waterGlasses">
+          <div class="water-glass" onclick="toggleWaterGlass(0)"></div>
+          <div class="water-glass" onclick="toggleWaterGlass(1)"></div>
+          <div class="water-glass" onclick="toggleWaterGlass(2)"></div>
+          <div class="water-glass" onclick="toggleWaterGlass(3)"></div>
+          <div class="water-glass" onclick="toggleWaterGlass(4)"></div>
+          <div class="water-glass" onclick="toggleWaterGlass(5)"></div>
+          <div class="water-glass" onclick="toggleWaterGlass(6)"></div>
+          <div class="water-glass" onclick="toggleWaterGlass(7)"></div>
+        </div>
+        <div class="water-count" id="waterCount">0/8</div>
+        <div class="water-goal">Goal: 8 glasses (2 liters)</div>
+      </div>
+
+      <!-- Daily Tips -->
+      <div class="tips-section">
+        <div class="tips-section-title">💡 Daily Wellness Tips</div>
+        <div class="tip-card">
+          <span class="tip-icon">🏃</span>
+          <div class="tip-content">
+            <div class="tip-title">Stay Active</div>
+            <div class="tip-text">Aim for at least 30 minutes of moderate exercise daily. Even a brisk walk counts!</div>
+          </div>
+        </div>
+        <div class="tip-card">
+          <span class="tip-icon">🥦</span>
+          <div class="tip-content">
+            <div class="tip-title">Eat Colorful</div>
+            <div class="tip-text">Include fruits and vegetables of different colors in your meals for maximum nutrients.</div>
+          </div>
+        </div>
+        <div class="tip-card">
+          <span class="tip-icon">😴</span>
+          <div class="tip-content">
+            <div class="tip-title">Sleep Well</div>
+            <div class="tip-text">Get 7-9 hours of quality sleep. Your body recovers and grows during sleep.</div>
+          </div>
+        </div>
+        <div class="tip-card">
+          <span class="tip-icon">🧠</span>
+          <div class="tip-content">
+            <div class="tip-title">Mental Health</div>
+            <div class="tip-text">Take time for mindfulness. Even 5 minutes of meditation can reduce stress.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Navigation -->
+  <nav class="bottom-nav">
+    <div class="nav-item active" onclick="navigateTo('home')" id="nav-home">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">Home</span>
+    </div>
+    <div class="nav-item" onclick="navigateTo('calorie')" id="nav-calorie">
+      <span class="nav-icon">🔥</span>
+      <span class="nav-label">Calories</span>
+    </div>
+    <div class="nav-item" onclick="navigateTo('wellness')" id="nav-wellness">
+      <span class="nav-icon">💚</span>
+      <span class="nav-label">Wellness</span>
+    </div>
+  </nav>
+</div>
+
+<!-- Modal Overlay -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal-content" id="modalContent">
+    <!-- Dynamic modal content -->
+  </div>
+</div>
+
+<script>
+  // ==================== STATE ====================
+  let currentPage = 'home';
+  let chatHistory = [];
+  let dailyLog = [];
+  let waterGlasses = new Array(8).fill(false);
+  let totalCalories = 0;
+  let totalProtein = 0;
+  let totalMeals = 0;
+  const DAILY_GOAL = 2000;
+
+  // ==================== DAILY TIPS ====================
+  const dailyTips = [
+    "Stay consistent! Small daily improvements lead to stunning results over time. Remember: progress, not perfection.",
+    "Hydration is key! Drink at least 8 glasses of water daily to keep your body performing at its best.",
+    "Sleep is when your body repairs itself. Aim for 7-9 hours of quality sleep every night.",
+    "Protein helps build and repair muscles. Include lean protein in every meal for optimal results.",
+    "Consistency beats intensity. Show up every day, even if it's just for 15 minutes.",
+    "Your mindset is everything. Believe in your ability to change and grow.",
+    "Rest days are just as important as workout days. Listen to your body.",
+    "Prep your meals ahead of time. Success in fitness starts in the kitchen.",
+    "Focus on compound movements like squats, deadlifts, and push-ups for maximum results.",
+    "Track your progress. What gets measured gets managed."
+  ];
+
+  function setDailyTip() {
+    const today = new Date();
+    const dayIndex = today.getDate() % dailyTips.length;
+    document.getElementById('dailyTip').textContent = dailyTips[dayIndex];
+  }
+
+  setDailyTip();
+
+  // ==================== NAVIGATION ====================
+  function navigateTo(page) {
+    if (page === currentPage) return;
+
+    const pages = document.querySelectorAll('.page');
+    const navItems = document.querySelectorAll('.nav-item');
+
+    pages.forEach(p => {
+      p.classList.remove('active', 'exit-left');
+    });
+
+    navItems.forEach(n => n.classList.remove('active'));
+
+    const targetPage = document.getElementById(`page-${page}`);
+    const targetNav = document.getElementById(`nav-${page}`);
+
+    targetPage.classList.add('active');
+    targetNav.classList.add('active');
+
+    currentPage = page;
+  }
+
+  // ==================== CHAT FUNCTIONS ====================
+  const rockResponses = {
+    'workout': "Great question! Here's a solid workout plan:\n\n🏋️ **Warm-up (5 min)**\n- Jumping jacks: 30 seconds\n- Arm circles: 30 seconds\n- High knees: 30 seconds\n\n💪 **Main Workout**\n- Push-ups: 3 sets of 12\n- Squats: 3 sets of 15\n- Plank: 3 sets of 30 seconds\n- Lunges: 3 sets of 10 each leg\n- Burpees: 3 sets of 8\n\n🧘 **Cool-down (5 min)**\n- Stretching\n\nRemember to rest 60 seconds between sets! 💪",
+    'nutrition': "Here are some key nutrition tips:\n\n🥗 **Eat Whole Foods**\nFocus on lean proteins, complex carbs, and healthy fats.\n\n🍎 **Portion Control**\nUse smaller plates and eat slowly.\n\n⏰ **Meal Timing**\nEat every 3-4 hours to maintain energy levels.\n\n💧 **Hydrate**\nDrink water before meals to help control appetite.\n\n🚫 **Limit Processed Foods**\nAvoid sugary drinks and snacks.",
+    'weight loss': "Here's how to lose weight effectively:\n\n🔥 **Calorie Deficit**\nConsume fewer calories than you burn.\n\n🏃 **Cardio + Strength**\nCombine cardio with strength training for best results.\n\n🥗 **Eat Protein**\nProtein keeps you full and preserves muscle.\n\n😴 **Sleep Well**\nPoor sleep increases hunger hormones.\n\n📊 **Track Progress**\nWeigh yourself weekly, not daily.\n\n⚡ **Be Patient**\nHealthy weight loss is 0.5-1 kg per week.",
+    'stretching': "Here's a great stretching routine:\n\n🧘 **Upper Body**\n- Neck stretches: 30 seconds each side\n- Shoulder stretches: 30 seconds each arm\n- Tricep stretch: 30 seconds each arm\n\n🦵 **Lower Body**\n- Hamstring stretch: 30 seconds each leg\n- Quad stretch: 30 seconds each leg\n- Hip flexor stretch: 30 seconds each side\n\n🔄 **Full Body**\n- Cat-cow: 10 reps\n- Child's pose: 30 seconds\n- Downward dog: 30 seconds\n\nHold each stretch for 20-30 seconds. Don't bounce! 🙌",
+    'motivation': "🔥 **Here's your motivation boost:**\n\n\"The only bad workout is the one that didn't happen.\"\n\nRemember:\n✅ Every rep counts\n✅ Every healthy meal matters\n✅ Every step forward is progress\n✅ You're stronger than you think\n✅ Consistency is your superpower\n\nDon't compare your Chapter 1 to someone else's Chapter 20. Focus on YOUR journey! 💪🚀",
+    'protein': "Here's your protein guide:\n\n🍗 **Best Protein Sources:**\n- Chicken breast: 31g per 100g\n- Eggs: 6g per egg\n- Greek yogurt: 10g per 100g\n- Salmon: 25g per 100g\n- Lentils: 18g per cup\n- Tofu: 20g per cup\n\n💡 **Daily Recommendation:**\n- Sedentary: 0.8g per kg body weight\n- Active: 1.2-2.0g per kg body weight\n\nSpread protein evenly across meals for optimal muscle protein synthesis! 🏋️",
+    'default': "That's a great question! Here's what I think:\n\n🤔 Based on fitness science, the key is consistency and progression. Whether you're looking to build muscle, lose weight, or improve overall health, the fundamentals remain the same:\n\n1️⃣ **Train consistently** - Aim for 3-5 times per week\n2️⃣ **Eat well** - Focus on whole, nutrient-dense foods\n3️⃣ **Rest adequately** - Your body needs time to recover\n4️⃣ **Stay hydrated** - Water is essential for performance\n5️⃣ **Track progress** - What gets measured gets managed\n\nWould you like me to elaborate on any of these? I'm here to help! 💪"
+  };
+
+  function getRockResponse(message) {
+    const msg = message.toLowerCase();
+
+    if (msg.includes('workout') || msg.includes('exercise') || msg.includes('plan')) {
+      return rockResponses.workout;
+    } else if (msg.includes('nutrition') || msg.includes('diet') || msg.includes('eat')) {
+      return rockResponses.nutrition;
+    } else if (msg.includes('weight') || msg.includes('lose') || msg.includes('fat')) {
+      return rockResponses['weight loss'];
+    } else if (msg.includes('stretch') || msg.includes('flexible') || msg.includes('yoga')) {
+      return rockResponses.stretching;
+    } else if (msg.includes('motivat') || msg.includes('inspire') || msg.includes('encourage')) {
+      return rockResponses.motivation;
+    } else if (msg.includes('protein')) {
+      return rockResponses.protein;
+    } else if (msg.includes('hello') || msg.includes('hi') || msg.includes('hey')) {
+      return "Hey! 👋 Great to see you! I'm Rock, your AI fitness coach. What can I help you with today? I can create workout plans, give nutrition advice, or motivate you to reach your fitness goals! 💪";
+    } else if (msg.includes('thank')) {
+      return "You're welcome! 😊 Remember, I'm always here to help. Keep pushing towards your goals — you've got this! 💪🔥";
+    } else if (msg.includes('cardio') || msg.includes('running') || msg.includes('hiit')) {
+      return "Great choice! Here's a cardio plan:\n\n🏃 **HIIT Workout (20 min)**\n- Sprint 30 seconds\n- Walk 30 seconds\n- Repeat 10 times\n\n🚴 **Steady State (30 min)**\n- Maintain 70% max heart rate\n- Can be running, cycling, or swimming\n\n🔥 **Benefits:**\n- Burns calories efficiently\n- Improves cardiovascular health\n- Boosts metabolism for hours after\n\nStart slow and gradually increase intensity! 💪";
+    } else if (msg.includes('rest') || msg.includes('recover') || msg.includes('sleep')) {
+      return "Recovery is crucial! Here's what you need to know:\n\n😴 **Sleep**\n- Aim for 7-9 hours nightly\n- Sleep is when muscle repair happens\n- Poor sleep increases cortisol (stress hormone)\n\n🛌 **Rest Days**\n- Take 1-2 rest days per week\n- Active recovery (light walking, stretching) is great\n- Don't train the same muscle groups consecutively\n\n🧊 **Recovery Tools**\n- Foam rolling\n- Cold showers\n- Massage\n- Proper nutrition\n\nRemember: You don't grow in the gym, you grow during recovery! 💤";
+    }
+
+    return rockResponses.default;
+  }
+
+  function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const message = input.value.trim();
+    if (!message) return;
+
+    addMessage(message, 'user');
+    input.value = '';
+
+    // Show typing indicator
+    showTypingIndicator();
+
+    // Simulate AI response delay
+    setTimeout(() => {
+      removeTypingIndicator();
+      const response = getRockResponse(message);
+      addMessage(response, 'rock');
+
+      // Text-to-Speech
+      speakText(response);
+    }, 1500 + Math.random() * 1000);
+  }
+
+  function sendQuickMessage(message) {
+    document.getElementById('chatInput').value = message;
+    sendMessage();
+  }
+
+  function addMessage(text, sender) {
+    const chatMessages = document.getElementById('chatMessages');
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${sender}`;
+
+    const avatar = sender === 'rock' ? '🤖' : '👤';
+    const formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+
+    messageDiv.innerHTML = `
+      <div class="message-avatar">${avatar}</div>
+      <div>
+        <div class="message-bubble">${formattedText}</div>
+        <span class="message-time">${time}</span>
+      </div>
+    `;
+
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function showTypingIndicator() {
+    const chatMessages = document.getElementById('chatMessages');
+    const typingDiv = document.createElement('div');
+    typingDiv.className = 'message rock';
+    typingDiv.id = 'typingIndicator';
+    typingDiv.innerHTML = `
+      <div class="message-avatar">🤖</div>
+      <div>
+        <div class="message-bubble">
+          <div class="typing-indicator">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
+        </div>
+      </div>
+    `;
+    chatMessages.appendChild(typingDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function removeTypingIndicator() {
+    const typing = document.getElementById('typingIndicator');
+    if (typing) typing.remove();
+  }
+
+  function handleChatKeypress(event) {
+    if (event.key === 'Enter') {
+      sendMessage();
+    }
+  }
+
+  // ==================== TEXT-TO-SPEECH ====================
+  function speakText(text) {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const cleanText = text.replace(/\*\*/g, '').replace(/[🏋️💪🔥🥗🍎⏰💧🚫🧘🦵🔄😴📊⚡1️⃣2️⃣3️⃣4️⃣5️⃣✅🤔🍗💡🏃🚴🔥🛌🧊😪👋😊🙌🚀]/g, '').substring(0, 500);
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.volume = 0.8;
+
+      // Try to find a good English voice
+      const voices = window.speechSynthesis.getVoices();
+      const englishVoice = voices.find(v => v.lang.includes('en') && v.name.includes('Google')) || voices.find(v => v.lang.includes('en'));
+      if (englishVoice) utterance.voice = englishVoice;
+
+      window.speechSynthesis.speak(utterance);
+    }
+  }
+
+  // Load voices
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      window.speechSynthesis.getVoices();
+    };
+  }
+
+  // ==================== VOICE INPUT ====================
+  function toggleVoiceInput() {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('Voice input is not supported in this browser. Try Chrome!');
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    const voiceBtn = document.getElementById('voiceBtn');
+    voiceBtn.style.background = 'rgba(255,51,102,0.2)';
+    voiceBtn.style.borderColor = 'var(--neon-red)';
+    voiceBtn.style.color = 'var(--neon-red)';
+
+    recognition.onstart = () => {
+      voiceBtn.textContent = '🔴';
+    };
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      document.getElementById('chatInput').value = transcript;
+      sendMessage();
+    };
+
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      voiceBtn.style.background = '';
+      voiceBtn.style.borderColor = '';
+      voiceBtn.style.color = '';
+      voiceBtn.textContent = '🎤';
+    };
+
+    recognition.onend = () => {
+      voiceBtn.style.background = '';
+      voiceBtn.style.borderColor = '';
+      voiceBtn.style.color = '';
+      voiceBtn.textContent = '🎤';
+    };
+
+    recognition.start();
+  }
+
+  // ==================== CALORIE TRACKER ====================
+  const foodDatabase = {
+    'chicken': { calories: 165, protein: 31, carbs: 0, fat: 3.6, emoji: '🍗' },
+    'rice': { calories: 130, protein: 2.7, carbs: 28, fat: 0.3, emoji: '🍚' },
+    'salad': { calories: 20, protein: 1.5, carbs: 4, fat: 0.2, emoji: '🥗' },
+    'egg': { calories: 78, protein: 6, carbs: 0.6, fat: 5, emoji: '🥚' },
+    'banana': { calories: 105, protein: 1.3, carbs: 27, fat: 0.4, emoji: '🍌' },
+    'apple': { calories: 95, protein: 0.5, carbs: 25, fat: 0.3, emoji: '🍎' },
+    'bread': { calories: 79, protein: 2.7, carbs: 15, fat: 1, emoji: '🍞' },
+    'milk': { calories: 149, protein: 8, carbs: 12, fat: 8, emoji: '🥛' },
+    'pizza': { calories: 285, protein: 12, carbs: 36, fat: 10, emoji: '🍕' },
+    'burger': { calories: 354, protein: 20, carbs: 29, fat: 17, emoji: '🍔' },
+    'pasta': { calories: 220, protein: 8, carbs: 43, fat: 1.3, emoji: '🍝' },
+    'fish': { calories: 206, protein: 22, carbs: 0, fat: 12, emoji: '🐟' },
+    'steak': { calories: 271, protein: 26, carbs: 0, fat: 18, emoji: '🥩' },
+    'yogurt': { calories: 149, protein: 8.5, carbs: 11, fat: 8, emoji: '🥛' },
+    'oatmeal': { calories: 154, protein: 5, carbs: 27, fat: 2.6, emoji: '🥣' },
+    'avocado': { calories: 240, protein: 3, carbs: 12, fat: 22, emoji: '🥑' },
+    'smoothie': { calories: 200, protein: 5, carbs: 40, fat: 2, emoji: '🥤' },
+    'protein shake': { calories: 120, protein: 24, carbs: 3, fat: 1, emoji: '🥤' },
+    'granola': { calories: 212, protein: 5, carbs: 31, fat: 8, emoji: '🥣' },
+    'chocolate': { calories: 546, protein: 5, carbs: 60, fat: 30, emoji: '🍫' },
+    'cookies': { calories: 150, protein: 2, carbs: 20, fat: 7, emoji: '🍪' },
+    'cake': { calories: 350, protein: 4, carbs: 50, fat: 14, emoji: '🍰' },
+    'donut': { calories: 253, protein: 4.9, carbs: 30, fat: 13, emoji: '🍩' },
+    'sandwich': { calories: 295, protein: 15, carbs: 35, fat: 10, emoji: '🥪' },
+    'soup': { calories: 120, protein: 5, carbs: 15, fat: 4, emoji: '🍲' },
+    'tacos': { calories: 210, protein: 10, carbs: 20, fat: 10, emoji: '🌮' },
+    'sushi': { calories: 150, protein: 7, carbs: 25, fat: 2, emoji: '🍣' },
+    'fried rice': { calories: 300, protein: 7, carbs: 45, fat: 10, emoji: '🍚' },
+    'noodles': { calories: 220, protein: 7, carbs: 42, fat: 2, emoji: '🍜' },
+    'potato': { calories: 163, protein: 4, carbs: 37, fat: 0.2, emoji: '🥔' },
+    'carrot': { calories: 25, protein: 0.6, carbs: 6, fat: 0.1, emoji: '🥕' },
+    'broccoli': { calories: 55, protein: 3.7, carbs: 11, fat: 0.6, emoji: '🥦' },
+    'spinach': { calories: 23, protein: 2.9, carbs: 3.6, fat: 0.4, emoji: '🥬' },
+    'tomato': { calories: 22, protein: 1.1, carbs: 4.8, fat: 0.2, emoji: '🍅' },
+    'orange': { calories: 62, protein: 1.2, carbs: 15, fat: 0.2, emoji: '🍊' },
+    'grapes': { calories: 104, protein: 1.1, carbs: 27, fat: 0.2, emoji: '🍇' },
+    'watermelon': { calories: 86, protein: 1.7, carbs: 22, fat: 0.4, emoji: '🍉' },
+    'strawberry': { calories: 32, protein: 0.7, carbs: 7.7, fat: 0.3, emoji: '🍓' },
+    'blueberry': { calories: 84, protein: 1.1, carbs: 21, fat: 0.5, emoji: '🫐' },
+    'peanut butter': { calories: 188, protein: 8, carbs: 6, fat: 16, emoji: '🥜' },
+    'almonds': { calories: 164, protein: 6, carbs: 6, fat: 14, emoji: '🌰' },
+    'cheese': { calories: 113, protein: 7, carbs: 0.4, fat: 9, emoji: '🧀' },
+    'bacon': { calories: 142, protein: 8, carbs: 0.2, fat: 12, emoji: '🥓' },
+    'sausage': { calories: 229, protein: 11, carbs: 1.4, fat: 20, emoji: '🌭' },
+    'hot dog': { calories: 290, protein: 11, carbs: 2, fat: 26, emoji: '🌭' },
+    'fries': { calories: 365, protein: 4, carbs: 48, fat: 17, emoji: '🍟' },
+    'popcorn': { calories: 106, protein: 3, carbs: 19, fat: 3, emoji: '🍿' },
+    'ice cream': { calories: 273, protein: 5, carbs: 31, fat: 15, emoji: '🍦' },
+    'coffee': { calories: 2, protein: 0.3, carbs: 0, fat: 0, emoji: '☕' },
+    'tea': { calories: 1, protein: 0, carbs: 0.3, fat: 0, emoji: '🍵' },
+    'juice': { calories: 111, protein: 1.7, carbs: 26, fat: 0.5, emoji: '🧃' },
+    'soda': { calories: 140, protein: 0, carbs: 39, fat: 0, emoji: '🥤' },
+    'beer': { calories: 153, protein: 1.6, carbs: 13, fat: 0, emoji: '🍺' },
+    'wine': { calories: 125, protein: 0.1, carbs: 4, fat: 0, emoji: '🍷' },
+    'grilled chicken': { calories: 165, protein: 31, carbs: 0, fat: 3.6, emoji: '🍗' },
+    'caesar salad': { calories: 184, protein: 6, carbs: 7, fat: 14, emoji: '🥗' },
+    'black coffee': { calories: 2, protein: 0.3, carbs: 0, fat: 0, emoji: '☕' },
+    'latte': { calories: 190, protein: 9, carbs: 16, fat: 9, emoji: '☕' },
+    'muffin': { calories: 357, protein: 6, carbs: 52, fat: 14, emoji: '🧁' },
+    'pancake': { calories: 227, protein: 6, carbs: 28, fat: 10, emoji: '🥞' },
+    'waffle': { calories: 230, protein: 5, carbs: 29, fat: 11, emoji: '🧇' },
+    'cereal': { calories: 190, protein: 3, carbs: 43, fat: 1, emoji: '🥣' },
+    'hummus': { calories: 166, protein: 8, carbs: 14, fat: 10, emoji: '🫘' },
+    'falafel': { calories: 333, protein: 15, carbs: 31, fat: 17, emoji: '🧆' },
+    'kebab': { calories: 250, protein: 20, carbs: 10, fat: 14, emoji: '🍢' },
+    'ramen': { calories: 400, protein: 15, carbs: 50, fat: 14, emoji: '🍜' },
+    'dim sum': { calories: 180, protein: 8, carbs: 20, fat: 7, emoji: '🥟' },
+    'pho': { calories: 350, protein: 25, carbs: 40, fat: 8, emoji: '🍜' },
+    'curry': { calories: 300, protein: 15, carbs: 25, fat: 16, emoji: '🍛' },
+    'biryani': { calories: 400, protein: 18, carbs: 50, fat: 14, emoji: '🍚' },
+    'pad thai': { calories: 350, protein: 12, carbs: 45, fat: 14, emoji: '🍜' },
+    'spring roll': { calories: 150, protein: 4, carbs: 20, fat: 6, emoji: '🥟' },
+    'tempura': { calories: 250, protein: 5, carbs: 30, fat: 12, emoji: '🍤' },
+    'poke bowl': { calories: 350, protein: 25, carbs: 40, fat: 8, emoji: '🥗' },
+    'smoothie bowl': { calories: 280, protein: 8, carbs: 50, fat: 6, emoji: '🥣' },
+    'acai bowl': { calories: 300, protein: 5, carbs: 55, fat: 8, emoji: '🫐' },
+    'granola bar': { calories: 190, protein: 4, carbs: 28, fat: 7, emoji: '🍫' },
+    'energy bar': { calories: 220, protein: 10, carbs: 30, fat: 8, emoji: '🍫' },
+    'trail mix': { calories: 250, protein: 6, carbs: 25, fat: 15, emoji: '🥜' },
+    'dark chocolate': { calories: 170, protein: 2, carbs: 13, fat: 12, emoji: '🍫' },
+    'cottage cheese': { calories: 206, protein: 28, carbs: 6, fat: 9, emoji: '🧀' },
+    'tuna': { calories: 191, protein: 42, carbs: 0, fat: 1.5, emoji: '🐟' },
+    'shrimp': { calories: 99, protein: 24, carbs: 0.2, fat: 0.3, emoji: '🦐' },
+    'lobster': { calories: 89, protein: 19, carbs: 0, fat: 0.5, emoji: '🦞' },
+    'crab': { calories: 87, protein: 16, carbs: 0, fat: 1.5, emoji: '🦀' },
+    'mussels': { calories: 172, protein: 24, carbs: 7, fat: 4, emoji: '🐚' },
+    'clams': { calories: 148, protein: 23, carbs: 6, fat: 2, emoji: '🐚' },
+    'octopus': { calories: 148, protein: 23, carbs: 3, fat: 4, emoji: '🐙' },
+    'squid': { calories: 132, protein: 23, carbs: 3, fat: 3, emoji: '🦑' },
+    'edamame': { calories: 121, protein: 11, carbs: 9, fat: 5, emoji: '🫘' },
+    'quinoa': { calories: 222, protein: 8, carbs: 39, fat: 3.5, emoji: '🌾' },
+    'sweet potato': { calories: 103, protein: 2, carbs: 24, fat: 0.1, emoji: '🍠' },
+    'corn': { calories: 86, protein: 3, carbs: 19, fat: 1.2, emoji: '🌽' },
+    'peas': { calories: 81, protein: 5, carbs: 14, fat: 0.4, emoji: '🫛' },
+    'green beans': { calories: 31, protein: 1.8, carbs: 7, fat: 0.1, emoji: '🫘' },
+    'zucchini': { calories: 17, protein: 1.2, carbs: 3.1, fat: 0.3, emoji: '🥒' },
+    'cucumber': { calories: 16, protein: 0.7, carbs: 3.6, fat: 0.1, emoji: '🥒' },
+    'lettuce': { calories: 5, protein: 0.5, carbs: 1, fat: 0.1, emoji: '🥬' },
+    'mushroom': { calories: 22, protein: 3, carbs: 3, fat: 0.3, emoji: '🍄' },
+    'onion': { calories: 40, protein: 1.1, carbs: 9, fat: 0.1, emoji: '🧅' },
+    'garlic': { calories: 4, protein: 0.2, carbs: 1, fat: 0, emoji: '🧄' },
+    'ginger': { calories: 80, protein: 1.8, carbs: 18, fat: 0.8, emoji: '🫚' },
+    'lemon': { calories: 29, protein: 1.1, carbs: 9, fat: 0.3, emoji: '🍋' },
+    'lime': { calories: 30, protein: 0.7, carbs: 10, fat: 0.2, emoji: '🍈' },
+    'pineapple': { calories: 82, protein: 0.5, carbs: 22, fat: 0.2, emoji: '🍍' },
+    'mango': { calories: 99, protein: 1.4, carbs: 25, fat: 0.4, emoji: '🥭' },
+    'papaya': { calories: 43, protein: 0.5, carbs: 11, fat: 0.3, emoji: '🍈' },
+    'kiwi': { calories: 61, protein: 1.1, carbs: 15, fat: 0.5, emoji: '🥝' },
+    'pomegranate': { calories: 83, protein: 1.7, carbs: 19, fat: 1.2, emoji: '🍎' },
+    'fig': { calories: 74, protein: 0.8, carbs: 19, fat: 0.3, emoji: '🫐' },
+    'date': { calories: 277, protein: 2.5, carbs: 75, fat: 0.2, emoji: '🌴' },
+    'raisin': { calories: 299, protein: 3.1, carbs: 79, fat: 0.5, emoji: '🍇' },
+    'prune': { calories: 240, protein: 2.2, carbs: 64, fat: 0.5, emoji: '🫐' },
+    'walnut': { calories: 185, protein: 4.3, carbs: 3.9, fat: 18, emoji: '🌰' },
+    'cashew': { calories: 157, protein: 5, carbs: 9, fat: 12, emoji: '🥜' },
+    'pistachio': { calories: 159, protein: 6, carbs: 8, fat: 13, emoji: '🥜' },
+    'pecan': { calories: 196, protein: 2.6, carbs: 4, fat: 20, emoji: '🌰' },
+    'hazelnut': { calories: 185, protein: 2.5, carbs: 5, fat: 18, emoji: '🌰' },
+    'macadamia': { calories: 204, protein: 2, carbs: 4, fat: 22, emoji: '🥜' },
+    'Brazil nut': { calories: 190, protein: 4, carbs: 4, fat: 19, emoji: '🌰' },
+    'sunflower seed': { calories: 174, protein: 5, carbs: 7, fat: 14, emoji: '🌻' },
+    'pumpkin seed': { calories: 151, protein: 7, carbs: 2, fat: 13, emoji: '🎃' },
+    'chia seed': { calories: 138, protein: 4.7, carbs: 12, fat: 8.7, emoji: '🌱' },
+    'flax seed': { calories: 151, protein: 5, carbs: 8, fat: 12, emoji: '🌱' },
+    'hemp seed': { calories: 166, protein: 9, carbs: 2, fat: 14, emoji: '🌱' },
+    'sesame seed': { calories: 165, protein: 5, carbs: 7, fat: 14, emoji: '🌱' },
+    'coconut': { calories: 354, protein: 3.3, carbs: 15, fat: 33, emoji: '🥥' },
+    'coconut water': { calories: 19, protein: 0.7, carbs: 4, fat: 0.2, emoji: '🥥' },
+    'almond milk': { calories: 30, protein: 1, carbs: 1, fat: 2.5, emoji: '🥛' },
+    'oat milk': { calories: 40, protein: 1, carbs: 7, fat: 1.5, emoji: '🥛' },
+    'soy milk': { calories: 54, protein: 4, carbs: 4, fat: 2, emoji: '🥛' },
+    'rice milk': { calories: 47, protein: 0.5, carbs: 9, fat: 1.5, emoji: '🥛' },
+    'kefir': { calories: 60, protein: 3.5, carbs: 4, fat: 3, emoji: '🥛' },
+    'buttermilk': { calories: 41, protein: 2.4, carbs: 5, fat: 1, emoji: '🥛' },
+    'cream': { calories: 345, protein: 2, carbs: 3, fat: 36, emoji: '🥛' },
+    'butter': { calories: 717, protein: 0.9, carbs: 0.1, fat: 81, emoji: '🧈' },
+    'ghee': { calories: 900, protein: 0, carbs: 0, fat: 100, emoji: '🧈' },
+    'olive oil': { calories: 119, protein: 0, carbs: 0, fat: 14, emoji: '🫒' },
+    'coconut oil': { calories: 121, protein: 0, carbs: 0, fat: 14, emoji: '🥥' },
+    'avocado oil': { calories: 124, protein: 0, carbs: 0, fat: 14, emoji: '🥑' },
+    'sesame oil': { calories: 124, protein: 0, carbs: 0, fat: 14, emoji: '🌻' },
+    'vinegar': { calories: 3, protein: 0, carbs: 0.04, fat: 0, emoji: '🫗' },
+    'soy sauce': { calories: 53, protein: 8, carbs: 5, fat: 0, emoji: '🫗' },
+    'hot sauce': { calories: 12, protein: 0.3, carbs: 2, fat: 0, emoji: '🌶️' },
+    'ketchup': { calories: 112, protein: 1.5, carbs: 27, fat: 0.2, emoji: '🫗' },
+    'mayo': { calories: 94, protein: 0.1, carbs: 0.1, fat: 10, emoji: '🫗' },
+    'mustard': { calories: 5, protein: 0.3, carbs: 0.3, fat: 0.3, emoji: '🫗' },
+    'honey': { calories: 304, protein: 0.3, carbs: 82, fat: 0, emoji: '🍯' },
+    'maple syrup': { calories: 260, protein: 0, carbs: 67, fat: 0, emoji: '🍁' },
+    'agave': { calories: 310, protein: 0, carbs: 76, fat: 0, emoji: '🌵' },
+    'brown sugar': { calories: 380, protein: 0, carbs: 98, fat: 0, emoji: '🍬' },
+    'white sugar': { calories: 387, protein: 0, carbs: 100, fat: 0, emoji: '🍬' },
+    'stevia': { calories: 0, protein: 0, carbs: 0, fat: 0, emoji: '🌿' },
+    'artificial sweetener': { calories: 0, protein: 0, carbs: 0, fat: 0, emoji: '🧪' },
+    'energy drink': { calories: 110, protein: 0, carbs: 28, fat: 0, emoji: '🥤' },
+    'sports drink': { calories: 50, protein: 0, carbs: 14, fat: 0, emoji: '🥤' },
+    'electrolyte drink': { calories: 25, protein: 0, carbs: 6, fat: 0, emoji: '🥤' },
+    'green tea': { calories: 0, protein: 0, carbs: 0, fat: 0, emoji: '🍵' },
+    'black tea': { calories: 0, protein: 0, carbs: 0, fat: 0, emoji: '🍵' },
+    'herbal tea': { calories: 0, protein: 0, carbs: 0, fat: 0, emoji: '🍵' },
+    'matcha': { calories: 3, protein: 0.4, carbs: 0.5, fat: 0, emoji: '🍵' },
+    'chocolate milk': { calories: 143, protein: 8, carbs: 22, fat: 3, emoji: '🥛' },
+    'banana smoothie': { calories: 210, protein: 4, carbs: 45, fat: 2, emoji: '🥤' },
+    'berry smoothie': { calories: 180, protein: 3, carbs: 40, fat: 1, emoji: '🥤' },
+    'protein bar': { calories: 220, protein: 20, carbs: 25, fat: 8, emoji: '🍫' },
+    'creatine': { calories: 0, protein: 0, carbs: 0, fat: 0, emoji: '💊' },
+    'BCAA': { calories: 0, protein: 0, carbs: 0, fat: 0, emoji: '💊' },
+    'pre workout': { calories: 15, protein: 0, carbs: 4, fat: 0, emoji: '💊' },
+    'fish oil': { calories: 90, protein: 0, carbs: 0, fat: 10, emoji: '💊' },
+    'vitamin d': { calories: 0, protein: 0, carbs: 0, fat: 0, emoji: '💊' },
+    'multivitamin': { calories: 0, protein: 0, carbs: 0, fat: 0, emoji: '💊' },
+    'collagen': { calories: 0, protein: 0, carbs: 0, fat: 0, emoji: '💊' },
+    'probiotic': { calories: 0, protein: 0, carbs: 0, fat: 0, emoji: '💊' },
+  };
+
+  function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const preview = document.getElementById('uploadPreview');
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+      preview.src = e.target.result;
+      preview.style.display = 'block';
+      document.getElementById('analyzeBtn').style.display = 'block';
+      document.getElementById('foodUploadArea').querySelector('.upload-text').textContent = file.name;
+    };
+
+    reader.readAsDataURL(file);
+  }
+
+  function analyzeFood() {
+    const preview = document.getElementById('uploadPreview');
+    if (!preview.src || preview.style.display === 'none') {
+      alert('Please upload a food photo first!');
+      return;
+    }
+
+    // Simulate food analysis
+    const foodKeys = Object.keys(foodDatabase);
+    const randomFood = foodKeys[Math.floor(Math.random() * foodKeys.length)];
+    const food = foodDatabase[randomFood];
+
+    document.getElementById('foodResultName').textContent = randomFood.charAt(0).toUpperCase() + randomFood.slice(1);
+    document.getElementById('foodResultConfidence').textContent = `Confidence: ${85 + Math.floor(Math.random() * 14)}%`;
+    document.getElementById('resultCalories').textContent = food.calories;
+    document.getElementById('resultProtein').textContent = food.protein + 'g';
+    document.getElementById('resultCarbs').textContent = food.carbs + 'g';
+    document.getElementById('resultFat').textContent = food.fat + 'g';
+
+    document.getElementById('foodResult').style.display = 'block';
+
+    // Add to log
+    addFoodToLog(randomFood, food);
+  }
+
+  function addManualFood() {
+    const input = document.getElementById('manualFoodInput');
+    const foodName = input.value.trim().toLowerCase();
+    if (!foodName) return;
+
+    // Search in database
+    let foundFood = null;
+    let foundKey = '';
+
+    for (const key of Object.keys(foodDatabase)) {
+      if (foodName.includes(key) || key.includes(foodName)) {
+        foundFood = foodDatabase[key];
+        foundKey = key;
+        break;
+      }
+    }
+
+    if (!foundFood) {
+      // Generate random nutrition if not found
+      foundFood = {
+        calories: 100 + Math.floor(Math.random() * 300),
+        protein: 5 + Math.floor(Math.random() * 20),
+        carbs: 10 + Math.floor(Math.random() * 40),
+        fat: 3 + Math.floor(Math.random() * 15),
+        emoji: '🍽️'
+      };
+      foundKey = foodName;
+    }
+
+    document.getElementById('foodResultName').textContent = foundKey.charAt(0).toUpperCase() + foundKey.slice(1);
+    document.getElementById('foodResultConfidence').textContent = `Confidence: ${foundFood ? '100%' : 'Estimated'}`;
+    document.getElementById('resultCalories').textContent = foundFood.calories;
+    document.getElementById('resultProtein').textContent = foundFood.protein + 'g';
+    document.getElementById('resultCarbs').textContent = foundFood.carbs + 'g';
+    document.getElementById('resultFat').textContent = foundFood.fat + 'g';
+
+    document.getElementById('foodResult').style.display = 'block';
+
+    addFoodToLog(foundKey, foundFood);
+    input.value = '';
+  }
+
+  function addFoodToLog(name, food) {
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    dailyLog.push({
+      name: name.charAt(0).toUpperCase() + name.slice(1),
+      calories: food.calories,
+      protein: food.protein,
+      carbs: food.carbs,
+      fat: food.fat,
+      emoji: food.emoji,
+      time: time
+    });
+
+    totalCalories += food.calories;
+    totalProtein += food.protein;
+    totalMeals++;
+
+    updateLogDisplay();
+  }
+
+  function updateLogDisplay() {
+    const logEntries = document.getElementById('logEntries');
+    const logTotal = document.getElementById('logTotal');
+    const progressFill = document.getElementById('progressFill');
+    const progressPercent = document.getElementById('progressPercent');
+
+    logTotal.textContent = totalCalories + ' cal';
+    document.getElementById('totalCalories').textContent = totalCalories;
+    document.getElementById('totalProtein').textContent = totalProtein + 'g';
+    document.getElementById('totalMeals').textContent = totalMeals;
+
+    const percent = Math.min((totalCalories / DAILY_GOAL) * 100, 100);
+    progressFill.style.width = percent + '%';
+    progressPercent.textContent = Math.round(percent) + '%';
+
+    if (dailyLog.length === 0) {
+      logEntries.innerHTML = '<div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 14px;">No meals logged yet. Start tracking!</div>';
+      return;
+    }
+
+    logEntries.innerHTML = dailyLog.map(entry => `
+      <div class="log-entry">
+        <div class="log-entry-info">
+          <span class="log-entry-emoji">${entry.emoji}</span>
+          <div>
+            <div class="log-entry-name">${entry.name}</div>
+            <div class="log-entry-time">${entry.time}</div>
+          </div>
+        </div>
+        <div class="log-entry-cal">${entry.calories} cal</div>
+      </div>
+    `).reverse().join('');
+  }
+
+  // ==================== BMI CALCULATOR ====================
+  function toggleBMICalculator() {
+    const bmiCalc = document.getElementById('bmiCalculator');
+    bmiCalc.classList.toggle('active');
+    if (bmiCalc.classList.contains('active')) {
+      bmiCalc.scrollIntoView({ behavior: 'smooth' });
+    }
+  }
+
+  function calculateBMI() {
+    const height = parseFloat(document.getElementById('bmiHeight').value);
+    const weight = parseFloat(document.getElementById('bmiWeight').value);
+
+    if (!height || !weight || height <= 0 || weight <= 0) {
+      alert('Please enter valid height and weight values!');
+      return;
+    }
+
+    const heightM = height / 100;
+    const bmi = weight / (heightM * heightM);
+    const bmiRounded = bmi.toFixed(1);
+
+    let category = '';
+    let color = '';
+    let info = '';
+
+    if (bmi < 18.5) {
+      category = 'Underweight';
+      color = 'var(--neon-blue)';
+      info = 'You may need to gain some weight. Consult a nutritionist for a healthy weight gain plan.';
+    } else if (bmi < 25) {
+      category = 'Normal Weight';
+      color = 'var(--neon-green)';
+      info = 'Great job! You\'re in the healthy weight range. Keep maintaining your lifestyle!';
+    } else if (bmi < 30) {
+      category = 'Overweight';
+      color = 'var(--neon-orange)';
+      info = 'Consider increasing physical activity and reviewing your diet for better health.';
+    } else {
+      category = 'Obese';
+      color = 'var(--neon-red)';
+      info = 'It\'s recommended to consult a healthcare provider for a personalized health plan.';
+    }
+
+    document.getElementById('bmiValue').textContent = bmiRounded;
+    document.getElementById('bmiValue').style.color = color;
+    document.getElementById('bmiCategory').textContent = category;
+    document.getElementById('bmiCategory').style.color = color;
+    document.getElementById('bmiInfo').textContent = info;
+
+    // Position indicator
+    const pos = Math.min(Math.max((bmi - 15) / 25 * 100, 0), 100);
+    document.getElementById('bmiIndicator').style.setProperty('--bmi-pos', pos);
+
+    document.getElementById('bmiResult').classList.add('active');
+  }
+
+  // ==================== WATER TRACKER ====================
+  function toggleWaterTracker() {
+    const waterTracker = document.getElementById('waterTracker');
+    waterTracker.style.display = waterTracker.style.display === 'none' ? 'block' : 'none';
+    if (waterTracker.style.display === 'block') {
+      waterTracker.scrollIntoView({ behavior: 'smooth' });
+    }
+  }
+
+  function toggleWaterGlass(index) {
+    waterGlasses[index] = !waterGlasses[index];
+    updateWaterDisplay();
+  }
+
+  function updateWaterDisplay() {
+    const glasses = document.querySelectorAll('.water-glass');
+    const filled = waterGlasses.filter(g => g).length;
+
+    glasses.forEach((glass, i) => {
+      if (waterGlasses[i]) {
+        glass.classList.add('filled');
+      } else {
+        glass.classList.remove('filled');
+      }
+    });
+
+    document.getElementById('waterCount').textContent = filled + '/8';
+  }
+
+  // ==================== MODALS ====================
+  function showSleepTracker() {
+    const modal = document.getElementById('modalOverlay');
+    const content = document.getElementById('modalContent');
+
+    content.innerHTML = `
+      <div class="modal-header">
+        <span class="modal-title">😴 Sleep Tracker</span>
+        <div class="modal-close" onclick="closeModal()">✕</div>
+      </div>
+      <div class="input-group">
+        <label class="input-label">Sleep Duration (hours)</label>
+        <input type="number" class="input-field" id="sleepHours" placeholder="e.g., 7.5" step="0.5">
+      </div>
+      <div class="input-group">
+        <label class="input-label">Sleep Quality</label>
+        <select class="input-field" id="sleepQuality">
+          <option value="">Select quality</option>
+          <option value="5">🌟 Excellent</option>
+          <option value="4">😊 Good</option>
+          <option value="3">😐 Fair</option>
+          <option value="2">😕 Poor</option>
+          <option value="1">😫 Terrible</option>
+        </select>
+      </div>
+      <button class="cta-button" onclick="saveSleepData()" style="margin-top: 12px;">
+        Save Sleep Data
+      </button>
+      <div id="sleepResult" style="margin-top: 16px; text-align: center; display: none;">
+        <div style="font-size: 48px; margin-bottom: 8px;">😴</div>
+        <div style="font-size: 16px; font-weight: 700;" id="sleepMessage">Sleep data saved!</div>
+      </div>
+    `;
+
+    modal.classList.add('active');
+  }
+
+  function saveSleepData() {
+    const hours = document.getElementById('sleepHours').value;
+    const quality = document.getElementById('sleepQuality').value;
+
+    if (!hours || !quality) {
+      alert('Please fill in all fields!');
+      return;
+    }
+
+    const result = document.getElementById('sleepResult');
+    const message = document.getElementById('sleepMessage');
+
+    if (hours >= 7 && hours <= 9) {
+      message.textContent = `Great! ${hours} hours of sleep is ideal for recovery. 😊`;
+    } else if (hours < 7) {
+      message.textContent = `Try to get more sleep. ${hours} hours might not be enough. 😴`;
+    } else {
+      message.textContent = `${hours} hours is a lot of sleep! Make sure it's quality sleep. 😴`;
+    }
+
+    result.style.display = 'block';
+  }
+
+  function showStepCounter() {
+    const modal = document.getElementById('modalOverlay');
+    const content = document.getElementById('modalContent');
+
+    content.innerHTML = `
+      <div class="modal-header">
+        <span class="modal-title">👟 Step Counter</span>
+        <div class="modal-close" onclick="closeModal()">✕</div>
+      </div>
+      <div style="text-align: center; padding: 20px;">
+        <div style="font-family: 'Orbitron', sans-serif; font-size: 48px; font-weight: 900; color: var(--neon-blue); margin-bottom: 8px;" id="stepCount">0</div>
+        <div style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px;">Steps today</div>
+        <div class="progress-container" style="margin-bottom: 20px;">
+          <div class="progress-header">
+            <span>Daily Goal: 10,000</span>
+            <span id="stepPercent">0%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="stepProgress" style="width: 0%"></div>
+          </div>
+        </div>
+        <button class="cta-button" onclick="simulateSteps()" style="margin-bottom: 12px;">
+          🏃 Simulate Walking
+        </button>
+        <button class="cta-button" onclick="resetSteps()" style="background: linear-gradient(135deg, var(--neon-red), var(--neon-orange));">
+          🔄 Reset
+        </button>
+      </div>
+    `;
+
+    modal.classList.add('active');
+  }
+
+  let stepCount = 0;
+
+  function simulateSteps() {
+    stepCount += Math.floor(Math.random() * 500) + 100;
+    document.getElementById('stepCount').textContent = stepCount.toLocaleString();
+    const percent = Math.min((stepCount / 10000) * 100, 100);
+    document.getElementById('stepProgress').style.width = percent + '%';
+    document.getElementById('stepPercent').textContent = Math.round(percent) + '%';
+
+    if (stepCount >= 10000) {
+      document.getElementById('stepCount').style.color = 'var(--neon-green)';
+    }
+  }
+
+  function resetSteps() {
+    stepCount = 0;
+    document.getElementById('stepCount').textContent = '0';
+    document.getElementById('stepProgress').style.width = '0%';
+    document.getElementById('stepPercent').textContent = '0%';
+    document.getElementById('stepCount').style.color = 'var(--neon-blue)';
+  }
+
+  function showNotifications() {
+    const modal = document.getElementById('modalOverlay');
+    const content = document.getElementById('modalContent');
+
+    content.innerHTML = `
+      <div class="modal-header">
+        <span class="modal-title">🔔 Notifications</span>
+        <div class="modal-close" onclick="closeModal()">✕</div>
+      </div>
+      <div class="tip-card" style="margin-bottom: 10px;">
+        <span class="tip-icon">💪</span>
+        <div class="tip-content">
+          <div class="tip-title">Time to workout!</div>
+          <div class="tip-text">You haven't exercised today. Rock suggests a 30-minute session.</div>
+        </div>
+      </div>
+      <div class="tip-card" style="margin-bottom: 10px;">
+        <span class="tip-icon">💧</span>
+        <div class="tip-content">
+          <div class="tip-title">Stay hydrated!</div>
+          <div class="tip-text">It's been 2 hours since your last water intake.</div>
+        </div>
+      </div>
+      <div class="tip-card" style="margin-bottom: 10px;">
+        <span class="tip-icon">🎯</span>
+        <div class="tip-content">
+          <div class="tip-title">Goal Progress</div>
+          <div class="tip-text">You're 65% towards your daily calorie goal. Keep going!</div>
+        </div>
+      </div>
+      <div class="tip-card">
+        <span class="tip-icon">🏆</span>
+        <div class="tip-content">
+          <div class="tip-title">Achievement Unlocked!</div>
+          <div class="tip-text">You've logged meals for 7 consecutive days!</div>
+        </div>
+      </div>
+    `;
+
+    modal.classList.add('active');
+  }
+
+  function showSettings() {
+    const modal = document.getElementById('modalOverlay');
+    const content = document.getElementById('modalContent');
+
+    content.innerHTML = `
+      <div class="modal-header">
+        <span class="modal-title">⚙️ Settings</span>
+        <div class="modal-close" onclick="closeModal()">✕</div>
+      </div>
+      <div class="input-group">
+        <label class="input-label">Daily Calorie Goal</label>
+        <input type="number" class="input-field" id="calorieGoal" value="2000" onchange="updateCalorieGoal()">
+      </div>
+      <div class="input-group">
+        <label class="input-label">Name</label>
+        <input type="text" class="input-field" id="userName" placeholder="Enter your name">
+      </div>
+      <div class="input-group">
+        <label class="input-label">Voice Output</label>
+        <select class="input-field" id="voiceOutput">
+          <option value="on">On</option>
+          <option value="off">Off</option>
+        </select>
+      </div>
+      <button class="cta-button" onclick="saveSettings()" style="margin-top: 12px;">
+        Save Settings
+      </button>
+    `;
+
+    modal.classList.add('active');
+  }
+
+  function updateCalorieGoal() {
+    const goal = parseInt(document.getElementById('calorieGoal').value);
+    if (goal > 0) {
+      // Update global goal
+    }
+  }
+
+  function saveSettings() {
+    closeModal();
+    // Show success feedback
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      position: fixed;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--neon-green);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      z-index: 300;
+      animation: fadeIn 0.3s ease-out;
+    `;
+    toast.textContent = '✅ Settings saved!';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2000);
+  }
+
+  function closeModal(event) {
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById('modalOverlay').classList.remove('active');
+  }
+
+  // ==================== INITIALIZATION ====================
+  document.addEventListener('DOMContentLoaded', () => {
+    // Set initial water display
+    updateWaterDisplay();
+
+    // Add drag and drop support
+    const uploadArea = document.getElementById('foodUploadArea');
+    uploadArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadArea.classList.add('dragover');
+    });
+    uploadArea.addEventListener('dragleave', () => {
+      uploadArea.classList.remove('dragover');
+    });
+    uploadArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadArea.classList.remove('dragover');
+      const files = e.dataTransfer.files;
+      if (files.length > 0) {
+        document.getElementById('foodInput').files = files;
+        handleFileUpload({ target: { files: files } });
+      }
+    });
+
+    // Simulate some initial log entries for demo
+    const demoFoods = [
+      { name: 'oatmeal', food: foodDatabase['oatmeal'] },
+      { name: 'banana', food: foodDatabase['banana'] },
+    ];
+
+    demoFoods.forEach(({ name, food }) => {
+      addFoodToLog(name, food);
+    });
+  });
+
+  // Prevent zoom on double tap (mobile)
+  document.addEventListener('dblclick', (event) => {
+    event.preventDefault();
+  }, { passive: false });
+</script>
+
+</body>
+</html>

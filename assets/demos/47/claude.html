@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Indian Roads Driver 3D</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+body{overflow:hidden;background:#87CEEB}
+#game{width:100vw;height:100vh;position:relative}
+#hud{position:absolute;top:10px;left:10px;color:#fff;background:rgba(0,0,0,0.55);padding:10px 14px;border-radius:10px;font-size:14px;line-height:1.5;z-index:10;backdrop-filter:blur(4px)}
+#hud b{color:#FFD24A}
+#speed{position:absolute;bottom:20px;right:20px;background:rgba(0,0,0,0.6);color:#fff;padding:12px 18px;border-radius:50%;width:110px;height:110px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:bold;border:3px solid #FFD24A;z-index:10}
+#speed .v{font-size:30px;color:#FFD24A}
+#speed .l{font-size:11px;opacity:.85}
+#overlay{position:absolute;inset:0;background:linear-gradient(135deg,#FF9933,#FFFFFF,#138808);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:20;color:#222;text-align:center;padding:20px}
+#overlay h1{font-size:42px;margin-bottom:10px;text-shadow:2px 2px 0 #fff}
+#overlay p{font-size:16px;margin:6px 0;max-width:520px}
+#overlay button{margin-top:18px;padding:14px 36px;font-size:18px;background:#138808;color:#fff;border:none;border-radius:30px;cursor:pointer;font-weight:bold;box-shadow:0 4px 10px rgba(0,0,0,0.3)}
+#overlay button:hover{background:#0a5c05}
+#controls{position:absolute;bottom:20px;left:20px;display:none;gap:10px;z-index:10}
+.btn{width:64px;height:64px;background:rgba(0,0,0,0.55);color:#fff;border:2px solid #FFD24A;border-radius:50%;font-size:24px;display:flex;align-items:center;justify-content:center;user-select:none;touch-action:none}
+@media (max-width:768px){#controls{display:flex}#hud{font-size:12px}}
+#gameover{position:absolute;inset:0;background:rgba(0,0,0,.75);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:25;color:#fff}
+#gameover h2{font-size:48px;color:#ff5252;margin-bottom:10px}
+#gameover button{margin-top:18px;padding:14px 36px;font-size:18px;background:#FF9933;color:#fff;border:none;border-radius:30px;cursor:pointer;font-weight:bold}
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="hud">
+    🇮🇳 <b>Indian Roads Driver</b><br>
+    Score: <b id="score">0</b> | Distance: <b id="dist">0</b> m<br>
+    Controls: <b>↑↓←→</b> / WASD &nbsp; • &nbsp;<b>Drive on LEFT!</b>
+  </div>
+  <div id="speed"><div class="v" id="kmh">0</div><div class="l">KM/H</div></div>
+  <div id="controls">
+    <div class="btn" id="bL">◀</div>
+    <div class="btn" id="bU">▲</div>
+    <div class="btn" id="bD">▼</div>
+    <div class="btn" id="bR">▶</div>
+  </div>
+  <div id="overlay">
+    <h1>🚗 Indian Roads Driver 3D</h1>
+    <p>Drive through a bustling Indian city with flyovers, metro bridges, auto-rickshaws, trucks, tea stalls and even cows on the road!</p>
+    <p><b>Remember: Drive on the LEFT side. Avoid traffic and cows.</b></p>
+    <button id="startBtn">START DRIVING</button>
+  </div>
+  <div id="gameover">
+    <h2>💥 CRASH!</h2>
+    <p>Final Score: <span id="finalScore">0</span></p>
+    <button id="restartBtn">DRIVE AGAIN</button>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+let scene, camera, renderer, car, clock;
+let speed=0, maxSpeed=1.6, accel=0.012, steer=0;
+let score=0, distance=0, running=false;
+const keys={};
+const traffic=[], cows=[], decorations=[];
+const ROAD_W=18, LANE=4.5;
+let roadZ=0;
+
+function init(){
+  scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x9ed8f5);
+  scene.fog=new THREE.Fog(0xb5e0f5,80,300);
+
+  camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,0.1,500);
+  camera.position.set(0,7,-12);
+
+  renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.shadowMap.enabled=true;
+  document.getElementById('game').appendChild(renderer.domElement);
+
+  // lights
+  const sun=new THREE.DirectionalLight(0xfff4d6,1.1);
+  sun.position.set(50,80,30);
+  sun.castShadow=true;
+  sun.shadow.mapSize.set(1024,1024);
+  sun.shadow.camera.left=-80;sun.shadow.camera.right=80;
+  sun.shadow.camera.top=80;sun.shadow.camera.bottom=-80;
+  scene.add(sun);
+  scene.add(new THREE.HemisphereLight(0xbfe2ff,0xbfa07a,0.55));
+  scene.add(new THREE.AmbientLight(0xffffff,0.25));
+
+  buildGround();
+  buildRoad();
+  buildFlyover();
+  buildMetroBridge();
+  buildEnvironment();
+  buildCar();
+  spawnTraffic();
+  spawnCows();
+
+  clock=new THREE.Clock();
+  window.addEventListener('resize',onResize);
+  document.addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);
+  document.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+  // touch
+  const setBtn=(id,k)=>{const b=document.getElementById(id);
+    const on=e=>{e.preventDefault();keys[k]=true};
+    const off=e=>{e.preventDefault();keys[k]=false};
+    b.addEventListener('touchstart',on);b.addEventListener('touchend',off);
+    b.addEventListener('mousedown',on);b.addEventListener('mouseup',off);b.addEventListener('mouseleave',off);};
+  setBtn('bU','arrowup');setBtn('bD','arrowdown');setBtn('bL','arrowleft');setBtn('bR','arrowright');
+}
+
+function buildGround(){
+  const g=new THREE.PlaneGeometry(600,2000);
+  const m=new THREE.MeshLambertMaterial({color:0x8bb55c});
+  const ground=new THREE.Mesh(g,m);
+  ground.rotation.x=-Math.PI/2;
+  ground.position.y=-0.05;
+  ground.receiveShadow=true;
+  scene.add(ground);
+
+  // dirt strips beside road
+  for(let s=-1;s<=1;s+=2){
+    const dg=new THREE.PlaneGeometry(8,2000);
+    const dm=new THREE.MeshLambertMaterial({color:0xb39a6b});
+    const d=new THREE.Mesh(dg,dm);
+    d.rotation.x=-Math.PI/2; d.position.set(s*(ROAD_W/2+5),0,0);
+    scene.add(d);
+  }
+}
+
+function buildRoad(){
+  const rg=new THREE.PlaneGeometry(ROAD_W,2000);
+  const rm=new THREE.MeshLambertMaterial({color:0x2a2a2c});
+  const road=new THREE.Mesh(rg,rm);
+  road.rotation.x=-Math.PI/2;
+  road.receiveShadow=true;
+  scene.add(road);
+
+  // center divider (Indian style - concrete with planters)
+  const dgeo=new THREE.BoxGeometry(0.6,0.6,2000);
+  const dmat=new THREE.MeshLambertMaterial({color:0xdddddd});
+  const div=new THREE.Mesh(dgeo,dmat);
+  div.position.y=0.3;
+  scene.add(div);
+  // planter bushes on divider
+  for(let z=-980;z<1000;z+=18){
+    const b=new THREE.Mesh(new THREE.SphereGeometry(0.7,8,6),new THREE.MeshLambertMaterial({color:0x2e7d32}));
+    b.position.set(0,0.9,z);
+    scene.add(b);
+  }
+
+  // lane markings (dashed) for each side
+  const lm=new THREE.MeshBasicMaterial({color:0xffffff});
+  for(let s of [-1,1]){
+    for(let z=-980;z<1000;z+=8){
+      const dash=new THREE.Mesh(new THREE.PlaneGeometry(0.25,3),lm);
+      dash.rotation.x=-Math.PI/2;
+      dash.position.set(s*LANE, 0.02, z);
+      scene.add(dash);
+    }
+  }
+
+  // speed breakers
+  for(let z=-800;z<900;z+=220){
+    for(let s of [-1,1]){
+      const sb=new THREE.Mesh(new THREE.BoxGeometry(ROAD_W/2-0.4,0.25,1.2),
+        new THREE.MeshLambertMaterial({color:0xffcc00}));
+      sb.position.set(s*(ROAD_W/4+0.2),0.12,z);
+      scene.add(sb);
+      decorations.push({mesh:sb,type:'sb'});
+    }
+  }
+}
+
+function buildFlyover(){
+  // a flyover passing overhead at certain z positions
+  const pillarMat=new THREE.MeshLambertMaterial({color:0xcccccc});
+  const deckMat=new THREE.MeshLambertMaterial({color:0x888888});
+  for(let z=-600;z<800;z+=400){
+    const deck=new THREE.Mesh(new THREE.BoxGeometry(ROAD_W+4,1,80),deckMat);
+    deck.position.set(0,10,z);
+    deck.castShadow=true;
+    scene.add(deck);
+    // pillars
+    for(let pz=-30;pz<=30;pz+=30){
+      const p=new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.4,10),pillarMat);
+      p.position.set(0,5,z+pz);
+      scene.add(p);
+    }
+    // railings
+    for(let s of [-1,1]){
+      const r=new THREE.Mesh(new THREE.BoxGeometry(0.3,1,80),new THREE.MeshLambertMaterial({color:0xff9933}));
+      r.position.set(s*(ROAD_W/2+1.8),11,z);
+      scene.add(r);
+    }
+  }
+}
+
+function buildMetroBridge(){
+  // elevated metro line running parallel on one side
+  const sideX=ROAD_W/2+14;
+  const trackMat=new THREE.MeshLambertMaterial({color:0x666677});
+  const pillarMat=new THREE.MeshLambertMaterial({color:0xb0b0b0});
+  for(let z=-1000;z<1000;z+=60){
+    const p=new THREE.Mesh(new THREE.BoxGeometry(2,16,2),pillarMat);
+    p.position.set(sideX,8,z);
+    scene.add(p);
+  }
+  const track=new THREE.Mesh(new THREE.BoxGeometry(6,1.2,2000),trackMat);
+  track.position.set(sideX,16,0);
+  scene.add(track);
+  // metro train
+  const trainMat=new THREE.MeshLambertMaterial({color:0x1976d2});
+  for(let i=0;i<3;i++){
+    const car=new THREE.Mesh(new THREE.BoxGeometry(5,3,15),trainMat);
+    car.position.set(sideX,18.5,-40+i*16);
+    scene.add(car);
+    decorations.push({mesh:car,type:'metro'});
+  }
+}
+
+function buildEnvironment(){
+  // trees, poles, billboards, shops, tea stalls
+  for(let z=-1000;z<1000;z+=14){
+    for(let s of [-1,1]){
+      const x=s*(ROAD_W/2+8+Math.random()*4);
+      const r=Math.random();
+      if(r<0.35) addTree(x,z);
+      else if(r<0.55) addPole(x,z);
+      else if(r<0.7) addShop(x,z,s);
+      else if(r<0.8) addBillboard(x,z,s);
+      else if(r<0.88) addTeaStall(x,z,s);
+      else if(r<0.95) addSignboard(x,z,s);
+    }
+  }
+  // traffic signals at intersections
+  for(let z=-700;z<800;z+=350){
+    addTrafficSignal(ROAD_W/2+1,z);
+    addTrafficSignal(-ROAD_W/2-1,z+5);
+  }
+}
+
+function addTree(x,z){
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.4,2.5),new THREE.MeshLambertMaterial({color:0x6b4423}));
+  trunk.position.set(x,1.25,z);
+  const leaves=new THREE.Mesh(new THREE.SphereGeometry(2,8,6),new THREE.MeshLambertMaterial({color:0x2e7d32+Math.floor(Math.random()*0x202020)}));
+  leaves.position.set(x,3.5,z);
+  leaves.castShadow=true;
+  scene.add(trunk);scene.add(leaves);
+}
+function addPole(x,z){
+  const p=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.12,7),new THREE.MeshLambertMaterial({color:0x555555}));
+  p.position.set(x,3.5,z);scene.add(p);
+  const arm=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.1,0.1),new THREE.MeshLambertMaterial({color:0x333}));
+  arm.position.set(x+(x<0?0.7:-0.7),6.5,z);scene.add(arm);
+}
+function addShop(x,z,s){
+  const colors=[0xff6b35,0xffc857,0x4cb944,0xd62828,0x118ab2,0xef476f];
+  const c=colors[Math.floor(Math.random()*colors.length)];
+  const shop=new THREE.Mesh(new THREE.BoxGeometry(6,4,5),new THREE.MeshLambertMaterial({color:c}));
+  shop.position.set(x+s*4,2,z);
+  shop.castShadow=true;
+  scene.add(shop);
+  // roof
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(6.5,0.3,5.5),new THREE.MeshLambertMaterial({color:0x4a3520}));
+  roof.position.set(x+s*4,4.15,z);scene.add(roof);
+  // signboard
+  const sign=new THREE.Mesh(new THREE.BoxGeometry(5,0.8,0.2),new THREE.MeshLambertMaterial({color:0xffffff}));
+  sign.position.set(x+s*4,4.6,z-s*2.5);scene.add(sign);
+}
+function addBillboard(x,z,s){
+  const post=new THREE.Mesh(new THREE.BoxGeometry(0.3,6,0.3),new THREE.MeshLambertMaterial({color:0x444}));
+  post.position.set(x,3,z);scene.add(post);
+  const colors=[0xff9933,0x138808,0x0066cc,0xcc0066];
+  const board=new THREE.Mesh(new THREE.BoxGeometry(5,2.5,0.2),new THREE.MeshLambertMaterial({color:colors[Math.floor(Math.random()*colors.length)]}));
+  board.position.set(x,6.5,z);scene.add(board);
+}
+function addTeaStall(x,z,s){
+  const stall=new THREE.Mesh(new THREE.BoxGeometry(3,2.5,2.5),new THREE.MeshLambertMaterial({color:0x8b5a2b}));
+  stall.position.set(x+s*2,1.25,z);scene.add(stall);
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(3.5,0.2,3),new THREE.MeshLambertMaterial({color:0x2a4d2a}));
+  roof.position.set(x+s*2,2.55,z);scene.add(roof);
+  // chai sign
+  const sign=new THREE.Mesh(new THREE.BoxGeometry(2,0.6,0.1),new THREE.MeshLambertMaterial({color:0xffeb3b}));
+  sign.position.set(x+s*2,3,z-s*1.4);scene.add(sign);
+}
+function addSignboard(x,z,s){
+  const post=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,3),new THREE.MeshLambertMaterial({color:0x666}));
+  post.position.set(x,1.5,z);scene.add(post);
+  const b=new THREE.Mesh(new THREE.BoxGeometry(1.5,1,0.1),new THREE.MeshLambertMaterial({color:0x1565c0}));
+  b.position.set(x,3,z);scene.add(b);
+}
+function addTrafficSignal(x,z){
+  const post=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.1,5),new THREE.MeshLambertMaterial({color:0x222}));
+  post.position.set(x,2.5,z);scene.add(post);
+  const box=new THREE.Mesh(new THREE.BoxGeometry(0.5,1.5,0.4),new THREE.MeshLambertMaterial({color:0x111}));
+  box.position.set(x,5.3,z);scene.add(box);
+  const colors=[0xff0000,0xffeb3b,0x00ff00];
+  for(let i=0;i<3;i++){
+    const light=new THREE.Mesh(new THREE.SphereGeometry(0.15),new THREE.MeshBasicMaterial({color:colors[i]}));
+    light.position.set(x,5.8-i*0.45,z+0.25);scene.add(light);
+  }
+}
+
+function buildCar(){
+  car=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.BoxGeometry(2,0.8,4),new THREE.MeshLambertMaterial({color:0xe63946}));
+  body.position.y=0.7; body.castShadow=true; car.add(body);
+  const top=new THREE.Mesh(new THREE.BoxGeometry(1.7,0.7,2.2),new THREE.MeshLambertMaterial({color:0xb52d39}));
+  top.position.set(0,1.4,-0.1); car.add(top);
+  // windows
+  const win=new THREE.Mesh(new THREE.BoxGeometry(1.72,0.55,2.1),new THREE.MeshLambertMaterial({color:0x223344}));
+  win.position.set(0,1.45,-0.1); car.add(win);
+  // wheels
+  const wmat=new THREE.MeshLambertMaterial({color:0x111});
+  for(let dx of [-1,1])for(let dz of [-1.3,1.3]){
+    const w=new THREE.Mesh(new THREE.CylinderGeometry(0.45,0.45,0.4),wmat);
+    w.rotation.z=Math.PI/2; w.position.set(dx,0.45,dz); car.add(w);
+  }
+  // headlights
+  for(let dx of [-0.6,0.6]){
+    const h=new THREE.Mesh(new THREE.SphereGeometry(0.15),new THREE.MeshBasicMaterial({color:0xffffaa}));
+    h.position.set(dx,0.7,2); car.add(h);
+  }
+  // Indian flag on antenna :)
+  car.position.set(-LANE,0,0);
+  scene.add(car);
+}
+
+function spawnTraffic(){
+  // create various vehicles
+  for(let i=0;i<25;i++) addVehicle();
+}
+function addVehicle(){
+  const types=['bus','auto','truck','bike','car'];
+  const type=types[Math.floor(Math.random()*types.length)];
+  const g=new THREE.Group();
+  let speedV=0.2+Math.random()*0.4;
+  let oncoming=Math.random()<0.5;
+  // left-side driving: our lane is left (negative x). oncoming = right side positive x going opposite
+  const laneX = oncoming ? (LANE) : (-LANE - (Math.random()<0.3?4:0));
+  let mat,body;
+  if(type==='bus'){
+    body=new THREE.Mesh(new THREE.BoxGeometry(2.2,2.8,8),new THREE.MeshLambertMaterial({color:0xff5722}));
+    body.position.y=1.6; g.add(body);
+    const w=new THREE.Mesh(new THREE.BoxGeometry(2.1,1.2,7.5),new THREE.MeshLambertMaterial({color:0x223}));
+    w.position.y=2.4; g.add(w);
+  } else if(type==='auto'){
+    body=new THREE.Mesh(new THREE.BoxGeometry(1.4,1.4,2.4),new THREE.MeshLambertMaterial({color:0xffeb3b}));
+    body.position.y=0.9; g.add(body);
+    const top=new THREE.Mesh(new THREE.BoxGeometry(1.3,0.8,1.8),new THREE.MeshLambertMaterial({color:0x111}));
+    top.position.set(0,1.8,0); g.add(top);
+    speedV*=0.7;
+  } else if(type==='truck'){
+    body=new THREE.Mesh(new THREE.BoxGeometry(2.4,2.4,6),new THREE.MeshLambertMaterial({color:0x1565c0}));
+    body.position.y=1.5; g.add(body);
+    const cab=new THREE.Mesh(new THREE.BoxGeometry(2.4,1.8,2),new THREE.MeshLambertMaterial({color:0xffc107}));
+    cab.position.set(0,1.6,2); g.add(cab);
+  } else if(type==='bike'){
+    body=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.6,1.8),new THREE.MeshLambertMaterial({color:0x333}));
+    body.position.y=0.6; g.add(body);
+    const rider=new THREE.Mesh(new THREE.BoxGeometry(0.5,1,0.5),new THREE.MeshLambertMaterial({color:0x4a90e2}));
+    rider.position.set(0,1.4,0); g.add(rider);
+    speedV*=1.1;
+  } else {
+    body=new THREE.Mesh(new THREE.BoxGeometry(1.8,0.8,3.5),new THREE.MeshLambertMaterial({color:Math.random()*0xffffff}));
+    body.position.y=0.6; g.add(body);
+    const top=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.6,1.8),new THREE.MeshLambertMaterial({color:0x222}));
+    top.position.set(0,1.2,-0.2); g.add(top);
+  }
+  g.position.set(laneX,0,Math.random()*2000-1000);
+  if(oncoming) g.rotation.y=Math.PI;
+  scene.add(g);
+  traffic.push({mesh:g,speed:speedV,oncoming,lane:laneX,type});
+}
+
+function spawnCows(){
+  for(let i=0;i<6;i++){
+    const cow=new THREE.Group();
+    const body=new THREE.Mesh(new THREE.BoxGeometry(1.2,1,2.2),new THREE.MeshLambertMaterial({color:0xf5e6c8}));
+    body.position.y=1.1; cow.add(body);
+    const head=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.7,0.8),new THREE.MeshLambertMaterial({color:0xf5e6c8}));
+    head.position.set(0,1.3,1.4); cow.add(head);
+    for(let dx of [-0.4,0.4])for(let dz of [-0.8,0.8]){
+      const leg=new THREE.Mesh(new THREE.BoxGeometry(0.25,1,0.25),new THREE.MeshLambertMaterial({color:0xc8a878}));
+      leg.position.set(dx,0.5,dz); cow.add(leg);
+    }
+    const x = (Math.random()<0.5?-1:1)*(ROAD_W/2 - 1 + Math.random()*2);
+    cow.position.set(x,0,Math.random()*1600-800);
+    cow.rotation.y=Math.random()*Math.PI*2;
+    scene.add(cow);
+    cows.push({mesh:cow});
+  }
+}
+
+function onResize(){
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+}
+
+function update(dt){
+  if(!running) return;
+  // input
+  const up=keys['arrowup']||keys['w'];
+  const down=keys['arrowdown']||keys['s'];
+  const left=keys['arrowleft']||keys['a'];
+  const right=keys['arrowright']||keys['d'];
+
+  if(up) speed=Math.min(maxSpeed,speed+accel);
+  else if(down) speed=Math.max(-0.5,speed-accel*1.5);
+  else speed*=0.99;
+
+  const steerAmt=0.06*Math.min(1,Math.abs(speed)/0.5);
+  if(left) car.position.x -= steerAmt;
+  if(right) car.position.x += steerAmt;
+  car.position.x=Math.max(-ROAD_W/2+1, Math.min(ROAD_W/2-1, car.position.x));
+
+  // tilt
+  car.rotation.z = (left?0.05:0) - (right?0.05:0);
+
+  // move world relative to car: car stays near z=0, traffic & decor recycle
+  const dz = speed; // car moves forward
+  car.position.z += dz;
+
+  // camera follow
+  const camTarget=new THREE.Vector3(car.position.x*0.4, 6, car.position.z-12);
+  camera.position.lerp(camTarget,0.1);
+  camera.lookAt(car.position.x, 1.5, car.position.z+5);
+
+  // traffic update & recycle
+  for(const t of traffic){
+    t.mesh.position.z += t.oncoming ? -t.speed : t.speed;
+    // recycle when too far
+    const rel=t.mesh.position.z-car.position.z;
+    if(rel<-100) t.mesh.position.z=car.position.z+400+Math.random()*200;
+    if(rel>500) t.mesh.position.z=car.position.z-50-Math.random()*100;
+    // collision
+    if(Math.abs(t.mesh.position.x-car.position.x)<1.8 && Math.abs(rel)<3.5){
+      gameOver();
+    }
+  }
+  // cows recycle
+  for(const c of cows){
+    const rel=c.mesh.position.z-car.position.z;
+    if(rel<-100) c.mesh.position.z=car.position.z+300+Math.random()*200;
+    if(Math.abs(c.mesh.position.x-car.position.x)<1.6 && Math.abs(rel)<2.5){
+      gameOver();
+    }
+  }
+
+  // score
+  distance+=Math.max(0,dz);
+  score=Math.floor(distance*2);
+  document.getElementById('score').textContent=score;
+  document.getElementById('dist').textContent=Math.floor(distance);
+  document.getElementById('kmh').textContent=Math.floor(speed*80);
+
+  // bumpy speed breaker effect
+  car.position.y = Math.abs(Math.sin(car.position.z*0.5))<0.05 && Math.abs(car.position.z%220)<1.5 ? 0.2 : 0;
+}
+
+function gameOver(){
+  if(!running) return;
+  running=false;
+  document.getElementById('finalScore').textContent=score;
+  document.getElementById('gameover').style.display='flex';
+  // crash sound
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const o=ctx.createOscillator(),g=ctx.createGain();
+    o.type='sawtooth';o.frequency.setValueAtTime(200,ctx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(40,ctx.currentTime+0.5);
+    g.gain.setValueAtTime(0.3,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.01,ctx.currentTime+0.5);
+    o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+0.5);
+  }catch(e){}
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=clock.getDelta();
+  update(dt);
+  renderer.render(scene,camera);
+}
+
+function startGame(){
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('gameover').style.display='none';
+  speed=0;distance=0;score=0;
+  car.position.set(-LANE,0,0);
+  running=true;
+}
+
+document.getElementById('startBtn').onclick=startGame;
+document.getElementById('restartBtn').onclick=()=>{
+  // reset traffic positions
+  traffic.forEach(t=>t.mesh.position.z=Math.random()*800-400);
+  startGame();
+};
+
+init();
+animate();
+</script>
+</body>
+</html>

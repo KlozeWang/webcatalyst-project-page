@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Math Adventure - Addition & Subtraction</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Comic Sans MS', 'Trebuchet MS', sans-serif; }
+  body {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #ffafbd, #ffc3a0, #a1c4fd, #c2e9fb);
+    background-size: 400% 400%;
+    animation: bgShift 15s ease infinite;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 15px;
+  }
+  @keyframes bgShift {
+    0%,100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+  .game {
+    background: #fff;
+    border-radius: 25px;
+    padding: 25px;
+    max-width: 500px;
+    width: 100%;
+    box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+    text-align: center;
+  }
+  h1 { color: #ff5e7e; font-size: 2em; margin-bottom: 5px; }
+  .subtitle { color: #888; margin-bottom: 15px; font-size: 0.9em; }
+  .stats {
+    display: flex;
+    justify-content: space-around;
+    background: #fef6ff;
+    border-radius: 15px;
+    padding: 10px;
+    margin-bottom: 20px;
+    font-weight: bold;
+  }
+  .stat { color: #6a4cff; font-size: 1.1em; }
+  .stat span { color: #ff5e7e; }
+  .question {
+    font-size: 3em;
+    color: #333;
+    background: linear-gradient(135deg, #fffde4, #fcefee);
+    padding: 25px;
+    border-radius: 20px;
+    margin: 15px 0;
+    font-weight: bold;
+    letter-spacing: 5px;
+  }
+  .answers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 15px 0;
+  }
+  .answer-btn {
+    font-size: 1.8em;
+    padding: 20px;
+    border: 3px solid transparent;
+    border-radius: 15px;
+    cursor: pointer;
+    background: linear-gradient(135deg, #a1c4fd, #c2e9fb);
+    color: #2c3e50;
+    font-weight: bold;
+    transition: transform 0.15s, box-shadow 0.15s;
+    font-family: inherit;
+  }
+  .answer-btn:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+  .answer-btn:disabled { cursor: not-allowed; opacity: 0.7; }
+  .answer-btn.correct { background: linear-gradient(135deg, #56ab2f, #a8e063); color: white; animation: pop 0.4s; }
+  .answer-btn.wrong { background: linear-gradient(135deg, #ff5858, #f857a6); color: white; animation: shake 0.4s; }
+  @keyframes pop { 0%,100%{transform:scale(1)} 50%{transform:scale(1.15)} }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
+  .feedback { font-size: 1.5em; height: 40px; margin: 10px 0; font-weight: bold; }
+  .difficulty { display: flex; gap: 8px; justify-content: center; margin-bottom: 15px; flex-wrap: wrap; }
+  .diff-btn {
+    padding: 8px 16px; border: 2px solid #6a4cff; background: white; color: #6a4cff;
+    border-radius: 20px; cursor: pointer; font-weight: bold; font-family: inherit;
+  }
+  .diff-btn.active { background: #6a4cff; color: white; }
+  .start-screen, .game-over { padding: 20px; }
+  .big-btn {
+    font-size: 1.4em; padding: 15px 40px; border: none; border-radius: 30px;
+    background: linear-gradient(135deg, #ff5e7e, #ff9966); color: white;
+    cursor: pointer; font-weight: bold; font-family: inherit;
+    box-shadow: 0 6px 20px rgba(255,94,126,0.4); margin-top: 15px;
+  }
+  .big-btn:hover { transform: scale(1.05); }
+  .hidden { display: none; }
+  .stars { font-size: 2em; margin: 10px 0; }
+  .emoji-rain {
+    position: fixed; top: -50px; font-size: 2em; pointer-events: none;
+    animation: fall 2s linear forwards;
+  }
+  @keyframes fall { to { transform: translateY(110vh) rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="game">
+  <h1>🦁 Math Adventure 🐘</h1>
+  <p class="subtitle">Solve problems and earn stars!</p>
+
+  <div id="startScreen" class="start-screen">
+    <p style="font-size:1.1em; margin:15px 0; color:#555;">Pick your level:</p>
+    <div class="difficulty">
+      <button class="diff-btn active" data-level="easy">🌱 Easy (1-10)</button>
+      <button class="diff-btn" data-level="medium">🌳 Medium (1-20)</button>
+      <button class="diff-btn" data-level="hard">🚀 Hard (1-50)</button>
+    </div>
+    <p style="color:#666; margin-top:15px;">Answer 10 questions. Each one has 15 seconds!</p>
+    <button class="big-btn" id="startBtn">▶ Start Game</button>
+  </div>
+
+  <div id="gameScreen" class="hidden">
+    <div class="stats">
+      <div class="stat">⭐ Score: <span id="score">0</span></div>
+      <div class="stat">📝 Q: <span id="qNum">1</span>/10</div>
+      <div class="stat">⏱ <span id="timer">15</span></div>
+    </div>
+    <div class="question" id="question">2 + 3 = ?</div>
+    <div class="answers" id="answers"></div>
+    <div class="feedback" id="feedback"></div>
+  </div>
+
+  <div id="gameOver" class="hidden game-over">
+    <h2 style="color:#6a4cff; font-size:1.8em;">🎉 Great Job! 🎉</h2>
+    <div class="stars" id="finalStars"></div>
+    <p style="font-size:1.3em; margin:10px 0;">Final Score: <strong id="finalScore">0</strong>/10</p>
+    <p id="message" style="color:#666; margin:10px 0;"></p>
+    <button class="big-btn" id="playAgain">🔄 Play Again</button>
+  </div>
+</div>
+
+<script>
+const startScreen = document.getElementById('startScreen');
+const gameScreen = document.getElementById('gameScreen');
+const gameOver = document.getElementById('gameOver');
+const questionEl = document.getElementById('question');
+const answersEl = document.getElementById('answers');
+const scoreEl = document.getElementById('score');
+const qNumEl = document.getElementById('qNum');
+const timerEl = document.getElementById('timer');
+const feedbackEl = document.getElementById('feedback');
+
+let level = 'easy', score = 0, qNum = 0, correctAnswer = 0, timer = 15, timerInterval;
+const TOTAL = 10;
+
+document.querySelectorAll('.diff-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    level = btn.dataset.level;
+  };
+});
+
+document.getElementById('startBtn').onclick = startGame;
+document.getElementById('playAgain').onclick = () => {
+  gameOver.classList.add('hidden');
+  startScreen.classList.remove('hidden');
+};
+
+function startGame() {
+  score = 0; qNum = 0;
+  scoreEl.textContent = 0;
+  startScreen.classList.add('hidden');
+  gameOver.classList.add('hidden');
+  gameScreen.classList.remove('hidden');
+  nextQuestion();
+}
+
+function nextQuestion() {
+  if (qNum >= TOTAL) return endGame();
+  qNum++;
+  qNumEl.textContent = qNum;
+  feedbackEl.textContent = '';
+  
+  const max = level === 'easy' ? 10 : level === 'medium' ? 20 : 50;
+  const isAdd = Math.random() < 0.5;
+  let a = Math.floor(Math.random() * max) + 1;
+  let b = Math.floor(Math.random() * max) + 1;
+  
+  if (isAdd) {
+    correctAnswer = a + b;
+    questionEl.textContent = `${a} + ${b} = ?`;
+  } else {
+    if (b > a) [a, b] = [b, a]; // ensure positive result
+    correctAnswer = a - b;
+    questionEl.textContent = `${a} − ${b} = ?`;
+  }
+  
+  // Generate 4 answer choices
+  const choices = new Set([correctAnswer]);
+  while (choices.size < 4) {
+    const offset = Math.floor(Math.random() * 7) - 3;
+    const candidate = correctAnswer + offset;
+    if (candidate >= 0 && candidate !== correctAnswer) choices.add(candidate);
+  }
+  const shuffled = [...choices].sort(() => Math.random() - 0.5);
+  
+  answersEl.innerHTML = '';
+  shuffled.forEach(num => {
+    const btn = document.createElement('button');
+    btn.className = 'answer-btn';
+    btn.textContent = num;
+    btn.onclick = () => checkAnswer(btn, num);
+    answersEl.appendChild(btn);
+  });
+  
+  // Timer
+  timer = 15;
+  timerEl.textContent = timer;
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    timer--;
+    timerEl.textContent = timer;
+    if (timer <= 0) {
+      clearInterval(timerInterval);
+      revealAnswer(false);
+    }
+  }, 1000);
+}
+
+function checkAnswer(btn, num) {
+  clearInterval(timerInterval);
+  const correct = num === correctAnswer;
+  if (correct) {
+    btn.classList.add('correct');
+    score++;
+    scoreEl.textContent = score;
+    feedbackEl.textContent = '✅ Correct!';
+    feedbackEl.style.color = '#56ab2f';
+    playSound(true);
+    rainEmojis('⭐');
+  } else {
+    btn.classList.add('wrong');
+    feedbackEl.textContent = `❌ Answer: ${correctAnswer}`;
+    feedbackEl.style.color = '#ff5858';
+    playSound(false);
+    // highlight correct
+    [...answersEl.children].forEach(b => {
+      if (parseInt(b.textContent) === correctAnswer) b.classList.add('correct');
+    });
+  }
+  [...answersEl.children].forEach(b => b.disabled = true);
+  setTimeout(nextQuestion, 1400);
+}
+
+function revealAnswer(answered) {
+  feedbackEl.textContent = `⏰ Time's up! Answer: ${correctAnswer}`;
+  feedbackEl.style.color = '#ff9966';
+  [...answersEl.children].forEach(b => {
+    b.disabled = true;
+    if (parseInt(b.textContent) === correctAnswer) b.classList.add('correct');
+  });
+  playSound(false);
+  setTimeout(nextQuestion, 1400);
+}
+
+function endGame() {
+  clearInterval(timerInterval);
+  gameScreen.classList.add('hidden');
+  gameOver.classList.remove('hidden');
+  document.getElementById('finalScore').textContent = score;
+  const stars = score >= 9 ? '⭐⭐⭐⭐⭐' : score >= 7 ? '⭐⭐⭐⭐' : score >= 5 ? '⭐⭐⭐' : score >= 3 ? '⭐⭐' : '⭐';
+  document.getElementById('finalStars').textContent = stars;
+  const msg = score >= 9 ? 'Amazing! You\'re a math genius! 🏆' :
+              score >= 7 ? 'Great job! Keep it up! 🌟' :
+              score >= 5 ? 'Good work! Practice makes perfect! 💪' :
+              'Nice try! Let\'s play again! 🌈';
+  document.getElementById('message').textContent = msg;
+  if (score >= 7) for (let i = 0; i < 20; i++) setTimeout(() => rainEmojis('🎉'), i * 100);
+}
+
+// Sound effects
+let audioCtx;
+function playSound(correct) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    if (correct) {
+      o.frequency.setValueAtTime(523, audioCtx.currentTime);
+      o.frequency.setValueAtTime(784, audioCtx.currentTime + 0.1);
+    } else {
+      o.frequency.setValueAtTime(200, audioCtx.currentTime);
+      o.frequency.setValueAtTime(150, audioCtx.currentTime + 0.15);
+    }
+    g.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+    o.start(); o.stop(audioCtx.currentTime + 0.3);
+  } catch(e) {}
+}
+
+function rainEmojis(emoji) {
+  const el = document.createElement('div');
+  el.className = 'emoji-rain';
+  el.textContent = emoji;
+  el.style.left = Math.random() * 100 + 'vw';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2000);
+}
+</script>
+</body>
+</html>

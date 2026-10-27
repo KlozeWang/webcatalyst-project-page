@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEON TIC-TAC-TOE 🕹️</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    background-color: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Press Start 2P', monospace;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Scanline effect */
+  body::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.15) 0px,
+      rgba(0, 0, 0, 0.15) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* CRT vignette */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.7) 100%);
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  .game-container {
+    text-align: center;
+    position: relative;
+    z-index: 10;
+  }
+
+  .title {
+    font-size: 28px;
+    color: #ff00ff;
+    text-shadow:
+      0 0 10px #ff00ff,
+      0 0 20px #ff00ff,
+      0 0 40px #ff00ff,
+      0 0 80px #ff00ff;
+    margin-bottom: 10px;
+    animation: flicker 3s infinite alternate;
+    letter-spacing: 4px;
+  }
+
+  .subtitle {
+    font-size: 10px;
+    color: #00ffff;
+    text-shadow:
+      0 0 5px #00ffff,
+      0 0 10px #00ffff;
+    margin-bottom: 30px;
+    letter-spacing: 2px;
+  }
+
+  @keyframes flicker {
+    0%, 95%, 100% { opacity: 1; }
+    96% { opacity: 0.8; }
+    97% { opacity: 1; }
+    98% { opacity: 0.6; }
+    99% { opacity: 1; }
+  }
+
+  .scoreboard {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    margin-bottom: 25px;
+  }
+
+  .score-item {
+    text-align: center;
+  }
+
+  .score-label {
+    font-size: 10px;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+  }
+
+  .score-x .score-label {
+    color: #ff00ff;
+    text-shadow: 0 0 10px #ff00ff;
+  }
+
+  .score-o .score-label {
+    color: #ffff00;
+    text-shadow: 0 0 10px #ffff00;
+  }
+
+  .score-draw .score-label {
+    color: #00ff00;
+    text-shadow: 0 0 10px #00ff00;
+  }
+
+  .score-value {
+    font-size: 24px;
+    font-family: 'Press Start 2P', monospace;
+  }
+
+  .score-x .score-value {
+    color: #ff00ff;
+    text-shadow: 0 0 15px #ff00ff, 0 0 30px #ff00ff;
+  }
+
+  .score-o .score-value {
+    color: #ffff00;
+    text-shadow: 0 0 15px #ffff00, 0 0 30px #ffff00;
+  }
+
+  .score-draw .score-value {
+    color: #00ff00;
+    text-shadow: 0 0 15px #00ff00, 0 0 30px #00ff00;
+  }
+
+  .status {
+    font-size: 12px;
+    color: #ff00ff;
+    text-shadow: 0 0 10px #ff00ff;
+    margin-bottom: 20px;
+    min-height: 20px;
+    animation: pulse 1.5s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, 120px);
+    grid-template-rows: repeat(3, 120px);
+    gap: 8px;
+    margin: 0 auto 30px;
+    position: relative;
+  }
+
+  .cell {
+    width: 120px;
+    height: 120px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 2px solid #333;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cell::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+    transition: left 0.5s;
+  }
+
+  .cell:hover::before {
+    left: 100%;
+  }
+
+  .cell:hover {
+    border-color: #ff00ff;
+    box-shadow:
+      0 0 10px rgba(255, 0, 255, 0.3),
+      inset 0 0 10px rgba(255, 0, 255, 0.1);
+    background: rgba(255, 0, 255, 0.05);
+  }
+
+  .cell.taken {
+    cursor: default;
+  }
+
+  .cell.taken:hover {
+    border-color: #333;
+    box-shadow: none;
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .cell.x {
+    color: #ff00ff;
+    text-shadow:
+      0 0 10px #ff00ff,
+      0 0 20px #ff00ff,
+      0 0 40px #ff00ff,
+      0 0 80px #ff00ff;
+    animation: appear 0.3s ease-out;
+  }
+
+  .cell.o {
+    color: #ffff00;
+    text-shadow:
+      0 0 10px #ffff00,
+      0 0 20px #ffff00,
+      0 0 40px #ffff00,
+      0 0 80px #ffff00;
+    animation: appear 0.3s ease-out;
+  }
+
+  @keyframes appear {
+    0% {
+      transform: scale(0) rotate(-180deg);
+      opacity: 0;
+    }
+    50% {
+      transform: scale(1.3) rotate(10deg);
+    }
+    100% {
+      transform: scale(1) rotate(0deg);
+      opacity: 1;
+    }
+  }
+
+  .cell.win {
+    animation: winPulse 0.5s ease-in-out infinite alternate;
+  }
+
+  .cell.win.x {
+    border-color: #ff00ff;
+    box-shadow:
+      0 0 20px #ff00ff,
+      0 0 40px #ff00ff,
+      inset 0 0 20px rgba(255, 0, 255, 0.2);
+  }
+
+  .cell.win.o {
+    border-color: #ffff00;
+    box-shadow:
+      0 0 20px #ffff00,
+      0 0 40px #ffff00,
+      inset 0 0 20px rgba(255, 255, 0, 0.2);
+  }
+
+  @keyframes winPulse {
+    0% { transform: scale(1); }
+    100% { transform: scale(1.05); }
+  }
+
+  .buttons {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+  }
+
+  .btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    padding: 12px 24px;
+    border: 2px solid;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 1px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    transition: left 0.3s;
+  }
+
+  .btn:hover::before {
+    left: 100%;
+  }
+
+  .btn-restart {
+    color: #00ffff;
+    border-color: #00ffff;
+    text-shadow: 0 0 10px #00ffff;
+  }
+
+  .btn-restart:hover {
+    background: rgba(0, 255, 255, 0.1);
+    box-shadow:
+      0 0 15px #00ffff,
+      0 0 30px rgba(0, 255, 255, 0.3);
+    transform: scale(1.05);
+  }
+
+  .btn-reset {
+    color: #ff0066;
+    border-color: #ff0066;
+    text-shadow: 0 0 10px #ff0066;
+  }
+
+  .btn-reset:hover {
+    background: rgba(255, 0, 102, 0.1);
+    box-shadow:
+      0 0 15px #ff0066,
+      0 0 30px rgba(255, 0, 102, 0.3);
+    transform: scale(1.05);
+  }
+
+  .win-line {
+    position: absolute;
+    background: #ff00ff;
+    z-index: 100;
+    border-radius: 2px;
+    box-shadow:
+      0 0 10px #ff00ff,
+      0 0 20px #ff00ff,
+      0 0 40px #ff00ff;
+    transition: all 0.3s ease;
+  }
+
+  .decorative-corner {
+    position: fixed;
+    width: 60px;
+    height: 60px;
+    border: 2px solid #ff00ff;
+    opacity: 0.3;
+  }
+
+  .decorative-corner.top-left {
+    top: 20px;
+    left: 20px;
+    border-right: none;
+    border-bottom: none;
+  }
+
+  .decorative-corner.top-right {
+    top: 20px;
+    right: 20px;
+    border-left: none;
+    border-bottom: none;
+  }
+
+  .decorative-corner.bottom-left {
+    bottom: 20px;
+    left: 20px;
+    border-right: none;
+    border-top: none;
+  }
+
+  .decorative-corner.bottom-right {
+    bottom: 20px;
+    right: 20px;
+    border-left: none;
+    border-top: none;
+  }
+
+  .stars {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .star {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: #fff;
+    border-radius: 50%;
+    animation: twinkle 3s infinite;
+  }
+
+  @keyframes twinkle {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 1; }
+  }
+
+  .mode-selector {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+  }
+
+  .mode-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    padding: 8px 16px;
+    border: 2px solid #333;
+    background: transparent;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 1px;
+  }
+
+  .mode-btn.active {
+    border-color: #00ffff;
+    color: #00ffff;
+    text-shadow: 0 0 10px #00ffff;
+    box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+  }
+
+  .mode-btn:hover {
+    border-color: #00ffff;
+    color: #00ffff;
+  }
+
+  .insert-coin {
+    font-size: 8px;
+    color: #ff0066;
+    text-shadow: 0 0 10px #ff0066;
+    margin-top: 20px;
+    animation: blink 1s infinite;
+  }
+
+  @keyframes blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+
+  @media (max-width: 500px) {
+    .title {
+      font-size: 18px;
+    }
+    .board {
+      grid-template-columns: repeat(3, 90px);
+      grid-template-rows: repeat(3, 90px);
+      gap: 6px;
+    }
+    .cell {
+      width: 90px;
+      height: 90px;
+    }
+    .scoreboard {
+      gap: 20px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="decorative-corner top-left"></div>
+<div class="decorative-corner top-right"></div>
+<div class="decorative-corner bottom-left"></div>
+<div class="decorative-corner bottom-right"></div>
+
+<div class="stars" id="stars"></div>
+
+<div class="game-container">
+  <div class="title">TIC-TAC-TOE</div>
+  <div class="subtitle">⚡ ARCADE EDITION ⚡</div>
+
+  <div class="mode-selector">
+    <button class="mode-btn active" onclick="setMode('pvp')">2 PLAYERS</button>
+    <button class="mode-btn" onclick="setMode('ai')">VS CPU</button>
+  </div>
+
+  <div class="scoreboard">
+    <div class="score-item score-x">
+      <div class="score-label">PLAYER X</div>
+      <div class="score-value" id="scoreX">0</div>
+    </div>
+    <div class="score-item score-draw">
+      <div class="score-label">DRAWS</div>
+      <div class="score-value" id="scoreDraw">0</div>
+    </div>
+    <div class="score-item score-o">
+      <div class="score-label">PLAYER O</div>
+      <div class="score-value" id="scoreO">0</div>
+    </div>
+  </div>
+
+  <div class="status" id="status">PLAYER X'S TURN</div>
+
+  <div class="board" id="board">
+    <div class="cell" data-index="0" onclick="handleClick(0)"></div>
+    <div class="cell" data-index="1" onclick="handleClick(1)"></div>
+    <div class="cell" data-index="2" onclick="handleClick(2)"></div>
+    <div class="cell" data-index="3" onclick="handleClick(3)"></div>
+    <div class="cell" data-index="4" onclick="handleClick(4)"></div>
+    <div class="cell" data-index="5" onclick="handleClick(5)"></div>
+    <div class="cell" data-index="6" onclick="handleClick(6)"></div>
+    <div class="cell" data-index="7" onclick="handleClick(7)"></div>
+    <div class="cell" data-index="8" onclick="handleClick(8)"></div>
+  </div>
+
+  <div class="buttons">
+    <button class="btn btn-restart" onclick="restartGame()">RESTART</button>
+    <button class="btn btn-reset" onclick="resetScores()">RESET SCORES</button>
+  </div>
+
+  <div class="insert-coin">INSERT COIN TO PLAY</div>
+</div>
+
+<script>
+  let board = ['', '', '', '', '', '', '', '', ''];
+  let currentPlayer = 'X';
+  let gameActive = true;
+  let scores = { X: 0, O: 0, draw: 0 };
+  let mode = 'pvp'; // 'pvp' or 'ai'
+
+  const winConditions = [
+    [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
+    [0, 3, 6], [1, 4, 7], [2, 5, 8], // columns
+    [0, 4, 8], [2, 4, 6]              // diagonals
+  ];
+
+  const cells = document.querySelectorAll('.cell');
+  const statusDisplay = document.getElementById('status');
+
+  function setMode(newMode) {
+    mode = newMode;
+    document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+    restartGame();
+  }
+
+  function handleClick(index) {
+    if (board[index] !== '' || !gameActive) return;
+
+    makeMove(index, currentPlayer);
+
+    if (mode === 'ai' && gameActive && currentPlayer === 'O') {
+      setTimeout(() => {
+        aiMove();
+      }, 400);
+    }
+  }
+
+  function makeMove(index, player) {
+    board[index] = player;
+    const cell = cells[index];
+    cell.textContent = player;
+    cell.classList.add('taken', player.toLowerCase());
+
+    const winResult = checkWin();
+    if (winResult) {
+      gameActive = false;
+      scores[player]++;
+      updateScores();
+      statusDisplay.textContent = `PLAYER ${player} WINS! 🎉`;
+      statusDisplay.style.color = player === 'X' ? '#ff00ff' : '#ffff00';
+      statusDisplay.style.textShadow = player === 'X'
+        ? '0 0 10px #ff00ff, 0 0 20px #ff00ff'
+        : '0 0 10px #ffff00, 0 0 20px #ffff00';
+      statusDisplay.style.animation = 'none';
+
+      winResult.forEach(idx => {
+        cells[idx].classList.add('win');
+      });
+
+      return;
+    }
+
+    if (board.every(cell => cell !== '')) {
+      gameActive = false;
+      scores.draw++;
+      updateScores();
+      statusDisplay.textContent = "IT'S A DRAW! 🤝";
+      statusDisplay.style.color = '#00ff00';
+      statusDisplay.style.textShadow = '0 0 10px #00ff00, 0 0 20px #00ff00';
+      statusDisplay.style.animation = 'none';
+      return;
+    }
+
+    currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+    statusDisplay.textContent = `PLAYER ${currentPlayer}'S TURN`;
+    statusDisplay.style.color = currentPlayer === 'X' ? '#ff00ff' : '#ffff00';
+    statusDisplay.style.textShadow = currentPlayer === 'X'
+      ? '0 0 10px #ff00ff'
+      : '0 0 10px #ffff00';
+  }
+
+  function checkWin() {
+    for (const condition of winConditions) {
+      const [a, b, c] = condition;
+      if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+        return condition;
+      }
+    }
+    return null;
+  }
+
+  function aiMove() {
+    if (!gameActive) return;
+
+    // Try to win
+    let move = findBestMove('O');
+    // Try to block
+    if (move === -1) move = findBestMove('X');
+    // Take center
+    if (move === -1 && board[4] === '') move = 4;
+    // Take corners
+    if (move === -1) {
+      const corners = [0, 2, 6, 8].filter(i => board[i] === '');
+      if (corners.length > 0) move = corners[Math.floor(Math.random() * corners.length)];
+    }
+    // Take any available
+    if (move === -1) {
+      const available = board.map((cell, i) => cell === '' ? i : null).filter(i => i !== null);
+      if (available.length > 0) move = available[Math.floor(Math.random() * available.length)];
+    }
+
+    if (move !== -1) {
+      makeMove(move, 'O');
+    }
+  }
+
+  function findBestMove(player) {
+    for (const condition of winConditions) {
+      const [a, b, c] = condition;
+      const cells = [board[a], board[b], board[c]];
+      const playerCount = cells.filter(cell => cell === player).length;
+      const emptyCount = cells.filter(cell => cell === '').length;
+      if (playerCount === 2 && emptyCount === 1) {
+        if (board[a] === '') return a;
+        if (board[b] === '') return b;
+        if (board[c] === '') return c;
+      }
+    }
+    return -1;
+  }
+
+  function updateScores() {
+    document.getElementById('scoreX').textContent = scores.X;
+    document.getElementById('scoreO').textContent = scores.O;
+    document.getElementById('scoreDraw').textContent = scores.draw;
+  }
+
+  function restartGame() {
+    board = ['', '', '', '', '', '', '', '', ''];
+    currentPlayer = 'X';
+    gameActive = true;
+    statusDisplay.textContent = "PLAYER X'S TURN";
+    statusDisplay.style.color = '#ff00ff';
+    statusDisplay.style.textShadow = '0 0 10px #ff00ff';
+    statusDisplay.style.animation = 'pulse 1.5s infinite';
+
+    cells.forEach(cell => {
+      cell.textContent = '';
+      cell.classList.remove('taken', 'x', 'o', 'win');
+    });
+  }
+
+  function resetScores() {
+    scores = { X: 0, O: 0, draw: 0 };
+    updateScores();
+    restartGame();
+  }
+
+  // Create stars background
+  function createStars() {
+    const starsContainer = document.getElementById('stars');
+    for (let i = 0; i < 50; i++) {
+      const star = document.createElement('div');
+      star.className = 'star';
+      star.style.left = Math.random() * 100 + '%';
+      star.style.top = Math.random() * 100 + '%';
+      star.style.animationDelay = Math.random() * 3 + 's';
+      star.style.animationDuration = (Math.random() * 3 + 2) + 's';
+      starsContainer.appendChild(star);
+    }
+  }
+
+  createStars();
+
+  // Keyboard support
+  document.addEventListener('keydown', (e) => {
+    if (e.key >= '1' && e.key <= '9') {
+      const index = parseInt(e.key) - 1;
+      handleClick(index);
+    }
+    if (e.key === 'r' || e.key === 'R') {
+      restartGame();
+    }
+    if (e.key === 'Escape') {
+      resetScores();
+    }
+  });
+</script>
+
+</body>
+</html>

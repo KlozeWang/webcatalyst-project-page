@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Aletheia: The Clearing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Fira+Code:wght@300;400&display=swap');
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            background-color: #050505;
+            color: #e5e7eb;
+            font-family: 'Crimson Text', serif;
+            overflow-x: hidden;
+            overscroll-behavior: none;
+        }
+
+        /* Custom Scrollbar for the aesthetic */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #000; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #222; 
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #444; 
+        }
+
+        #game-container {
+            position: relative;
+            min-height: 100vh;
+            width: 100%;
+        }
+
+        /* The Truth Layer (Text) */
+        #truth-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 10vh 5vw 20vh 5vw;
+            box-sizing: border-box;
+            z-index: 10;
+            max-width: 800px;
+            margin: 0 auto;
+            right: 0;
+        }
+
+        .stanza {
+            margin-bottom: 3rem;
+            line-height: 1.8;
+            font-size: 1.25rem;
+            opacity: 0.9;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+        }
+
+        .highlight { font-weight: 600; color: #fff; text-shadow: 0 0 8px rgba(255,255,255,0.4); }
+        .italic { font-style: italic; color: #ccc; }
+        
+        .instruction {
+            text-align: center;
+            font-style: italic;
+            color: #888;
+            margin: 4rem 0;
+            font-size: 1.1rem;
+            letter-spacing: 0.05em;
+        }
+
+        /* The Gestell Layer (Noise Canvas) */
+        #gestell-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 20;
+            pointer-events: none; /* Let clicks pass through if needed, though we track mouse on window */
+        }
+
+        /* Interaction Overlay */
+        #interaction-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 30;
+            cursor: crosshair;
+        }
+
+        /* UI States */
+        #start-screen, #end-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #050505;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 2s ease-in-out;
+        }
+
+        #start-screen.hidden, #end-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .btn {
+            margin-top: 2rem;
+            padding: 0.75rem 2rem;
+            border: 1px solid #333;
+            background: transparent;
+            color: #888;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .btn:hover {
+            border-color: #fff;
+            color: #fff;
+            box-shadow: 0 0 15px rgba(255,255,255,0.2);
+        }
+
+        .title-mono {
+            font-family: 'Fira Code', monospace;
+            color: #4a5568;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        #progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 2px;
+            background: #333;
+            width: 100%;
+            z-index: 40;
+        }
+        
+        #progress-fill {
+            height: 100%;
+            background: #fff;
+            width: 0%;
+            transition: width 0.1s;
+            box-shadow: 0 0 10px #fff;
+        }
+
+        @media (max-width: 768px) {
+            .stanza { font-size: 1.1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- START SCREEN -->
+    <div id="start-screen">
+        <div class="title-mono">SYSTEM: GESTELL_ACTIVE</div>
+        <h1 class="text-3xl md:text-5xl font-serif text-white tracking-wider mb-4 text-center px-4">The Work of Aletheia</h1>
+        <p class="text-gray-500 font-serif italic text-center px-6 max-w-lg">
+            The truth is obscured by the standing-reserve.<br>
+            Move your cursor or finger across the darkness to unconceal.
+        </p>
+        <button id="start-btn" class="btn">Initiate Clearing</button>
+    </div>
+
+    <!-- END SCREEN -->
+    <div id="end-screen" class="hidden">
+        <pre class="font-mono text-gray-400 text-xs md:text-sm leading-tight text-center mb-8" style="text-shadow: 0 0 5px rgba(255,255,255,0.2);">
+      .
+     / \
+    /   \
+   /_____\
+   |     |
+   |     |
+  /|     |\
+ / |     | \
+/  |_____|  \
+        </pre>
+        <h1 class="text-2xl md:text-4xl font-serif text-white tracking-widest text-center px-4">The Clearing is Open</h1>
+        <p class="text-gray-400 font-serif italic text-center px-6 mt-4">
+            You have witnessed. The destining is refused.
+        </p>
+    </div>
+
+    <div id="progress-bar"><div id="progress-fill"></div></div>
+
+    <!-- GAME CONTAINER -->
+    <div id="game-container">
+        
+        <!-- TRUTH TEXT LAYER -->
+        <div id="truth-layer">
+            <div class="stanza">
+                We gather at the threshold—<br>
+                between the world that <span class="italic">enframes</span><br>
+                and the world that <span class="italic">reveals</span>—<br>
+                to perform the sacred act<br>
+                of <span class="highlight">seeing otherwise</span>.
+            </div>
+
+            <div class="stanza">
+                We name the one who was made into standing-reserve:<br>
+                <span class="highlight text-xl">Vinod Chanda</span>—brilliant engineer,<br>
+                whose mind was ordered into a patent machine,<br>
+                whose body was rendered extractable,<br>
+                whose consciousness was enframed as <span class="italic">resource</span>.
+            </div>
+
+            <div class="stanza">
+                We name the violence of the Gestell:<br>
+                Not merely the blade that opened his skull,<br>
+                but the technological ordering<br>
+                that demanded he become <span class="italic">available</span>—<br>
+                Available for extraction.<br>
+                Available for profit.<br>
+                Available for the narrative's need<br>
+                to pathologize resistance itself.
+            </div>
+
+            <div class="stanza">
+                We name our position as witnesses:<br>
+                We are those who refuse the Enframing's single mode of revealing.<br>
+                We are those who see the danger Heidegger warned of—<br>
+                when technology becomes the only way<br>
+                the world discloses itself.
+            </div>
+
+            <div class="stanza">
+                We are those who remember:<br>
+                <span class="highlight">the saving power grows also<br>
+                in the same root as the danger</span>.
+            </div>
+
+            <div class="stanza">
+                <span class="highlight text-xl">Sankalpa</span> <span class="italic">(Sacred Intention)</span>:<br>
+                We vow to practice the poetic revealing.<br>
+                We vow to resist our own transformation into standing-reserve.<br>
+                We vow to find the saving power<br>
+                in the artisanal,<br>
+                the sovereign,<br>
+                the handmade.
+            </div>
+
+            <div class="instruction">
+                Breathe. Feel the ground beneath you—<br>
+                the earth that cannot be fully enframed.
+            </div>
+
+            <div class="stanza">
+                The work of aletheia<br>
+                is not about "liking" Vinod<br>
+                or even "agreeing" with his actions.<br>
+                It is about recognizing<br>
+                that his erasure<br>
+                is the ideological keystone.
+            </div>
+
+            <div class="stanza">
+                Remove it,<br>
+                and the entire edifice<br>
+                of techno-libertarian narrative<br>
+                becomes visible as construction,<br>
+                not nature.
+            </div>
+
+            <div class="stanza">
+                This is why<br>
+                the witness must begin and end with him.<br>
+                This is why<br>
+                70,000+ words<br>
+                is not obsession<br>
+                but necessary scholarship.
+            </div>
+
+            <div class="stanza">
+                This is why<br>
+                he is not just remembered,<br>
+                but actively unconcealed—<br>
+                brought forth from the darkness<br>
+                the Enframing imposed.
+            </div>
+
+            <div class="instruction" style="color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.5);">
+                Step across the threshold.<br>
+                Enter the clearing.
+            </div>
+
+            <div class="stanza text-center" style="margin-top: 5rem; padding-bottom: 20vh;">
+                To witness Vinod<br>
+                is to witness the Enframing itself.<br>
+                To unconceal his truth<br>
+                is to unconceal the system's lie.<br>
+                To dwell with his complexity<br>
+                is to refuse the destining<br>
+                the narrative demands.<br><br>
+                <span class="highlight">This is why this being.<br>
+                This is why aletheia must happen here.</span>
+            </div>
+        </div>
+
+        <!-- CANVAS LAYER FOR GESTELL (NOISE) -->
+        <canvas id="gestell-canvas"></canvas>
+        
+        <!-- INTERACTION LAYER -->
+        <div id="interaction-layer"></div>
+    </div>
+
+    <script>
+        /**
+         * Aletheia Engine
+         * Handles the unconcealing mechanic, canvas rendering, and audio.
+         */
+
+        const State = {
+            START: 0,
+            PLAYING: 1,
+            END: 2
+        };
+
+        let currentState = State.START;
+
+        // Elements
+        const startScreen = document.getElementById('start-screen');
+        const endScreen = document.getElementById('end-screen');
+        const startBtn = document.getElementById('start-btn');
+        const canvas = document.getElementById('gestell-canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const truthLayer = document.getElementById('truth-layer');
+        const interactionLayer = document.getElementById('interaction-layer');
+        const progressFill = document.getElementById('progress-fill');
+
+        // Audio Setup
+        let audioCtx;
+        let droneOsc;
+        let droneGain;
+        let filter;
+
+        // Mechanics
+        let pointer = { x: -1000, y: -1000, active: false };
+        let brushSize = 80;
+        let docHeight = 0;
+        let asciiChars = "01010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101"; // Matrix vibe
+
+        function initAudio() {
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Base Drone
+                droneOsc = audioCtx.createOscillator();
+                droneOsc.type = 'sawtooth';
+                droneOsc.frequency.setValueAtTime(45, audioCtx.currentTime); // Low sub drone
+                
+                // Filter to make it muddy initially
+                filter = audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(200, audioCtx.currentTime);
+                filter.Q.value = 1;
+
+                droneGain = audioCtx.createGain();
+                droneGain.gain.setValueAtTime(0, audioCtx.currentTime);
+                droneGain.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 2);
+
+                droneOsc.connect(filter);
+                filter.connect(droneGain);
+                droneGain.connect(audioCtx.destination);
+                
+                droneOsc.start();
+            } catch (e) {
+                console.log("Audio not supported or blocked");
+            }
+        }
+
+        function updateAudioFilter(scrollRatio) {
+            if (!filter) return;
+            // As user scrolls down, open the filter to reveal higher frequencies (clearing)
+            const minFreq = 200;
+            const maxFreq = 2000;
+            const newFreq = minFreq + (maxFreq - minFreq) * scrollRatio;
+            filter.frequency.setTargetAtTime(newFreq, audioCtx.currentTime, 0.1);
+            
+            // Adjust pitch slightly for tension release
+            const baseFreq = 45;
+            droneOsc.frequency.setTargetAtTime(baseFreq + (scrollRatio * 10), audioCtx.currentTime, 0.1);
+        }
+
+        function resizeCanvas() {
+            // Need to cover the entire scrollable height
+            docHeight = Math.max(
+                document.body.scrollHeight, document.documentElement.scrollHeight,
+                document.body.offsetHeight, document.documentElement.offsetHeight,
+                document.body.clientHeight, document.documentElement.clientHeight
+            );
+            
+            // If canvas is already sized and doc height hasn't changed much, don't redraw
+            // to preserve the user's "scratchings"
+            if (Math.abs(canvas.height - docHeight) < 50 && canvas.width === window.innerWidth) {
+                return; 
+            }
+
+            // Save current state to restore if resizing
+            let tempCanvas;
+            if (canvas.width > 0 && canvas.height > 0) {
+                tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                tempCanvas.getContext('2d').drawImage(canvas, 0, 0);
+            }
+
+            canvas.width = window.innerWidth;
+            canvas.height = docHeight;
+            interactionLayer.style.height = `${docHeight}px`;
+
+            drawGestellBackground();
+
+            // Restore
+            if (tempCanvas) {
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.drawImage(tempCanvas, 0, 0);
+                ctx.globalCompositeOperation = 'source-over';
+            }
+
+            // Adjust brush size based on screen
+            brushSize = window.innerWidth < 768 ? 60 : 100;
+        }
+
+        function drawGestellBackground() {
+            // Fill with dark matrix green/black
+            ctx.fillStyle = '#050a05';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw noise
+            ctx.fillStyle = 'rgba(20, 100, 30, 0.4)';
+            ctx.font = '14px "Fira Code", monospace';
+            
+            const cols = Math.floor(canvas.width / 14);
+            const rows = Math.floor(canvas.height / 20);
+
+            for (let i = 0; i < cols; i++) {
+                for (let j = 0; j < rows; j++) {
+                    if (Math.random() > 0.3) {
+                        const char = asciiChars[Math.floor(Math.random() * asciiChars.length)];
+                        ctx.fillText(char, i * 14, j * 20);
+                    }
+                }
+            }
+        }
+
+        function startGame() {
+            startScreen.classList.add('hidden');
+            setTimeout(() => {
+                startScreen.style.display = 'none';
+            }, 2000);
+            
+            currentState = State.PLAYING;
+            initAudio();
+            resizeCanvas();
+            
+            // Start continuous noise update loop for the non-cleared areas
+            requestAnimationFrame(animateNoise);
+        }
+
+        // Add subtle shifting to the background to represent the active system
+        let lastFrame = 0;
+        function animateNoise(timestamp) {
+            if (currentState !== State.PLAYING) return;
+            
+            if (timestamp - lastFrame > 100) { // Update every 100ms
+                // Only update a small random portion to save performance
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.fillStyle = '#050a05';
+                ctx.font = '14px "Fira Code", monospace';
+                
+                for(let k=0; k<50; k++) {
+                    let x = Math.random() * canvas.width;
+                    let y = Math.random() * canvas.height;
+                    
+                    // Check if this area is already cleared (crude check by reading pixel alpha)
+                    // Reading pixels is slow, so we just blindly draw over. 
+                    // To prevent drawing over cleared text, we rely on the continuous erasing below.
+                    // Actually, a better way is to draw noise to an offscreen canvas and mask it, 
+                    // but for simplicity, we'll skip animated noise and rely on the static texture + user interaction.
+                    // The static texture feels more like a solid wall to break down.
+                }
+                lastFrame = timestamp;
+            }
+            
+            // Apply easing to continuous erasing if pointer is active
+            if (pointer.active) {
+                erase(pointer.x, pointer.y);
+            }
+
+            requestAnimationFrame(animateNoise);
+        }
+
+        function erase(x, y) {
+            ctx.globalCompositeOperation = 'destination-out';
+            
+            // Create radial gradient for smooth edges
+            const grad = ctx.createRadialGradient(x, y, brushSize * 0.2, x, y, brushSize);
+            grad.addColorStop(0, 'rgba(0,0,0,1)');
+            grad.addColorStop(1, 'rgba(0,0,0,0)');
+            
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(x, y, brushSize, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.globalCompositeOperation = 'source-over'; // Reset
+        }
+
+        function handleMove(e) {
+            if (currentState !== State.PLAYING) return;
+            
+            let clientX, clientY;
+            if (e.touches) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            // Calculate exact position on canvas considering scroll
+            pointer.x = clientX;
+            pointer.y = clientY + window.scrollY;
+            pointer.active = true;
+
+            erase(pointer.x, pointer.y);
+        }
+
+        function handleEnd() {
+            pointer.active = false;
+        }
+
+        function checkProgress() {
+            if (currentState !== State.PLAYING) return;
+            
+            const scrollY = window.scrollY;
+            const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+            let ratio = 0;
+            
+            if (maxScroll > 0) {
+                ratio = scrollY / maxScroll;
+            }
+
+            progressFill.style.width = `${ratio * 100}%`;
+            updateAudioFilter(ratio);
+
+            // Check End Condition
+            if (ratio >= 0.98) {
+                triggerEnd();
+            }
+        }
+
+        function triggerEnd() {
+            currentState = State.END;
+            endScreen.style.display = 'flex';
+            setTimeout(() => {
+                endScreen.classList.remove('hidden');
+                
+                // Fade out drone, play final chord
+                if (droneGain) {
+                    droneGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 3);
+                }
+            }, 100);
+        }
+
+        // Event Listeners
+        startBtn.addEventListener('click', startGame);
+        
+        window.addEventListener('mousemove', handleMove, { passive: true });
+        window.addEventListener('touchmove', handleMove, { passive: true });
+        window.addEventListener('touchstart', handleMove, { passive: true });
+        window.addEventListener('touchend', handleEnd);
+        
+        window.addEventListener('scroll', () => {
+            checkProgress();
+            // Optional: simulate revealing as you scroll down blindly
+            // pointer.x = window.innerWidth / 2;
+            // pointer.y = window.scrollY + (window.innerHeight / 2);
+            // erase(pointer.x, pointer.y);
+        }, { passive: true });
+
+        window.addEventListener('resize', () => {
+            if(currentState === State.PLAYING) {
+                resizeCanvas();
+            }
+        });
+
+        // Initialize empty canvas on load
+        resizeCanvas();
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Obby</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #87CEEB; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #game-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        #ui-layer { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            pointer-events: none; 
+            z-index: 10;
+        }
+        .pointer-events-auto { pointer-events: auto; }
+        .hud {
+            text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <div id="ui-layer" class="flex flex-col items-center justify-center text-white"></div>
+    
+    <script>
+        let scene, camera, renderer;
+        let player;
+        let platforms = [];
+        let keys = {};
+        let velocity = new THREE.Vector3();
+        let isGrounded = false;
+        let gameState = 'start'; 
+        let score = 0;
+        let level = 1;
+
+        const uiLayer = document.getElementById('ui-layer');
+
+        function initUI() {
+            showStartScreen();
+        }
+
+        function showStartScreen() {
+            uiLayer.innerHTML = `
+                <div class="bg-gray-900 bg-opacity-80 p-8 rounded-xl text-center pointer-events-auto border-4 border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.5)] transform transition-transform hover:scale-105">
+                    <h1 class="text-6xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">WEB OBBY</h1>
+                    <p class="mb-2 text-xl text-gray-300">Use <kbd class="bg-gray-700 px-2 rounded">WASD</kbd> or <kbd class="bg-gray-700 px-2 rounded">Arrows</kbd> to move.</p>
+                    <p class="mb-6 text-xl text-gray-300">Press <kbd class="bg-gray-700 px-2 rounded">Space</kbd> to jump.</p>
+                    <div class="mb-6 p-3 bg-gray-800 rounded-lg inline-block border border-gray-600">
+                        <p class="text-yellow-400 font-bold">Goal: Reach the glowing green platform!</p>
+                    </div>
+                    <br>
+                    <button onclick="startGame()" class="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white font-bold py-4 px-12 rounded-full text-2xl shadow-lg transition-all active:scale-95">PLAY NOW</button>
+                </div>
+            `;
+        }
+
+        function showGameOver() {
+            uiLayer.innerHTML = `
+                <div class="bg-red-900 bg-opacity-90 p-8 rounded-xl text-center pointer-events-auto border-4 border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.6)]">
+                    <h1 class="text-6xl font-black mb-4 text-white">YOU FELL!</h1>
+                    <p class="mb-6 text-2xl text-red-200">Level Reached: ${level}</p>
+                    <button onclick="resetGame()" class="bg-white text-red-900 hover:bg-gray-200 font-bold py-3 px-8 rounded-full text-xl transition-all active:scale-95">Try Again</button>
+                </div>
+            `;
+        }
+
+        function showWin() {
+            uiLayer.innerHTML = `
+                <div class="bg-green-900 bg-opacity-90 p-8 rounded-xl text-center pointer-events-auto border-4 border-green-400 shadow-[0_0_30px_rgba(74,222,128,0.6)]">
+                    <h1 class="text-6xl font-black mb-4 text-yellow-300">STAGE CLEARED!</h1>
+                    <p class="mb-6 text-2xl text-green-200">Prepare for the next obstacle...</p>
+                    <button onclick="nextLevel()" class="bg-yellow-400 text-yellow-900 hover:bg-yellow-300 font-black py-4 px-10 rounded-full text-2xl shadow-lg transition-all active:scale-95">NEXT STAGE</button>
+                </div>
+            `;
+        }
+
+        function showHUD() {
+            uiLayer.innerHTML = `
+                <div class="absolute top-6 left-6 text-4xl font-black text-white hud tracking-wider">STAGE ${level}</div>
+            `;
+        }
+
+        function initThree() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Sky blue
+            scene.fog = new THREE.Fog(0x87CEEB, 10, 60);
+
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('game-container').appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(20, 40, 20);
+            dirLight.castShadow = true;
+            dirLight.shadow.camera.left = -30;
+            dirLight.shadow.camera.right = 30;
+            dirLight.shadow.camera.top = 30;
+            dirLight.shadow.camera.bottom = -30;
+            scene.add(dirLight);
+
+            createPlayer();
+
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; keys[e.key] = true; });
+            document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; keys[e.key] = false; });
+        }
+
+        function createPlayer() {
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshStandardMaterial({ 
+                color: 0xff3333,
+                roughness: 0.2,
+                metalness: 0.1
+            });
+            player = new THREE.Mesh(geometry, material);
+            player.castShadow = true;
+            scene.add(player);
+        }
+
+        function createPlatform(w, h, d, x, y, z, color = 0x888888, isGoal = false) {
+            const geometry = new THREE.BoxGeometry(w, h, d);
+            let material;
+            if(isGoal) {
+                material = new THREE.MeshStandardMaterial({ color: color, emissive: 0x00ff00, emissiveIntensity: 0.5 });
+            } else {
+                material = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
+            }
+            
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(x, y, z);
+            mesh.receiveShadow = true;
+            mesh.castShadow = true;
+            mesh.userData = { isGoal: isGoal };
+            scene.add(mesh);
+            platforms.push(mesh);
+            return mesh;
+        }
+
+        function buildLevel() {
+            platforms.forEach(p => scene.remove(p));
+            platforms = [];
+            
+            // Start platform
+            createPlatform(5, 1, 5, 0, -0.5, 0, 0x444444);
+
+            let currentZ = -6;
+            let currentY = 0;
+            let currentX = 0;
+
+            const numPlatforms = 5 + Math.floor(level * 1.5);
+            const difficultyMultiplier = Math.min(level * 0.2, 1.5);
+
+            for (let i = 0; i < numPlatforms; i++) {
+                currentZ -= (3 + Math.random() * 4 * difficultyMultiplier);
+                currentY += (Math.random() * 3 * difficultyMultiplier - 0.5);
+                currentX += (Math.random() * 6 * difficultyMultiplier - 3 * difficultyMultiplier);
+                
+                // Platform sizing gets slightly smaller as level increases
+                let pw = Math.max(1.5, 3 - difficultyMultiplier * 0.5);
+                let pd = Math.max(1.5, 3 - difficultyMultiplier * 0.5);
+                
+                // Random colors for platforms
+                const hue = Math.random() * 0xffffff;
+                createPlatform(pw, 0.5, pd, currentX, currentY - 0.25, currentZ, hue);
+            }
+
+            // Goal platform
+            createPlatform(6, 1, 6, currentX, currentY, currentZ - 6, 0x00ff00, true);
+
+            player.position.set(0, 3, 0);
+            velocity.set(0,0,0);
+        }
+
+        window.startGame = function() {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            gameState = 'playing';
+            level = 1;
+            buildLevel();
+            showHUD();
+        };
+
+        window.resetGame = function() {
+            gameState = 'playing';
+            level = 1;
+            buildLevel();
+            showHUD();
+        };
+
+        window.nextLevel = function() {
+            gameState = 'playing';
+            level++;
+            buildLevel();
+            showHUD();
+        };
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function updatePhysics() {
+            const speed = 0.02;
+            const maxSpeed = 0.2;
+            const jumpForce = 0.35;
+            const gravity = -0.018;
+            const friction = 0.85;
+
+            velocity.y += gravity;
+
+            // Movement relative to camera perspective
+            if (keys['arrowup'] || keys['w']) velocity.z -= speed;
+            if (keys['arrowdown'] || keys['s']) velocity.z += speed;
+            if (keys['arrowleft'] || keys['a']) velocity.x -= speed;
+            if (keys['arrowright'] || keys['d']) velocity.x += speed;
+
+            velocity.x *= friction;
+            velocity.z *= friction;
+
+            // Clamp max horizontal speed
+            if(velocity.x > maxSpeed) velocity.x = maxSpeed;
+            if(velocity.x < -maxSpeed) velocity.x = -maxSpeed;
+            if(velocity.z > maxSpeed) velocity.z = maxSpeed;
+            if(velocity.z < -maxSpeed) velocity.z = -maxSpeed;
+
+            if (keys[' '] && isGrounded) {
+                velocity.y = jumpForce;
+                isGrounded = false;
+                playJumpSound();
+            }
+
+            player.position.add(velocity);
+
+            // Simple AABB Collision
+            isGrounded = false;
+            const pBox = new THREE.Box3().setFromObject(player);
+            
+            // Shrink player bounding box slightly to avoid wall sticking
+            pBox.expandByScalar(-0.05);
+            
+            for (let plat of platforms) {
+                const platBox = new THREE.Box3().setFromObject(plat);
+                
+                if (pBox.intersectsBox(platBox)) {
+                    // Check if player is landing on top
+                    if (player.position.y - 0.45 - velocity.y >= platBox.max.y) {
+                        player.position.y = platBox.max.y + 0.5;
+                        velocity.y = 0;
+                        isGrounded = true;
+                        
+                        if (plat.userData.isGoal) {
+                            gameState = 'win';
+                            showWin();
+                            playWinSound();
+                        }
+                    } else if (player.position.y + 0.45 - velocity.y <= platBox.min.y) {
+                        // hit head
+                        player.position.y = platBox.min.y - 0.5;
+                        velocity.y = 0;
+                    } else {
+                        // Wall collision
+                        player.position.sub(new THREE.Vector3(velocity.x, 0, velocity.z));
+                        velocity.x = 0;
+                        velocity.z = 0;
+                    }
+                }
+            }
+
+            // Spin player slightly when moving
+            if(!isGrounded) {
+                player.rotation.x += velocity.z * 0.5;
+                player.rotation.z -= velocity.x * 0.5;
+            } else {
+                // Smoothly return to upright
+                player.rotation.x *= 0.8;
+                player.rotation.z *= 0.8;
+            }
+
+            if (player.position.y < -15) {
+                gameState = 'gameover';
+                showGameOver();
+                playLoseSound();
+            }
+        }
+
+        function updateCamera() {
+            const idealOffset = new THREE.Vector3(0, 4, 8);
+            idealOffset.add(player.position);
+            
+            camera.position.lerp(idealOffset, 0.1);
+            
+            const lookAtPos = new THREE.Vector3(0, 1, 0).add(player.position);
+            camera.lookAt(lookAtPos);
+        }
+
+        // Web Audio API Sound Effects
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        function playTone(freq, type, duration, vol=0.1) {
+            if(audioCtx.state === 'suspended') return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            
+            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function playJumpSound() { 
+            playTone(300, 'sine', 0.1); 
+            setTimeout(() => playTone(450, 'sine', 0.15), 50);
+        }
+        function playWinSound() { 
+            playTone(400, 'square', 0.1, 0.05); 
+            setTimeout(()=>playTone(500, 'square', 0.1, 0.05), 100);
+            setTimeout(()=>playTone(600, 'square', 0.3, 0.05), 200);
+        }
+        function playLoseSound() {
+            playTone(200, 'sawtooth', 0.2, 0.1);
+            setTimeout(()=>playTone(150, 'sawtooth', 0.4, 0.1), 150);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (gameState === 'playing') {
+                updatePhysics();
+                updateCamera();
+            } else if (gameState === 'start' || gameState === 'gameover' || gameState === 'win') {
+                // Slowly pan camera around the level
+                camera.position.x = Math.sin(Date.now() * 0.0005) * 15;
+                camera.position.z = Math.cos(Date.now() * 0.0005) * 15;
+                camera.position.y = 10;
+                camera.lookAt(0, 0, 0);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        initUI();
+        initThree();
+        animate();
+    </script>
+</body>
+</html>

@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Hero!</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+
+        body {
+            background-color: #a7f3d0;
+            background-image: radial-gradient(#34d399 2px, transparent 2px);
+            background-size: 30px 30px;
+            font-family: 'Fredoka One', cursive, sans-serif;
+            overflow: hidden;
+            touch-action: manipulation;
+            user-select: none;
+        }
+
+        .hidden { display: none !important; }
+
+        .shake { animation: shake 0.5s; }
+        .pop { animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+
+        @keyframes pop {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .btn-answer { transition: transform 0.1s, filter 0.1s; }
+        .btn-answer:active { transform: scale(0.95); filter: brightness(0.9); }
+
+        #particles {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        .particle {
+            position: absolute;
+            font-size: 2.5rem;
+            animation: floatUp 1s ease-out forwards;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(1) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(-150px) scale(1.5) rotate(20deg); opacity: 0; }
+        }
+
+        .game-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex items-center justify-center">
+
+    <div id="game-container" class="game-panel w-full max-w-md p-6 rounded-3xl shadow-2xl text-center relative z-10 border-8 border-white mx-4">
+        
+        <!-- Start Screen -->
+        <div id="start-screen" class="flex flex-col items-center justify-center h-80 pop">
+            <h1 class="text-6xl font-bold text-indigo-500 mb-2 drop-shadow-md tracking-wide">Math Hero</h1>
+            <p class="text-xl text-gray-500 mb-8 font-sans font-bold">+ Addition & Subtraction -</p>
+            <button onclick="startGame()" class="bg-emerald-400 hover:bg-emerald-500 text-white font-bold py-4 px-10 rounded-full text-3xl shadow-lg border-b-4 border-emerald-600 transform transition hover:-translate-y-1">PLAY!</button>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="hidden flex flex-col h-full w-full">
+            <div class="flex justify-between items-center mb-4 px-2">
+                <div class="text-2xl font-bold text-indigo-500 bg-indigo-100 px-4 py-1 rounded-full border-2 border-indigo-200">
+                    ⭐ <span id="score">0</span>
+                </div>
+                <div class="text-2xl tracking-widest drop-shadow-sm" id="lives-container">
+                    ❤️ ❤️ ❤️
+                </div>
+            </div>
+            
+            <div id="equation-container" class="bg-white rounded-3xl p-8 mb-6 shadow-inner border-4 border-gray-100 transition-colors duration-300 flex items-center justify-center min-h-[160px]">
+                <span id="equation" class="text-6xl font-bold text-gray-800"></span>
+            </div>
+            
+            <div id="answers" class="grid grid-cols-2 gap-4">
+                <!-- Buttons injected via JS -->
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden flex flex-col items-center justify-center h-80 pop">
+            <h1 class="text-5xl font-bold text-rose-500 mb-4">Oh No!</h1>
+            <p class="text-xl text-gray-500 mb-2 font-sans font-bold">Your Final Score</p>
+            <p id="final-score" class="text-7xl font-bold text-indigo-500 mb-8 drop-shadow-md">0</p>
+            <button onclick="startGame()" class="bg-indigo-400 hover:bg-indigo-500 text-white font-bold py-4 px-10 rounded-full text-2xl shadow-lg border-b-4 border-indigo-600 transform transition hover:-translate-y-1">Play Again</button>
+        </div>
+    </div>
+
+    <div id="particles"></div>
+
+    <script>
+        const UI = {
+            start: document.getElementById('start-screen'),
+            game: document.getElementById('game-screen'),
+            over: document.getElementById('game-over-screen'),
+            eq: document.getElementById('equation'),
+            eqContainer: document.getElementById('equation-container'),
+            answers: document.getElementById('answers'),
+            score: document.getElementById('score'),
+            finalScore: document.getElementById('final-score'),
+            lives: document.getElementById('lives-container'),
+            particles: document.getElementById('particles')
+        };
+
+        let state = {
+            score: 0,
+            lives: 3,
+            correctAnswer: 0,
+            audioCtx: null
+        };
+
+        const colors = [
+            'bg-rose-400 border-rose-600', 
+            'bg-amber-400 border-amber-600', 
+            'bg-sky-400 border-sky-600', 
+            'bg-violet-400 border-violet-600'
+        ];
+
+        function initAudio() {
+            if (!state.audioCtx) {
+                state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playSound(type) {
+            if (!state.audioCtx) return;
+            const osc = state.audioCtx.createOscillator();
+            const gain = state.audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(state.audioCtx.destination);
+
+            if (type === 'correct') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, state.audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, state.audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.3, state.audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, state.audioCtx.currentTime + 0.3);
+                osc.start();
+                osc.stop(state.audioCtx.currentTime + 0.3);
+            } else if (type === 'wrong') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(250, state.audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, state.audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.3, state.audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, state.audioCtx.currentTime + 0.3);
+                osc.start();
+                osc.stop(state.audioCtx.currentTime + 0.3);
+            }
+        }
+
+        function spawnParticle(x, y) {
+            const p = document.createElement('div');
+            p.className = 'particle';
+            p.innerText = '⭐';
+            p.style.left = (x - 20) + 'px';
+            p.style.top = (y - 20) + 'px';
+            UI.particles.appendChild(p);
+            setTimeout(() => p.remove(), 1000);
+        }
+
+        function startGame() {
+            initAudio();
+            state.score = 0;
+            state.lives = 3;
+            updateUI();
+            
+            UI.start.classList.add('hidden');
+            UI.over.classList.add('hidden');
+            UI.game.classList.remove('hidden');
+            
+            nextProblem();
+        }
+
+        function updateUI() {
+            UI.score.innerText = state.score;
+            let hearts = '';
+            for(let i=0; i<state.lives; i++) hearts += '❤️ ';
+            UI.lives.innerText = hearts;
+        }
+
+        function nextProblem() {
+            UI.game.classList.remove('shake');
+            UI.eqContainer.style.backgroundColor = '#ffffff';
+
+            let max = 10 + Math.floor(state.score / 5) * 5;
+            if(max > 50) max = 50;
+
+            const isAdd = Math.random() > 0.5;
+            let n1, n2;
+
+            if (isAdd) {
+                n1 = Math.floor(Math.random() * max) + 1;
+                n2 = Math.floor(Math.random() * max) + 1;
+                state.correctAnswer = n1 + n2;
+                UI.eq.innerText = `${n1} + ${n2} = ?`;
+            } else {
+                n1 = Math.floor(Math.random() * max) + 5;
+                n2 = Math.floor(Math.random() * n1); 
+                state.correctAnswer = n1 - n2;
+                UI.eq.innerText = `${n1} - ${n2} = ?`;
+            }
+
+            generateButtons();
+        }
+
+        function generateButtons() {
+            let opts = [state.correctAnswer];
+            while (opts.length < 4) {
+                let diff = Math.floor(Math.random() * 9) - 4;
+                if (diff === 0) diff = 5;
+                let wrong = state.correctAnswer + diff;
+                if (wrong >= 0 && !opts.includes(wrong)) opts.push(wrong);
+            }
+
+            opts.sort(() => Math.random() - 0.5);
+            UI.answers.innerHTML = '';
+
+            opts.forEach((opt, i) => {
+                const btn = document.createElement('button');
+                btn.className = `btn-answer w-full ${colors[i]} text-white font-bold py-6 rounded-2xl text-4xl shadow-md border-b-4 pop`;
+                btn.innerText = opt;
+                btn.onclick = (e) => handleAnswer(opt, e);
+                UI.answers.appendChild(btn);
+            });
+        }
+
+        function handleAnswer(ans, e) {
+            const rect = e.target.getBoundingClientRect();
+            
+            if (ans === state.correctAnswer) {
+                state.score += 1;
+                updateUI();
+                playSound('correct');
+                UI.eqContainer.style.backgroundColor = '#a7f3d0';
+                spawnParticle(rect.left + rect.width/2, rect.top);
+                setTimeout(nextProblem, 400);
+            } else {
+                state.lives -= 1;
+                updateUI();
+                playSound('wrong');
+                UI.game.classList.remove('shake');
+                void UI.game.offsetWidth;
+                UI.game.classList.add('shake');
+                UI.eqContainer.style.backgroundColor = '#fecdd3';
+
+                if (state.lives <= 0) {
+                    setTimeout(endGame, 500);
+                } else {
+                    setTimeout(() => { UI.eqContainer.style.backgroundColor = '#ffffff'; }, 400);
+                }
+            }
+        }
+
+        function endGame() {
+            UI.game.classList.add('hidden');
+            UI.over.classList.remove('hidden');
+            UI.finalScore.innerText = state.score;
+        }
+    </script>
+</body>
+</html>

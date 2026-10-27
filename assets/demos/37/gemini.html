@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Stream Optimizer: Thin Client Defender</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none;
+            user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .interactive {
+            pointer-events: auto;
+        }
+        .scanline {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 10;
+        }
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .critical {
+            animation: pulse-red 1s infinite;
+            color: #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="scanline"></div>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui-layer" class="p-4 md:p-8">
+        <!-- Header / Stats -->
+        <div id="hud" class="hidden flex justify-between items-start w-full">
+            <div class="bg-slate-800/80 border border-blue-500 rounded p-3 backdrop-blur-sm">
+                <h2 class="text-blue-400 font-bold text-sm uppercase tracking-wider mb-1">Mobile Host (Encoder)</h2>
+                <div class="text-2xl font-mono" id="scoreDisplay">Data: 0 MB</div>
+                <div class="text-xs text-slate-400 mt-1">CPU Load: <span class="text-green-400">95% (Stable)</span></div>
+            </div>
+            
+            <div class="bg-slate-800/80 border border-emerald-500 rounded p-3 backdrop-blur-sm text-right">
+                <h2 class="text-emerald-400 font-bold text-sm uppercase tracking-wider mb-1">Android TV (Thin Client)</h2>
+                <div class="text-2xl font-mono flex items-center justify-end gap-2">
+                    CPU: <span id="cpuDisplay">5%</span>
+                </div>
+                <div class="w-32 h-2 bg-slate-700 mt-2 rounded overflow-hidden float-right">
+                    <div id="cpuBar" class="h-full bg-green-500 w-[5%] transition-all duration-200"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Screens -->
+        <div id="startScreen" class="absolute inset-0 flex items-center justify-center bg-slate-900/90 interactive backdrop-blur-md">
+            <div class="text-center max-w-lg p-8 bg-slate-800 border-2 border-blue-500 rounded-xl shadow-2xl">
+                <h1 class="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 mb-4">STREAM OPTIMIZER</h1>
+                <p class="text-slate-300 mb-6 text-left leading-relaxed">
+                    <strong>Mission:</strong> Mirror the mobile display to the Android TV using minimal TV CPU.<br><br>
+                    Raw video packets (<span class="text-red-400 font-bold">RED</span>) will overload the TV. Tap/Click them in transit to hardware-encode them into H.265 streams (<span class="text-emerald-400 font-bold">GREEN</span>).<br><br>
+                    Keep the TV CPU below 100%!
+                </p>
+                <button id="startBtn" class="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-colors transform hover:scale-105 active:scale-95 shadow-[0_0_15px_rgba(37,99,235,0.5)]">
+                    ESTABLISH CONNECTION
+                </button>
+            </div>
+        </div>
+
+        <div id="gameOverScreen" class="hidden absolute inset-0 flex items-center justify-center bg-red-900/90 interactive backdrop-blur-md">
+            <div class="text-center p-8 bg-slate-900 border-2 border-red-500 rounded-xl shadow-2xl">
+                <h1 class="text-5xl font-black text-red-500 mb-2">CONNECTION LOST</h1>
+                <p class="text-xl text-slate-300 mb-2">Thin Client CPU Overloaded!</p>
+                <p class="text-2xl font-mono text-blue-400 mb-8">Data Streamed: <span id="finalScore">0</span> MB</p>
+                <button id="restartBtn" class="px-8 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-colors transform hover:scale-105 active:scale-95">
+                    REBOOT SYSTEM
+                </button>
+            </div>
+        </div>
+    </div>
+
+<script>
+/** Game Engine & Logic **/
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let width, height;
+
+// UI Elements
+const startScreen = document.getElementById('startScreen');
+const gameOverScreen = document.getElementById('gameOverScreen');
+const hud = document.getElementById('hud');
+const startBtn = document.getElementById('startBtn');
+const restartBtn = document.getElementById('restartBtn');
+const scoreDisplay = document.getElementById('scoreDisplay');
+const cpuDisplay = document.getElementById('cpuDisplay');
+const cpuBar = document.getElementById('cpuBar');
+const finalScore = document.getElementById('finalScore');
+
+// Game State
+let gameState = 'START'; // START, PLAYING, GAMEOVER
+let score = 0;
+let tvCpu = 5;
+let packets = [];
+let particles = [];
+let spawnRate = 1000;
+let lastSpawnTime = 0;
+let baseSpeed = 2;
+let difficultyMultiplier = 1;
+let lastFrameTime = 0;
+
+// Audio Context
+let audioCtx;
+
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}
+
+function playSound(type) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    if (type === 'encode') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+    } else if (type === 'hitGood') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+    } else if (type === 'hitBad') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+    } else if (type === 'over') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(100, audioCtx.currentTime);
+        osc.frequency.linearRampToValueAtTime(20, audioCtx.currentTime + 1);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 1);
+    }
+}
+
+function resize() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.width = width;
+    canvas.height = height;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Input Handling
+function handleInput(x, y) {
+    if (gameState !== 'PLAYING') return;
+    let hit = false;
+    
+    // Check packets from newest to oldest
+    for (let i = packets.length - 1; i >= 0; i--) {
+        const p = packets[i];
+        if (!p.encoded) {
+            const dx = x - p.x;
+            const dy = y - p.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            
+            if (dist < p.size * 2) { // Generous hitbox
+                p.encoded = true;
+                hit = true;
+                playSound('encode');
+                createParticles(p.x, p.y, '#34d399', 5);
+                break; // Only hit one per click
+            }
+        }
+    }
+}
+
+canvas.addEventListener('mousedown', (e) => handleInput(e.clientX, e.clientY));
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    for(let i=0; i<e.touches.length; i++) {
+        handleInput(e.touches[i].clientX, e.touches[i].clientY);
+    }
+}, {passive: false});
+
+// Game Entities
+class Packet {
+    constructor() {
+        this.size = Math.random() * 15 + 15; // 15-30
+        this.x = width * 0.1; // Spawn at mobile device
+        this.y = height * 0.3 + Math.random() * (height * 0.4);
+        
+        // Arc movement
+        this.targetY = height * 0.3 + Math.random() * (height * 0.4);
+        this.cpX = width * 0.5;
+        this.cpY = this.y + (Math.random() - 0.5) * 400;
+        
+        this.progress = 0;
+        this.speed = (baseSpeed + Math.random()) * difficultyMultiplier * 0.001;
+        this.encoded = false;
+    }
+
+    update(dt) {
+        this.progress += this.speed * (dt / 16);
+        
+        // Bezier curve calculation
+        const t = this.progress;
+        const startX = width * 0.1;
+        const endX = width * 0.9;
+        
+        this.x = (1-t)*(1-t)*startX + 2*(1-t)*t*this.cpX + t*t*endX;
+        this.y = (1-t)*(1-t)*this.y + 2*(1-t)*t*this.cpY + t*t*this.targetY;
+        
+        return this.progress >= 1;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.progress * Math.PI * 4);
+        
+        ctx.shadowBlur = 15;
+        if (this.encoded) {
+            ctx.shadowColor = '#10b981'; // Emerald
+            ctx.fillStyle = '#34d399';
+            ctx.strokeStyle = '#059669';
+        } else {
+            ctx.shadowColor = '#ef4444'; // Red
+            ctx.fillStyle = '#f87171';
+            ctx.strokeStyle = '#b91c1c';
+        }
+        
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.rect(-this.size/2, -this.size/2, this.size, this.size);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Inner detail
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(-this.size/4, -this.size/4, this.size/2, this.size/2);
+        
+        ctx.restore();
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 8;
+        this.vy = (Math.random() - 0.5) * 8;
+        this.life = 1;
+        this.decay = Math.random() * 0.02 + 0.02;
+        this.color = color;
+        this.size = Math.random() * 4 + 2;
+    }
+    update(dt) {
+        this.x += this.vx * (dt/16);
+        this.y += this.vy * (dt/16);
+        this.life -= this.decay * (dt/16);
+        return this.life <= 0;
+    }
+    draw(ctx) {
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+}
+
+function createParticles(x, y, color, count) {
+    for(let i=0; i<count; i++) {
+        particles.push(new Particle(x, y, color));
+    }
+}
+
+// Drawing environment
+function drawDevices() {
+    // Mobile Device (Left)
+    ctx.fillStyle = '#1e293b';
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 4;
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = '#3b82f6';
+    
+    const mWidth = width * 0.08;
+    const mHeight = mWidth * 2;
+    const mX = width * 0.05 - mWidth/2;
+    const mY = height/2 - mHeight/2;
+    
+    ctx.beginPath();
+    ctx.roundRect(mX, mY, mWidth, mHeight, 15);
+    ctx.fill();
+    ctx.stroke();
+    
+    // Mobile Screen
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(mX + 5, mY + 5, mWidth - 10, mHeight - 10);
+    // Code lines on mobile
+    ctx.fillStyle = '#34d399';
+    ctx.font = '10px monospace';
+    ctx.shadowBlur = 0;
+    ctx.fillText('ENCODING...', mX + 10, mY + 20);
+    ctx.fillText('H.265 HW', mX + 10, mY + 35);
+    
+    // TV Device (Right)
+    ctx.fillStyle = '#1e293b';
+    ctx.strokeStyle = tvCpu > 80 ? '#ef4444' : '#10b981';
+    ctx.lineWidth = 4;
+    ctx.shadowBlur = 30;
+    ctx.shadowColor = tvCpu > 80 ? '#ef4444' : '#10b981';
+    
+    const tvWidth = width * 0.15;
+    const tvHeight = tvWidth * 0.6;
+    const tvX = width * 0.95 - tvWidth/2;
+    const tvY = height/2 - tvHeight/2;
+    
+    ctx.beginPath();
+    ctx.roundRect(tvX, tvY, tvWidth, tvHeight, 10);
+    ctx.fill();
+    ctx.stroke();
+    
+    // TV Stand
+    ctx.fillRect(tvX + tvWidth/2 - 10, tvY + tvHeight, 20, 30);
+    ctx.fillRect(tvX + tvWidth/2 - 40, tvY + tvHeight + 30, 80, 10);
+    
+    // TV Screen
+    ctx.fillStyle = '#0f172a';
+    ctx.shadowBlur = 0;
+    ctx.fillRect(tvX + 5, tvY + 5, tvWidth - 10, tvHeight - 10);
+    ctx.fillStyle = tvCpu > 80 ? '#ef4444' : '#34d399';
+    ctx.font = '14px monospace';
+    ctx.fillText(`DECODE CPU: ${Math.floor(tvCpu)}%`, tvX + 15, tvY + tvHeight/2);
+}
+
+// Main Game Loop
+function update(time) {
+    if (!lastFrameTime) lastFrameTime = time;
+    const dt = time - lastFrameTime;
+    lastFrameTime = time;
+
+    if (gameState === 'PLAYING') {
+        // Difficulty scaling
+        difficultyMultiplier = 1 + (score / 200);
+        
+        // TV CPU Decay
+        if (tvCpu > 5) {
+            tvCpu -= 2 * (dt / 1000); // lose 2% per second
+            if (tvCpu < 5) tvCpu = 5;
+        }
+
+        // Spawn Packets
+        if (time - lastSpawnTime > spawnRate / difficultyMultiplier) {
+            packets.push(new Packet());
+            lastSpawnTime = time;
+        }
+
+        // Update Packets
+        for (let i = packets.length - 1; i >= 0; i--) {
+            const p = packets[i];
+            const arrived = p.update(dt);
+            
+            if (arrived) {
+                if (p.encoded) {
+                    score += 1;
+                    playSound('hitGood');
+                    createParticles(p.x, p.y, '#34d399', 10);
+                } else {
+                    tvCpu += 15;
+                    playSound('hitBad');
+                    createParticles(p.x, p.y, '#ef4444', 20);
+                }
+                packets.splice(i, 1);
+                updateUI();
+                
+                if (tvCpu >= 100) {
+                    gameOver();
+                }
+            }
+        }
+
+        // Update Particles
+        for (let i = particles.length - 1; i >= 0; i--) {
+            if (particles[i].update(dt)) {
+                particles.splice(i, 1);
+            }
+        }
+    }
+
+    draw();
+    requestAnimationFrame(update);
+}
+
+function draw() {
+    // Clear
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, width, height);
+    
+    // Grid background
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for(let x=0; x<width; x+=50) { ctx.moveTo(x, 0); ctx.lineTo(x, height); }
+    for(let y=0; y<height; y+=50) { ctx.moveTo(0, y); ctx.lineTo(width, y); }
+    ctx.stroke();
+
+    if (gameState === 'PLAYING' || gameState === 'GAMEOVER') {
+        // Draw connection lines
+        ctx.strokeStyle = 'rgba(59, 130, 246, 0.2)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(width * 0.1, height/2);
+        ctx.lineTo(width * 0.9, height/2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        drawDevices();
+        
+        packets.forEach(p => p.draw(ctx));
+        particles.forEach(p => p.draw(ctx));
+    }
+}
+
+function updateUI() {
+    scoreDisplay.innerText = `Data: ${score} MB`;
+    cpuDisplay.innerText = `${Math.floor(tvCpu)}%`;
+    cpuBar.style.width = `${Math.min(100, Math.max(0, tvCpu))}%`;
+    
+    if (tvCpu > 80) {
+        cpuDisplay.classList.add('critical');
+        cpuBar.classList.replace('bg-green-500', 'bg-red-500');
+        cpuBar.classList.replace('bg-yellow-500', 'bg-red-500');
+    } else if (tvCpu > 50) {
+        cpuDisplay.classList.remove('critical');
+        cpuBar.classList.replace('bg-green-500', 'bg-yellow-500');
+        cpuBar.classList.replace('bg-red-500', 'bg-yellow-500');
+    } else {
+        cpuDisplay.classList.remove('critical');
+        cpuBar.classList.replace('bg-yellow-500', 'bg-green-500');
+        cpuBar.classList.replace('bg-red-500', 'bg-green-500');
+    }
+}
+
+function startGame() {
+    initAudio();
+    gameState = 'PLAYING';
+    score = 0;
+    tvCpu = 5;
+    packets = [];
+    particles = [];
+    lastSpawnTime = performance.now();
+    lastFrameTime = performance.now();
+    
+    startScreen.classList.add('hidden');
+    gameOverScreen.classList.add('hidden');
+    hud.classList.remove('hidden');
+    
+    updateUI();
+}
+
+function gameOver() {
+    gameState = 'GAMEOVER';
+    playSound('over');
+    finalScore.innerText = score;
+    gameOverScreen.classList.remove('hidden');
+}
+
+startBtn.addEventListener('click', startGame);
+restartBtn.addEventListener('click', startGame);
+
+// Start Loop
+requestAnimationFrame(update);
+</script>
+</body>
+</html>
