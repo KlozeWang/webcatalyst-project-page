@@ -148,6 +148,25 @@ function renderResults() {
 }
 renderResults();
 
+// Highlights use the same manuscript rows as the complete table below.
+function renderResultHighlights() {
+  const base=resultRows.find(row=>row[0]==='Qwen3.6-35B-A3B');
+  const ours=resultRows.find(row=>row[0]==='WebCatalyst');
+  const claude=resultRows.find(row=>row[0]==='Claude-Opus-4.7');
+  const selected=[base,claude,ours];
+  const cards=[
+    {title:'WebGen-Bench',subtitle:'Webpage generation',theme:'webgen',metric:4,label:'Accuracy',columns:[4,8],labels:['Accuracy ↑','Func. test ↑']},
+    {title:'Cookie-Bench Mini Games',subtitle:'Interactive experiences',theme:'games',metric:13,label:'Total score',columns:[11,12,13],labels:['Aesthetics ↑','Functionality ↑','Total ↑']},
+  ];
+  const renderCard=card=>`<article class="benchmark-card ${card.theme}">
+    <div class="benchmark-card-heading"><div><span class="section-kicker">${card.subtitle}</span><h3>${card.title}</h3></div><span class="benchmark-number" aria-hidden="true">${card.theme==='webgen'?'01':'02'}</span></div>
+    <div class="benchmark-score"><div><span class="score-value">${ours[card.metric].toFixed(1)}</span><span class="score-label">${card.label} <span>↑</span></span></div><div class="score-gain"><strong>${reportedDelta[card.metric]}</strong><span>vs. base model</span></div></div>
+    <table class="highlight-table"><caption class="sr-only">Selected models on ${card.title}. The complete 20-model comparison follows.</caption><thead><tr><th scope="col">Model</th>${card.labels.map(label=>`<th scope="col">${label}</th>`).join('')}</tr></thead><tbody>${selected.map(row=>`<tr class="${row===ours?'ours':row===base?'base':''}"><th scope="row">${row[0]}${row===base?'<span class="highlight-model-note">Base model</span>':''}</th>${card.columns.map(column=>`<td>${row[column].toFixed(1)}</td>`).join('')}</tr>`).join('')}</tbody></table>
+  </article>`;
+  $('#results-overview').innerHTML=`<div class="rank-summary"><div class="rank-summary-copy"><span class="section-kicker">Across the evaluated 20-model pool</span><h3>Average rank</h3></div><div class="rank-change" aria-label="Average rank improves from ${base[14].toFixed(1)} to ${ours[14].toFixed(1)}"><span>${base[14].toFixed(1)}</span><span class="rank-arrow" aria-hidden="true">→</span><strong>${ours[14].toFixed(1)}</strong></div><p>With <strong>640</strong> training requests.<br><span>Comparable performance to Claude Opus 4.7.</span></p></div><div class="benchmark-grid">${cards.map(renderCard).join('')}</div><p class="highlights-caption">Selected comparisons from Table 1. Higher scores are better; lower average rank is better.</p>`;
+}
+renderResultHighlights();
+
 // Accessible analysis tabs, including arrow-key navigation.
 const tabs=$$('[data-analysis]');
 function selectAnalysis(tab) {
