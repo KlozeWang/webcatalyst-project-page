@@ -40,8 +40,9 @@ The build and validation scripts use only Python's standard library. Validation 
 - `index.html`: paper content, author list, section structure and equations.
 - `assets/css/site.css`: responsive visual design.
 - `assets/js/site.js`: comparisons, live playground, table, tabs, video lifecycle and citation copy.
-- `assets/js/explainer.js`: explicit play control, quality switching, loading feedback and playback retry.
-- `scripts/prepare_web_video.py`: generates the 720p H.264/AAC streaming copy with a front-loaded MP4 index and two-second keyframes. The page defaults to this smaller file; 1080p playback and download remain available.
+- `assets/js/explainer.js`: explicit play control, quality switching, loading feedback and playback retry. If native streaming fails, it fetches a complete fresh copy for playback without HTTP byte-range/cache dependencies. Safari's click-to-play permission is respected.
+- `scripts/prepare_web_video.py`: generates a Safari-compatible 720p H.264 Constrained Baseline/AAC copy, with a front-loaded MP4 index and two-second keyframes. The page defaults to this smaller file; 1080p playback and download remain available.
+- `scripts/build.py`: gives both explainer videos content-hashed URLs in the published page, so re-encoded files cannot be combined with older cached MP4 ranges. Original download URLs remain available.
 - `assets/data/demos.json`: public prompts and model output paths.
 - `assets/data/provenance.json`: hashes of the original generated HTML.
 - `assets/data/training-dynamics.json`: chart data. Mini Games step-0 values follow the paper's main table, as specified for the video; subsequent checkpoint values are unchanged.

@@ -30,8 +30,12 @@ def prepare(ffmpeg=None, force=False):
             ffmpeg, '-hide_banner', '-loglevel', 'warning', '-y', '-i', str(SOURCE),
             '-map', '0:v:0', '-map', '0:a:0', '-map_metadata', '-1', '-map_chapters', '-1',
             '-vf', 'scale=1280:720,fps=24', '-c:v', 'libx264', '-preset', 'slow', '-crf', '25',
-            '-profile:v', 'main', '-level:v', '3.1', '-pix_fmt', 'yuv420p', '-g', '48',
-            '-keyint_min', '24', '-c:a', 'aac', '-b:a', '96k', '-ar', '48000', '-ac', '2',
+            # Constrained Baseline avoids CABAC/B-frame/reference-frame issues in
+            # Safari's hardware decoder. Bound the stream to H.264 level 3.1.
+            '-profile:v', 'baseline', '-level:v', '3.1', '-pix_fmt', 'yuv420p',
+            '-bf', '0', '-refs', '1', '-maxrate', '4000k', '-bufsize', '8000k',
+            '-tag:v', 'avc1', '-g', '48', '-keyint_min', '24',
+            '-c:a', 'aac', '-b:a', '96k', '-ar', '48000', '-ac', '2',
             '-movflags', '+faststart', str(temporary),
         ], check=True)
         temporary.replace(TARGET)
