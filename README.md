@@ -54,7 +54,7 @@ Publishing generates the small streaming copy from the checked-in 1080p master, 
 
 ## Content and media
 
-Research claims, authors, equations, and Table 1 values come from the supplied manuscript. Figure 2 is a high-resolution crop of that manuscript. The analysis plots are redrawn in this site's visual style using the supplied experiment data. The citation is a manuscript `@misc` entry; no arXiv identifier or publication venue is invented.
+Research claims, authors, equations, and Table 1 values come from the supplied manuscript. Figure 2 is a high-resolution crop of that manuscript. The analysis plots are redrawn in this site's visual style using the supplied experiment data. The citation and Read the paper link point to [arXiv:2611.05151](https://arxiv.org/abs/2611.05151). The public `assets/WebCatalyst.pdf` is downloaded from that arXiv record; the asset export script preserves it instead of copying the earlier local draft.
 
 The featured comparisons show original-speed browser recordings. Live outputs are copied from the supplied generated HTML without repairs; incomplete or failed outputs are preserved. The playground runs at a 1280×800 logical viewport and scales it to fit. Some artifacts use external libraries from CDNs. Full-screen links open the original artifact in a new tab. On phones, keyboard-driven games are best explored through the recordings or on a desktop.
 

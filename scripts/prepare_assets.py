@@ -90,7 +90,7 @@ catalog = dict(models=[dict(id=s, label=l) for s,l,_ in MODELS],
                featured=FEATURED, prompts=[prompts[k] for k in sorted(prompts)])
 (ASSETS / 'data/demos.json').write_text(json.dumps(catalog, ensure_ascii=False, indent=2))
 (ASSETS / 'data/provenance.json').write_text(json.dumps(provenance, indent=2))
-shutil.copy2(WORK / 'paper.pdf', ASSETS / 'WebCatalyst.pdf')
+# Keep the public PDF downloaded from arXiv:2611.05151; do not replace it with the local draft.
 shutil.copy2(V2 / 'WebCatalyst_Explainer_EN_1080p_v7.mp4', ASSETS / 'media/webcatalyst-explainer.mp4')
 prepare_web_video(FF)
 # Use the examples wall after its narration captions have cleared.
