@@ -8,6 +8,8 @@ The site includes the manuscript, the 5:02 English explainer, the method and equ
 
 ## Preview locally
 
+On a fresh clone, install FFmpeg and run `python3 scripts/prepare_web_video.py` once to generate the smaller inline video. The supplied local workspace already includes FFmpeg; GitHub Actions installs it and generates this asset automatically.
+
 ```sh
 python3 -m http.server 8000 --bind 127.0.0.1
 ```
@@ -38,6 +40,8 @@ The build and validation scripts use only Python's standard library. Validation 
 - `index.html`: paper content, author list, section structure and equations.
 - `assets/css/site.css`: responsive visual design.
 - `assets/js/site.js`: comparisons, live playground, table, tabs, video lifecycle and citation copy.
+- `assets/js/explainer.js`: explicit play control, quality switching, loading feedback and playback retry.
+- `scripts/prepare_web_video.py`: generates the 720p H.264/AAC streaming copy with a front-loaded MP4 index and two-second keyframes. The page defaults to this smaller file; 1080p playback and download remain available.
 - `assets/data/demos.json`: public prompts and model output paths.
 - `assets/data/provenance.json`: hashes of the original generated HTML.
 - `assets/data/training-dynamics.json`: chart data. Mini Games step-0 values follow the paper's main table, as specified for the video; subsequent checkpoint values are unchanged.
@@ -46,7 +50,7 @@ The build and validation scripts use only Python's standard library. Validation 
 - `scripts/render_experience_analysis.py`: regenerate the experience dumbbell charts and refinement-round plot.
 - `scripts/render_figures.py`: optional regeneration of the training-dynamics SVGs and social image, using Matplotlib and Pillow.
 
-Ordinary publishing uses the exported assets already present in the repository. It does not require `codex-workspace` or the asset-generation dependencies.
+Publishing generates the small streaming copy from the checked-in 1080p master, then uses the remaining exported assets already present in the repository. It does not require `codex-workspace` or the manuscript/demo asset-generation dependencies.
 
 ## Content and media
 

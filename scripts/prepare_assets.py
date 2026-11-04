@@ -6,6 +6,7 @@ of the public export. Generated HTML is copied verbatim, with SHA-256 provenance
 """
 from pathlib import Path
 import hashlib, json, shutil, subprocess, sys
+from prepare_web_video import prepare as prepare_web_video
 
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / 'codex-workspace'
@@ -91,6 +92,7 @@ catalog = dict(models=[dict(id=s, label=l) for s,l,_ in MODELS],
 (ASSETS / 'data/provenance.json').write_text(json.dumps(provenance, indent=2))
 shutil.copy2(WORK / 'paper.pdf', ASSETS / 'WebCatalyst.pdf')
 shutil.copy2(V2 / 'WebCatalyst_Explainer_EN_1080p_v7.mp4', ASSETS / 'media/webcatalyst-explainer.mp4')
+prepare_web_video(FF)
 # Use the examples wall after its narration captions have cleared.
 subprocess.run([FF, '-hide_banner', '-loglevel', 'error', '-y', '-ss', '288',
     '-i', str(ASSETS / 'media/webcatalyst-explainer.mp4'), '-frames:v', '1',
